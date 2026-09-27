@@ -13,6 +13,13 @@ import {
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+// ⭑ FICHA 431 (R7): el error que aborta una consolidacion que enlazaria menos cierres de los que
+// sus totales snapshot ya sumaron. Modulo puro, compartido con el servicio que lo traduce.
+import { ConsolidacionParcialError } from "@/lib/utils/consolidacion-parcial";
+// ⭑ FICHA 431 (R17/R18): la MISMA resta que deriva el saldo de `/wallet/satelites`. Se importa
+// en vez de reescribirse para que la satelite y la central no puedan leer cifras distintas de la
+// misma consolidacion (ver la cabecera del modulo).
+import { saldoDe } from "@/lib/utils/conciliacion-satelite";
 // Feature 393 (design §2.3): las dos derivaciones de la cascada «lo que va a la central».
 // La resta vive en la funcion pura; el repositorio solo la llama.
 import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-ordenex";
@@ -70,8 +77,15 @@ export const BODEGA_RESUMEN_SELECT = {
   solicitadoAt: true,
   resueltoAt: true,
   motivoRechazo: true,
+  // ⭑ FICHA 431 (R26/R28): la marca de conciliacion viaja en la MISMA lectura que la cabecera.
+  // Son cuatro columnas mas en un `select` que ya trae doce: ni una consulta nueva ni un `join`
+  // nuevo salvo el del usuario que marco, que es el mismo patron que `solicitadoPorUsuario`.
+  montoRecibido: true,
+  conciliadoAt: true,
+  conciliadoNota: true,
   zona: { select: { nombre: true } },
   solicitadoPorUsuario: { select: { nombre: true } },
+  conciliadoPorUsuario: { select: NOMBRE_USUARIO_SELECT },
   _count: { select: { cierresDia: true } },
 } as const;
 
@@ -111,6 +125,19 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
     paraLaCentral: paraLaCentral(totales.general, pagoMensajero, ganaBodega),
     // Feature 393 (R37): contra el EFECTIVO, no contra el general.
     efectivoCubreDescuentos: efectivoCubreDescuentos(totales.efectivo, pagoMensajero, ganaBodega),
+    // ⭑ FICHA 431 (R26/R28) — la marca, derivada AQUI por el mismo motivo que los dos de
+    // arriba: este mapper lo comparten las OCHO lecturas de esta cabecera, asi que la tarjeta
+    // que ve la bodega satelite y la que ve la central salen del mismo sitio y no pueden
+    // discrepar sobre si el dinero llego.
+    conciliado: r.conciliadoAt !== null,
+    montoRecibido: r.montoRecibido === null ? null : r.montoRecibido.toFixed(2),
+    // R17/R18/R20: la MISMA `saldoDe` que usa `/wallet/satelites`, sobre el EFECTIVO. La resta
+    // se hace aqui con `Prisma.Decimal`; la pantalla no resta dinero.
+    faltaPorRecibir: saldoDe(r.totalEfectivo, r.montoRecibido).toFixed(2),
+    conciliadoAt: r.conciliadoAt ? r.conciliadoAt.toISOString() : null,
+    conciliadoPorNombre:
+      r.conciliadoPorUsuario === null ? null : nombreCompletoUsuario(r.conciliadoPorUsuario),
+    conciliadoNota: r.conciliadoNota,
   };
 }
 
@@ -339,15 +366,18 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
     });
   }
 
-  /** R8: existe un CierreBodega de la zona en estado `solicitado`. */
-  async existeCierreBodegaSolicitado(zonaId: string): Promise<boolean> {
-    const count = await this.prisma.cierreBodega.count({
-      where: { zonaId, estado: ESTADO_SOLICITADO },
-    });
-    return count > 0;
-  }
+  // ⭑ FICHA 431 — AQUI VIVIA `existeCierreBodegaSolicitado`, el gate «a lo sumo una consolidacion
+  // `solicitado` por zona» (feature 40/R8). Se retiro junto con el indice unico parcial que lo
+  // respaldaba, y no es limpieza: con la aprobacion convertida en marca de conciliacion, ese gate
+  // seria el MISMO bloqueo mudado de sitio. Lo que protegia esta ahora en el todo-o-nada de
+  // `crearCierreBodega`, aqui debajo.
 
-  /** R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico. */
+  /**
+   * R9/R10: INSERT cierre_bodega (snapshot Decimal) + vincular cierre_dia, atomico.
+   *
+   * ⭑ FICHA 431 (R7) — Y TODO-O-NADA DE VERDAD: si el `updateMany` vincula menos cierres de los
+   * que se le pidieron, se LANZA y la transaccion se deshace entera.
+   */
   async crearCierreBodega(input: CrearCierreBodegaInput): Promise<string> {
     const { zonaId, solicitadoPor, cierreDiaIds, totales, totalPagoMensajero, totalIngresoBodegaRechazos } =
       input;
@@ -370,7 +400,7 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
       });
       // R9: vincula SOLO los cierre_dia consolidables de la zona (guardia de propiedad
       // + no-consolidados + aprobados en el WHERE; concurrencia-segura).
-      await tx.cierreDia.updateMany({
+      const vinculados = await tx.cierreDia.updateMany({
         where: {
           id: { in: cierreDiaIds },
           cierreBodegaId: null,
@@ -379,6 +409,14 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
         },
         data: { cierreBodegaId: cierre.id },
       });
+      // ⭑ FICHA 431 (R7) — TODO-O-NADA. Sustituye al indice unico parcial que la ficha borra, y
+      // protege lo que aquel protegia DE VERDAD: que dos consolidaciones simultaneas no se repartan
+      // la misma cola. Los totales snapshot de arriba se calcularon sobre el conjunto ENTERO, asi
+      // que una consolidacion que enlace menos cierres de los que sumo declara mas dinero del que
+      // lleva. Lanzar aborta la `$transaction`: no queda ni la fila ni los enlaces.
+      if (vinculados.count !== cierreDiaIds.length) {
+        throw new ConsolidacionParcialError(vinculados.count, cierreDiaIds.length);
+      }
       return cierre.id;
     });
   }

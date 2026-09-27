@@ -34,7 +34,7 @@ import {
  * añadiera un tercer literal aqui sin declarar su arista, el choke point del historial lo
  * rechazaria en runtime con su guardia de fallo cerrado.
  */
-export const RESULTADOS_DESDE_AYUDA = ["reprogramada", "rechazada"] as const;
+export const RESULTADOS_DESDE_AYUDA = ["reprogramado", "devolucion_a_origen_por_rechazo"] as const;
 
 export type ResultadoDesdeAyuda = (typeof RESULTADOS_DESDE_AYUDA)[number];
 
@@ -54,7 +54,7 @@ export type ResultadoDesdeAyuda = (typeof RESULTADOS_DESDE_AYUDA)[number];
 export const gestionarDesdeAyudaSchema = z.discriminatedUnion("resultado", [
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("reprogramada"),
+    resultado: z.literal("reprogramado"),
     // R14: no anterior a mañana en el calendario de CR, revalidado AQUI y no solo en la ventana.
     fechaReprogramacion: fechaFuturaSchema,
     motivo: motivoSchema,
@@ -62,7 +62,7 @@ export const gestionarDesdeAyudaSchema = z.discriminatedUnion("resultado", [
   }),
   z.object({
     ordenId: z.string().min(1),
-    resultado: z.literal("rechazada"),
+    resultado: z.literal("devolucion_a_origen_por_rechazo"),
     motivo: motivoSchema,
     evidencias: evidenciasSchema,
   }),

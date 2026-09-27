@@ -626,7 +626,10 @@ describe("R52 — la fila del reparto es inmutable (anular NO es editar ni borra
 
   it("las Server Actions del reparto son TRES: dos que lo crean y UNA que lo anula", async () => {
     const acciones = fuente("lib/actions/liquidacion.ts");
-    const exportadas = [...acciones.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]);
+    // fix/458-B-async: las firmas de SOBRECARGA de una action también son `export async function`
+    // (Next exige `async` en todo export de un archivo "use server"), así que el mismo nombre sale
+    // varias veces; se cuentan NOMBRES distintos, que es lo que R52 vigila.
+    const exportadas = [...new Set([...acciones.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]))];
     const delReparto = exportadas.filter((n) => /Reparto/i.test(n));
     // Enumeradas a mano y no contadas: si mañana aparece una cuarta —«corregirReparto»,
     // «reimputarReparto»— este test la ve, que es justo lo que R52 vigila.

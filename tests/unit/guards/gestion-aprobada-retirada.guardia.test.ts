@@ -173,7 +173,7 @@ describe("239/R20 — AUTOCOMPROBACION: la guardia se sabe poner roja", () => {
   it("detecta el encendedor reintroducido en el repositorio de cierres", () => {
     const comoEnResolverCierre = `
       await tx.orden.updateMany({
-        where: { gestiones: { some: { cierreId, resultado: "devuelta" } } },
+        where: { gestiones: { some: { cierreId, resultado: "novedad" } } },
         data: { gestionAprobada: true },
       });`;
     expect(detecta(comoEnResolverCierre)).toBe(true);

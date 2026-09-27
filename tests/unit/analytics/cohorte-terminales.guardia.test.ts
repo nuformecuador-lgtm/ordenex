@@ -82,7 +82,7 @@ describe("R8 · el repositorio de la cohorte no escribe los terminales, los impo
     // ANTI-VACIO. Si `ESTADOS_TERMINALES` quedara vacia —o el import de este test se rompiera—
     // el censo de arriba pasaria sin buscar nada. Este literal escrito A MANO es el contrato del
     // dominio hoy; si entra un cuarto terminal, este caso obliga a mirarlo a conciencia.
-    expect([...ESTADOS_TERMINALES]).toEqual(["entregada", "devuelta_a_tienda", "incidente"]);
+    expect([...ESTADOS_TERMINALES]).toEqual(["entregado", "devuelta_a_tienda", "incidente"]);
   });
 });
 
@@ -90,7 +90,7 @@ describe("R8 · autocomprobacion: el detector muerde", () => {
   // Sin estos dos, el censo estaria verde por construccion y nadie sabria si funciona.
   const INFRACTOR = `
 import { Prisma } from "@prisma/client";
-const TERMINALES = Prisma.join(["entregada", "devuelta_a_tienda", "incidente"]);
+const TERMINALES = Prisma.join(["entregado", "devuelta_a_tienda", "incidente"]);
 export const x = TERMINALES;
 `;
 
@@ -103,7 +103,7 @@ export const x = TERMINALES;
 
   it("cae el que escribe la lista a mano", () => {
     expect(literalesTerminalesEscritos(INFRACTOR)).toEqual([
-      "entregada",
+      "entregado",
       "devuelta_a_tienda",
       "incidente",
     ]);
@@ -124,7 +124,7 @@ export const x = TERMINALES;
     // La direccion que impide que el guardia sea ruido: la cabecera del repositorio TIENE que
     // poder explicar que clasifica por `entregada` / `devuelta_a_tienda` / `incidente`.
     const comentado = `
-// los cubos son "entregada", "devuelta_a_tienda" e "incidente", mas las vivas
+// los cubos son "entregado", "devuelta_a_tienda" e "incidente", mas las vivas
 import { ESTADOS_TERMINALES } from "@/lib/types/order-status-transiciones";
 const TERMINALES = [...ESTADOS_TERMINALES];
 export const x = TERMINALES;

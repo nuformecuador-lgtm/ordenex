@@ -34,6 +34,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
     registradoPor: null,
     fechaMovimiento: "2026-08-20T18:30:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...over,
   };
 }
@@ -62,7 +63,7 @@ function fila(over: Partial<OrdenAporteRow> = {}): OrdenAporteRow {
         tarifaEspecialDevuelta: null,
       },
     },
-    gestiones: [{ resultado: "entregada", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
     ...over,
   };
 }
@@ -90,6 +91,7 @@ function montar(opciones: {
     { obtenerPorId },
     { obtenerPorIdDeTienda },
     { listarOrdenesQueAportan, contarOrdenesDelCierre, obtenerCabeceraDeCierre },
+    { movimientoDeMensajero: vi.fn(async () => null) }, // 458-D: este archivo no abre filas del mensajero
   );
   return {
     service,
@@ -143,7 +145,7 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
         guia: "501",
         destinatario: "Ana",
         tiendaNombre: "Tienda A",
-        resultados: ["entregada"],
+        resultados: ["entregado"],
         aporte: "1000.00", // el flete congelado, re-derivado
       },
     ]);
@@ -177,8 +179,8 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
       filas: [
         fila({
           gestiones: [
-            { resultado: "entregada", montoRecibido: "3000.00" },
-            { resultado: "entregada", montoRecibido: "4000.00" },
+            { resultado: "entregado", montoRecibido: "3000.00" },
+            { resultado: "entregado", montoRecibido: "4000.00" },
           ],
         }),
       ],
@@ -186,7 +188,7 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
     const r = await m.service.verDetalleDeMovimiento(PAGINA, MAESTRO);
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(r.data.ordenes).toHaveLength(1);
-    expect(r.data.ordenes[0].resultados).toEqual(["entregada", "entregada"]);
+    expect(r.data.ordenes[0].resultados).toEqual(["entregado", "entregado"]);
     expect(r.data.ordenes[0].aporte).toBe("2000.00"); // 1000.00 x 2
   });
 

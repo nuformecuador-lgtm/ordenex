@@ -31,15 +31,17 @@ const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
 const CATALOGO: Record<string, string> = {
   ayuda_tienda: "os-ayuda",
-  reprogramada: "os-reprogramada",
-  rechazada: "os-rechazada",
+  reprogramado: "os-reprogramada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   return {
     tiendaId: "tienda-1",
     mensajeroAsignadoId: "mensajero-1",
-    estatusValue: "ayuda_tienda",
+    // ⏳ 2026-09-23 (FICHA 454, T1.15): `en_reparto` con la ayuda ABIERTA (ya no hay estatus de ayuda).
+    estatusValue: "en_reparto",
+    ayudaAbierta: true,
     deletedAt: null,
     fechaReparto: null,
     ...over,
@@ -75,7 +77,7 @@ function foto(n: number) {
 
 const REPROGRAMACION: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "reprogramada",
+  resultado: "reprogramado",
   fechaReprogramacion: "2027-01-05",
   motivo: "el cliente pidio otro dia",
   evidencias: [foto(0)],
@@ -83,7 +85,7 @@ const REPROGRAMACION: GestionDesdeAyudaInput = {
 
 const RECHAZO: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   motivo: "el cliente no la quiere",
   evidencias: [foto(0), foto(1)],
 };
@@ -109,7 +111,7 @@ describe("276/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
 
     const r = await service.gestionar(RECHAZO, TIENDA);
 
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" });
     expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 
@@ -118,7 +120,7 @@ describe("276/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
 
     const r = await service.gestionar(REPROGRAMACION, TIENDA);
 
-    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "reprogramada" });
+    expect(r).toEqual({ status: "ok", ordenId: "o1", resultado: "reprogramado" });
     expect(gestionRepo.crearGestionDesdeAyuda).toHaveBeenCalledTimes(1);
   });
 
@@ -183,7 +185,7 @@ describe("276/T5 · R11 — no hay campo del input que abra la puerta", () => {
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2027-12-31",
         motivo: "insistir la semana que viene",
         evidencias: [foto(7)],
@@ -200,7 +202,10 @@ describe("276/T5 · R11 — no hay campo del input que abra la puerta", () => {
     // Si el orden se invirtiera, una orden que ya salio de ayuda leeria el motivo del tope en vez
     // del suyo, y la tienda no sabria que paso.
     const notaRepo = {
-      findOrdenParaHilo: vi.fn(async () => ordenParaHilo({ estatusValue: "en_reparto" })),
+      // FICHA 454: «salio de ayuda» = ayuda CERRADA (la orden sigue `en_reparto`).
+      findOrdenParaHilo: vi.fn(async () =>
+        ordenParaHilo({ estatusValue: "en_reparto", ayudaAbierta: false }),
+      ),
     };
     const historial = fakeIntentosEnLote({ o1: UMBRAL + 1 });
     const service = new GestionDesdeAyudaService({

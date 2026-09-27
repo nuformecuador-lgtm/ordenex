@@ -120,7 +120,7 @@ function filaRetirada(): Record<string, string> {
 /**
  * Los metodos de ESCRITURA de `IOrdenRepository` (T13.1/R43): crear, actualizar, transicionar,
  * asignar, recibir, persistir URLs... y, nombrados aparte por lo que significan, el consumo de
- * guias (`generarGuiaLote`, R44) y el rastro por orden (`transicionarAyuda`,
+ * guias (`generarGuiaLote`, R44) y el rastro por orden (`registrarAyuda*` desde la 454,
  * `incrementarIntentoContacto`, R45).
  *
  * La lista esta escrita a mano y con los nombres REALES de la interfaz. El `satisfies` de abajo
@@ -149,7 +149,9 @@ const METODOS_ESCRITURA = [
   "recibirEnBodegaCentral",
   "asignarSateliteLote",
   "deshacerAsignacionLote",
-  "transicionarAyuda",
+  // FICHA 454: `transicionarAyuda` se sustituye por los dos registros de la ayuda como evento.
+  "registrarAyudaSolicitada",
+  "registrarAyudaResuelta",
   "incrementarIntentoContacto",
   "setCargaDownloadUrl",
   "setOrdenesDownloadUrl",
@@ -914,7 +916,12 @@ describe("cotizacion por API key — lectura pura (R43/R44/R45)", () => {
 
     // D3 (firmada): lectura pura, SIN RASTRO. El unico rastro por orden que este repo tiene es
     // el historial (`orden_historial`) y sus escrituras derivadas; ninguna se invoca.
-    for (const metodo of ["transicionarAyuda", "incrementarIntentoContacto", "update"]) {
+    for (const metodo of [
+      "registrarAyudaSolicitada",
+      "registrarAyudaResuelta",
+      "incrementarIntentoContacto",
+      "update",
+    ]) {
       expect(sondas.invocados).not.toContain(metodo);
     }
     // Ni el borde importa nada que sepa escribir un rastro.

@@ -109,7 +109,7 @@ export async function sembrarBase(tx: TxDeTest): Promise<BaseSembrada> {
   const etiqueta = new Map<string, string>();
 
   const crearZona = async (nombre: string): Promise<string> => {
-    const z = await tx.zona.create({ data: { nombre: `${sufijo}-${nombre}` }, select: { id: true } });
+    const z = await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `${sufijo}-${nombre}` }, select: { id: true } });
     etiqueta.set(z.id, nombre);
     return z.id;
   };

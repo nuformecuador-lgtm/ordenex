@@ -26,8 +26,8 @@ describe("OrdenHistorialRepository.findOrigenesReversion (feature 149/R11)", () 
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
 
     const mapa = await repo.findOrigenesReversion([
-      { ordenId: "o1", estatusActualId: idEstado("por_recoger") },
-      { ordenId: "o2", estatusActualId: idEstado("por_recoger") },
+      { ordenId: "o1", estatusActualId: idEstado("mensajero_recogiendo_en_bodega") },
+      { ordenId: "o2", estatusActualId: idEstado("mensajero_recogiendo_en_bodega") },
     ]);
 
     expect($queryRaw).toHaveBeenCalledTimes(1); // sin N+1
@@ -51,12 +51,12 @@ describe("OrdenHistorialRepository.findOrigenesReversion (feature 149/R11)", () 
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
 
     await repo.findOrigenesReversion([
-      { ordenId: "o1", estatusActualId: idEstado("por_recoger") },
+      { ordenId: "o1", estatusActualId: idEstado("mensajero_recogiendo_en_bodega") },
     ]);
 
     const sql = sqlDe($queryRaw);
     expect(sql).not.toContain("o1"); // el id no esta en el texto del SQL
-    expect(sql).not.toContain(idEstado("por_recoger"));
+    expect(sql).not.toContain(idEstado("mensajero_recogiendo_en_bodega"));
   });
 
   it("mapea `value` NULL (fila de creacion) a null y omite las ordenes sin fila", async () => {
@@ -64,8 +64,8 @@ describe("OrdenHistorialRepository.findOrigenesReversion (feature 149/R11)", () 
     const repo = new OrdenHistorialRepository(prisma as unknown as PrismaClient);
 
     const mapa = await repo.findOrigenesReversion([
-      { ordenId: "o1", estatusActualId: idEstado("por_recoger") },
-      { ordenId: "o2", estatusActualId: idEstado("por_recoger") },
+      { ordenId: "o1", estatusActualId: idEstado("mensajero_recogiendo_en_bodega") },
+      { ordenId: "o2", estatusActualId: idEstado("mensajero_recogiendo_en_bodega") },
     ]);
 
     expect(mapa.has("o1")).toBe(true);

@@ -76,25 +76,25 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     // Camino 1 (reparto), con y sin gestion.
     const entregada = await crearOrden(tx, base, {
       clave: "c1-entregada",
-      estatus: "entregada",
+      estatus: "entregado",
       mensajeroId: base.mensajero1,
       asignadoAt: instanteCR(FECHA_CR, "07:00"),
     });
     await crearGestion(tx, {
       ordenId: entregada,
       mensajeroId: base.mensajero1,
-      resultado: "entregada",
+      resultado: "entregado",
       at: instanteCR(FECHA_CR, "10:00"),
     });
     const reintentada = await crearOrden(tx, base, {
       clave: "c1-reintentada",
-      estatus: "reprogramada",
+      estatus: "reprogramado",
       mensajeroId: base.mensajero1,
       asignadoAt: instanteCR(FECHA_CR, "07:00"),
     });
     for (const [hora, resultado] of [
       ["09:00", "incidente"],
-      ["11:00", "reprogramada"],
+      ["11:00", "reprogramado"],
     ] as const) {
       await crearGestion(tx, {
         ordenId: reintentada,
@@ -105,7 +105,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     }
     await crearOrden(tx, base, {
       clave: "c1-sin-gestion",
-      estatus: "por_recoger",
+      estatus: "mensajero_recogiendo_en_bodega",
       mensajeroId: base.mensajero1,
       asignadoAt: instanteCR(FECHA_CR, "08:00"),
     });
@@ -121,7 +121,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     await transicionDeRecoleccion(tx, base, soloRecoleccion, instanteCR(FECHA_CR, "08:30"));
     const recolectadaYGestionada = await crearOrden(tx, base, {
       clave: "c2-gestionada",
-      estatus: "entregada",
+      estatus: "entregado",
       mensajeroId: base.mensajero1,
       asignadoAt: null,
     });
@@ -129,7 +129,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     await crearGestion(tx, {
       ordenId: recolectadaYGestionada,
       mensajeroId: base.mensajero1,
-      resultado: "entregada",
+      resultado: "entregado",
       at: instanteCR(FECHA_CR, "16:00"),
     });
 
@@ -222,10 +222,10 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     expect(sinResultado).toHaveLength(
       detalle.fila.sinRecoger + detalle.fila.enReparto + detalle.fila.otros,
     );
-    expect(conResultado.filter((f) => f.resultadoDelDia === "entregada")).toHaveLength(
+    expect(conResultado.filter((f) => f.resultadoDelDia === "entregado")).toHaveLength(
       detalle.fila.entregadas,
     );
-    expect(conResultado.filter((f) => f.resultadoDelDia === "reprogramada")).toHaveLength(
+    expect(conResultado.filter((f) => f.resultadoDelDia === "reprogramado")).toHaveLength(
       detalle.fila.reprogramadas,
     );
   });
@@ -251,7 +251,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       // (a) reservada para hoy y asignada hoy.
       await crearOrden(tx, base, {
         clave: "cuadre259-a-hoy",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
         fechaReparto: diaReparto(FECHA_CR),
@@ -259,7 +259,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       // (b) sin dia de reparto: el respaldo por `asignado_at`.
       await crearOrden(tx, base, {
         clave: "cuadre259-b",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "08:00"),
       });
@@ -287,7 +287,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       idsDeManana.push(
         await crearOrden(tx, base, {
           clave: "cuadre259-para-manana",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "14:00"),
           fechaReparto: diaReparto("2001-06-16"),
@@ -295,7 +295,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       );
       const recoleccionParaManana = await crearOrden(tx, base, {
         clave: "cuadre259-recoleccion-manana",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero2,
         asignadoAt: instanteCR(FECHA_CR, "14:00"),
         fechaReparto: diaReparto("2001-06-16"),

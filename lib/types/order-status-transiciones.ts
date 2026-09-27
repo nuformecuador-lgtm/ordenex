@@ -145,7 +145,7 @@ export const TRANSICIONES = {
   // --- Bodegas y reparto ---------------------------------------------------------------
   en_bodega_central: [
     { to: "en_ruta_bodega_satelite", via: "ruteo_satelite", rol: "maestro/admin" }, // #7
-    { to: "por_recoger", via: "asignacion_bodega", rol: "maestro/admin" }, // #8
+    { to: "mensajero_recogiendo_en_bodega", via: "asignacion_bodega", rol: "maestro/admin" }, // #8
     { to: "devolviendo_a_tienda", via: "cancelacion_api", rol: "apiKey (tienda)" }, // #29
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #34
     // #48 (158, camino del ADMIN): el paquete se dana/pierde/roba EN LA BODEGA CENTRAL. `rol`
@@ -168,7 +168,7 @@ export const TRANSICIONES = {
     }, // #51 (158)
   ],
   en_bodega_satelite: [
-    { to: "por_recoger", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
+    { to: "mensajero_recogiendo_en_bodega", via: "asignacion_satelite", rol: "adminSatelite" }, // #9
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #35
     // #49 (158): incidente EN LA BODEGA SATELITE. La forma compuesta del `rol` es LITERAL de
     // #47 (149) y recoge que quien opera esa bodega es el `adminSatelite` de su zona (#9), sin
@@ -179,7 +179,7 @@ export const TRANSICIONES = {
       rol: "maestro/admin/adminSatelite (de la zona)",
     }, // #49 (158)
   ],
-  por_recoger: [
+  mensajero_recogiendo_en_bodega: [
     { to: "en_reparto", via: "recoleccion", rol: "mensajero" }, // #11
     // Feature 149 (caso a): deshacer la asignacion a un mensajero que aun no recogio. El
     // destino se DERIVA del historial (D3) y se normaliza a un estado de BODEGA (D3'): NO se
@@ -208,18 +208,30 @@ export const TRANSICIONES = {
     }, // #52 (158)
   ],
   en_reparto: [
-    { to: "entregada", via: "gestion", rol: "mensajero" }, // #12
-    { to: "reprogramada", via: "gestion", rol: "mensajero" }, // #13
-    // FEATURE 239 — BAJA de #14 (`en_reparto -> devuelta`) y ALTA de #59
-    // (`en_reparto -> devolucion_por_confirmar`). Es la MISMA accion del mensajero con otro
-    // destino: gestionar una devolucion ya no deja la orden en `devuelta`, la deja en el
-    // pre-estado, y la aprobacion del cierre es la que la ancla (#60). La baja va en el MISMO
-    // commit que su ultimo productor —el mapa `ESTATUS_POR_RESULTADO` de
-    // `lib/types/gestion-destino.ts`, que ya apunta al pre-estado—, que es la convencion del
-    // repo. Reintroducir #14 reabre el cobro prematuro que la 239 cierra.
-    { to: "devolucion_por_confirmar", via: "gestion", rol: "mensajero" }, // #59 (239)
-    { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
-    { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
+    // FICHA 454 (2026-09-23, design §2): #12/#13/#15/#44 conservan par y familia, pero su productor
+    // cambia de momento: la gestion del mensajero se REGISTRA sin transicion (la orden sigue en
+    // `en_reparto` con la gestion pendiente de confirmar) y la transicion la escribe la APROBACION
+    // del cierre (`CierresAdminRepository.resolverCierre`, bloque «APLICACION DE GESTIONES»).
+    { to: "entregado", via: "gestion", rol: "mensajero (aplicado al aprobar el cierre)" }, // #12
+    { to: "reprogramado", via: "gestion", rol: "mensajero (aplicado al aprobar el cierre)" }, // #13
+    // FICHA 454 (design §2): metadato de la gestion de la TIENDA desde una ayuda abierta (237), que
+    // ahora sale de `en_reparto` al aprobar (antes salia de `ayuda_tienda`, #65/#66). Mismo par que
+    // #13/#15: no cambia la legalidad, solo documenta la familia que escribe la aplicacion.
+    { to: "reprogramado", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña), aplicado al aprobar el cierre" }, // #71 (454)
+    { to: "devolucion_a_origen_por_rechazo", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña), aplicado al aprobar el cierre" }, // #72 (454)
+    // FEATURE 239 — BAJA de #14 (`en_reparto -> devuelta` por la gestion del mensajero).
+    // Reintroducirla reabre el cobro prematuro que la 239 cierra.
+    // FICHA 454 (2026-09-23) — BAJA de #59 (`en_reparto -> devolucion_por_confirmar`, 239): el
+    // pre-estado sale del catalogo. La gestion `devuelta` se registra sin transicion y la
+    // aprobacion del cierre aplica `en_reparto -> devuelta` (#70, abajo).
+    // FICHA 454 (design §2) — ALTA de `en_reparto -> devuelta`, familia `anclaje_devolucion`. Es el
+    // PAR de la vieja #14, pero NO la reabre: la #14 era la gestion del mensajero llevando a
+    // `devuelta` al instante (cobro prematuro); esta la produce SOLO la aprobacion del cierre
+    // (`CierresAdminRepository.resolverCierre`, bloque «APLICACION DE GESTIONES»), que es lo que la
+    // 239 pedia. Productor en el mismo commit.
+    { to: "novedad", via: "anclaje_devolucion", rol: "admin (aprobar cierre)" }, // #70 (454)
+    { to: "devolucion_a_origen_por_rechazo", via: "gestion", rol: "mensajero (aplicado al aprobar el cierre)" }, // #15
+    { to: "novedad_interna", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
     // #44 (154, con el `via` REALINEADO por la 158/Q-G el 2026-07-30): resultado `incidente`
     // de la gestion. La 154 la declaro con `via: "gestion"` y dejo la familia `incidente` del
     // enum de historial «declarada SIN PRODUCTOR hasta la 158». La 158 ES ese productor: el
@@ -228,20 +240,14 @@ export const TRANSICIONES = {
     // decir lo mismo que la fila que se escribe. El `via` NO participa de la decision de
     // legalidad (:26-35), asi que el cambio es cosmetico — pero un metadato que miente sobre
     // lo que se persiste es peor que no tenerlo.
-    { to: "incidente", via: "incidente", rol: "mensajero" }, // #44 (154 / via 158)
-    // FEATURE 235 — ALTA de #62. Pedir ayuda a la tienda NO sustituye a ningun desenlace: se
-    // AÑADE. `en_reparto` conserva sus seis salidas intactas (contraste con la 239, que si dio de
-    // baja #14 porque su productor cambio de destino).
-    //
-    // El `rol` es `mensajero` y ademas el ASIGNADO, y eso NO se expresa aqui (los metadatos no
-    // participan de la legalidad): se expresa ESTRECHANDO LA VENTANA del hilo
-    // (`lib/types/ventana-hilo-notas.ts` + `autorizarSobreHilo`), que es la puerta unica de la
-    // solicitud. P9, firmada el 2026-08-19: «no una segunda tabla de permisos».
-    { to: "ayuda_tienda", via: "solicitud_ayuda_tienda", rol: "mensajero (asignado)" }, // #62 (235)
+    { to: "incidente", via: "incidente", rol: "mensajero (aplicado al aprobar el cierre)" }, // #44 (154 / via 158)
+    // FICHA 454 (2026-09-23) — BAJA de #62 (`en_reparto -> ayuda_tienda`, 235): pedir ayuda a la
+    // tienda deja de ser un estado y pasa a ser un evento (`orden_evento` `ayuda_solicitada`) sobre
+    // una orden que sigue en `en_reparto` (design §4). No escribe historial.
   ],
 
   // --- Resultados de gestion -----------------------------------------------------------
-  entregada: [
+  entregado: [
     // TERMINAL (Q1). Conserva UNA salida legitima: deshacer la gestion del dia (#31).
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #31
     // ⭑ FICHA 398 — LA CORRECCION EN SITIO. Un maestro/admin corrige, desde el detalle de un
@@ -261,77 +267,25 @@ export const TRANSICIONES = {
     //
     // NO se abre la inversa `rechazada -> entregada`: esta FUERA del alcance de la 398 y
     // reintroduciria el cobro. La vuelta atras de una correccion es rechazar el cierre.
-    { to: "rechazada", via: "correccion_resultado_gestion", rol: "maestro/admin" }, // #69 (398)
+    { to: "devolucion_a_origen_por_rechazo", via: "correccion_resultado_gestion", rol: "maestro/admin" }, // #69 (398)
   ],
-  reprogramada: [
+  reprogramado: [
     { to: "en_bodega_central", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #25
     { to: "en_bodega_satelite", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #26
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #32
   ],
-  // FEATURE 239 — el PRE-ESTADO de la devolucion. Tiene ENTRADA (#59, la gestion del mensajero)
-  // y SALIDAS (#60/#61), asi que no es terminal ni vestigial (invariante 140/R14).
-  //
-  // Las DOS salidas declaradas son EXACTAMENTE las que tienen productor en el codigo (R29):
-  //   #60 el anclaje al aprobar el cierre — el bloque de `CierresAdminRepository.resolverCierre`;
-  //   #61 el deshacer del mensajero — `CierreDiaRepository.anularGestionYDevolverAGestion`, con
-  //       su ventana de siempre (`cierre_id IS NULL`). Sin ella el mensajero no podria deshacer
-  //       su propia devolucion del dia (R24): eso seria una REGRESION, no una arista opcional.
-  //
-  // NO tiene arista de `recuperacion_manual` (P4, FIRMADA EN CONTRA de la recomendacion del spec
-  // el 2026-08-19, con el precio escrito en `requirements.md`): un satelite que tenga el paquete
-  // fisicamente en su estante NO puede registrarlo hasta que el cierre del mensajero se apruebe.
-  // Se prefiere que nada se mueva antes de la confirmacion fisica. Si duele en operacion, la via
-  // es REABRIR P4, no anadir aqui una puerta trasera «por comodidad».
-  devolucion_por_confirmar: [
-    { to: "devuelta", via: "anclaje_devolucion", rol: "admin (aprobar cierre)" }, // #60 (239)
-    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #61 (239)
-  ],
-  // FEATURE 235 — el estatus de la SOLICITUD DE AYUDA viva. Tiene ENTRADA (#62) y SALIDAS
-  // (#63/#64), asi que no es terminal ni vestigial (invariante 140/R14).
-  //
-  // Las DOS salidas declaradas son EXACTAMENTE las que tienen productor en el codigo (R12):
-  //   #63 el RESCATE — el punto UNICO de escritura (`OrdenRepository.transicionarAyuda`), al que
-  //       delegan los DOS llamadores: `SolicitudAyudaService.recuperar` («Recuperar», el
-  //       mensajero) y `HabilitarNovedadService.habilitar` («Habilitar», la tienda). Un solo par,
-  //       una sola familia, dos puertas.
-  //   #64 el CORTE DE LA NOCHE — `CierreDiaRepository.crearCierre`, en su propio bloque guardado
-  //       por este estatus de origen, para que el historial registre el origen REAL (R27) y no uno
-  //       supuesto.
-  //
-  // FEATURE 237 (T3.1, R1/R45) — LAS DOS GESTIONES DE LA TIENDA, que llegan CON su productor
-  // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`):
-  //   #65 `-> reprogramada` y #66 `-> rechazada`, las dos con `via: "gestion_tienda_ayuda"` y
-  //       actor = el adminTienda DUEÑO de la orden. La fila que producen se atribuye al MENSAJERO
-  //       (`gestion_orden.mensajero_id`), que es lo que la mete en SU cierre y mueve el dinero
-  //       igual; quien la registro lo dice `orden_historial_estado.actor_usuario_id`.
-  //
-  // ⏳ 2026-08-20 — AQUI DECIA, y ya no es cierto: «`ayuda_tienda -> entregada / reprogramada /
-  // devolucion_por_confirmar / rechazada / incidente`: son LAS GESTIONES. Las trae la ficha 237
-  // JUNTO A SU PRODUCTOR», y «consecuencia VIVA mientras la 237 no entre: desde aqui solo se sale
-  // rescatando o por el corte de la noche». La 237 entro y trajo DOS de las cinco. La nota se
-  // reescribe en vez de borrarse porque su razon sigue en pie para las OTRAS TRES.
-  //
-  // LO QUE **NO** SE DECLARA, y por que importa decirlo:
-  //   - `ayuda_tienda -> entregada`, `-> devolucion_por_confirmar` y `-> incidente`: las tres
-  //     SIGUEN SIN PRODUCTOR y siguen fuera (237/R1). El diseño firmado de la pila concede a la
-  //     tienda EXACTAMENTE dos desenlaces desde ayuda —reprogramar y rechazar— y ninguno mas: la
-  //     tienda no puede declarar entregado un paquete que no vio, ni devolver por su cuenta lo que
-  //     sigue en la moto del mensajero, ni reportar un incidente que no presencio. Declarar una
-  //     arista sin productor es el error que la 154 cometio con #43/#44 y que «costo el tren
-  //     154+155+156».
-  //   - `ayuda_tienda -> en_bodega_*`: no hay recuperacion manual desde aqui. El paquete esta en
-  //     la moto, no en un estante.
-  ayuda_tienda: [
-    { to: "en_reparto", via: "rescate_ayuda_tienda", rol: "mensajero / adminTienda" }, // #63 (235)
-    { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #64 (235)
-    { to: "reprogramada", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña)" }, // #65 (237)
-    { to: "rechazada", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña)" }, // #66 (237)
-  ],
-  devuelta: [
+  // FICHA 454 (2026-09-23) — BAJA de las claves `devolucion_por_confirmar` (239: #60 anclaje, #61
+  // deshacer) y `ayuda_tienda` (235/237: #63 rescate, #64 corte, #65/#66 gestion de la tienda). Los
+  // dos estados salen del catalogo (R37). Sus herederas: el anclaje es #70 (`en_reparto ->
+  // devuelta` al aprobar); el deshacer de una gestion pendiente no transiciona (anula + evento); el
+  // rescate es un evento `ayuda_rescatada`; el corte barre la orden desde `en_reparto` (#16); la
+  // gestion de la tienda se aplica al aprobar por #71/#72. Las filas historicas que los referencian
+  // se siguen leyendo (R40), pero el grafo ya no los declara.
+  novedad: [
     { to: "en_bodega_central", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #19
     { to: "en_bodega_satelite", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #20
-    { to: "rechazada", via: "escalado_devuelta_sla", rol: "sistema/cron" }, // #21
-    { to: "reprogramada", via: "reprogramacion_tienda", rol: "adminTienda" }, // #22
+    { to: "devolucion_a_origen_por_rechazo", via: "escalado_devuelta_sla", rol: "sistema/cron" }, // #21
+    { to: "reprogramado", via: "reprogramacion_tienda", rol: "adminTienda" }, // #22
     // #23/#24 comparten par con #19/#20 y difieren SOLO en familia (accion manual del admin).
     { to: "en_bodega_central", via: "recuperacion_manual", rol: "maestro/admin/adminSatelite" }, // #23
     { to: "en_bodega_satelite", via: "recuperacion_manual", rol: "adminSatelite" }, // #24
@@ -340,7 +294,7 @@ export const TRANSICIONES = {
     // origen->destino que #21, y por eso comparten par y no `via`: lo que las separa es QUIEN
     // decide. #21 es el reloj (el cron de plazo vencido); esta es una persona de la tienda que
     // sabe que ese paquete no se va a entregar y no quiere esperar al vencimiento (R25).
-    { to: "rechazada", via: "rechazo_tienda", rol: "adminTienda (dueña)" }, // #67 (240)
+    { to: "devolucion_a_origen_por_rechazo", via: "rechazo_tienda", rol: "adminTienda (dueña)" }, // #67 (240)
     // ⏳ 2026-08-20 (feature 240): aqui decia «FEATURE 239: las SIETE salidas de `devuelta` se
     // conservan INTACTAS». DEJA DE SER CIERTO y por eso se reescribe en vez de dejarlo: un
     // comentario que describe un mundo que ya no existe es peor que ninguno. Lo que la 239 dijo y
@@ -353,9 +307,9 @@ export const TRANSICIONES = {
     // entregar, ni devolver otra vez, ni mandar a bodega: el paquete esta fisicamente en la bodega
     // desde que se aprobo el cierre, y esos caminos tienen sus propios dueños (#19/#20/#23/#24).
   ],
-  rechazada: [
+  devolucion_a_origen_por_rechazo: [
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #33
-    { to: "por_devolver", via: "devolucion_rechazada", rol: "admin (aprobar cierre; zona satelite)" }, // #38 (139)
+    { to: "por_devolver_a_bodega_central", via: "devolucion_rechazada", rol: "admin (aprobar cierre; zona satelite)" }, // #38 (139)
     {
       to: "por_devolver_a_tienda",
       via: "devolucion_rechazada",
@@ -365,7 +319,7 @@ export const TRANSICIONES = {
     // la RETIRO a proposito (su R9): la unica salida de `rechazada` hacia la devolucion es
     // ahora la aprobacion del cierre (#38/#39). Reintroducirla reabre un camino cerrado.
   ],
-  sin_gestionar: [
+  novedad_interna: [
     { to: "en_bodega_central", via: "liberacion_sin_gestionar", rol: "admin (aprobar cierre)" }, // #17
     { to: "en_bodega_satelite", via: "liberacion_sin_gestionar", rol: "admin (aprobar cierre)" }, // #18
     // FEATURE 276 (T3/T9, R21/R22) — #68. LA NO GESTION EN EL TOPE NO VUELVE A BODEGA: se TERMINA.
@@ -380,11 +334,11 @@ export const TRANSICIONES = {
     // «liberacion» y esta es precisamente la orden que NO se libera. Las dos poblaciones saldrian
     // indistinguibles justo en la fila que es su unica evidencia — y esta cobra dinero
     // (`cobroRechazado`, 56). El argumento completo vive en `lib/types/orden-historial.ts`.
-    { to: "rechazada", via: "rechazo_tope_intentos", rol: "admin (aprobar cierre)" }, // #68 (276)
+    { to: "devolucion_a_origen_por_rechazo", via: "rechazo_tope_intentos", rol: "admin (aprobar cierre)" }, // #68 (276)
   ],
 
   // --- Flujo de devolucion (137 + 139) -------------------------------------------------
-  por_devolver: [
+  por_devolver_a_bodega_central: [
     {
       to: "devolviendo_a_bodega_central",
       via: "ajuste_estado",
@@ -454,7 +408,7 @@ export const TRANSICIONES = {
       rol: "maestro/admin/adminSatelite (de la zona)",
     }, // #57 (158, inversa de #51)
     {
-      to: "por_recoger",
+      to: "mensajero_recogiendo_en_bodega",
       via: "incidente",
       rol: "maestro/admin/adminSatelite (de la zona)",
     }, // #58 (158, inversa de #52)
@@ -507,7 +461,7 @@ export const ESTADOS_CREACION = [
  * `incidente` aprobado —con su egreso ya emitido— NO se revierte por ninguna de ellas (R59).
  */
 export const ESTADOS_TERMINALES = [
-  "entregada",
+  "entregado",
   "devuelta_a_tienda",
   "incidente", // feature 154
 ] as const satisfies readonly OrderStatusValue[];

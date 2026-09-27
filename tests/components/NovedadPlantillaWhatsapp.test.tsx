@@ -53,7 +53,7 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     id: "o1",
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: DESTINATARIO,
@@ -70,6 +70,8 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: null,
     causa: "not_found",
     intentosEntrega: 2,
@@ -90,7 +92,10 @@ const handlers = {
 };
 
 function renderAcciones(over: Partial<NovedadDTO> = {}) {
-  return render(<NovedadAcciones novedad={novedad(over)} {...handlers} />);
+  // FICHA 454 (T2.5): la fila lleva el grupo bajo el que se listó; aquí, una devolución.
+  return render(
+    <NovedadAcciones novedad={novedad(over)} grupoListado="devolucion" {...handlers} />,
+  );
 }
 
 let openSpy: ReturnType<typeof vi.spyOn>;

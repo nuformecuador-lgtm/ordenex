@@ -11,7 +11,8 @@
 // de la base.
 import type { PrismaClient } from "@prisma/client";
 import type { DatosPlantilla } from "@/lib/types/plantilla-datos";
-import { negocioDesdeEnv } from "@/lib/utils/whatsapp-envio-valores";
+import { resolverSinpeBodega } from "@/lib/utils/sinpe-bodega";
+import { negocioConSinpe } from "@/lib/utils/whatsapp-envio-valores";
 
 type OrdenPrismaClient = Pick<PrismaClient, "orden">;
 
@@ -54,7 +55,10 @@ export class OrdenEnvioReader implements IOrdenEnvioReader {
         // rastreo antes de ponerlo en un mensaje. El value interno no cruza esa frontera.
         estatus: { select: { value: true } },
         tienda: { select: { nombre: true } },
-        zona: { select: { nombre: true } },
+        // FICHA 429 (R13/R15): los dos campos del SINPE se anaden al `select` de zona QUE YA
+        // EXISTIA. Cero consultas nuevas: son dos columnas mas de una relacion que este metodo ya
+        // traia para `{{zona}}`.
+        zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
         provincia: { select: { nombre: true } },
         canton: { select: { nombre: true } },
         distrito: { select: { nombre: true } },
@@ -70,7 +74,9 @@ export class OrdenEnvioReader implements IOrdenEnvioReader {
             placa: true,
             estado: true,
             vehiculo: { select: { name: true } },
-            zona: { select: { nombre: true } },
+            // FICHA 429 (R13): la bodega del MENSAJERO, que es la que manda. Tambien aqui son dos
+            // columnas mas de un `select` que ya se hacia.
+            zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
           },
         },
       },
@@ -120,7 +126,24 @@ export class OrdenEnvioReader implements IOrdenEnvioReader {
         zonaNombre: m?.zona?.nombre ?? null,
         estado: m?.estado ?? null,
       },
-      negocio: negocioDesdeEnv(),
+      // ⭑ FICHA 429 (R13/R15/R16) — DE QUE BODEGA ES EL SINPE QUE VA A LEER EL CLIENTE.
+      //
+      // La MISMA funcion pura que usa la otra superficie (la composicion en el dispositivo, via
+      // `MiAsignacionDTO`). Que sea una sola es lo que hace que R16 —«las dos superficies no
+      // pueden dar resultados distintos para la misma orden»— sea estructural y no una promesa.
+      //
+      // `m?.zona ?? null`: el mensajero puede no existir (orden sin asignar) y, existiendo, puede
+      // no tener zona (`usuario.zona_id` es nullable). Los dos casos caen al respaldo, que es la
+      // zona de la ORDEN — y esa NO puede faltar: `orden.zona_id` es NOT NULL.
+      negocio: negocioConSinpe(
+        resolverSinpeBodega({
+          zonaDelMensajero:
+            m?.zona == null
+              ? null
+              : { numero: m.zona.sinpeNumero, nombre: m.zona.sinpeNombre },
+          zonaDeLaOrden: { numero: row.zona.sinpeNumero, nombre: row.zona.sinpeNombre },
+        }),
+      ),
     };
   }
 }

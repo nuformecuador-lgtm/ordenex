@@ -32,7 +32,7 @@ const TARIFA: TarifaVigente = {
 
 function input(overrides: Partial<OrdenIngresoInput> = {}): OrdenIngresoInput {
   return {
-    resultado: "entregada",
+    resultado: "entregado",
     esCentral: false,
     esZonaEspecial: false,
     montoCobrar: "10000.00",
@@ -77,7 +77,7 @@ describe("derivarIngresoOrden — entregada (R8)", () => {
 
 describe("derivarIngresoOrden — rechazada (R8; ficha 301)", () => {
   it("rechazada no-central: flete devolucion + su IVA (mismo % ivaFlete), SIN comision", () => {
-    const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: false }), TARIFA);
+    const d = derivarIngresoOrden(input({ resultado: "devolucion_a_origen_por_rechazo", esCentral: false }), TARIFA);
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("400.00");
     expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("52.00"); // 400 * 13%
     expect(d.ingreso_comision_cod).toBeUndefined();
@@ -86,7 +86,7 @@ describe("derivarIngresoOrden — rechazada (R8; ficha 301)", () => {
   });
 
   it("rechazada central: flete devolucion GAM + su IVA", () => {
-    const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: true }), TARIFA);
+    const d = derivarIngresoOrden(input({ resultado: "devolucion_a_origen_por_rechazo", esCentral: true }), TARIFA);
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("600.00");
     expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("78.00"); // 600 * 13%
   });
@@ -110,7 +110,7 @@ describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
   const CONCEPTOS_DEVOLUCION = ["ingreso_flete_devolucion", "ingreso_iva_flete_devolucion"] as const;
 
   it("entregada: cobra el flete NORMAL + su IVA, y NADA de devolucion", () => {
-    const d = derivarIngresoOrden(input({ resultado: "entregada", esCentral: true }), TARIFA);
+    const d = derivarIngresoOrden(input({ resultado: "entregado", esCentral: true }), TARIFA);
     expect(d.ingreso_flete?.toFixed(2)).toBe("1500.00"); // columna GAM
     expect(d.ingreso_iva_flete?.toFixed(2)).toBe("195.00");
     for (const c of CONCEPTOS_DEVOLUCION) expect(d[c]).toBeUndefined();
@@ -119,7 +119,7 @@ describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
   it("rechazada: SIGUE cobrando el flete de devolucion + su IVA, con los mismos montos", () => {
     // La mitad que NO cambia. Si esto se pusiera en cero, Ordenex dejaria de facturar los
     // retornos que si ocurren.
-    const d = derivarIngresoOrden(input({ resultado: "rechazada", esCentral: true }), TARIFA);
+    const d = derivarIngresoOrden(input({ resultado: "devolucion_a_origen_por_rechazo", esCentral: true }), TARIFA);
     expect(d.ingreso_flete_devolucion?.toFixed(2)).toBe("600.00"); // valorFleteDevueltoGam
     expect(d.ingreso_iva_flete_devolucion?.toFixed(2)).toBe("78.00"); // 600 * 13%
     expect(d.ingreso_flete).toBeUndefined();
@@ -131,23 +131,23 @@ describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
     for (const esCentral of [false, true]) {
       for (const esZonaEspecial of [false, true]) {
         expect(
-          derivarIngresoOrden(input({ resultado: "devuelta", esCentral, esZonaEspecial }), TARIFA),
+          derivarIngresoOrden(input({ resultado: "novedad", esCentral, esZonaEspecial }), TARIFA),
         ).toEqual({});
       }
     }
   });
 
   it("reprogramada: sigue sin aportar nada (no se movio de sitio)", () => {
-    expect(derivarIngresoOrden(input({ resultado: "reprogramada" }), TARIFA)).toEqual({});
+    expect(derivarIngresoOrden(input({ resultado: "reprogramado" }), TARIFA)).toEqual({});
   });
 
   it("devuelta y reprogramada dan lo MISMO; rechazada da algo DISTINTO de las dos", () => {
     // La distincion explicita: la devuelta paso a comportarse como la reprogramada, y ni una
     // ni otra se parecen a la rechazada. Una mutacion que dejara de cobrar SIEMPRE igualaria
     // las tres y este caso se pondria rojo.
-    const devuelta = derivarIngresoOrden(input({ resultado: "devuelta" }), TARIFA);
-    const reprogramada = derivarIngresoOrden(input({ resultado: "reprogramada" }), TARIFA);
-    const rechazada = derivarIngresoOrden(input({ resultado: "rechazada" }), TARIFA);
+    const devuelta = derivarIngresoOrden(input({ resultado: "novedad" }), TARIFA);
+    const reprogramada = derivarIngresoOrden(input({ resultado: "reprogramado" }), TARIFA);
+    const rechazada = derivarIngresoOrden(input({ resultado: "devolucion_a_origen_por_rechazo" }), TARIFA);
     expect(devuelta).toEqual(reprogramada);
     expect(rechazada).not.toEqual(devuelta);
     expect(Object.keys(rechazada)).toHaveLength(2);
@@ -163,7 +163,7 @@ describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
       ivaFlete: "13.00",
     };
     const nueveDevueltas = Array.from({ length: 9 }, () => ({
-      input: input({ resultado: "devuelta" as const, esCentral: true }),
+      input: input({ resultado: "novedad" as const, esCentral: true }),
       tarifa: tarifaProd,
     }));
 
@@ -174,7 +174,7 @@ describe("derivarIngresoOrden — los CUATRO resultados (ficha 301)", () => {
     // ordenes, si acabaran rechazadas, si facturarian esos ₡24.408,00.
     const nueveRechazadas = nueveDevueltas.map((g) => ({
       ...g,
-      input: { ...g.input, resultado: "rechazada" as const },
+      input: { ...g.input, resultado: "devolucion_a_origen_por_rechazo" as const },
     }));
     const agg = Object.fromEntries(
       agregarIngresosPorConcepto(nueveRechazadas).map((a) => [a.categoria, a.monto]),
@@ -204,10 +204,10 @@ describe("una devuelta que acaba rechazada cobra UNA sola vez (fichas 247/301)",
   it("los dos cierres de la orden 63050 juntos facturan el retorno UNA vez, al rechazarse", () => {
     // Cierre del 2026-07-22: la gestion fue `devuelta`. Cierre del 28: `rechazada`.
     const cierre22 = agregarIngresosPorConcepto([
-      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "novedad", ...enGam }), tarifa: TARIFA_63050 },
     ]);
     const cierre28 = agregarIngresosPorConcepto([
-      { input: input({ resultado: "rechazada", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "devolucion_a_origen_por_rechazo", ...enGam }), tarifa: TARIFA_63050 },
     ]);
 
     // El primer cierre no factura NADA por esa orden: ahi estaba el sobrecoste.
@@ -229,10 +229,10 @@ describe("una devuelta que acaba rechazada cobra UNA sola vez (fichas 247/301)",
   it("y da igual cuantas devueltas haya antes del rechazo: el retorno se cobra una vez", () => {
     // Tres intentos fallidos (cron de SLA liberando y reprogramando) y un rechazo final.
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
-      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
-      { input: input({ resultado: "devuelta", ...enGam }), tarifa: TARIFA_63050 },
-      { input: input({ resultado: "rechazada", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "novedad", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "novedad", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "novedad", ...enGam }), tarifa: TARIFA_63050 },
+      { input: input({ resultado: "devolucion_a_origen_por_rechazo", ...enGam }), tarifa: TARIFA_63050 },
     ]);
     const map = Object.fromEntries(agg.map((a) => [a.categoria, a.monto]));
     expect(map.ingreso_flete_devolucion).toBe("2200.00"); // x1, no x4
@@ -241,8 +241,8 @@ describe("una devuelta que acaba rechazada cobra UNA sola vez (fichas 247/301)",
 });
 
 describe("derivarIngresoOrden — reprogramada y gap de tarifa (R8/R9)", () => {
-  it("reprogramada -> ningun concepto", () => {
-    const d = derivarIngresoOrden(input({ resultado: "reprogramada" }), TARIFA);
+  it("reprogramado -> ningun concepto", () => {
+    const d = derivarIngresoOrden(input({ resultado: "reprogramado" }), TARIFA);
     expect(d).toEqual({});
   });
 
@@ -255,8 +255,8 @@ describe("derivarIngresoOrden — reprogramada y gap de tarifa (R8/R9)", () => {
 describe("agregarIngresosPorConcepto (R10)", () => {
   it("cierre solo-entregada con comision: emite flete, iva flete, comision, iva comision; NO devolucion", () => {
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "entregada" }), tarifa: TARIFA },
-      { input: input({ resultado: "entregada" }), tarifa: TARIFA },
+      { input: input({ resultado: "entregado" }), tarifa: TARIFA },
+      { input: input({ resultado: "entregado" }), tarifa: TARIFA },
     ]);
     const map = Object.fromEntries(agg.map((a) => [a.categoria, a.monto]));
     expect(map.ingreso_flete).toBe("2000.00");
@@ -270,7 +270,7 @@ describe("agregarIngresosPorConcepto (R10)", () => {
 
   it("cierre sin comision (cobraComision=false): NO emite comision ni su IVA", () => {
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "entregada", cobraComision: false }), tarifa: TARIFA },
+      { input: input({ resultado: "entregado", cobraComision: false }), tarifa: TARIFA },
     ]);
     const cats = agg.map((a) => a.categoria);
     expect(cats).toContain("ingreso_flete");
@@ -280,8 +280,8 @@ describe("agregarIngresosPorConcepto (R10)", () => {
 
   it("cierre mixto (entregada + rechazada): emite conceptos de ambos caminos", () => {
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "entregada", cobraComision: true }), tarifa: TARIFA },
-      { input: input({ resultado: "rechazada" }), tarifa: TARIFA },
+      { input: input({ resultado: "entregado", cobraComision: true }), tarifa: TARIFA },
+      { input: input({ resultado: "devolucion_a_origen_por_rechazo" }), tarifa: TARIFA },
     ]);
     const cats = agg.map((a) => a.categoria);
     expect(cats).toEqual(
@@ -299,12 +299,12 @@ describe("agregarIngresosPorConcepto (R10)", () => {
   it("ficha 301: una devuelta dentro de un cierre mixto NO añade ningun concepto", () => {
     // El mismo cierre, con y sin la devuelta: byte a byte lo mismo. Si la devuelta volviera a
     // facturar, el segundo agregado traeria dos conceptos mas y montos distintos.
-    const entregada = { input: input({ resultado: "entregada" as const }), tarifa: TARIFA };
+    const entregada = { input: input({ resultado: "entregado" as const }), tarifa: TARIFA };
     const sinDevuelta = agregarIngresosPorConcepto([entregada]);
     const conDevuelta = agregarIngresosPorConcepto([
       entregada,
-      { input: input({ resultado: "devuelta" }), tarifa: TARIFA },
-      { input: input({ resultado: "devuelta", esCentral: true }), tarifa: TARIFA },
+      { input: input({ resultado: "novedad" }), tarifa: TARIFA },
+      { input: input({ resultado: "novedad", esCentral: true }), tarifa: TARIFA },
     ]);
     expect(conDevuelta).toEqual(sinDevuelta);
     expect(conDevuelta.map((a) => a.categoria)).not.toContain("ingreso_flete_devolucion");
@@ -312,8 +312,8 @@ describe("agregarIngresosPorConcepto (R10)", () => {
 
   it("R9/R10: todas sin tarifa -> ningun concepto (todo 0.00, omitidos)", () => {
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "entregada" }), tarifa: null },
-      { input: input({ resultado: "devuelta" }), tarifa: null },
+      { input: input({ resultado: "entregado" }), tarifa: null },
+      { input: input({ resultado: "novedad" }), tarifa: null },
     ]);
     expect(agg).toEqual([]);
   });
@@ -330,8 +330,8 @@ describe("agregarIngresosPorConcepto (R10)", () => {
     // tarifa con flete que produce centavos que un float acumularia mal.
     const t: TarifaVigente = { ...TARIFA, valorFlete: "0.10", ivaFlete: "0" };
     const agg = agregarIngresosPorConcepto([
-      { input: input({ resultado: "entregada", cobraComision: false }), tarifa: t },
-      { input: input({ resultado: "entregada", cobraComision: false }), tarifa: { ...t, valorFlete: "0.20" } },
+      { input: input({ resultado: "entregado", cobraComision: false }), tarifa: t },
+      { input: input({ resultado: "entregado", cobraComision: false }), tarifa: { ...t, valorFlete: "0.20" } },
     ]);
     const map = Object.fromEntries(agg.map((a) => [a.categoria, a.monto]));
     expect(new Prisma.Decimal(map.ingreso_flete).toFixed(2)).toBe("0.30");
@@ -456,7 +456,7 @@ describe("costosListadoOrden (feature 204) — comisión + IVA, con los montos r
     // sale de la misma función.
     for (const monto of ["14900.00", "16618.40", "6500.00", "0.00", "33.33"]) {
       const d = derivarIngresoOrden(
-        { resultado: "entregada", esCentral: false, esZonaEspecial: false, montoCobrar: monto, cobraComision: true },
+        { resultado: "entregado", esCentral: false, esZonaEspecial: false, montoCobrar: monto, cobraComision: true },
         TARIFA_REAL,
       );
       const esperado = d.ingreso_comision_cod!.plus(d.ingreso_iva_comision_cod!).toFixed(2);

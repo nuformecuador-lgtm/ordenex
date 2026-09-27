@@ -42,20 +42,21 @@ describe("listarMovimientosDeTiendaSchema (R22/R25)", () => {
       tiendaId: "t1",
       page: 3,
       pageSize: 50,
-      cierreId: "c1",
+      cierreId: "c0c0c0c0-0000-4000-8000-000000000001",
       categoria: "iva_comision_cod",
-      desde: "2026-07-01T00:00:00.000Z",
-      hasta: "2026-07-31T00:00:00.000Z",
+      // Ficha 461 (R72): el borde recibe DIAS (`YYYY-MM-DD`) y los traduce a dias de Costa Rica.
+      desde: "2026-07-01",
+      hasta: "2026-07-31",
     });
     expect(r).toMatchObject({
       tiendaId: "t1",
       page: 3,
       pageSize: 50,
-      cierreId: "c1",
+      cierreId: "c0c0c0c0-0000-4000-8000-000000000001",
       categoria: "iva_comision_cod",
     });
-    expect(r.desde).toBeInstanceOf(Date);
-    expect(r.hasta).toBeInstanceOf(Date);
+    expect(r.desde).toEqual(new Date("2026-07-01T06:00:00.000Z")); // inicio del 1 de julio en CR
+    expect(r.hasta).toEqual(new Date("2026-08-01T06:00:00.000Z")); // inicio del dia SIGUIENTE al 31 (exclusivo)
   });
 
   it("R44: `pago_tienda` es un valor ACEPTADO del filtro por concepto (lo necesita la 172)", () => {
@@ -95,10 +96,10 @@ describe("listarMovimientosDeTiendaCompletoSchema (R24/R25/R37)", () => {
   it("R37: acepta el `tiendaId` + los MISMOS filtros que el listado, sin paginacion", () => {
     const r = listarMovimientosDeTiendaCompletoSchema.parse({
       tiendaId: "t1",
-      cierreId: "c1",
+      cierreId: "c0c0c0c0-0000-4000-8000-000000000001",
       categoria: "flete",
     });
-    expect(r).toMatchObject({ tiendaId: "t1", cierreId: "c1", categoria: "flete" });
+    expect(r).toMatchObject({ tiendaId: "t1", cierreId: "c0c0c0c0-0000-4000-8000-000000000001", categoria: "flete" });
     expect(r).not.toHaveProperty("page");
     expect(r).not.toHaveProperty("pageSize");
   });
@@ -106,10 +107,10 @@ describe("listarMovimientosDeTiendaCompletoSchema (R24/R25/R37)", () => {
   it("resuelve EXACTAMENTE los mismos filtros que el paginado (ningun conjunto distinto en el archivo)", () => {
     const entrada = {
       tiendaId: "t1",
-      cierreId: "c1",
+      cierreId: "c0c0c0c0-0000-4000-8000-000000000001",
       categoria: "comision_cod" as const,
-      desde: "2026-07-01T00:00:00.000Z",
-      hasta: "2026-07-31T00:00:00.000Z",
+      desde: "2026-07-01", // ficha 461 (R72): dias, no instantes
+      hasta: "2026-07-31",
     };
     const paginado = listarMovimientosDeTiendaSchema.parse(entrada);
     const completo = listarMovimientosDeTiendaCompletoSchema.parse(entrada);

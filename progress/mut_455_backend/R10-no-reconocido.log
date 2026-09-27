@@ -1,0 +1,44 @@
+# MUTACION R10-no-reconocido
+archivo: lib/types/order-status.ts
+linea: 218
+- "  return NOMBRE_NO_RECONOCIDO;\n}"
++ "  return value;\n}"
+tests: tests/unit/types/nombre-de-estado.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 9 passed (10)
+FAIL  tests/unit/types/nombre-de-estado.test.ts > 455/R2 · R10 · R11 — nombreDeEstado (superficies internas) > R10/R3: un codigo desconocido da «Estado no reconocido» y NUNCA el codigo
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/types/nombre-de-estado.test.ts (10 tests | 1 failed) 10ms
+     × R10/R3: un codigo desconocido da «Estado no reconocido» y NUNCA el codigo 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  06:29:03
+   Duration  358ms (transform 72ms, setup 53ms, import 92ms, tests 10ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/types/nombre-de-estado.test.ts > 455/R2 · R10 · R11 — nombreDeEstado (superficies internas) > R10/R3: un codigo desconocido da «Estado no reconocido» y NUNCA el codigo
+AssertionError: expected 'no_existe_455' to be 'Estado no reconocido' // Object.is equality
+
+Expected: "Estado no reconocido"
+Received: "no_existe_455"
+
+ ❯ tests/unit/types/nombre-de-estado.test.ts:41:45
+     39|
+     40|   it("R10/R3: un codigo desconocido da «Estado no reconocido» y NUNCA …
+     41|     expect(nombreDeEstado("no_existe_455")).toBe("Estado no reconocido…
+       |                                             ^
+     42|     expect(NOMBRE_NO_RECONOCIDO).toBe("Estado no reconocido");
+     43|     // Un codigo ANTERIOR tampoco se muestra crudo ni se traduce aqui:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

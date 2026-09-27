@@ -150,7 +150,7 @@ describeSiHayBase("FICHA 450 · el emisor de la tercera consulta", () => {
       select: { id: true },
     });
     const gestion = await tx.gestionOrden.create({
-      data: { ordenId: orden.id, mensajeroId, resultado: "entregada" },
+      data: { ordenId: orden.id, mensajeroId, resultado: "entregado" },
       select: { id: true },
     });
     return gestion.id;

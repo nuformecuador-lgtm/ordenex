@@ -41,14 +41,19 @@ import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 // (`cobro_tienda_registrado`), que es dinero en el sentido mas directo: baja el disponible de una
 // tienda por una decision humana; y la ficha 398 añade el DUODECIMO (`cierre_dia_gestion_corregida`),
 // que tambien es dinero: saca de un cierre abierto un cobro que nadie recaudo y deja en cero el pago
-// de esa gestion al mensajero. El motivo de cada uno esta escrito a su lado.
+// de esa gestion al mensajero; y la ficha 429 añade el DECIMOTERCERO (`zona_sinpe_cambiado`), que
+// es dinero en el sentido MAS directo de todos: decide a que cuenta transfiere el cliente; y la
+// ficha 431 añade el DECIMOCUARTO y el DECIMOQUINTO (`cierre_bodega_conciliado` y
+// `cierre_bodega_conciliacion_revertida`), que son dinero aunque no hagan asiento: declaran que el
+// bulto de efectivo de una satelite llego a la central —o que dejo de haber llegado— y mueven el
+// saldo con el que la central lo persigue. El motivo de cada uno esta escrito a su lado.
 
 /**
- * Los 52 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
+ * Los 55 tipos de accion. El ORDEN de esta tupla es el del Anexo A (dinero, desaparicion,
  * permisos) y es el que consume el selector de filtros: no se reordena por gusto.
  */
 export const HISTORIAL_ACCION_TIPOS = [
-  // --- A.1 · mueve dinero (30) ---
+  // --- A.1 · mueve dinero (31) ---
   "cierre_dia_aprobado", // cierres-admin.aprobarCierre
   "cierre_dia_rechazado", // cierres-admin.rechazarCierre
   "cierre_dia_pagos_editados", // cierres-admin.actualizarPagosGestion
@@ -61,7 +66,7 @@ export const HISTORIAL_ACCION_TIPOS = [
   "reparto_anulado", // liquidacion.anularRepartoAction
   "wallet_movimiento_manual_registrado", // wallet.registrarMovimientoManualAction
   "egreso_administrativo_registrado", // wallet-egresos.registrarEgresoAdministrativoAction
-  "egreso_administrativo_reversado", // wallet-egresos.reversarEgresoAdministrativoAction
+  "egreso_administrativo_reversado", // WalletEgresoService.reversarEgreso (su Server Action se retiro en la 458-E, M4; quedan las filas historicas)
   "tarifa_creada", // tarifas.crearTarifa
   "tarifa_actualizada", // tarifas.actualizarTarifa
   "incidente_aprobado", // incidentes.aprobarIncidente
@@ -124,6 +129,29 @@ export const HISTORIAL_ACCION_TIPOS = [
   //     `zona_creada`, igual que `vehiculo_borrado` sin `vehiculo_creado`— por el motivo escrito
   //     mas abajo: lo que decide no es el nombre de la operacion sino su PAPEL.
   "zona_pago_mensajero_cambiado", // zonas.actualizarZona -> ZonaRepository.update (SOLO update)
+  // ⭑ FICHA 429 — EL SINPE DE UNA BODEGA QUEDO DISTINTO. Entra en DINERO y es el sentido MAS
+  // DIRECTO de la categoria, mas todavia que `zona_pago_mensajero_cambiado`: estos dos campos
+  // deciden A QUE CUENTA VA A PARAR EL DINERO DEL CLIENTE. Hasta esta ficha el SINPE era UNO para
+  // toda la operacion y vivia en una variable de entorno, asi que cambiarlo no dejaba rastro en
+  // ninguna parte — ni siquiera un despliegue con nombre.
+  //
+  // ⚠️ `valor_anterior`/`valor_nuevo` LLEVAN EL NUMERO Y EL TITULAR NO (R23). La columna admite
+  // «vocabulario CERRADO … nunca texto libre tecleado por una persona» (TSDoc de
+  // `HistorialAccion`). El numero NO es texto libre: son ocho digitos con un `CHECK` detras, es el
+  // dato PUBLICO que se le manda a cada cliente en cada mensaje, y es lo unico que contesta la
+  // pregunta del dia del reclamo —«¿a que numero transfirio el cliente el martes?»—. El titular SI
+  // es un nombre tecleado por una persona: fuera, por la misma regla que dejo fuera el motivo de un
+  // rechazo. `monto` va NULL: no hay un importe unico.
+  //
+  // ⚠️ LIMITE DECLARADO, con el precedente de la Q2 de la 380 delante: si un guardado cambia SOLO
+  // el titular, la fila existe y sus dos valores son el MISMO numero. El historial dira que el
+  // SINPE de esa bodega cambio, cual, quien y cuando — y no de que titular a que titular.
+  //
+  // ⚠️ CONFIRMAR SIN CAMBIAR NADA NO DEJA FILA (R25). D6 dice «quien lo CAMBIO»; una confirmacion
+  // no cambia nada y no mueve dinero. Meter un tipo «alguien lo miro» en la categoria del dinero la
+  // convertiria en un registro de visitas. La fecha queda en `zona.sinpe_revisado_at`; el «quien»
+  // de una confirmacion sin cambio, no.
+  "zona_sinpe_cambiado", // sinpe-bodega.guardarSinpeBodega -> ZonaRepository.guardarSinpe
   // ⭑ FICHA 381 — ALGUIEN LE COBRO UN COSTO A UNA TIENDA a mano, desde «Registrar movimiento».
   // Entra en DINERO y no admite discusion: la fila documenta que el disponible de esa tienda BAJO
   // por una decision humana, y que puede haber quedado NEGATIVO (el humano lo firmo asi el
@@ -143,6 +171,46 @@ export const HISTORIAL_ACCION_TIPOS = [
   // La fila lleva `monto` (el importe cobrado) y se etiqueta por el NOMBRE DE LA TIENDA. La
   // `descripcion` del cobro NO entra (R43): es texto libre tecleado por una persona.
   "cobro_tienda_registrado", // wallet-tienda.registrarCobroTiendaAction -> WalletTiendaMovimientoRepository.registrarCobroEnHistorial
+  // ⭑ FICHA 459 (R53/R78) — el PAGO POR CUENTA de una tienda y el SALDO INICIAL o APORTE DE
+  // CAPITAL, registrados y anulados. Los cuatro «mueve dinero»: el pago por cuenta saca dinero de
+  // la caja y baja el saldo de la tienda; el aporte mete dinero de Ordenex en la caja. UN TIPO POR
+  // METODO (la guardia del censo mide por metodo). La fila lleva el importe y, en el pago por
+  // cuenta, el NOMBRE de la tienda; NUNCA el motivo, la referencia ni el beneficiario (texto libre).
+  "pago_por_cuenta_tienda_registrado", // PagoPorCuentaTiendaRepository.crear
+  "pago_por_cuenta_tienda_anulado", // PagoPorCuentaTiendaRepository.anular
+  "aporte_capital_registrado", // AporteCapitalRepository.crear
+  "aporte_capital_anulado", // AporteCapitalRepository.anular
+  // ⭑ FICHA 461 (R55) — alguien ANULO un cobro de Ordenex a una tienda. «Mueve dinero» en el sentido
+  // mas directo: le devuelve a la tienda el monto del cobro (credito) y baja la ganancia (reverso del
+  // cargo en la caja). TIPO PROPIO y metodo propio (la guardia del censo mide POR METODO). La fila
+  // lleva el importe y el NOMBRE de la tienda; NUNCA el motivo de la anulacion (texto libre, R5 de la
+  // 362). Entidad: `wallet_tienda_movimiento` (el debito del cobro), sin entidad nueva.
+  "cobro_tienda_anulado", // CobroTiendaAnulacionRepository.anular
+  // ⭑ FICHA 461 (R69, auditoria de la wallet D3) — alguien ANULO una CORRECCION de caja
+  // (`ingreso_ajuste`/`egreso_ajuste`). Mueve dinero: el contra-asiento deshace su efecto en la
+  // ganancia. TIPO PROPIO y metodo propio (la guardia del censo mide POR METODO). La fila lleva el
+  // importe y la CATEGORIA de la correccion; NUNCA el motivo (texto libre, R5 de la 362). Entidad:
+  // `wallet_movimiento` (la correccion original).
+  "wallet_movimiento_manual_anulado", // AjusteCajaAnulacionRepository.anular
+  // ⭑ FICHA 457 (R61/R62) — alguien REGISTRO un pago de una tienda a Ordenex, o lo ANULO. Los dos
+  // «mueven dinero» en el sentido mas directo: entra (o vuelve a salir) dinero de la tienda y su saldo
+  // sube (o baja). UN TIPO POR METODO (la guardia del censo mide por metodo). La fila lleva el importe
+  // y el NOMBRE de la tienda; NUNCA el motivo, la referencia ni la ruta del comprobante (R63).
+  // Reabre a proposito la D3 de la 381 (2026-09-24, ficha 457): este credito SI tiene dinero real y
+  // su contrapartida en la caja en la misma transaccion; lo protege la guardia de alcance de la 457.
+  "abono_tienda_registrado", // AbonoTiendaRepository.crear
+  "abono_tienda_anulado", // AbonoTiendaRepository.anular
+  // ⭑ FICHA 458-B (R63/R64, D7) — alguien ANULO un cobro por rechazo aprobado (337). Mueve dinero:
+  // le devuelve a la tienda el flete y el IVA y baja la ganancia. TIPO PROPIO y metodo propio (la
+  // guardia del censo mide POR METODO). La fila lleva el importe (flete + IVA) y el NOMBRE de la
+  // tienda; NUNCA el motivo (texto libre, R5 de la 362). Entidad: `rechazo_tienda_cobro`.
+  "cobro_rechazo_tienda_anulado", // RechazoTiendaCobroAnulacionRepository.anular
+  // ⭑ FICHA 458-B (R63/R64, D13) — alguien ANULO con motivo un sueldo, un gasto de Ordenex, un gasto
+  // fijo cobrado o una indemnizacion. Mueve dinero: el contra-asiento devuelve el importe a la caja
+  // y a la ganancia. TIPO PROPIO: el de la 461 (`wallet_movimiento_manual_anulado`) dice «corrección
+  // de caja». La fila lleva el importe y la CATEGORIA del egreso; NUNCA el motivo. Entidad:
+  // `wallet_movimiento` (el egreso original).
+  "egreso_caja_anulado", // AjusteCajaAnulacionRepository.anularEgreso
   // ⭑ FICHA 398 — UN MAESTRO/ADMIN CORRIGIO EL RESULTADO de una gestion que ya estaba dentro de un
   // cierre ABIERTO: `entregada -> rechazada`. Entra en DINERO y no admite discusion — la fila
   // documenta que del cierre SALIO un cobro que nadie recaudo (baja `total_general` y el balde de
@@ -164,6 +232,24 @@ export const HISTORIAL_ACCION_TIPOS = [
   // que es el vocabulario cerrado que esa columna admite (precedente: `usuario_fulfillment_cambiado`).
   // El MOTIVO NO ENTRA (R5): es texto libre tecleado por una persona y vive en `gestion_orden.motivo`.
   "cierre_dia_gestion_corregida", // CierresAdminRepository.corregirResultadoGestionEnCierre
+  // ⭑ FICHA 431 — LA CENTRAL DIJO QUE EL BULTO DE EFECTIVO DE UNA SATELITE LLEGO, Y POR CUANTO; y
+  // su gemelo, alguien deshizo esa afirmacion. Entran en DINERO, y el matiz importa: la ficha 431
+  // NO escribe en ningun libro (R14) — ni `wallet_movimiento`, ni `wallet_tienda_movimiento`, ni
+  // `pago_mensajero_movimiento`—, asi que estas dos acciones no hacen un asiento. Lo que hacen es
+  // DECLARAR que ₡X llego o dejo de haber llegado, y con eso mueven el saldo sin conciliar con el
+  // que la central persigue el efectivo que anda fuera. Las otras dos categorias no lo describen en
+  // ningun sentido: no hace desaparecer nada y no cambia quien puede hacer que.
+  //
+  // ⚠️ DOS TIPOS Y NO UNO CON UN VALOR, y el motivo esta MEDIDO en este repo (fichas 376 y 380): la
+  // guardia del censo de historial mide POR METODO, no por escritura. Con las dos acciones dentro
+  // del mismo metodo, borrar UNO de los dos `appendAccion` la dejaria VERDE. Dos tipos obligan a
+  // dos entradas de censo y por tanto a dos metodos.
+  //
+  // `monto` = el monto recibido. En la REVERSION es el monto que se esta BORRANDO: al revertir,
+  // `cierre_bodega.monto_recibido` vuelve a NULL, asi que esta fila es el UNICO sitio donde
+  // sobrevive cuanto se habia dado por recibido. La NOTA no entra (R5 de la 362: texto libre).
+  "cierre_bodega_conciliado", // CierresBodegaAdminRepository.marcarConciliado
+  "cierre_bodega_conciliacion_revertida", // CierresBodegaAdminRepository.revertirConciliacion
 
   // --- A.2 · hace desaparecer algo (10) ---
   // ⭑ FICHA 371 — la fecha de una reprogramacion ya registrada, corregida por un coordinador.
@@ -287,6 +373,11 @@ export const HISTORIAL_ACCION_ENTIDADES = [
   "canton",
   "distrito",
   "wallet_tienda_movimiento",
+  // ⭑ FICHA 459 — los dos documentos nuevos, 1:1 con sus tablas (criterio de la 381/457).
+  "pago_por_cuenta_tienda",
+  "aporte_capital",
+  // ⭑ FICHA 457 — el documento del pago de una tienda a Ordenex, 1:1 con su tabla.
+  "abono_tienda",
 ] as const satisfies readonly PrismaHistorialAccionEntidad[];
 
 export type HistorialAccionEntidad = (typeof HISTORIAL_ACCION_ENTIDADES)[number];
@@ -339,13 +430,37 @@ export const CATEGORIA_POR_ACCION: Record<HistorialAccionTipo, CategoriaAccion> 
   // FICHA 380: `tarifa_zona_mensajero` ES lo que cobra un mensajero por entregar y por recibir un
   // rechazo. No hay lectura mas literal de «mueve dinero».
   zona_pago_mensajero_cambiado: "mueve_dinero",
+  // FICHA 429: los dos campos deciden A QUE CUENTA va el dinero del cliente. No hay lectura mas
+  // directa de «mueve dinero», y R17 exige exactamente una categoria por tipo.
+  zona_sinpe_cambiado: "mueve_dinero",
   // FICHA 381 (R41): un cobro manual BAJA el disponible de una tienda. No hay lectura mas directa
   // de «mueve dinero», y R17 exige exactamente una categoria por tipo.
   cobro_tienda_registrado: "mueve_dinero",
+  // FICHA 459 (R53/R78): pago por cuenta y saldo inicial o aporte — dinero que sale o entra.
+  pago_por_cuenta_tienda_registrado: "mueve_dinero",
+  pago_por_cuenta_tienda_anulado: "mueve_dinero",
+  aporte_capital_registrado: "mueve_dinero",
+  aporte_capital_anulado: "mueve_dinero",
+  // FICHA 461 (R55): anular un cobro le devuelve dinero a la tienda y baja la ganancia.
+  cobro_tienda_anulado: "mueve_dinero",
+  // FICHA 461 (R69): anular una correccion de caja deshace su efecto en la ganancia.
+  wallet_movimiento_manual_anulado: "mueve_dinero",
+  // FICHA 457 (R61/R62): entra dinero de una tienda y su saldo sube; la anulacion lo deshace.
+  abono_tienda_registrado: "mueve_dinero",
+  abono_tienda_anulado: "mueve_dinero",
+  // FICHA 458-B (R63/R64): anular un cobro por rechazo le devuelve dinero a la tienda y baja la
+  // ganancia; anular un egreso devuelve el importe a la caja y a la ganancia.
+  cobro_rechazo_tienda_anulado: "mueve_dinero",
+  egreso_caja_anulado: "mueve_dinero",
   // FICHA 398: la correccion saca del cierre un cobro que nadie recaudo y pone en cero el pago
   // de esa gestion al mensajero. No hay lectura mas directa de «mueve dinero», y R17 exige
   // exactamente una categoria por tipo.
   cierre_dia_gestion_corregida: "mueve_dinero",
+  // FICHA 431: no hacen asiento (R14), pero declaran que ₡X de efectivo llego —o dejo de haber
+  // llegado— a la central, y mueven el saldo sin conciliar de esa bodega. R17 exige exactamente
+  // una categoria, y ninguna de las otras dos describe esto.
+  cierre_bodega_conciliado: "mueve_dinero",
+  cierre_bodega_conciliacion_revertida: "mueve_dinero",
   gestion_fecha_reprogramacion_corregida: "hace_desaparecer",
   orden_eliminada: "hace_desaparecer",
   orden_recuperada: "hace_desaparecer",
@@ -402,8 +517,26 @@ export const ACCION_LABELS: Record<HistorialAccionTipo, string> = {
   orden_zona_reconciliada: "Actualizó la zona de una orden",
   zona_central_cambiada: "Cambió la marca de zona central",
   zona_pago_mensajero_cambiado: "Cambió el pago al mensajero de una zona",
-  cobro_tienda_registrado: "Cobró un costo a una tienda",
+  zona_sinpe_cambiado: "Cambió el SINPE de una bodega",
+  // Ficha 461 (design §7.7, HD3/P15): los seis textos que esta ficha toca, desde Ordenex y diciendo
+  // quien le paga a quien; verbo en pasado con la persona como sujeto, como el resto del catalogo.
+  cobro_tienda_registrado: "Le cobró a una tienda",
+  cobro_tienda_anulado: "Anuló un cobro a una tienda",
+  // Ficha 461 (R69, design §7: «correccion», no «ajuste»).
+  wallet_movimiento_manual_anulado: "Anuló una corrección de caja",
+  pago_por_cuenta_tienda_registrado: "Pagó un gasto de una tienda",
+  pago_por_cuenta_tienda_anulado: "Anuló el pago de un gasto de una tienda",
+  aporte_capital_registrado: "Registró un aporte de dinero a la caja",
+  aporte_capital_anulado: "Anuló un aporte de dinero a la caja",
+  // Ficha 457 (design §2/§9): desde Ordenex, diciendo quien le paga a quien (HD3 de la 461).
+  abono_tienda_registrado: "Registró un pago de una tienda a Ordenex",
+  abono_tienda_anulado: "Anuló un pago de una tienda a Ordenex",
+  // Ficha 458-B (R63/R64): verbo en pasado con la persona como sujeto, como el resto del catálogo.
+  cobro_rechazo_tienda_anulado: "Anuló un cobro por rechazo a una tienda",
+  egreso_caja_anulado: "Anuló un gasto de la caja",
   cierre_dia_gestion_corregida: "Corrigió el resultado de una gestión",
+  cierre_bodega_conciliado: "Marcó recibida una consolidación de bodega",
+  cierre_bodega_conciliacion_revertida: "Revirtió la conciliación de una consolidación de bodega",
   gestion_fecha_reprogramacion_corregida: "Corrigió la fecha de una reprogramación",
   orden_eliminada: "Eliminó una orden",
   orden_recuperada: "Recuperó una orden",
@@ -458,6 +591,11 @@ export const ENTIDAD_LABELS: Record<HistorialAccionEntidad, string> = {
   canton: "Cantón",
   distrito: "Distrito",
   wallet_tienda_movimiento: "Movimiento de tienda",
+  // Ficha 461 (design §7.7): las dos etiquetas de entidad con el nombre nuevo.
+  pago_por_cuenta_tienda: "Pago de un gasto de una tienda",
+  aporte_capital: "Aporte de dinero a la caja",
+  // Ficha 457 (design §2): el documento del pago de una tienda a Ordenex.
+  abono_tienda: "Pago de una tienda a Ordenex",
 };
 
 /** Los tipos de UNA categoria. Es la traduccion `categoria -> accion IN (…)` del borde (R17). */

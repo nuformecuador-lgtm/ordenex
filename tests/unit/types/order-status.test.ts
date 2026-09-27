@@ -9,39 +9,35 @@ import { seedOrderStatus } from "@/scripts/seed-catalogos";
 // en_ruta_bodega_central, devolviendo_a_tienda y devuelta_a_tienda. Los otros 9 no
 // cambian (en_ruta_bodega_satelite feature 30, en_bodega_satelite feature 33, etc.).
 describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2 · 155 retiro)", () => {
-  it("contiene exactamente los 22 valores esperados", () => {
+  it("contiene exactamente los 20 valores esperados", () => {
     expect([...ORDER_STATUS_SEED].sort()).toEqual(
       [
-        "devuelta",
+        "novedad",
         "devolviendo_a_tienda",
         "en_bodega_central",
         "en_preparacion",
-        "por_recoger",
+        "mensajero_recogiendo_en_bodega",
         "en_ruta_bodega_central",
         "en_ruta_bodega_satelite",
         "en_reparto",
-        "rechazada",
-        "entregada",
-        "reprogramada",
+        "devolucion_a_origen_por_rechazo",
+        "entregado",
+        "reprogramado",
         "en_bodega_satelite",
         "devuelta_a_tienda",
-        "sin_gestionar",
+        "novedad_interna",
         // feature 139: los 3 estados del flujo de devolucion de rechazadas
-        "por_devolver",
+        "por_devolver_a_bodega_central",
         "devolviendo_a_bodega_central",
         "por_devolver_a_tienda",
         // feature 154: los 2 estados del flujo v2
         "por_recolectar_en_tienda",
         "recolectando", // feature 157 (ampliacion)
         "incidente",
-        // Feature 239 (2026-08-19): el PRE-ESTADO de la devolucion. El mensajero la gestiono y
-        // la bodega aun no la confirmo al aprobar el cierre; hasta entonces no la ve la tienda
-        // ni corre su ventana de SLA.
-        "devolucion_por_confirmar",
-        // Feature 235 (2026-08-19): la SOLICITUD DE AYUDA viva del mensajero a la tienda. Era un
-        // booleano (`orden.ayuda`) y la orden nunca salia de `en_reparto`; con estatus propio sale
-        // de la ruta, del mapa y de la gestion por construccion.
-        "ayuda_tienda",
+        // ⏳ 2026-09-23 (FICHA 454, R37): aqui estaban `devolucion_por_confirmar` (239, el
+        // pre-estado de la devolucion) y `ayuda_tienda` (235, la solicitud de ayuda). Salen del
+        // catalogo: la gestion se registra sin cambiar el estado y se aplica al aprobar el
+        // cierre, y la ayuda pasa a ser un evento. El catalogo vuelve a 20.
       ].sort(),
     );
   });
@@ -52,43 +48,40 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
   it("feature 154/R1/R2: por_recolectar_en_tienda e incidente conservan su posicion", () => {
     expect(ORDER_STATUS_SEED[17]).toBe("por_recolectar_en_tienda");
     expect(ORDER_STATUS_SEED[18]).toBe("incidente");
-    // La 157 apendio `recolectando` DESPUES, la 239 `devolucion_por_confirmar` y la 235
-    // `ayuda_tienda`, sin mover a los dos de la 154 (las tres son aditivas puras).
-    expect(ORDER_STATUS_SEED.slice(-5)).toEqual([
+    // La 157 apendio `recolectando` DESPUES sin mover a los dos de la 154. (La 239 y la 235
+    // apendieron dos mas; la 454 los retiro el 2026-09-23 sin mover a nadie: eran los ultimos.)
+    expect(ORDER_STATUS_SEED.slice(-3)).toEqual([
       "por_recolectar_en_tienda",
       "incidente",
       "recolectando",
-      "devolucion_por_confirmar", // feature 239 (2026-08-19)
-      "ayuda_tienda", // feature 235 (2026-08-19)
     ]);
-    // Y es el ULTIMO: apendice puro, sin reordenar a nadie (235/R1).
-    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe("ayuda_tienda");
+    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe("recolectando");
   });
 
   // Feature 155/R27: el UNICO cambio sobre el catalogo de la 154 es la BAJA del estado de
   // fulfillment (que ocupaba el indice 4). Ni un rename, ni un reorden, ni otra baja.
   it("feature 155/R27: los 17 values previos siguen intactos y en su orden relativo", () => {
     const PREVIOS_17 = [
-      "entregada",
-      "devuelta",
+      "entregado",
+      "novedad",
       "devolviendo_a_tienda",
-      "reprogramada",
+      "reprogramado",
       "en_ruta_bodega_central",
       "en_bodega_central",
       "en_preparacion",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_ruta_bodega_satelite",
       "en_reparto",
-      "rechazada",
+      "devolucion_a_origen_por_rechazo",
       "en_bodega_satelite",
       "devuelta_a_tienda",
-      "sin_gestionar",
-      "por_devolver",
+      "novedad_interna",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
       "por_devolver_a_tienda",
     ];
     expect(ORDER_STATUS_SEED.slice(0, 17)).toEqual(PREVIOS_17);
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
   });
 
   // Feature 155/R27: el value retirado ya no esta. Se construye por concatenacion para no
@@ -100,12 +93,12 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
 
   it("feature 139/R1: incluye los 3 estados del flujo de devolucion (indices 14/15/16 tras la 155)", () => {
     // Se APENDIERON al final; la 155 los corre UNA posicion al retirar un value previo.
-    expect(ORDER_STATUS_SEED[14]).toBe("por_devolver");
+    expect(ORDER_STATUS_SEED[14]).toBe("por_devolver_a_bodega_central");
     expect(ORDER_STATUS_SEED[15]).toBe("devolviendo_a_bodega_central");
     expect(ORDER_STATUS_SEED[16]).toBe("por_devolver_a_tienda");
     // El set completo incluye los 3 nuevos.
     const set = new Set(ORDER_STATUS_SEED);
-    expect(set.has("por_devolver")).toBe(true);
+    expect(set.has("por_devolver_a_bodega_central")).toBe(true);
     expect(set.has("devolviendo_a_bodega_central")).toBe(true);
     expect(set.has("por_devolver_a_tienda")).toBe(true);
   });
@@ -115,9 +108,9 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
   });
 
   // Los indices de aqui abajo bajaron UNO tras la 155 (el value retirado ocupaba el 4).
-  it("R5/R12: por_recoger conserva su lugar relativo (indice 7 tras la 155, feature 17)", () => {
-    expect(ORDER_STATUS_SEED).toContain("por_recoger");
-    expect(ORDER_STATUS_SEED[7]).toBe("por_recoger");
+  it("R5/R12: mensajero_recogiendo_en_bodega conserva su lugar relativo (indice 7 tras la 155, feature 17)", () => {
+    expect(ORDER_STATUS_SEED).toContain("mensajero_recogiendo_en_bodega");
+    expect(ORDER_STATUS_SEED[7]).toBe("mensajero_recogiendo_en_bodega");
   });
 
   it("R1: incluye en_ruta_bodega_satelite (indice 8 tras la 155, feature 30)", () => {
@@ -127,7 +120,7 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
 
   it("R5/R12: en_reparto y rechazada (indices 9 y 10 tras la 155, feature 36)", () => {
     expect(ORDER_STATUS_SEED[9]).toBe("en_reparto");
-    expect(ORDER_STATUS_SEED[10]).toBe("rechazada");
+    expect(ORDER_STATUS_SEED[10]).toBe("devolucion_a_origen_por_rechazo");
   });
 
   it("R1: incluye en_bodega_satelite (indice 11 tras la 155, feature 33)", () => {
@@ -140,24 +133,28 @@ describe("ORDER_STATUS_SEED (R1/R5/R12 · 135 rename · 139 devolucion · 154 v2
     expect(ORDER_STATUS_SEED[12]).toBe("devuelta_a_tienda");
   });
 
-  it("feature 109/R1: incluye sin_gestionar (indice 13 tras la 155)", () => {
-    expect(ORDER_STATUS_SEED).toContain("sin_gestionar");
-    expect(ORDER_STATUS_SEED[13]).toBe("sin_gestionar");
+  it("feature 109/R1: incluye novedad_interna (indice 13 tras la 155)", () => {
+    expect(ORDER_STATUS_SEED).toContain("novedad_interna");
+    expect(ORDER_STATUS_SEED[13]).toBe("novedad_interna");
   });
 
   // Feature 235 (T1.1, R1): el estatus propio de la SOLICITUD DE AYUDA. Caso nombrado, aparte del
   // censo de arriba, porque R1 es un requisito por si mismo: «un estado de orden, DISTINTO de
   // `en_reparto`, que represente que hay una solicitud de ayuda viva y el paquete sigue con el
   // mensajero». Lo que hace de esto una feature y no un renombre es justamente que sean dos.
-  it("235/R1: `ayuda_tienda` existe en el catalogo y es DISTINTO de `en_reparto`", () => {
-    expect(ORDER_STATUS_SEED as readonly string[]).toContain("ayuda_tienda");
+  // ⏳ 2026-09-23 (FICHA 454, R37): este caso afirmaba «235/R1: `ayuda_tienda` existe en el
+  // catalogo y es DISTINTO de `en_reparto`». La 454 revierte esa decision: la ayuda vuelve a ser un
+  // hecho sobre una orden que sigue `en_reparto` —ahora un EVENTO append-only, no el booleano mutable
+  // que la 235 retiro— y los dos estados salen del catalogo.
+  it("454/R37: `ayuda_tienda` y `devolucion_por_confirmar` ya NO estan en el catalogo", () => {
+    expect(ORDER_STATUS_SEED as readonly string[]).not.toContain("ayuda_tienda");
+    expect(ORDER_STATUS_SEED as readonly string[]).not.toContain("devolucion_por_confirmar");
     expect(ORDER_STATUS_SEED as readonly string[]).toContain("en_reparto");
-    expect("ayuda_tienda").not.toBe("en_reparto");
   });
 
   it("no tiene valores duplicados", () => {
     expect(new Set(ORDER_STATUS_SEED).size).toBe(ORDER_STATUS_SEED.length);
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
   });
 });
 
@@ -185,25 +182,27 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
         return row;
       },
     );
-    return { rows, upsert };
+    // FICHA 455 (R20): el sembrado mira antes si la base tiene un codigo anterior (aqui, nunca).
+    const findFirst = vi.fn(async () => null);
+    return { rows, upsert, findFirst };
   }
 
-  it("agrega por_recoger sin duplicar tras dos ejecuciones", async () => {
+  it("agrega mensajero_recogiendo_en_bodega sin duplicar tras dos ejecuciones", async () => {
     const fake = createFakeOrderStatus();
-    const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
+    const client = { orderStatus: { upsert: fake.upsert, findFirst: fake.findFirst } } as unknown as Pick<
       PrismaClient,
       "orderStatus"
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.has("por_recoger")).toBe(true);
+    expect(fake.rows.has("mensajero_recogiendo_en_bodega")).toBe(true);
     expect(fake.rows.has("en_ruta_bodega_satelite")).toBe(true); // feature 30/R1
     expect(fake.rows.has("en_reparto")).toBe(true); // feature 36/R1
-    expect(fake.rows.has("rechazada")).toBe(true); // feature 36/R3
+    expect(fake.rows.has("devolucion_a_origen_por_rechazo")).toBe(true); // feature 36/R3
     expect(fake.rows.has("en_bodega_satelite")).toBe(true); // feature 33/R1
     expect(fake.rows.has("devuelta_a_tienda")).toBe(true); // cierre de devolucion
-    expect(fake.rows.has("sin_gestionar")).toBe(true); // feature 109
-    expect(fake.rows.has("por_devolver")).toBe(true); // feature 139
+    expect(fake.rows.has("novedad_interna")).toBe(true); // feature 109
+    expect(fake.rows.has("por_devolver_a_bodega_central")).toBe(true); // feature 139
     expect(fake.rows.has("devolviendo_a_bodega_central")).toBe(true); // feature 139
     expect(fake.rows.has("por_devolver_a_tienda")).toBe(true); // feature 139
     expect(fake.rows.has("por_recolectar_en_tienda")).toBe(true); // feature 154
@@ -211,14 +210,16 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     // Feature 155/R27: el sembrado idempotente DEJA DE INCLUIR el estado retirado. Es la
     // mitad "codigo" del retiro; la mitad "datos" es la migracion con su backfill.
     expect(fake.rows.has(["en", "fulfillment"].join("_"))).toBe(false);
-    expect(fake.rows.has("devolucion_por_confirmar")).toBe(true); // feature 239
-    expect(fake.rows.has("ayuda_tienda")).toBe(true); // feature 235
-    expect(fake.rows.size).toBe(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
-    const idPrimera = fake.rows.get("por_recoger")?.id;
+    // FICHA 454 (2026-09-23): el sembrado deja de incluir los dos estados retirados (la mitad
+    // «datos» es la migracion M3, con su backfill y su retiro condicional).
+    expect(fake.rows.has("devolucion_por_confirmar")).toBe(false); // 239 -> retirado por la 454
+    expect(fake.rows.has("ayuda_tienda")).toBe(false); // 235 -> retirado por la 454
+    expect(fake.rows.size).toBe(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
+    const idPrimera = fake.rows.get("mensajero_recogiendo_en_bodega")?.id;
 
     await seedOrderStatus(client); // segunda ejecucion: idempotente
-    expect(fake.rows.size).toBe(22); // no crece
-    expect(fake.rows.get("por_recoger")?.id).toBe(idPrimera); // id conservado
+    expect(fake.rows.size).toBe(20); // no crece
+    expect(fake.rows.get("mensajero_recogiendo_en_bodega")?.id).toBe(idPrimera); // id conservado
   });
 
   // Feature 154/R4: reaplicar el alta sobre un catalogo que YA tiene los dos values lo deja con
@@ -226,7 +227,7 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
   // `INSERT ... WHERE NOT EXISTS` de la migracion A (idempotencia en tests/integration/db).
   it("feature 154/R4: el alta de los dos values nuevos es idempotente (19 filas, sin duplicar)", async () => {
     const fake = createFakeOrderStatus();
-    const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
+    const client = { orderStatus: { upsert: fake.upsert, findFirst: fake.findFirst } } as unknown as Pick<
       PrismaClient,
       "orderStatus"
     >;
@@ -238,7 +239,7 @@ describe("seedOrderStatus siembra los values renombrados de forma idempotente (R
     await seedOrderStatus(client);
     await seedOrderStatus(client);
 
-    expect(fake.rows.size).toBe(22); // 2026-08-19 (235): 21 -> 22, +ayuda_tienda
+    expect(fake.rows.size).toBe(20); // 2026-08-19 (235): 21 -> 22; 2026-09-23 (454): 22 -> 20
     expect(fake.rows.get("incidente")?.id).toBe(idIncidente);
     expect(fake.rows.get("por_recolectar_en_tienda")?.id).toBe(idRecolectar);
   });

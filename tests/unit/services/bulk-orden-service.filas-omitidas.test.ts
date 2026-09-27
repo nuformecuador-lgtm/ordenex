@@ -220,7 +220,8 @@ describe("294 — via API KEY (contrato publico de la 88)", () => {
 
     const omitida = res.summary.filas.find((f) => f.numRemision === "R-2");
     expect(omitida?.resultado).toBe("duplicada");
-    expect(omitida?.estatus).toBe("en_bodega_central");
+    expect(omitida?.estado).toBe("en_bodega_central"); // 455 (R27)
+    expect(omitida?.estadoNombre).toBe("En bodega central");
     // ESTE era el agujero de la via API: la fila se quedaba `creada` SIN guia y sin entrada en
     // `ordenes`, o sea un `creada` que el integrador no podia rastrear ni imprimir.
     expect(omitida?.numGuia).toBeUndefined();

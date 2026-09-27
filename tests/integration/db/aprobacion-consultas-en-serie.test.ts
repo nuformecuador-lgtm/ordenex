@@ -257,7 +257,7 @@ describeSiHayBase("FICHA 450 · una consulta a la vez sobre la conexion de la tr
       const ids = await Promise.all([
         repo.findEstatusIdByValue("en_reparto"),
         repo.findEstatusIdByValue("ayuda_tienda"),
-        repo.findEstatusIdByValue("sin_gestionar"),
+        repo.findEstatusIdByValue("novedad_interna"),
       ]);
 
       console.log(resumenDeLaSonda("R2 · CorteDiarioService:164", contado.sonda));

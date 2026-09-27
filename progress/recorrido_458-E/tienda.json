@@ -1,0 +1,22 @@
+{
+  "rol": "tienda",
+  "pasos": [
+    {
+      "nombre": "login",
+      "url": "http://localhost:3471/dashboard",
+      "otp": false
+    },
+    {
+      "nombre": "tienda GET /wallet",
+      "status": 404,
+      "libro": 0,
+      "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tienda No encontramos esta página 26/09/2026 Claro Tema claro activado. Salir Esta"
+    },
+    {
+      "nombre": "tienda GET /wallet/tiendas",
+      "status": 404,
+      "libro": 0,
+      "texto": "Ordenex Analítica Órdenes Novedades Mi wallet Ayuda TT Tania Tienda Admin de tienda No encontramos esta página 26/09/2026 Claro Tema claro activado. Salir Esta"
+    }
+  ]
+}

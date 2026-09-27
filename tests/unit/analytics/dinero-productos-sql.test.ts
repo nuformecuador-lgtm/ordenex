@@ -158,8 +158,8 @@ describe("La forma del SQL: LATERAL, resultados, joins y orden", () => {
     for (const r of RESULTADOS_QUE_APORTAN) expect(valores, r).toContain(r);
     // Y no hay ningun resultado incrustado en el texto del SQL: si alguien escribiera la lista a
     // mano en el SQL, aparecerian como literales.
-    expect(sql).not.toContain("'entregada'");
-    expect(sql).not.toContain("'rechazada'");
+    expect(sql).not.toContain("'entregado'");
+    expect(sql).not.toContain("'devolucion_a_origen_por_rechazo'");
   });
 
   it("⟨Q3⟩ · el JOIN a `gestion_orden` EXCLUYE las anuladas", async () => {
@@ -225,7 +225,7 @@ describe("R76 · el tope, y que NO sale de un numero nuevo", () => {
       num_remision: "r1",
       destinatario: "D",
       gestion_id: "g1",
-      resultado: "entregada",
+      resultado: "entregado",
       monto_recibido: null,
       cierre_estado: null,
       detalle_id: null,
@@ -250,7 +250,7 @@ describe("R76 · el tope, y que NO sale de un numero nuevo", () => {
       num_remision: `r${i}`,
       destinatario: "D",
       gestion_id: `g${i}`,
-      resultado: "entregada",
+      resultado: "entregado",
       monto_recibido: null,
       cierre_estado: null,
       detalle_id: null,
@@ -278,7 +278,7 @@ describe("R22 · lo que sale del repositorio ya es money-safe", () => {
         num_remision: "r1",
         destinatario: "D",
         gestion_id: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         monto_recibido: new Prisma.Decimal("10000"),
         cierre_estado: "aprobado",
         detalle_id: "d1",
@@ -330,7 +330,7 @@ describe("R22 · lo que sale del repositorio ya es money-safe", () => {
         num_remision: "r-9",
         destinatario: "D",
         gestion_id: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         monto_recibido: null,
         cierre_estado: null,
         detalle_id: null,
@@ -368,7 +368,7 @@ function filaCrudaConSnapshot(fulfillment: Prisma.Decimal | null) {
     num_remision: "r1",
     destinatario: "D",
     gestion_id: "g1",
-    resultado: "entregada",
+    resultado: "entregado",
     monto_recibido: new Prisma.Decimal("10000"),
     cierre_estado: "aprobado",
     detalle_id: "d1",
@@ -441,7 +441,7 @@ describe("FICHA 449 · `tarifa_fulfillment` se proyecta y sube en un campo propi
       num_remision: "r-9",
       destinatario: "D",
       gestion_id: "g1",
-      resultado: "entregada",
+      resultado: "entregado",
       monto_recibido: null,
       cierre_estado: null,
       detalle_id: null,
@@ -463,7 +463,7 @@ describe("FICHA 449 · `tarifa_fulfillment` se proyecta y sube en un campo propi
       num_remision: "r-8",
       destinatario: "D",
       gestion_id: "g2",
-      resultado: "entregada",
+      resultado: "entregado",
       monto_recibido: null,
       cierre_estado: null,
       detalle_id: null,

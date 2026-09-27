@@ -92,10 +92,11 @@ describe("R41 · el catalogo y la produccion real no se desincronizan", () => {
     // Sin el, anular un egreso no se descontaba nunca de la cifra.
     const egresos = listarMetricas({ dominio: "financiera" }).find((m) => m.id === "egresos");
     const categorias = egresos?.definicion.categorias ?? [];
-    expect(categorias).toHaveLength(9);
+    // FICHA 459 (P13): DIEZ — mas `egreso_pago_por_cuenta_tienda`, que sale de la caja.
+    expect(categorias).toHaveLength(10);
     // Las ocho historicas siguen enteras: sustituir una por la nueva encogeria la cifra igual
     // que recortarla, que es justo lo que este caso existe para impedir.
-    expect(categorias.filter((c) => c.startsWith("egreso_"))).toHaveLength(8);
+    expect(categorias.filter((c) => c.startsWith("egreso_"))).toHaveLength(9);
     expect(categorias.filter((c) => !c.startsWith("egreso_"))).toEqual(["ingreso_ajuste"]);
   });
 

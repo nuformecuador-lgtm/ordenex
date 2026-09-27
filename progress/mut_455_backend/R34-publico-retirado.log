@@ -1,0 +1,44 @@
+# MUTACION R34-publico-retirado
+archivo: lib/types/order-status.ts
+linea: 227
+- "return NOMBRE_ESTADO[ESTADO_RETIRADO[value].equivalente];"
++ "return ESTADO_RETIRADO[value].nombreHistorico;"
+tests: tests/unit/types/nombre-de-estado.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 9 passed (10)
+FAIL  tests/unit/types/nombre-de-estado.test.ts > 455/R34 — nombrePublicoDeEstado (rastreo) > un vigente da su nombre; un retirado, el de su vigente EQUIVALENTE; lo desconocido, R10
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/types/nombre-de-estado.test.ts (10 tests | 1 failed) 10ms
+     × un vigente da su nombre; un retirado, el de su vigente EQUIVALENTE; lo desconocido, R10 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  06:29:05
+   Duration  361ms (transform 59ms, setup 54ms, import 90ms, tests 10ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/types/nombre-de-estado.test.ts > 455/R34 — nombrePublicoDeEstado (rastreo) > un vigente da su nombre; un retirado, el de su vigente EQUIVALENTE; lo desconocido, R10
+AssertionError: expected 'Devolución por confirmar' to be 'Novedad' // Object.is equality
+
+Expected: "Novedad"
+Received: "Devolución por confirmar"
+
+ ❯ tests/unit/types/nombre-de-estado.test.ts:62:68
+     60|   it("un vigente da su nombre; un retirado, el de su vigente EQUIVALEN…
+     61|     expect(nombrePublicoDeEstado("novedad")).toBe("Novedad");
+     62|     expect(nombrePublicoDeEstado(RETIRADO.devolucionPorConfirmar)).toB…
+       |                                                                    ^
+     63|     expect(nombrePublicoDeEstado(RETIRADO.ayudaTienda)).toBe("En repar…
+     64|     expect(nombrePublicoDeEstado(RETIRADO.enFulfillment)).toBe("En pre…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

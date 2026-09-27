@@ -353,7 +353,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (a) — los enums de la base SON l
     const origenes = await valoresDeEnum(admin, "public", "orden_historial_origen_tipo");
     const acciones = await valoresDeEnum(admin, "public", "historial_accion_tipo");
     expect(origenes.at(-1)).toBe(VALOR_ORIGEN);
-    expect(acciones.at(-1)).toBe(VALOR_ACCION);
+    // ⚠️ `historial_accion_tipo` YA NO acaba en `VALOR_ACCION`, y esa es justamente la señal que
+    // este caso existe para dar: la ficha 429 añadio `zona_sinpe_cambiado` DESPUES (2026-09-15) y
+    // al hacerlo tuvo que pasar por aqui. Se afirma la POSICION RELATIVA —el invariante real,
+    // «`ADD VALUE` APENDE»— en vez de «es el ultimo», que caduca con cada ficha nueva. La
+    // afirmacion es MAS estrecha, no menos: inmediatamente antes del siguiente.
+    expect(acciones.indexOf("zona_sinpe_cambiado")).toBe(acciones.indexOf(VALOR_ACCION) + 1);
     // La POSICION RELATIVA frente a los dos ultimos valores previos de cada enum, que es el
     // invariante real y no caduca con la siguiente ficha como si lo haria «es el ultimo».
     expect(origenes.indexOf(VALOR_ORIGEN)).toBeGreaterThan(origenes.indexOf("habilitacion_api"));
@@ -419,7 +424,35 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("398/T1.5 (b) — el down recrea las listas 
     // migracion, en la lista `POSTERIORES` que le toque. Es lo que convierte la comparacion en una
     // cadena verificable en vez de en algo que caduca en silencio.
     const ORIGENES_POSTERIORES: string[] = [];
-    const ACCIONES_POSTERIORES: string[] = [];
+    // ficha 429 (2026-09-15): `zona_sinpe_cambiado`, con su archivo
+    // `historial-accion-zona-sinpe-migration.test.ts`.
+    const ACCIONES_POSTERIORES: string[] = [
+      "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
+      // Ficha 461 (2026-09-25): la anulacion del cobro de Ordenex a una tienda (migracion 1 de la
+      // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
+      "cobro_tienda_anulado",
+      "wallet_movimiento_manual_anulado",
+      // Ficha 457 (2026-09-25): el pago de una tienda a Ordenex, registrar y anular (la guardia del censo
+      // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
+      "abono_tienda_registrado",
+      "abono_tienda_anulado",
+      // Ficha 458-B (2026-09-26): la anulacion del cobro por rechazo aprobado (D7) y la de un egreso de
+      // caja (D13). Su migracion: `20260928120000_wallet_458_enums`.
+      "cobro_rechazo_tienda_anulado",
+      "egreso_caja_anulado",
+    ];
     expect([...origenAntes].sort()).toEqual(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter(
         (t) => t !== VALOR_ORIGEN && !ORIGENES_POSTERIORES.includes(t),
@@ -475,7 +508,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
       await admin.$executeRawUnsafe(
         `INSERT INTO "${esquema}"."historial_accion"
            ("id","accion","entidad_tipo","valor_anterior","valor_nuevo")
-         VALUES ('a1','${VALOR_ACCION}','gestion_orden','entregada','rechazada')`,
+         VALUES ('a1','${VALOR_ACCION}','gestion_orden','entregado','devolucion_a_origen_por_rechazo')`,
       );
     }, 120_000);
 
@@ -516,8 +549,8 @@ describe.skipIf(!HAY_BASE_DE_DATOS)(
       expect(historial.origen).toBe(VALOR_ORIGEN);
       expect(accion.n).toBe(1);
       expect(accion.accion).toBe(VALOR_ACCION);
-      expect(accion.anterior).toBe("entregada");
-      expect(accion.nuevo).toBe("rechazada");
+      expect(accion.anterior).toBe("entregado");
+      expect(accion.nuevo).toBe("devolucion_a_origen_por_rechazo");
     });
   },
 );

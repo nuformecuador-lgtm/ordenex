@@ -99,7 +99,7 @@ describe("Feature 158 (T2.7) — R41: la acción sólo se ofrece en los cinco es
     ).toBeInTheDocument();
   });
 
-  it.each(["en_reparto", "entregada", "devuelta", "incidente", "en_preparacion"])(
+  it.each(["en_reparto", "entregado", "novedad", "incidente", "en_preparacion"])(
     "en `%s` NO renderiza NADA (ni un botón deshabilitado)",
     (estado) => {
       const { container } = render(<ReportarIncidenteAccion orden={orden(estado)} />);

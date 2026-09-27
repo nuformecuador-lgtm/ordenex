@@ -35,6 +35,7 @@ import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // el dia que el humano mueva el plazo el cron escalaria a los 6 dias y el aviso seguiria
 // prometiendo 5 — y la tienda organiza su trabajo con ese numero.
 import { devolucionSlaConfig } from "@/lib/config/devolucion-sla";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 /**
  * Cliente transaccional que el emisor del rechazo necesita: las dos tablas de la feature +
@@ -57,7 +58,9 @@ export type NotificacionEmisor = (
 // Textos (design §4.6). NUNCA direccion, telefono ni monto.
 // ---------------------------------------------------------------------------
 
-export const TEXTO_ORDEN_RECHAZADA = "Una orden fue rechazada por el destinatario.";
+// FICHA 455 (R36): el texto CONTIENE el nombre visible exacto del estado (antes: «Una orden fue rechazada
+// por el destinatario.»). Las notificaciones ya emitidas no se reescriben.
+export const TEXTO_ORDEN_RECHAZADA = `${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}: el destinatario rechazó una orden.`;
 export const TEXTO_POSTULACION_PENDIENTE =
   "Una postulación de mensajero está pendiente de aprobación.";
 export const TEXTO_CIERRE_POR_APROBAR = "Un mensajero envió su cierre del día para aprobación.";
@@ -200,89 +203,50 @@ export async function emitirOrdenRechazada(
   );
 }
 
-/** Estado destino y familia de origen que identifican el rechazo DEL DESTINATARIO (R18/R19). */
-const DESTINO_RECHAZO: OrderStatusValue = "rechazada";
-const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
-
-// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — `gestion_tienda_ayuda` QUEDA FUERA A PROPOSITO, y
-// esto se escribe aqui para que la AUSENCIA sea una DECISION y no un olvido.
+// ⏳ 2026-09-23 — FICHA 454 (design DD; R35): EL DISPARO SE MUDA DEL CHOKE POINT AL REGISTRO.
 //
-// Desde la 237 la TIENDA puede rechazar una orden desde su pestaña de ayuda. Esa transicion
-// tambien aterriza en `rechazada`, pero con `origen_tipo = gestion_tienda_ayuda`, asi que la
-// igualdad de arriba NO la alcanza y el aviso NO se emite.
+// Hasta la 454 el aviso salia de `emisorNotificacionReal`, enganchado a `appendCambioEstado`, que
+// filtraba el lote por `destino === "rechazada" && origenTipo === "gestion"` (y por eso el escalado
+// por SLA, `escalado_devuelta_sla`, no avisaba: R19 de la 146). Con la 454 la gestion ya NO
+// transiciona al registrarse: la transicion `en_reparto -> rechazada` la escribe la APROBACION del
+// cierre, horas despues. Un emisor en el choke point avisaria TARDE y, con el registro avisando
+// tambien, DOS veces. El aviso sale ahora de `emitirOrdenRechazadaEnTransaccion`, que llama
+// `GestionOrdenRepository.registrarGestionPendiente` dentro de SU transaccion y SOLO para una
+// gestion `rechazada` del MENSAJERO: el mismo instante que antes (cero regresion de tiempo).
 //
-// POR QUE NO SE AMPLIA EL FILTRO: el texto del aviso es «Una orden fue rechazada POR EL
-// DESTINATARIO», y aqui eso seria FALSO — rechazo la tienda, sobre un paquete que el destinatario
-// no llego a ver. Este repo tiene escrito lo que cuesta un dato que miente con formato de dato
-// (236/D3, la columna «Sin causa registrada»). Y el aviso no es el mecanismo de nada: el paquete
-// llega igual a `por_devolver`/`por_devolver_a_tienda` al aprobar el cierre (139), que es donde
-// bodega lo ve.
+// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — la gestion de la TIENDA (`gestion_tienda_ayuda`)
+// QUEDA FUERA A PROPOSITO, y esto se escribe aqui para que la AUSENCIA sea una DECISION y no un
+// olvido. El texto del aviso es «Una orden fue rechazada POR EL DESTINATARIO», y sobre un rechazo
+// de la tienda seria FALSO: rechazo la tienda, sobre un paquete que el destinatario no llego a ver.
+// Desde la 454 la ausencia la sostiene el SITIO del disparo: `crearGestionDesdeAyuda` no llama a
+// este emisor (afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`).
+// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de esa clase de rechazo;
+// si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision.
 //
-// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de que viene un rechazo de
-// esta clase. Si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision — no ensanchar
-// esta igualdad. Afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`.
-//
-// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` QUEDA FUERA POR LA MISMA RAZON, y se escribe aparte
-// porque es un caso distinto que llega al mismo sitio.
-//
-// Desde la 240 la tienda puede rechazar a mano una devolucion ya anclada (`devuelta -> rechazada`,
-// familia `rechazo_tienda`). Tambien aterriza en `rechazada` y tampoco la alcanza la igualdad de
-// arriba, asi que el aviso NO se emite. Y aqui el texto seria todavia mas falso que en el caso de
-// la 237: el paquete ni siquiera esta en la calle — volvio a la bodega, se escaneo al aprobar el
-// cierre (238) y lleva dias esperando. Decir «rechazada por el destinatario» sobre eso es contar un
-// hecho que no ocurrio.
-//
-// Y como en la 237, el aviso no es el mecanismo de nada: la orden llega igual a
-// `por_devolver`/`por_devolver_a_tienda` al aprobarse el cierre que recoja la gestion sintetica
-// (139). Afirmado con su CONTROL POSITIVO en
-// `tests/unit/repositories/notificacion-orden-rechazada.test.ts`.
+// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` (la tienda rechaza a mano una devolucion ya anclada)
+// QUEDA FUERA POR LA MISMA RAZON: el paquete ni siquiera esta en la calle. Y el escalado por SLA
+// (146/R19), tambien: ninguno de los dos pasa por el registro de una gestion del mensajero.
 
 /**
- * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por
- * `destino === "rechazada" && origenTipo === "gestion"`: el escalado por SLA
- * (`escalado_devuelta_sla`) tambien aterriza en `rechazada` y NO notifica (R19).
- *
- * GUARD DEFENSIVO (patron `emisorWebhookEstadoReal`): los ~18 call-sites historicos del choke
- * point tienen tests unitarios que mockean `tx` con SOLO `ordenHistorialEstado`. Si el `tx`
- * no expone las tablas de esta feature no hay nada real que emitir y se retorna sin tocar
- * nada, para no romper esas suites. En produccion el `tx` es el de `$transaction`, completo.
+ * Emisor por defecto de `appendCambioEstado` (design §4.1 de la 146). FICHA 454: NO-OP — el choke
+ * point ya no avisa de ningun rechazo (ver arriba). Se conserva la exportacion y la firma porque el
+ * choke point la recibe por parametro (y los tests de sus call-sites inyectan la suya).
  */
-export const emisorNotificacionReal: NotificacionEmisor = async (
-  tx,
-  entradas,
-  valuePorEstatusId,
-) => {
-  const rechazos = entradas.filter(
-    (e) =>
-      e.origenTipo === ORIGEN_RECHAZO_DEL_DESTINATARIO &&
-      valuePorEstatusId.get(e.estatusDestinoId) === DESTINO_RECHAZO,
-  );
-  if (rechazos.length === 0) return; // caso mayoritario: ni una consulta
-  if (typeof (tx as { orden?: unknown }).orden !== "object" || tx.orden === null) return;
-  if (typeof (tx as { notificacion?: unknown }).notificacion !== "object") return;
+export const emisorNotificacionReal: NotificacionEmisor = async () => {};
 
-  const ordenIds = Array.from(new Set(rechazos.map((e) => e.ordenId)));
-  const ordenes = await tx.orden.findMany({
-    where: { id: { in: ordenIds } },
-    select: { id: true, tiendaId: true, zonaId: true, numGuia: true, numRemision: true },
-  });
-  if (!Array.isArray(ordenes)) return;
-
-  const repo = new NotificacionRepository(tx);
-  for (const orden of ordenes) {
-    await emitirOrdenRechazada(
-      repo,
-      {
-        ordenId: orden.id,
-        tiendaId: orden.tiendaId,
-        zonaId: orden.zonaId ?? null,
-        numGuia: orden.numGuia ?? null,
-        numRemision: orden.numRemision,
-      },
-      tx,
-    );
-  }
-};
+/**
+ * FICHA 454 (T1.6, DD; R35) — el aviso N1 DENTRO de la transaccion del registro de la gestion
+ * `rechazada` del mensajero. Construye su repositorio con `tx` para que el aviso y la gestion se
+ * guarden o se pierdan juntos (R20/R21 de la 146). `orden_rechazada` NO es elegible para push, y
+ * dentro de una transaccion el decorador del canal se retira igual (R27 de la 410): por eso este es
+ * el unico `new NotificacionRepository` de este modulo (`push-cableado-unico.guardia`).
+ */
+export async function emitirOrdenRechazadaEnTransaccion(
+  tx: NotificacionTxClient,
+  orden: OrdenRechazadaContexto,
+): Promise<number> {
+  return emitirOrdenRechazada(new NotificacionRepository(tx), orden, tx);
+}
 
 // ---------------------------------------------------------------------------
 // §4.2 — Carga masiva terminada (R22, R39). BEST-EFFORT en los call-sites.
@@ -1280,6 +1244,87 @@ export async function emitirDevolucionesRepresadas(
     tx,
   );
 }
+// ---------------------------------------------------------------------------
+// FICHA 462 §3.2 — «REPROGRAMADO PARA HOY: N PAQUETES ESPERAN LA APROBACIÓN DE SU CIERRE». AGREGADO,
+// POR AMBITO, UNA VEZ AL DÍA (07:00 CR).
+// ---------------------------------------------------------------------------
+
+/** El AMBITO de una retenida: la administracion CENTRAL o la zona de un satelite. Nunca «global». */
+export type AmbitoReprogramadasRetenidas =
+  | { readonly tipo: "central" }
+  | { readonly tipo: "zona"; readonly zonaId: string };
+
+/**
+ * FICHA 462 (R17) — el DETALLE persistido del aviso. LLANO, SIN NUMERO Y SIN PII: ni cifra (vive en
+ * el titulo, con la cifra viva), ni identificador interno, ni guia, ni remision, ni destinatario, ni
+ * direccion, ni telefono, ni monto, ni nombre de mensajero, ni estado del cierre —que cambia durante
+ * el dia (rechazado → solicitado) y un texto persistido mentiria (requirements, decision 6)—.
+ * Nombra la MARCA que la persona vera en `/cierres-admin` para que sepa que buscar.
+ * TUTEO («Revisa», «apruébalos»), como los avisos de cierres a bodega.
+ *
+ * FASE 3 (decision del leader, 2026-09-25; prevalece sobre el literal de requirements/R17): se habla
+ * del PAQUETE en masculino («los visitó», «Retiene paquetes reprogramados para hoy»), igual que la
+ * marca y la franja. El plural femenino del estado retirado («reprogramadas», 455 §0.3) NO aparece:
+ * la guardia `nombres-estado-retirados` lo vigila sin excepcion para esta ficha.
+ */
+export const TEXTO_REPROGRAMADAS_ESPERAN_CIERRE =
+  "No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. " +
+  "Revisa los cierres marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.";
+
+/** Lo MINIMO que el aviso necesita: un ambito y un dia CR. Sin PII (R52). */
+export interface ReprogramadasEsperanCierreContexto {
+  /** Central (maestro + admin) o una zona (su `adminSatelite`). VA DENTRO DE LA ENTIDAD. */
+  ambito: AmbitoReprogramadasRetenidas;
+  /** `YYYY-MM-DD` del dia calendario CR de la corrida (`fechaCalendarioCR`). ES la otra mitad de la entidad. */
+  diaCR: string;
+}
+
+/**
+ * R9/R11/R12 — UNA fila `warning` por rol destinatario del ambito:
+ *   · ambito CENTRAL -> `maestro` y `admin`, sin acotar por zona;
+ *   · ambito ZONA    -> `adminSatelite` ACOTADO a esa zona.
+ * Jamas una fila por orden ni una por cierre (R9).
+ *
+ * `warning` y no `alert`: es una cola de trabajo atascada (como `devoluciones_represadas`), no un
+ * servicio caido.
+ *
+ * ⚠️ EL AMBITO VA DENTRO DEL `entidad_id` (`${ambito}:${diaCR}`), y sin el LAS ZONAS SE PISAN ENTRE
+ * SI: la clave de dedupe no incluye `zona_id`, asi que la primera zona del recorrido se llevaria el
+ * aviso y las demas quedarian mudas (R12, mutacion 7 del design, medida contra Postgres en
+ * `tests/integration/db/462/aviso-reprogramadas-dedupe.test.ts`). El literal es `"central"` y no
+ * `"global"`: maestro y admin cuentan el ambito central, no el total del sistema (R6).
+ *
+ * Que `destinatario_rol` este DENTRO de la clave de dedupe es lo que hace que `maestro` y `admin`
+ * se dedupliquen de forma INDEPENDIENTE: que uno lea el suyo no suprime el del otro.
+ *
+ * SIN NUMERO PERSISTIDO (409/R57): el titulo lo compone el catalogo con la cifra viva. SIN ANEXO:
+ * no hay dato adicional que enseñar sin romper R17.
+ */
+export async function emitirReprogramadasEsperanCierre(
+  repo: INotificacionRepository,
+  ctx: ReprogramadasEsperanCierreContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const destinatarios: NotificacionDestinatario[] =
+    ctx.ambito.tipo === "central"
+      ? [...ROLES_ADMINISTRACION]
+      : [{ tipo: "rol", rol: "adminSatelite", zonaId: ctx.ambito.zonaId }];
+  const ambito = ctx.ambito.tipo === "central" ? "central" : ctx.ambito.zonaId;
+  return emitirFilas(
+    repo,
+    destinatarios.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "reprogramadas_esperan_cierre" as const,
+      descripcion: TEXTO_REPROGRAMADAS_ESPERAN_CIERRE,
+      anexo: null,
+      entidadTipo: "reprogramadas_esperan_cierre_dia" as const,
+      entidadId: `${ambito}:${ctx.diaCR}`,
+      destinatario,
+    })),
+    tx,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // FICHA 413 §8.2 — «TENÉS N ÓRDENES PARA MAÑANA». AGREGADO, AL MENSAJERO, UNA VEZ POR TARDE.
 //

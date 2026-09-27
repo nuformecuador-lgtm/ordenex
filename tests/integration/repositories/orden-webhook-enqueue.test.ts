@@ -16,7 +16,7 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 // asi el test recorre append -> emitir -> enqueue de punta a punta.
 
 const VALUE_POR_ID: Record<string, string> = {
-  [idEstado("entregada")]: "entregada",
+  [idEstado("entregado")]: "entregado",
   [idEstado("en_reparto")]: "en_reparto",
   // Feature 155: el estado de nacimiento de la via API. Sustituye a `en_ruta_bodega_central`,
   // que dejo de ser estado de creacion (R22).
@@ -32,8 +32,8 @@ const VALUE_POR_ID: Record<string, string> = {
 // que este test necesita para ver el encolado; ese caso NO lleva entrada en el mapa de origenes:
 // su `estatusOrigenId` es `null` (A.1), asi que nunca lo consulta.
 const ORIGEN_LEGAL: Record<string, OrderStatusValue> = {
-  [idEstado("entregada")]: "en_reparto",
-  [idEstado("en_reparto")]: "por_recoger",
+  [idEstado("entregado")]: "en_reparto",
+  [idEstado("en_reparto")]: "mensajero_recogiendo_en_bodega",
 };
 
 beforeEach(async () => {
@@ -94,7 +94,7 @@ describe("R10 — transicion de orden con owner suscrito deja job pendiente", ()
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o1", idEstado("entregada"))],
+      [entrada("o1", idEstado("entregado"))],
       emisorReal(repo, () => new Date("2026-07-21T10:00:00.000Z")),
     );
     expect(createMany).toHaveBeenCalledTimes(1); // append del historial
@@ -110,7 +110,7 @@ describe("R11 — si el cambio de estado falla no queda job huerfano", () => {
     createMany.mockRejectedValueOnce(new Error("tx abortada"));
     const { repo, enqueue } = buildRepo();
     await expect(
-      appendCambioEstado(tx as never, [entrada("o1", idEstado("entregada"))], emisorReal(repo)),
+      appendCambioEstado(tx as never, [entrada("o1", idEstado("entregado"))], emisorReal(repo)),
     ).rejects.toThrow("tx abortada");
     expect(enqueue).not.toHaveBeenCalled(); // ningun job encolado
   });
@@ -120,7 +120,7 @@ describe("R12 — solo owner rol apiKey con suscripcion activa", () => {
   it("no encola para una orden cuyo owner no es elegible (sin sub / no apiKey)", async () => {
     const { tx } = buildTx(new Set()); // §5 devuelve vacio (adminTienda o sin suscripcion)
     const { repo, enqueue } = buildRepo();
-    await appendCambioEstado(tx as never, [entrada("o1", idEstado("entregada"))], emisorReal(repo));
+    await appendCambioEstado(tx as never, [entrada("o1", idEstado("entregado"))], emisorReal(repo));
     expect(enqueue).not.toHaveBeenCalled();
   });
 
@@ -129,7 +129,7 @@ describe("R12 — solo owner rol apiKey con suscripcion activa", () => {
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o-api", idEstado("entregada")), entrada("o-adminTienda", idEstado("entregada"))],
+      [entrada("o-api", idEstado("entregado")), entrada("o-adminTienda", idEstado("entregado"))],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -149,7 +149,7 @@ describe("R16 — transiciones por dos mecanismos encolan por igual", () => {
     const b = buildTx(new Set(["o-gestion"]));
     await appendCambioEstado(
       b.tx as never,
-      [entrada("o-gestion", idEstado("entregada"), "gestion")],
+      [entrada("o-gestion", idEstado("entregado"), "gestion")],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(2);
@@ -166,7 +166,7 @@ describe("R25 — con dos owners suscritos cada job lleva su propia orden", () =
     const { repo, enqueue } = buildRepo();
     await appendCambioEstado(
       tx as never,
-      [entrada("o-ownerA", idEstado("entregada")), entrada("o-ownerB", idEstado("en_reparto"))],
+      [entrada("o-ownerA", idEstado("entregado")), entrada("o-ownerB", idEstado("en_reparto"))],
       emisorReal(repo),
     );
     expect(enqueue).toHaveBeenCalledTimes(2);

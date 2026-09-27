@@ -85,7 +85,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
     const [hoy] = await contarCon(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "c1-hoy-para-hoy",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
         fechaReparto: diaReparto(FECHA_CR),
@@ -104,7 +104,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
     const [hoy, manana] = await contarCon(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "c2-hoy-para-manana",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "14:00"),
         fechaReparto: diaReparto(MANANA_CR),
@@ -141,7 +141,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
     const [hoy] = await contarCon(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "c4-hoy-sin-dia",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
@@ -156,7 +156,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
     const [hoy, ayer] = await contarCon(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "c5-ayer-sin-dia",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(AYER_CR, "07:00"),
       });
@@ -174,7 +174,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
     const [hoy, ayer] = await contarCon(async (tx, base) => {
       await crearOrden(tx, base, {
         clave: "c6-para-ayer",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(AYER_CR, "07:00"),
         fechaReparto: diaReparto(AYER_CR),
@@ -193,14 +193,14 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
       const sembradas = {
         c1: await crearOrden(tx, base, {
           clave: "c7-c1",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "07:00"),
           fechaReparto: diaReparto(FECHA_CR),
         }),
         c2: await crearOrden(tx, base, {
           clave: "c7-c2",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "14:00"),
           fechaReparto: diaReparto(MANANA_CR),
@@ -214,19 +214,19 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
         }),
         c4: await crearOrden(tx, base, {
           clave: "c7-c4",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "07:00"),
         }),
         c5: await crearOrden(tx, base, {
           clave: "c7-c5",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(AYER_CR, "07:00"),
         }),
         c6: await crearOrden(tx, base, {
           clave: "c7-c6",
-          estatus: "por_recoger",
+          estatus: "mensajero_recogiendo_en_bodega",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(AYER_CR, "07:00"),
           fechaReparto: diaReparto(AYER_CR),

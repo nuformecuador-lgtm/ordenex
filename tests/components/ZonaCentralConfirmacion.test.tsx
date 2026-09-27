@@ -4,6 +4,7 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import { tecleaSinpeDeLaZona } from "../fixtures/sinpe-en-formulario-zona";
 
 /**
  * ⭑ FICHA 376 / T12 — LA PANTALLA AVISA ANTES Y EXPLICA DESPUÉS (R20-R23).
@@ -288,6 +289,9 @@ describe("R22 — cancelar la confirmación no envía nada", () => {
       zonas: [zonaDTO("z-gam", "GAM", true)],
     });
 
+    // FICHA 429 (R11): al crear, el SINPE es obligatorio. Sin el, `validar()` falla antes de
+    // llegar a la confirmacion y el modal que este caso cancela no se abriria nunca.
+    await tecleaSinpeDeLaZona(user);
     await user.click(casilla());
     await user.click(botonGuardar());
     await screen.findByText("Zona central ya asignada");

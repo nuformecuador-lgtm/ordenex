@@ -151,7 +151,7 @@ function buildPrisma(filas: FilaOrden[]) {
 function ordenDeLote(over: Partial<FilaOrden> = {}): FilaOrden {
   return {
     id: "o1",
-    estatus_id: idEstado("por_recoger"),
+    estatus_id: idEstado("mensajero_recogiendo_en_bodega"),
     mensajero_asignado_id: "m-1",
     asignado_at: new Date("2026-07-30T10:00:00.000Z"),
     deleted_at: null,
@@ -168,14 +168,14 @@ beforeEach(async () => {
 });
 
 describe("141 x 149 — la orden revertida conserva la trazabilidad de su carga", () => {
-  it("caso (a) por_recoger -> en_bodega_central: suelta al mensajero, NO suelta el lote", async () => {
+  it("caso (a) mensajero_recogiendo_en_bodega -> en_bodega_central: suelta al mensajero, NO suelta el lote", async () => {
     const fila = ordenDeLote();
     const { prisma } = buildPrisma([fila]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     const count = await repo.deshacerAsignacionLote(
       [{ ordenId: "o1", destinoEstatusId: idEstado("en_bodega_central") }],
-      new Map([["o1", idEstado("por_recoger")]]),
+      new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]),
       HIST,
       null,
     );

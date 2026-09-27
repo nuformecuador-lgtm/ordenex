@@ -1,0 +1,10 @@
+Generar API key
+Identificador
+Tienda destino
+
+Opcional. Si eliges una tienda, las órdenes que cargue esta clave serán de esa tienda ya registrada. Si la dejas sin elegir, la clave usa su propia cuenta nueva y las órdenes serán suyas.
+
+Ninguna: la clave usa su propia cuenta
+URL de webhook (callback)
+Cancelar
+Generar

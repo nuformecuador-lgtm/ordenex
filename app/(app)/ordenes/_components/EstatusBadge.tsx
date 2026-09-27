@@ -1,50 +1,27 @@
 import type { VariantProps } from "class-variance-authority";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import {
+  esOrderStatusRetirado,
+  NOMBRE_ESTADO,
+  type OrderStatusValue,
+} from "@/lib/types/order-status";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
 /**
- * Mapa de estatus de orden -> etiqueta legible. Se reusa en cualquier lugar
- * donde haya que mostrar un estatus con el mismo look & feel.
+ * FICHA 455 (2026-09-24, design DA; R1/R2/R42) — el nombre visible de cada estado ya NO se escribe
+ * aquí: es `NOMBRE_ESTADO`, la fuente única de `lib/types/order-status.ts`. `ORDER_STATUS_LABELS` se
+ * conserva como REEXPORTACIÓN (mismo objeto) para los consumidores que ya la importaban. Hasta la
+ * 455 este archivo tenía su propio mapa («Entregada», «Por recoger», «Sin gestionar»…) y cada
+ * superficie de `lib/` el suyo: por eso divergían.
+ *
+ * Las filas HISTÓRICAS de un estado retirado (454/155) ya no tienen mapa propio: `nombreDeEstado`
+ * las lee como «<nombre histórico> (estado retirado)» (R11).
  */
-export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
-  en_preparacion: "En preparación",
-  // Feature 155/R28: el estado interno de fulfillment en bodega salió del catálogo
-  // (las órdenes que ya están en bodega nacen en `en_preparacion`), así que sale de
-  // este mapa. Un value fuera del catálogo del build degrada al chip neutro con el
-  // texto crudo (R41), abajo en `EstatusBadge`.
-  en_bodega_central: "En bodega central", // feature 135 (R8): value legible directo
-  en_ruta_bodega_central: "En ruta a bodega central", // feature 135 (R8)
-  entregada: "Entregada",
-  devuelta: "Devuelta",
-  devolviendo_a_tienda: "Devolviendo a tienda", // feature 135
-  reprogramada: "Reprogramada",
-  por_recoger: "Por recoger", // feature 17 (renombrado en feature 135)
-  en_ruta_bodega_satelite: "En ruta a bodega satélite", // feature 30 (R8: value legible directo)
-  en_reparto: "En reparto", // feature 36 (renombrado en la 135 y de vuelta en la 153/R9)
-  rechazada: "Rechazada", // feature 36
-  en_bodega_satelite: "En bodega satélite", // feature 33 (R8: value legible directo)
-  devuelta_a_tienda: "Devuelta a tienda", // feature 135: cierre del flujo de devolución, la tienda de origen la recibió
-  sin_gestionar: "Sin gestionar", // feature 109/R25: orden que quedó en en_reparto al pasar de día (congelada hasta aprobar el cierre)
-  por_devolver: "Por devolver", // feature 139/R4: rechazada de bodega satélite tras aprobar el cierre (elegible para "enviar a central")
-  devolviendo_a_bodega_central: "Devolviendo a bodega central", // feature 139/R4: en tránsito satélite → central
-  por_devolver_a_tienda: "Por devolver a tienda", // feature 139/R4: en la central, elegible para "enviar a la tienda"
-  por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
-  recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda
-  incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
-  // Feature 239/R26 (P1 firmada 2026-08-19): la devolución la gestionó el mensajero y la bodega
-  // todavía no la confirmó al aprobar el cierre. La etiqueta nombra QUIÉN FALTA, no promete un
-  // desenlace: «por confirmar», no «pendiente» (que se leería como lo contrario).
-  devolucion_por_confirmar: "Devolución por confirmar",
-  // Feature 235/R37 (P1 firmada 2026-08-19): la etiqueta dice A QUIÉN SE LE PIDIÓ, que es lo que
-  // no se puede deducir de «Ayuda solicitada» a secas cuando maestro/admin la ven en `/ordenes`
-  // junto a otros veintiún estados. Se descartó la forma corta por ambigua; la longitud (28) está
-  // dentro de lo que ya existe («Devolviendo a bodega central», 28).
-  ayuda_tienda: "Ayuda solicitada a la tienda",
-};
+export const ORDER_STATUS_LABELS: Readonly<Record<OrderStatusValue, string>> = NOMBRE_ESTADO;
 
 /**
  * Estatus -> variante semántica de la primitiva `Badge`. La semántica se conserva
@@ -57,24 +34,24 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   en_preparacion: "secondary",
   en_bodega_central: "secondary",
   en_ruta_bodega_central: "info",
-  entregada: "success",
-  devuelta: "warning",
+  entregado: "success",
+  novedad: "warning",
   devolviendo_a_tienda: "danger",
-  reprogramada: "warning",
-  por_recoger: "info", // feature 17
+  reprogramado: "warning",
+  mensajero_recogiendo_en_bodega: "info", // feature 17
   en_ruta_bodega_satelite: "info", // feature 30
   en_reparto: "secondary", // feature 36
-  rechazada: "danger", // feature 36
+  devolucion_a_origen_por_rechazo: "danger", // feature 36
   en_bodega_satelite: "info", // feature 33
   // Terminal y NO error: reusa la variante de `entregada` (success), el otro cierre
   // sano del flujo. `devolviendo_a_tienda` sigue en danger por ser el tránsito.
   devuelta_a_tienda: "success",
   // Feature 109/R25: estado de EXCEPCIÓN (orden sin gestionar, congelada) -> variante de alerta.
-  sin_gestionar: "warning",
+  novedad_interna: "warning",
   // Feature 139/R4: estados del flujo de devolución de rechazadas. Los estados de ESPERA
   // (por devolver / por devolver a tienda) usan `warning` (acción pendiente); el de TRÁNSITO
   // (devolviendo a bodega central) usa `info`, como el resto de estados en ruta.
-  por_devolver: "warning",
+  por_devolver_a_bodega_central: "warning",
   devolviendo_a_bodega_central: "info",
   por_devolver_a_tienda: "warning",
   // Feature 154/R29/R30 (Q5 confirmada por el humano). Mismo criterio que los estados ya
@@ -86,16 +63,8 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // es trabajo en curso, la misma familia visual que el resto de tramos en movimiento.
   recolectando: "info",
   incidente: "danger",
-  // Feature 239/R26: MISMA variante que `devuelta` (`warning`). Es la misma cosa vista antes de
-  // la confirmación: un estado de alerta con acción pendiente, no un error ni un tránsito. Sin
-  // refuerzo de acento en `ORDER_STATUS_CLASS`, igual que `devuelta`.
-  devolucion_por_confirmar: "warning",
-  // Feature 235/R37: `warning` es la variante que este repo da a los estados de ESPERA CON ACCIÓN
-  // PENDIENTE (`por_devolver`, `sin_gestionar`, `devuelta`, `devolucion_por_confirmar`), que es
-  // exactamente lo que es: el paquete sigue en la calle y alguien tiene que hacer algo. Ni error
-  // (`danger`) ni tránsito (`info`). Sin refuerzo de acento en `ORDER_STATUS_CLASS`, igual que
-  // `devuelta`.
-  ayuda_tienda: "warning",
+  // FICHA 454 (R37): fuera las variantes de los dos estados retirados; sus filas históricas usan
+  // `warning`, la que tenían (ver `EstatusBadge`).
 };
 
 /**
@@ -113,44 +82,47 @@ const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   // fijos para decir "tinta y realce del tema". `foreground` hace lo mismo con un
   // solo token y en claro es el mismo azul (#12233f vs #0b2545).
   en_bodega_central: "text-foreground dark:bg-foreground/10",
-  reprogramada: "border-hivis/60 dark:border-hivis/40",
+  reprogramado: "border-hivis/60 dark:border-hivis/40",
 };
 
 function isKnownStatus(value: string): value is OrderStatusValue {
-  return value in ORDER_STATUS_LABELS;
+  return value in ORDER_STATUS_VARIANT;
 }
 
 /**
- * Chip de estatus de orden. Si `value` no matchea ningún estatus conocido, cae
- * a un chip neutro con el valor crudo (no rompe la UI ante datos inesperados).
+ * Chip de estatus de orden. El texto es SIEMPRE `nombreDeEstado(value)` (R2/R10/R11): el nombre
+ * visible exacto; un estado retirado, «<histórico> (estado retirado)»; un código desconocido,
+ * «Estado no reconocido» (nunca el código crudo, R3).
  *
- * Feature 30/R15: para `en_ruta_bodega_satelite` el destino es la bodega de la
- * ZONA de la orden. Cuando el consumidor pasa `zonaNombre` (derivado por fila de
- * `orden.zonaId`), el label se vuelve legible como "En ruta a bodega <zona>"; sin
- * él, cae al label estático genérico (el único estado con nombre derivado; el
- * resto de estados ignora `zonaNombre`).
+ * FICHA 455 (2026-09-24, R2): se retira la derivación «En ruta a bodega <zona>» de la feature 30:
+ * el nombre del estado no interpola ningún dato. La zona es columna propia en los listados.
  */
-export function EstatusBadge({
-  value,
-  zonaNombre,
-}: {
-  value: string;
-  zonaNombre?: string;
-}) {
+/*
+ * FICHA 456 (T2.3, design §3; R9/R32) — el chip va SIEMPRE con su botón de información: se pinta
+ * dentro de `EstadoConInfo`, que calcula el nombre y pone el botón como HERMANO del `Badge`. El
+ * `Badge` conserva texto, variante y clases (R32). Sin prop para apagarlo (design §10-I): sus
+ * consumidores —`/ordenes`, el detalle del día de `/monitoreo`, la bodega satélite, la carga
+ * masiva— lo heredan. Un retirado o desconocido sale sin botón (R15).
+ */
+export function EstatusBadge({ value }: { value: string }) {
   const known = isKnownStatus(value);
-  const label =
-    value === "en_ruta_bodega_satelite" && zonaNombre
-      ? `En ruta a bodega ${zonaNombre}`
-      : known
-        ? ORDER_STATUS_LABELS[value]
-        : value;
-  // Estatus desconocido -> variante neutra (no rompe la UI ante datos inesperados).
-  const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
+  // Estado retirado por la 454 (fila histórica, R40) -> la variante `warning` que tenían; el de la
+  // 155 y cualquier desconocido -> variante neutra (no rompe la UI ante datos inesperados).
+  const variant = known
+    ? ORDER_STATUS_VARIANT[value]
+    : esOrderStatusRetirado(value)
+      ? "warning"
+      : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
   return (
-    <Badge variant={variant} className={cn(extra)}>
-      {label}
-    </Badge>
+    <EstadoConInfo
+      codigo={value}
+      chip={(nombre) => (
+        <Badge variant={variant} className={cn(extra)}>
+          {nombre}
+        </Badge>
+      )}
+    />
   );
 }

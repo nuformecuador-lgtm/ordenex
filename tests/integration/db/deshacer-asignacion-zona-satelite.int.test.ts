@@ -55,7 +55,7 @@ const MOTIVO = "la satelite no puede recibir hoy: el lote vuelve a la bodega cen
 
 /** Los cuatro `value` del catalogo que esta suite necesita. */
 const VALUES = [
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_ruta_bodega_satelite",
   "en_bodega_central",
   "en_bodega_satelite",
@@ -281,7 +281,7 @@ describeSiHayBase("363 — deshacer el ruteo a una bodega satelite, contra Postg
     // bodega satelite. Ahi el destino correcto es la satelite; rechazarlo dejaba la orden sin
     // ninguna via de deshacer.
     const r = await ejecutar({
-      estadoActual: "por_recoger",
+      estadoActual: "mensajero_recogiendo_en_bodega",
       origenHistorial: "en_bodega_satelite",
       enZonaCentral: true,
     });
@@ -301,7 +301,7 @@ describeSiHayBase("363 — deshacer el ruteo a una bodega satelite, contra Postg
     "misma orden en zona %s y mismo historial: el destino es el mismo (lo fija el historial)",
     async (_nombre, enZonaCentral) => {
       const r = await ejecutar({
-        estadoActual: "por_recoger",
+        estadoActual: "mensajero_recogiendo_en_bodega",
         origenHistorial: "en_bodega_central",
         enZonaCentral,
       });

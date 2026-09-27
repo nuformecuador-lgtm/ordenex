@@ -187,7 +187,8 @@ export function RecoleccionModule({
    * Lo unico que sigue difiriendo de «Por recoger» son las dos props que describen ESTA
    * pantalla: sin `onGestionar` (aqui no se gestiona nada, asi que la card no es clickeable ni
    * enfocable) y `mostrarRuta={false}`, porque estas ordenes no son paradas de la ruta
-   * optimizada. El `estado` lo dice: «Por recolectar», no «Por recoger».
+   * optimizada. FICHA 455 (R7): el chip dice el ESTADO de la orden (`nombreDeEstado`), no un
+   * rótulo fijo de la pantalla.
    */
   function renderCardRecoleccion(
     orden: RecoleccionOrdenDTO,
@@ -200,7 +201,6 @@ export function RecoleccionModule({
       <CardVista
         orden={orden}
         total={total}
-        estado="Por recolectar"
         mostrarRuta={false}
       />
     );

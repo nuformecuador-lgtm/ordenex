@@ -1,0 +1,27 @@
+=== MUTACION C15 — 2026-09-24T04:52:22-05:00
+archivo: lib/types/plantilla-datos.ts
+perl: s/transform: \(v\) => \(v === null \? VACIO : ETIQUETA_POR_HITO\[hitoDeEstatus\(v\)\]\),/transform: () => "",/
+--- diff aplicado:
+diff --git a/lib/types/plantilla-datos.ts b/lib/types/plantilla-datos.ts
+index a268d203..6ba549d5 100644
+--- a/lib/types/plantilla-datos.ts
++++ b/lib/types/plantilla-datos.ts
+@@ -495 +495 @@ const CATALOGO_DECLARADO: CampoPlantilla[] = [
+-    transform: (v) => (v === null ? VACIO : ETIQUETA_POR_HITO[hitoDeEstatus(v)]),
++    transform: () => "",
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts
+ ✓ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > para los 20 estados el lector entrega el codigo y la variable se resuelve sin fallar 2ms
+ × tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > el texto nunca es vacio ni el codigo 7ms
+   → expected [ { clave: 'entregado', …(3) }, …(19) ] to deeply equal []
+ × tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R35) > el texto de cada estado, hoy (hito publico) 2ms
+   → expected { entregado: '', novedad: '', …(18) } to deeply equal { entregado: 'Entregado', …(19) }
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > el texto nunca es vacio ni el codigo
+AssertionError: expected [ { clave: 'entregado', …(3) }, …(19) ] to deeply equal []
+ FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R35) > el texto de cada estado, hoy (hito publico)
+AssertionError: expected { entregado: '', novedad: '', …(18) } to deeply equal { entregado: 'Entregado', …(19) }
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

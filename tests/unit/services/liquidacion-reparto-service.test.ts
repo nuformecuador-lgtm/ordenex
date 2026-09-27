@@ -64,8 +64,10 @@ const CLAVE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
  */
 const RELOJ = "2026-08-02T15:04:05.000Z";
 const FECHA_PAGO = "2026-07-30";
-/** Medianoche UTC del dia de pago: lo que se escribe en el documento y en el libro. */
+/** Medianoche UTC del dia de pago: lo que se escribe en el DOCUMENTO (`fecha_pago`, `@db.Date`). */
 const FECHA_PAGO_UTC = "2026-07-30T00:00:00.000Z";
+/** Ficha 461 (R73): el ASIENTO del libro va al INICIO de ese dia en Costa Rica (06:00Z). */
+const ASIENTO_PAGO_UTC = "2026-07-30T06:00:00.000Z";
 /** El dia del RELOJ, en el formato de la peticion. Nunca puede ser lo que se escribe. */
 const DIA_DEL_RELOJ = "2026-08-02";
 
@@ -485,9 +487,10 @@ describe("R18/R19/R25/R58 — tres imputaciones, tres pagos, tres movimientos", 
       expect(mov.tipo).toBe("pago");
       expect(mov.categoria).toBe("liquidacion");
       expect(mov.origenTipo).toBe("pago_mensajero");
-      // R37 de la 172: la fecha REAL del pago, medianoche UTC, no el instante de registro. El
-      // reloj del doble marca el 2 de agosto: si el libro se fechara con él, esto sería rojo.
-      expect(mov.fechaMovimiento).toEqual(new Date(FECHA_PAGO_UTC));
+      // R37 de la 172: la fecha REAL del pago, no el instante de registro. El reloj del doble marca
+      // el 2 de agosto: si el libro se fechara con él, esto sería rojo. Ficha 461 (R73): al INICIO
+      // de ese dia en Costa Rica (06:00Z), no a la medianoche UTC.
+      expect(mov.fechaMovimiento).toEqual(new Date(ASIENTO_PAGO_UTC));
     }
     // Y los montos del libro son los mismos que los de los documentos, uno a uno.
     expect(d.confirmados.movimientos.map((m) => m.monto)).toEqual(
@@ -529,6 +532,7 @@ describe("R18/R19/R25/R58 — tres imputaciones, tres pagos, tres movimientos", 
       await repartir(d, { monto: "15000.00", fechaPago });
 
       const esperada = `${fechaPago}T00:00:00.000Z`;
+      const esperadaLibro = `${fechaPago}T06:00:00.000Z`; // ficha 461 (R73): el asiento, al inicio del dia CR
       expect(esperada, "la fecha del caso no puede ser la del reloj").not.toBe(
         `${DIA_DEL_RELOJ}T00:00:00.000Z`,
       );
@@ -543,9 +547,9 @@ describe("R18/R19/R25/R58 — tres imputaciones, tres pagos, tres movimientos", 
       // por el tipo (el campo es opcional en el input del libro): si alguna línea llegara SIN
       // fecha, el `undefined` no casaría con `esperada` y esto seguiría siendo rojo.
       expect(d.confirmados.movimientos.map((m) => m.fechaMovimiento?.toISOString())).toEqual([
-        esperada,
-        esperada,
-        esperada,
+        esperadaLibro,
+        esperadaLibro,
+        esperadaLibro,
       ]);
       // Dicho por el otro lado, que es el que nombra al culpable si esto se rompe: el día del
       // reloj no aparece en ninguna fila escrita.

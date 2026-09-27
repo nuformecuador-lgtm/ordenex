@@ -1,0 +1,84 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Buscar en la ayuda
+
+MENSAJEROS
+Cierre del día
+Ranking
+Recoger en bodega
+Recolección
+Reparto
+TIENDAS
+Mi wallet
+Novedades
+Órdenes
+BODEGAS SATÉLITE
+En bodega
+Mi bodega
+Por recibir
+OFICINA
+Cierres
+Configuración · API keys
+Configuración · Geografía
+Configuración · Plantillas
+Configuración · SINPE por bodega
+Configuración · Tarifas
+Configuración · Usuarios
+Configuración · Vehículos
+Histórico · Acciones
+Histórico · Conversaciones
+Incidentes
+Inicio
+Monitoreo
+Órdenes
+Wallet · Caja
+Wallet · Mensajeros
+Wallet · Satélites
+Wallet · Tiendas
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+
+Elegí un tema del índice
+
+Cada documento explica una pantalla: qué ves, qué podés hacer y qué no. También llegás a la ayuda de la pantalla en la que estés con el botón «?» del encabezado.
+
+Confirmá el SINPE de GAM
+
+Hasta ahora tu bodega cobraba en el número de la central. Confirmá el tuyo para que la plata de tus clientes llegue a donde tiene que llegar.
+
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Ahora no
+Confirmar

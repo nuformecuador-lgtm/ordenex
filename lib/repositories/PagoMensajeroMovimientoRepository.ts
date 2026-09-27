@@ -17,7 +17,7 @@ import {
   filtrarPorBusquedaMensajero,
   ordenarCuentasPorPagar,
 } from "@/lib/utils/cuentas-por-pagar-listado";
-import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletTiendaMovimientoRepository).
 // Feature 172 (T C.3): + `liquidacionPago`, SOLO para LEER los ids de pago de un cierre (§5).
@@ -123,7 +123,8 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     if (f.desde !== undefined || f.hasta !== undefined) {
       where.fechaMovimiento = {
         ...(f.desde !== undefined ? { gte: f.desde } : {}),
-        ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+        // Ficha 461 (R72, auditoria T1): cota EXCLUSIVA; el borde manda el inicio del dia CR siguiente.
+        ...(f.hasta !== undefined ? { lt: f.hasta } : {}),
       };
     }
     return where;
@@ -195,7 +196,8 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     const [rows, total] = await Promise.all([
       this.prisma.pagoMensajeroMovimiento.findMany({
         where,
-        orderBy: { fechaMovimiento: "desc" },
+        // Ficha 458-B (R23, m4 de la auditoria): orden TOTAL, como la caja. Ver `listarPorTienda`.
+        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         skip,
         take: filtros.pageSize,
       }),
@@ -259,9 +261,9 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
     const mensajeroIds = [...porMensajero.keys()];
     const usuarios = await this.prisma.usuario.findMany({
       where: { id: { in: mensajeroIds } },
-      select: { id: true, ...NOMBRE_USUARIO_SELECT },
+      select: { id: true, ...CUENTA_USUARIO_SELECT },
     });
-    const nombrePorId = new Map(usuarios.map((u) => [u.id, nombreCompletoUsuario(u)]));
+    const nombrePorId = new Map(usuarios.map((u) => [u.id, etiquetaDeCuenta(u)]));
 
     return mensajeroIds.map((mensajeroId) => {
       const acc = porMensajero.get(mensajeroId)!;
@@ -328,9 +330,9 @@ export class PagoMensajeroMovimientoRepository implements IPagoMensajeroMovimien
   async obtenerNombreMensajero(mensajeroId: string): Promise<string | null> {
     const u = await this.prisma.usuario.findUnique({
       where: { id: mensajeroId },
-      select: NOMBRE_USUARIO_SELECT,
+      select: CUENTA_USUARIO_SELECT,
     });
-    return u ? nombreCompletoUsuario(u) : null;
+    return u ? etiquetaDeCuenta(u) : null;
   }
 
   /**

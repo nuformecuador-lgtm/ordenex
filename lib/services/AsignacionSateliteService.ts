@@ -27,10 +27,10 @@ import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
 // estos dos valores de catalogo, ya sembrados.
 const ORIGEN_ASIGNACION = "en_bodega_satelite";
-const ESTADO_ASIGNADA = "por_recoger";
+const ESTADO_ASIGNADA = "mensajero_recogiendo_en_bodega";
 
 // Feature 46/R3: estatus bloqueado por reprogramacion (guardia explicito y tipado).
-const ESTATUS_REPROGRAMADA = "reprogramada";
+const ESTATUS_REPROGRAMADA = "reprogramado";
 
 // Solo el rol autorizado en el modulo (R1/R13): el adminSatelite, SIEMPRE acotado
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
@@ -376,7 +376,7 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     // clave no existe en el objeto y los `toEqual` vigentes siguen verdes.
     const resultados = asignables.map((ordenId) => ({
       ordenId,
-      estado: ESTADO_ASIGNADA as "por_recoger",
+      estado: ESTADO_ASIGNADA as "mensajero_recogiendo_en_bodega",
     }));
     const aviso400 = sinUbicacion > 0 ? { sinUbicacion } : {};
     // Ficha 407 (R10): misma regla, cifra propia. Con cero, la clave NO existe en el objeto.

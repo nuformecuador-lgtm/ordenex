@@ -31,6 +31,10 @@ import {
   buildWebhookEstadoService,
   crearWebhookEstadoHandler,
 } from "@/lib/services/jobs/webhook-estado-handler";
+import {
+  buildWebhookEventoService,
+  crearWebhookEventoHandler,
+} from "@/lib/services/jobs/webhook-evento-handler";
 import { crearWhatsappTemplateSyncHandler } from "@/lib/services/jobs/whatsapp-template-sync-handler";
 import { crearWhatsappChatEnvioHandler } from "@/lib/services/jobs/whatsapp-chat-envio-handler";
 import { crearWhatsappBienvenidaHandler } from "@/lib/services/jobs/whatsapp-bienvenida-handler";
@@ -82,6 +86,10 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // caido, clave de cifrado ausente) lo captura `JobQueueService.drenar` job a job, asi que NO
   // afecta al drenado de los otros tipos, que comparten este cron.
   handlers.set("webhook_estado", crearWebhookEstadoHandler(buildWebhookEstadoService(now)));
+  // FICHA 454 (design §12.1, R33): entrega firmada de UN hecho de orden (gestion registrada/
+  // anulada/corregida, ayuda solicitada/resuelta). Como el de estado, NO es recurrente: se encola
+  // por EVENTO, en la misma transaccion que el hecho. Un fallo suyo lo captura el drenado job a job.
+  handlers.set("webhook_evento", crearWebhookEventoHandler(buildWebhookEventoService(now)));
   // Integracion WhatsApp: reintento de una op de plantilla (create/update/delete) que fallo en
   // linea. Encolado por EVENTO (fallo de la propagacion sincrona), no por reloj -> fuera de
   // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el handler:

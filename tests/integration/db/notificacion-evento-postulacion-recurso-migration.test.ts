@@ -229,6 +229,7 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
       "traspaso_ordenes_recibido",
       "traspaso_ordenes_cedido",
+      "reprogramadas_esperan_cierre", // ficha 462 (2026-09-25): el cuarto agregado
     ]);
   });
 
@@ -274,6 +275,7 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       // clave de dedupe -que NO mira el estado de lectura- admitiria UNA sola fila para siempre y
       // el SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA, en silencio.
       "orden_traspaso_lote",
+      "reprogramadas_esperan_cierre_dia", // ficha 462 (2026-09-25): `${ambito}:${diaCR}`, ambito central|zona
     ]);
   });
 
@@ -356,6 +358,7 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
       "traspaso_ordenes_recibido",
       "traspaso_ordenes_cedido",
+      "reprogramadas_esperan_cierre", // ficha 462 (2026-09-25): el cuarto agregado
     ]);
   });
 
@@ -392,6 +395,7 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       // clave de dedupe -que NO mira el estado de lectura- admitiria UNA sola fila para siempre y
       // el SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA, en silencio.
       "orden_traspaso_lote",
+      "reprogramadas_esperan_cierre_dia", // ficha 462 (2026-09-25): `${ambito}:${diaCR}`, ambito central|zona
     ]);
   });
 

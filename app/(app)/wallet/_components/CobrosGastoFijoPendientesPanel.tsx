@@ -27,7 +27,7 @@ import type {
 
 import {
   COBROS_PENDIENTES_COLUMNA,
-  COBROS_PENDIENTES_DESCRIPCION,
+  cobrosPendientesDescripcion,
   COBROS_PENDIENTES_SECCION,
   COBROS_PENDIENTES_TITULO,
   COBROS_PENDIENTES_VACIO,
@@ -284,7 +284,7 @@ export function CobrosGastoFijoPendientesPanel({
       <Card>
         <CardHeader className="border-b">
           <CardTitle>{COBROS_PENDIENTES_TITULO}</CardTitle>
-          <CardDescription>{COBROS_PENDIENTES_DESCRIPCION}</CardDescription>
+          <CardDescription>{cobrosPendientesDescripcion(puedeDecidir)}</CardDescription>
           <CardAction>
             {/* R41: `total` del SERVIDOR. `Badge variant="warning"` es lo que llama la atención
                 sin romper el diseño: un token del tema, con contraste AA en claro y en oscuro. */}

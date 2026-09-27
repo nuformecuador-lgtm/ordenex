@@ -89,7 +89,7 @@ export function filaDinero(opts: OpcionesFilaDinero = {}): FilaDineroCruda {
     numGuia: opts.numGuia === undefined ? null : opts.numGuia,
     destinatario: opts.destinatario ?? "Destinatario",
     gestionId: opts.gestionId ?? `${ordenId}-g1`,
-    resultado: opts.resultado ?? "entregada",
+    resultado: opts.resultado ?? "entregado",
     montoRecibido: opts.montoRecibido === undefined ? "10000.00" : opts.montoRecibido,
     cierreEstado: opts.cierreEstado === undefined ? "aprobado" : opts.cierreEstado,
     congelada: laCongelada,

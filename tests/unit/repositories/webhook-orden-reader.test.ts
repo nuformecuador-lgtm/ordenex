@@ -133,7 +133,7 @@ function buildPrisma(
       })),
     },
     orderStatus: {
-      findUnique: vi.fn(async () => ({ value: "devuelta" })),
+      findUnique: vi.fn(async () => ({ value: "novedad" })),
     },
     // Delegates presentes SOLO para poder afirmar que NADIE los usa (256/R11, 268). El tipo real
     // que recibe el reader (`Pick<PrismaClient, "orden" | "orderStatus">`) ni los expone.
@@ -178,7 +178,7 @@ const POSTERIOR = new Date("2026-08-21T09:00:00.000Z");
 
 function devuelta(over: Partial<FilaGestion> = {}): FilaGestion {
   return {
-    resultado: "devuelta",
+    resultado: "novedad",
     anuladaAt: null,
     createdAt: NUEVA,
     causaDevolucion: "not_found",
@@ -237,7 +237,7 @@ describe("256/R8-R12 — que gestion manda al resolver la causa de la devolucion
     const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
 
     expect(argOrden(prisma).select.gestiones.where).toEqual({
-      resultado: { in: ["devuelta", "incidente"] },
+      resultado: { in: ["novedad", "incidente"] },
       anuladaAt: null,
     });
     expect(datos?.causaDevolucion).toBe("not_found");
@@ -246,7 +246,7 @@ describe("256/R8-R12 — que gestion manda al resolver la causa de la devolucion
   it("R10: una gestion `entregada`/`incidente` POSTERIOR no desplaza a la `devuelta` vigente, y su causa nunca sale por `causaDevolucion`", async () => {
     const prisma = buildPrisma([
       devuelta({ createdAt: VIEJA, causaDevolucion: "wrong_number" }),
-      { resultado: "entregada", anuladaAt: null, createdAt: NUEVA, causaDevolucion: null },
+      { resultado: "entregado", anuladaAt: null, createdAt: NUEVA, causaDevolucion: null },
       incidenteMensajero({ createdAt: POSTERIOR, causaIncidente: "danado" }),
     ]);
     const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
@@ -289,7 +289,7 @@ describe("256/R8-R12 — que gestion manda al resolver la causa de la devolucion
 
   it("R5: orden sin ninguna gestion `devuelta` vigente -> null (la relacion viene vacia)", async () => {
     const prisma = buildPrisma([
-      { resultado: "reprogramada", anuladaAt: null, createdAt: NUEVA, causaDevolucion: null },
+      { resultado: "reprogramado", anuladaAt: null, createdAt: NUEVA, causaDevolucion: null },
     ]);
     const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
     expect(datos?.causaDevolucion).toBeNull();
@@ -322,7 +322,7 @@ describe("256/R8-R12 — que gestion manda al resolver la causa de la devolucion
       numGuia: 12345,
       numRemision: "REM-0001",
       deletedAt: null,
-      estado: "devuelta",
+      estado: "novedad",
       causaDevolucion: "not_found",
       // ⏳ 2026-08-22 (268): el DTO gana un campo REQUERIDO. `toEqual` lo exige presente.
       causaIncidente: null,
@@ -345,7 +345,7 @@ describe("268/R20 — el reader proyecta `causaIncidente` desde las DOS proceden
     const datos = await readerWith(prisma).findDatosEntrega(ORDEN_ID, ESTATUS_DESTINO_ID);
 
     expect(argOrden(prisma).select.gestiones.where).toMatchObject({
-      resultado: { in: ["devuelta", "incidente"] },
+      resultado: { in: ["novedad", "incidente"] },
       anuladaAt: null,
     });
     expect(datos?.causaIncidente).toBe("perdido");

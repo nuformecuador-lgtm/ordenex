@@ -23,7 +23,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { GestionarOrdenPanel } from "@/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel";
@@ -72,10 +72,10 @@ const LOS_CINCO = [ENTREGAR, RECHAZAR, REPROGRAMAR, DEVOLVER, INCIDENTE];
 
 /** Rótulo visible de cada `resultado` del contrato. Escrito a mano, a propósito. */
 const ROTULO_POR_RESULTADO: Record<string, string> = {
-  entregada: ENTREGAR,
-  rechazada: RECHAZAR,
-  reprogramada: REPROGRAMAR,
-  devuelta: DEVOLVER,
+  entregado: ENTREGAR,
+  devolucion_a_origen_por_rechazo: RECHAZAR,
+  reprogramado: REPROGRAMAR,
+  novedad: DEVOLVER,
   incidente: INCIDENTE,
 };
 
@@ -103,6 +103,8 @@ function makeOrden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: 1,
     ...over,
   };
@@ -132,7 +134,7 @@ function desenlacesVisibles(): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregada" });
+  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregado" });
 });
 
 afterEach(() => {
@@ -213,7 +215,7 @@ describe("276/R8 — la pantalla lee la lista compartida, no una copia", () => {
     montar({ enElTope: true });
     await screen.findByRole("button", { name: ENTREGAR });
 
-    const negados = (["entregada", "rechazada", "reprogramada", "devuelta", "incidente"] as const)
+    const negados = (["entregado", "devolucion_a_origen_por_rechazo", "reprogramado", "novedad", "incidente"] as const)
       .filter((r) => !permitidoEnElTope(r))
       .map((r) => ROTULO_POR_RESULTADO[r]);
     // Hoy son dos; el día que la lista cambie, este caso y el de arriba se mueven juntos —y el
@@ -280,5 +282,18 @@ describe("276/R10 — la nota no lleva el número del umbral, ni de lejos", () =
     expect(fuente).not.toContain("reintentosConfig");
     expect(fuente).not.toContain("MIN_INTENTOS_ENTREGA");
     expect(fuente).not.toContain("lib/config/reintentos");
+  });
+});
+
+// FICHA 456 (T3.6, design §5.1 fila 9; R9) — la cabecera del panel «Gestionar orden» nombra el
+// estado de la orden con su botón de información.
+describe("456 — cabecera del panel con el botón de información", () => {
+  it("el estado de la cabecera lleva su botón y abre la explicación aprobada", async () => {
+    montar();
+    const cabecera = document.querySelector("header") as HTMLElement;
+    const boton = within(cabecera).getByRole("button", { name: "Qué significa «En reparto»" });
+    fireEvent.click(boton);
+    const explicacion = await screen.findByRole("dialog", { name: "En reparto" });
+    expect(explicacion.textContent).toContain("El mensajero tiene el paquete y lo lleva al destinatario.");
   });
 });

@@ -46,6 +46,16 @@ const RESUMEN: CajaResumenDTO = {
   // 10 000 / 12 000 x 100 = 83.333… -> "83.33" (R9/R10, derivado en el servidor).
   porcentajeTiendas: "83.33",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "2000.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "10000.00",
+  // Ficha 459 (T A.8, R22): la barra SOLO se pinta con un saldo inicial vigente, así que el
+  // conjunto de esta suite va en estado «saldo», a conciencia (`progress/impl_459_frontend.md`).
+  estado: "saldo",
+  flujoDesde: "2026-08-25",
 };
 
 /**
@@ -152,9 +162,9 @@ describe("BarraComposicionCaja — los dos bolsillos (R3/R5)", () => {
     const tiendas = bolsillo(container, "tiendas");
     expect(within(tiendas).getByText("₡10.000")).toBeInTheDocument();
     expect(within(tiendas).getByText(CAJA_COMPOSICION_LABEL.tiendas)).toBeInTheDocument();
-    // Su explicación es la advertencia de la 173, con su enlace: esa cifra NO es la deuda.
+    // Su explicación, con su enlace. Ficha 459 (R23): desde esta ficha esa cifra SÍ es la deuda.
     expect(within(tiendas).getByRole("note").textContent ?? "").toMatch(
-      /no es lo que se les debe/i,
+      /suma de los saldos de todas las tiendas/i, // ficha 459 (R23/R24): el aviso nuevo
     );
     expect(within(tiendas).getByRole("link")).toHaveAttribute("href", "/wallet/tiendas");
 
@@ -262,7 +272,7 @@ describe("BarraComposicionCaja — cuando la barra no se puede partir (R16/R18/R
     const tiendas = bolsillo(container, "tiendas");
     expect(within(tiendas).getByText("-₡800")).toBeInTheDocument();
     expect(within(tiendas).getByRole("note").textContent ?? "").toMatch(
-      /no es lo que se les debe/i,
+      /suma de los saldos de todas las tiendas/i, // ficha 459 (R23/R24): el aviso nuevo
     );
     const nota = within(bolsillo(container, "ordenex")).getByRole("note");
     expect(nota.textContent).toBe(CAJA_COMPOSICION_MENSAJE.solo_ordenex);
@@ -396,5 +406,29 @@ describe("BarraComposicionCaja — money-safe y color por token (R12/R39)", () =
     const enlace = within(bolsillo(container, "tiendas")).getByRole("link");
     expect(enlace.className).toContain("focus-visible:ring-3");
     expect(enlace.className).toContain("focus-visible:ring-ring/50");
+  });
+});
+
+// ─── Ficha 459 (design §3.4, R11/R26) — «De Ordenex» es ganancia MÁS aportes ───
+describe("Ficha 459 — la barra reparte «De las tiendas» y «De Ordenex» (R11/R26)", () => {
+  it("el nombre accesible usa «De Ordenex» (ganancia y aportes), no la ganancia a secas", () => {
+    // Capital distinto de cero: con 0 «De Ordenex» y la ganancia valdrían lo mismo y el caso
+    // no distinguiría nada.
+    pintarBarra({ ganancia: "2000.00", capital: "500.25", deOrdenex: "2500.25" });
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
+      "Reparto del dinero en caja. De las tiendas: ₡10.000. De Ordenex: ₡2.500,25 (ganancia y aportes).",
+    );
+  });
+
+  it("R26: los tres mensajes con el significado nuevo, literales del diseño", () => {
+    expect(CAJA_COMPOSICION_MENSAJE).toEqual({
+      dos_bolsillos: null,
+      solo_tiendas:
+        "Lo de Ordenex (ganancia más aportes) está en negativo, así que hay dinero de las tiendas cubriendo ese saldo. Lo que hay en la caja no alcanza para entregarles todo lo suyo.",
+      solo_ordenex:
+        "Las tiendas le deben a Ordenex, así que todo lo que hay en la caja es de Ordenex y además hay dinero por cobrarles.",
+      sin_reparto:
+        "No hay nada que repartir: ni Ordenex ni las tiendas tienen dinero a favor en la caja.",
+    });
   });
 });

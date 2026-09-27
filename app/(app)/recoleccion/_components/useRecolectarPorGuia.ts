@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { useToast } from "@/hooks/useToast";
 import { recolectarEnTiendaPorQr } from "@/lib/actions/recoleccion-tienda";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // Feature 157 (R21/R23) — espejo de `useRecogerPorGuia` para la RECOLECCIÓN EN TIENDA.
 // Lógica compartida por las dos vías de entrada del apartado (escáner de cámara e input de
@@ -58,8 +59,9 @@ export function useRecolectarPorGuia(): UseRecolectarPorGuia {
             toast.info(`La guía ${numGuia} ya estaba recolectada.`);
             return true;
           case "estado_invalido":
+            // FICHA 455 (2026-09-24, design §2.1; R3): el estado por su NOMBRE, nunca el código crudo.
             toast.error(
-              `La guía ${numGuia} ya no está por recolectar (está en "${result.estado}").`,
+              `La guía ${numGuia} ya no está por recolectar (está en «${nombreDeEstado(result.estado)}»).`,
             );
             break;
           case "no_encontrada":

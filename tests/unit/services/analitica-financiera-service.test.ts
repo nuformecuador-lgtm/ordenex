@@ -3,6 +3,7 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import fs from "fs";
 import path from "path";
 import { listarMetricas } from "@/lib/analytics/metrics";
+import { derivarCaja } from "@/lib/utils/caja-tesoreria";
 import { monedaConfig } from "@/lib/config/moneda";
 import {
   IDS_FINANCIERAS_ACUMULADAS,
@@ -309,7 +310,9 @@ describe("R18 · egresos se sirve de verdad, incluida la indemnizacion", () => {
     // ⚠️ DADO VUELTA por la 183 (R25): era `toHaveLength(8)`. ⟨D12⟩ (humano, 2026-08-04,
     // `progress/decision_183.md`) anadio `ingreso_ajuste` sin quitar ninguna de las ocho.
     const egresos = listarMetricas({ dominio: "financiera" }).find((m) => m.id === "egresos");
-    expect(egresos?.definicion.categorias).toHaveLength(9);
+    // FICHA 459 (P13): DIEZ, con `egreso_pago_por_cuenta_tienda`.
+    expect(egresos?.definicion.categorias).toHaveLength(10);
+    expect(egresos?.definicion.categorias).toContain("egreso_pago_por_cuenta_tienda");
     expect(egresos?.definicion.categorias).toContain("ingreso_ajuste");
     // R10/183 — y de la entrada NO cambia nada mas que la definicion y la descripcion.
     expect(egresos?.id).toBe("egresos");
@@ -446,7 +449,9 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
   it("`dinero_en_caja` es entradas − salidas, con el dinero de terceros dentro", async () => {
     const vista = await totalDe("dinero_en_caja", LIBRO_MIXTO);
 
-    expect(vista.total.neto).toBe("2930.00");
+    // Ficha 459 (R12, reescrito A PROPOSITO): la cifra principal de la caja. El flete y su IVA
+    // (1 130) son CARGOS a la tienda, no efectivo: 5 000 + 200 − 400 − 3 000 = 1 800.
+    expect(vista.total.neto).toBe("1800.00");
     expect(vista.total.bruto).toBe("9730.00");
     expect(vista.id).toBe("dinero_en_caja");
     expect(vista.fuente).toBe("wallet_movimiento");
@@ -458,6 +463,16 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(vista.filas).toHaveLength(1);
     expect(vista.filas[0].cubo).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(vista.filas[0].importe).toEqual(vista.total);
+  });
+
+  it("459/R12: `dinero_en_caja` (total y cubo) = la cifra principal de la tarjeta sobre el mismo conjunto", async () => {
+    const vista = await totalDe("dinero_en_caja", LIBRO_MIXTO);
+    const tarjeta = derivarCaja(
+      LIBRO_MIXTO.map((f) => ({ categoria: f.categoria, tipo: f.tipo, total: f.suma })),
+    );
+    expect(vista.total.neto).toBe(tarjeta.enCaja);
+    expect(vista.filas[0].importe).toEqual(vista.total);
+    expect(tarjeta.enCaja).toBe("1800.00");
   });
 
   it("`ganancia_ordenex` deja fuera el dinero de terceros: 730, no 2930", async () => {
@@ -474,11 +489,12 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     const ganancia = await totalDe("ganancia_ordenex", LIBRO_MIXTO);
 
     expect(enCaja.total.neto).not.toBe(ganancia.total.neto);
-    // 2930 − 730 = 2200 = el contra-entrega que aun no se ha entregado (5000 − 3000 + 200).
+    // Ficha 459 (reescrito): 1800 − 730 = 1070 = lo que se les debe a las tiendas
+    // (5000 − 3000 + 200 − 1130 de flete e IVA que Ordenex se queda del contra-entrega).
     expect(
       Number(enCaja.total.neto) - Number(ganancia.total.neto),
       "solo para leer el descuadre: la aritmetica de dinero vive en Prisma.Decimal",
-    ).toBeCloseTo(2200, 2);
+    ).toBeCloseTo(1070, 2);
   });
 
   it("R51 en el servicio: anadir contra-entrega NO mueve la ganancia y SI mueve la caja", async () => {
@@ -491,14 +507,19 @@ describe("R54 · dinero_en_caja y ganancia_ordenex son DOS cifras, no la misma d
     expect(gananciaConTerceros.total.neto).toBe("730.00");
     // Y la otra no es insensible: si las dos se movieran igual, serian la misma cifra.
     expect(cajaConTerceros.total.neto).not.toBe(cajaSinTerceros.total.neto);
-    expect(cajaSinTerceros.total.neto).toBe("730.00");
+    // Ficha 459 (reescrito): sin contra-entrega, el flete y su IVA no entran a la caja (son una
+    // deuda de la tienda): solo sale el sueldo.
+    expect(cajaSinTerceros.total.neto).toBe("-400.00");
   });
 
-  it("un libro sin dinero de terceros hace coincidir las dos, y eso es correcto (R6)", async () => {
+  it("459/R12: sin dinero de terceros las dos cifras difieren EXACTAMENTE en los cargos a tiendas", async () => {
+    // Sustituye a «un libro sin dinero de terceros hace coincidir las dos (R6)», que medía el doble
+    // conteo F2: el flete (1 000) y su IVA (130) no son efectivo. Ganancia 730; caja −400.
     const enCaja = await totalDe("dinero_en_caja", LIBRO_SOLO_PROPIO);
     const ganancia = await totalDe("ganancia_ordenex", LIBRO_SOLO_PROPIO);
 
-    expect(enCaja.total.neto).toBe(ganancia.total.neto);
+    expect(enCaja.total.neto).toBe("-400.00");
+    expect(ganancia.total.neto).toBe("730.00");
   });
 
   it("las dos consultan el libro de la caja y NINGUN otro repositorio", async () => {

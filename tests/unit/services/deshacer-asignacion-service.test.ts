@@ -33,7 +33,7 @@ const ZONA_CENTRAL = "z-central";
 const ZONA_SATELITE = "z-limon";
 
 const ESTATUS_ID: Record<string, string> = {
-  por_recoger: "os-por-recoger",
+  mensajero_recogiendo_en_bodega: "os-por-recoger",
   en_ruta_bodega_satelite: "os-ruta-satelite",
   en_bodega_central: "os-bodega-central",
   en_bodega_satelite: "os-bodega-satelite",
@@ -44,7 +44,7 @@ const MOTIVO = "mensajero equivocado: la orden vuelve a bodega";
 function ordenRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     numGuia: 1234,
     deletedAt: null,
     zonaId: ZONA_CENTRAL,
@@ -175,7 +175,7 @@ describe("T4.2/R4/R5/R6 — alcance del adminSatelite", () => {
   it("R5: destino derivado `en_bodega_central` con actor adminSatelite -> forbidden", async () => {
     const e = escenario({
       zonaUsuario: ZONA_CENTRAL, // zona del actor = la central (caso patologico permitido)
-      ordenes: [ordenRow({ id: "o1", estatusValue: "por_recoger", zonaId: ZONA_CENTRAL })],
+      ordenes: [ordenRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega", zonaId: ZONA_CENTRAL })],
       origenes: new Map([["o1", "en_bodega_central"]]),
     });
     const r = await e.service.deshacer(input(), ADMIN_SATELITE);
@@ -199,7 +199,7 @@ describe("T4.2/R4/R5/R6 — alcance del adminSatelite", () => {
 // ---------------------------------------------------------------------------------------
 // T4.3 / T4.4 — Casos (a) y (b)
 // ---------------------------------------------------------------------------------------
-describe("T4.3/R8/R9 — caso (a): orden en por_recoger", () => {
+describe("T4.3/R8/R9 — caso (a): orden en mensajero_recogiendo_en_bodega", () => {
   it("origen `en_bodega_central` -> destino en_bodega_central", async () => {
     const e = escenario({ origenes: new Map([["o1", "en_bodega_central"]]) });
     const r = await e.service.deshacer(input(), MAESTRO);
@@ -213,7 +213,7 @@ describe("T4.3/R8/R9 — caso (a): orden en por_recoger", () => {
     ]);
     // La guarda de escritura usa el estado ACTUAL como origen (anti-TOCTOU).
     expect([...e.deshacerAsignacionLote.mock.calls[0][1]]).toEqual([
-      ["o1", ESTATUS_ID.por_recoger],
+      ["o1", ESTATUS_ID.mensajero_recogiendo_en_bodega],
     ]);
   });
 
@@ -286,7 +286,7 @@ describe("T4.5/R11/R12 — el destino se DERIVA del historial y se normaliza", (
   it("R11: la derivacion consulta el HISTORIAL con el estado actual de cada orden", async () => {
     const e = escenario({
       ordenes: [
-        ordenRow({ id: "o1", estatusValue: "por_recoger" }),
+        ordenRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega" }),
         ordenRow({ id: "o2", estatusValue: "en_ruta_bodega_satelite" }),
       ],
       origenes: new Map([
@@ -297,7 +297,7 @@ describe("T4.5/R11/R12 — el destino se DERIVA del historial y se normaliza", (
     await e.service.deshacer(input(["o1", "o2"]), MAESTRO);
     expect(e.findOrigenesReversion).toHaveBeenCalledTimes(1); // sin N+1
     expect(e.findOrigenesReversion.mock.calls[0][0]).toEqual([
-      { ordenId: "o1", estatusActualId: ESTATUS_ID.por_recoger },
+      { ordenId: "o1", estatusActualId: ESTATUS_ID.mensajero_recogiendo_en_bodega },
       { ordenId: "o2", estatusActualId: ESTATUS_ID.en_ruta_bodega_satelite },
     ]);
   });
@@ -331,7 +331,7 @@ describe("T4.6/R13 — fallo CERRADO: sin origen derivable no se escribe nada", 
     ["sin fila de historial", new Map<string, string | null>()],
     ["fila de creacion (origen NULL)", new Map<string, string | null>([["o1", null]])],
     ["origen fuera de la tabla (en_reparto)", new Map<string, string | null>([["o1", "en_reparto"]])],
-    ["origen fuera de la tabla (devuelta)", new Map<string, string | null>([["o1", "devuelta"]])],
+    ["origen fuera de la tabla (devuelta)", new Map<string, string | null>([["o1", "novedad"]])],
   ])("%s -> conflict con motivo tipado y 0 escrituras", async (_n, origenes) => {
     const e = escenario({ origenes });
     const r = await e.service.deshacer(input(), MAESTRO);
@@ -415,7 +415,7 @@ describe("T4.7/R14/R15 (FICHA 363) — la inferencia se VERIFICA contra el inven
   // rechazarla la dejaba sin ninguna via de deshacer.
   it("orden de zona CENTRAL cuyo paquete quedo en la satelite -> vuelve a la satelite", async () => {
     const e = escenario({
-      ordenes: [ordenRow({ zonaId: ZONA_CENTRAL, estatusValue: "por_recoger" })],
+      ordenes: [ordenRow({ zonaId: ZONA_CENTRAL, estatusValue: "mensajero_recogiendo_en_bodega" })],
       origenes: new Map([["o1", "en_bodega_satelite"]]),
     });
     const r = await e.service.deshacer(input(), MAESTRO);
@@ -431,7 +431,7 @@ describe("T4.7/R14/R15 (FICHA 363) — la inferencia se VERIFICA contra el inven
     ["satelite", ZONA_SATELITE, false],
   ])("zona %s: el destino lo fija el historial, no la zona", async (_n, zonaId, zonaEsGam) => {
     const e = escenario({
-      ordenes: [ordenRow({ zonaId, zonaEsGam, estatusValue: "por_recoger" })],
+      ordenes: [ordenRow({ zonaId, zonaEsGam, estatusValue: "mensajero_recogiendo_en_bodega" })],
       origenes: new Map([["o1", "en_preparacion"]]),
     });
     const r = await e.service.deshacer(input(), MAESTRO);
@@ -467,15 +467,15 @@ describe("T4.7/R14/R15 (FICHA 363) — la inferencia se VERIFICA contra el inven
 // ---------------------------------------------------------------------------------------
 // T4.8 — Bloqueos de estado y existencia (R16/R17/R18)
 // ---------------------------------------------------------------------------------------
-describe("T4.8/R16 — solo por_recoger y en_ruta_bodega_satelite son reversibles", () => {
+describe("T4.8/R16 — solo mensajero_recogiendo_en_bodega y en_ruta_bodega_satelite son reversibles", () => {
   it.each([
     "en_reparto",
     "en_bodega_satelite",
-    "entregada",
-    "reprogramada",
-    "devuelta",
-    "rechazada",
-    "sin_gestionar",
+    "entregado",
+    "reprogramado",
+    "novedad",
+    "devolucion_a_origen_por_rechazo",
+    "novedad_interna",
   ])("estado %s -> conflict con el estado NOMBRADO en el motivo", async (estatusValue) => {
     const e = escenario({ ordenes: [ordenRow({ estatusValue })] });
     const r = await e.service.deshacer(input(), MAESTRO);
@@ -594,7 +594,7 @@ describe("T4.13/R40 — ningun motivo expone UUIDs ni datos del destinatario", (
       ordenes: [
         ordenRow({
           id: "8b1a2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d",
-          estatusValue: "entregada",
+          estatusValue: "entregado",
         }),
       ],
     });
@@ -705,7 +705,7 @@ describe("T4.14(a)/R41 — esta feature NO notifica al mensajero desasignado", (
   it("el unico efecto para el mensajero es que la orden sale de su listado de asignaciones", async () => {
     // `GestionOrdenRepository.findMisAsignaciones` filtra por `mensajeroAsignadoId`; al quedar
     // en NULL, la orden deja de casar el predicado. Se simula esa DB en memoria.
-    const db = { id: "o1", mensajeroAsignadoId: "m-1", asignadoAt: new Date(), estatus: "por_recoger" };
+    const db = { id: "o1", mensajeroAsignadoId: "m-1", asignadoAt: new Date(), estatus: "mensajero_recogiendo_en_bodega" };
     const e = escenario({
       escritura: async (items) => {
         for (const i of items) {

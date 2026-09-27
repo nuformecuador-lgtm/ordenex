@@ -36,6 +36,8 @@ function row(over: Partial<MiAsignacionRow> & { id: string }): MiAsignacionRow {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...over,
   };
@@ -52,7 +54,10 @@ function fakeRepo(rows: MiAsignacionRow[]): IGestionOrdenRepository {
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -116,7 +121,7 @@ describe("R17 — el DTO refleja marcar_luego del mensajero", () => {
   });
 
   it("R17: la marca tambien viaja en 'Por recoger' (dato de la pareja mensajero/orden)", async () => {
-    const rows = [row({ id: "o3", estatusValue: "por_recoger" })];
+    const rows = [row({ id: "o3", estatusValue: "mensajero_recogiendo_en_bodega" })];
     const { service } = build(rows, new Set(["o3"]));
     const r = await service.listarMisAsignaciones(MENSAJERO);
     if (r.status !== "ok") throw new Error("esperaba ok");

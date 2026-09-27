@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   listarMovimientosAction,
@@ -11,6 +12,7 @@ import type {
   ComposicionGananciaDTO,
   WalletMovimientoDTO,
 } from "@/lib/types/wallet";
+import { ORIGENES_FALSOS } from "@/tests/fixtures/origenes-falsos";
 
 // Feature 42 (T10) — tests unit de las Server Actions de wallet (R19/R21/R25). Sin sesion
 // -> unauthenticated; rol no autorizado -> forbidden (el service lo decide); DTOs STRING.
@@ -39,6 +41,7 @@ function mov(): WalletMovimientoDTO {
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     // Feature 231 (R31): el flete es dinero de Ordenex.
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
@@ -61,6 +64,14 @@ const RESUMEN: CajaResumenDTO = {
   // Feature 231 (R9/R10): 5000 / 5700 x 100 = 87.719… -> "87.72", con las dos cifras > 0.
   porcentajeTiendas: "87.72",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "700.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "5000.00",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 /**
@@ -76,6 +87,7 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_iva_flete_devolucion: "0.00",
     ingreso_iva_comision_cod: "0.00",
     ingreso_ajuste: "0.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "1000.00",
   // Ficha 339 (T1.3): las dos cubetas nuevas. Aqui van a 0,00 y los 300 siguen en «otros»,
@@ -83,6 +95,9 @@ const COMPOSICION: ComposicionGananciaDTO = {
   egresos: {
     egreso_pago_mensajero: "0.00",
     egreso_ajuste: "0.00",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+    egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+    egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
   },
   otrosEgresos: "300.00",
   totalEgresos: "300.00",
@@ -121,20 +136,20 @@ function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
 describe("listarMovimientosAction (R19/R25)", () => {
   it("sin sesion -> unauthenticated, sin tocar el service", async () => {
     const service = fakeService();
-    const r = await listarMovimientosAction({}, { service, getActor: async () => null });
+    const r = await listarMovimientosAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => null });
     expect(r).toEqual({ status: "unauthenticated" });
     expect(service.listarMovimientos).not.toHaveBeenCalled();
   });
 
   it("R19: rol no autorizado -> forbidden (el service decide, sin exponer datos)", async () => {
     const service = fakeService({ listarMovimientos: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await listarMovimientosAction({}, { service, getActor: async () => OTRO });
+    const r = await listarMovimientosAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => OTRO });
     expect(r).toEqual({ status: "forbidden" });
   });
 
   it("R25: maestro -> ok con DTOs de monto STRING", async () => {
     const service = fakeService();
-    const r = await listarMovimientosAction({ page: 1, pageSize: 20 }, { service, getActor: async () => MAESTRO });
+    const r = await listarMovimientosAction({ page: 1, pageSize: 20 }, { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO });
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(typeof r.data.movimientos[0].monto).toBe("string");
@@ -144,7 +159,7 @@ describe("listarMovimientosAction (R19/R25)", () => {
     const service = fakeService();
     const r = await listarMovimientosAction(
       { page: 1, pageSize: 9999 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
     expect(service.listarMovimientos).not.toHaveBeenCalled();
@@ -154,7 +169,7 @@ describe("listarMovimientosAction (R19/R25)", () => {
 describe("verResumenCajaAction (R8/R64/R65)", () => {
   it("sin sesion -> unauthenticated, sin tocar el service", async () => {
     const service = fakeService();
-    const r = await verResumenCajaAction({}, { service, getActor: async () => null });
+    const r = await verResumenCajaAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => null });
     expect(r).toEqual({ status: "unauthenticated" });
     expect(service.verResumenCaja).not.toHaveBeenCalled();
   });
@@ -163,14 +178,14 @@ describe("verResumenCajaAction (R8/R64/R65)", () => {
     const service = fakeService({
       verResumenCaja: vi.fn(async () => ({ status: "forbidden" as const })),
     });
-    const r = await verResumenCajaAction({}, { service, getActor: async () => OTRO });
+    const r = await verResumenCajaAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => OTRO });
     expect(r).toEqual({ status: "forbidden" });
     expect(Object.keys(r)).toEqual(["status"]);
   });
 
   it("R64: maestro -> el DTO cruza con los NUEVE importes como STRING", async () => {
     const service = fakeService();
-    const r = await verResumenCajaAction({}, { service, getActor: async () => MAESTRO });
+    const r = await verResumenCajaAction({}, { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO });
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -193,7 +208,7 @@ describe("verResumenCajaAction (R8/R64/R65)", () => {
     const service = fakeService();
     const r = await verResumenCajaAction(
       { page: 1, pageSize: 9999 },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
     expect(service.verResumenCaja).not.toHaveBeenCalled();
@@ -209,7 +224,7 @@ describe("verResumenCajaAction (R8/R64/R65)", () => {
     });
     const r = await verResumenCajaAction(
       { tipo: "ingreso" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     if (r.status !== "ok") throw new Error("esperado ok");
     expect(r.resumen.periodoFiltrado).toBe(true);
@@ -239,6 +254,7 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
     // frontend; quien lo cablee tiene que borrar esa anotación, y la guardia de superficie de
     // uso lo exige en los dos sentidos.
     expect(Object.keys(acciones).sort()).toEqual([
+      "anularAjusteCajaAction", // ficha 461 (R69–R71): anular una correccion de caja
       "listarMovimientosAction",
       "listarMovimientosCompletoAction",
       "listarMovimientosDeFilaAction",
@@ -254,8 +270,8 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("sin sesion -> unauthenticated", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
-      { service, getActor: async () => null },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => null },
     );
     expect(r).toEqual({ status: "unauthenticated" });
   });
@@ -265,8 +281,8 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
       registrarMovimientoManual: vi.fn(async () => ({ status: "forbidden" as const })),
     });
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
-      { service, getActor: async () => OTRO },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => OTRO },
     );
     expect(r).toEqual({ status: "forbidden" });
   });
@@ -274,8 +290,8 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("descripcion vacia -> validation_error (zod en el borde), sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "" },
-      { service, getActor: async () => MAESTRO },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
     expect(service.registrarMovimientoManual).not.toHaveBeenCalled();
@@ -284,8 +300,8 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("monto no positivo -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "0", descripcion: "x" },
-      { service, getActor: async () => MAESTRO },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "0", descripcion: "x" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
   });
@@ -293,8 +309,8 @@ describe("registrarMovimientoManualAction (R15/R19)", () => {
   it("R15: maestro con ajuste valido -> ok, movimiento con monto STRING", async () => {
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
-      { service, getActor: async () => MAESTRO },
+      { claveIdempotencia: randomUUID(), tipo: "egreso", categoria: "egreso_ajuste", monto: "50.00", descripcion: "correccion" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("esperado ok");
@@ -324,6 +340,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
 
   function ajuste(fecha: string) {
     return {
+      claveIdempotencia: randomUUID(), // ficha 461 (R66)
       tipo: "ingreso",
       categoria: "ingreso_ajuste",
       monto: "50.00",
@@ -337,6 +354,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     const service = fakeService();
     const r = await registrarMovimientoManualAction(ajuste("2026-08-30"), {
       service,
+      origenes: ORIGENES_FALSOS,
       getActor: async () => MAESTRO,
     });
     expect(r.status).toBe("validation_error");
@@ -352,6 +370,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     const service = fakeService();
     const r = await registrarMovimientoManualAction(ajuste("2026-02-31"), {
       service,
+      origenes: ORIGENES_FALSOS,
       getActor: async () => MAESTRO,
     });
     expect(r.status).toBe("validation_error");
@@ -363,6 +382,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     const service = fakeService();
     const r = await registrarMovimientoManualAction(ajuste("2019-03-04"), {
       service,
+      origenes: ORIGENES_FALSOS,
       getActor: async () => MAESTRO,
     });
     expect(r.status).toBe("validation_error");
@@ -376,6 +396,7 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     const service = fakeService();
     const r = await registrarMovimientoManualAction(ajuste("2026-08-28"), {
       service,
+      origenes: ORIGENES_FALSOS,
       getActor: async () => MAESTRO,
     });
     expect(r.status).toBe("ok");
@@ -389,8 +410,8 @@ describe("registrarMovimientoManualAction — la fecha del movimiento (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarMovimientoManualAction(
-      { tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
-      { service, getActor: async () => MAESTRO },
+      { claveIdempotencia: randomUUID(), tipo: "ingreso", categoria: "ingreso_ajuste", monto: "50.00", descripcion: "x" },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
     const entrada = (service.registrarMovimientoManual as ReturnType<typeof vi.fn>).mock

@@ -417,7 +417,7 @@ describeSiHayBase("212 / bloque B — la migracion HACE lo que dice (Postgres re
         `INSERT INTO "${esquema}"."gestion_orden"
            ("id","orden_id","mensajero_id","resultado","monto_recibido","metodo_pago","created_at")
          VALUES ('${ids[s.clave]}', '${randomUUID()}', '${randomUUID()}',
-                 'entregada'::public.gestion_resultado,
+                 'entregado'::public.gestion_resultado,
                  ${s.monto === null ? "NULL" : s.monto},
                  ${s.metodo === null ? "NULL" : `'${s.metodo}'::public.metodo_pago_value`},
                  TIMESTAMP '${s.createdAt}')`,

@@ -29,10 +29,10 @@ import { WALLET_INGRESO_CONCEPTO_SEED } from "@/lib/types/wallet";
  */
 
 const RESULTADOS: readonly GestionResultado[] = [
-  "entregada",
-  "reprogramada",
-  "devuelta",
-  "rechazada",
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ];
 
@@ -225,7 +225,7 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
       for (const cobraComision of [true, false]) {
         for (const hayTarifa of [true, false]) {
           for (const hayMontoRecibido of [true, false]) {
-            const esperado = resultado === "entregada" && hayMontoRecibido;
+            const esperado = resultado === "entregado" && hayMontoRecibido;
             expect(
               satisfaceCriterio(CRITERIO_RECAUDO_ENTREGA, {
                 resultado,
@@ -250,8 +250,8 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
     // recaudo que no sean entrega, asi que hoy las dos definiciones dan el mismo numero. El
     // filtro explicito existe para que la cifra no cambie sola el dia que eso deje de ser
     // cierto — no para cambiarla hoy.
-    const divergentes = RESULTADOS.filter((r) => r !== "entregada");
-    expect(divergentes).toEqual(["reprogramada", "devuelta", "rechazada", "incidente"]);
+    const divergentes = RESULTADOS.filter((r) => r !== "entregado");
+    expect(divergentes).toEqual(["reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"]);
     for (const resultado of divergentes) {
       const hechos = {
         resultado,

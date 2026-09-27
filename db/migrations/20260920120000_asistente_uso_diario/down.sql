@@ -1,0 +1,27 @@
+-- DOWN (ficha 436, T8) -- revierte EXACTAMENTE `migration.sql`.
+--
+-- Una sola sentencia, y arrastra TODO lo que el `up` creo: la tabla, su clave primaria, su indice
+-- unico `asistente_uso_diario_usuario_id_fecha_key`, su clave ajena a `usuario`, los dos CHECK, los
+-- cuatro `COMMENT ON` y la configuracion de RLS. No hace falta soltarlos uno a uno y no se debe: un
+-- `DROP INDEX` suelto delante seria ruido que puede desincronizarse del `up`.
+--
+-- SIN `CASCADE`, y es deliberado: hoy nada depende de esta tabla, asi que si algun dia existiera una
+-- dependencia no prevista lo correcto es que el rollback FALLE ruidosamente y no que arrastre en
+-- silencio un objeto ajeno.
+--
+-- NO HAY `DROP TYPE`, Y NO ES UN OLVIDO. Esta migracion NO CREA NINGUN ENUM ni ningun tipo: solo usa
+-- `TEXT`, `DATE`, `INTEGER` y `TIMESTAMP`. Por eso aqui NO aplica la leccion de los enums recreados
+-- con lista -- no hay ninguna lista que recrear, asi que tampoco hay ninguna columna que retipar ni
+-- ningun valor posterior que se pueda borrar en silencio. Y por el mismo motivo NO SE TOCA NINGUN
+-- `down.sql` ANTERIOR: cada uno es una foto de SU rama y todos siguen siendo ciertos.
+--
+-- NO TOCA `usuario`. Ni un `UPDATE`, ni un `DELETE`, ni un `INSERT` sobre nada que existiera antes:
+-- revertir esta ficha no da de baja a nadie ni cambia un permiso.
+--
+-- QUE SE PIERDE AL REVERTIR, DICHO EN VOZ ALTA: el contador del dia de todo el mundo. Consecuencia
+-- inmediata y concreta: **el asistente se queda sin tope**, porque quien lo aplica es este contador.
+-- Si se revierte con la ruta `/api/asistente` viva, cada consulta fallara al intentar contar (la
+-- tabla ya no existe) y la ruta respondera su error propio en vez de atender -- es decir, el
+-- asistente deja de responder, que es el modo de fallo seguro y no el de gastar sin limite. Lo que
+-- NO se pierde es nada de la conversacion: aqui nunca hubo texto que perder.
+DROP TABLE IF EXISTS "asistente_uso_diario";

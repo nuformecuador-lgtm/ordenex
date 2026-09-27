@@ -25,10 +25,10 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
  * sobre cuantas entregadas hubo, porque salen de la misma consulta.
  */
 export const DESENLACES: readonly OrderStatusValue[] = [
-  "entregada",
-  "devuelta",
-  "rechazada",
-  "reprogramada",
+  "entregado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
+  "reprogramado",
   "incidente",
 ];
 

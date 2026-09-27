@@ -25,7 +25,7 @@ function fakeService(
     gestionar: vi.fn(async () => ({
       status: "ok" as const,
       ordenId: ORDEN_ID,
-      resultado: "rechazada" as const,
+      resultado: "devolucion_a_origen_por_rechazo" as const,
     })),
     ...overrides,
   };
@@ -43,7 +43,7 @@ function formData(
 ): FormData {
   const fd = new FormData();
   fd.set("ordenId", over.ordenId ?? ORDEN_ID);
-  fd.set("resultado", over.resultado ?? "rechazada");
+  fd.set("resultado", over.resultado ?? "devolucion_a_origen_por_rechazo");
   if (over.motivo !== undefined) fd.set("motivo", over.motivo);
   else fd.set("motivo", "el cliente no la quiere");
   if (over.fechaReprogramacion !== undefined) {
@@ -90,7 +90,7 @@ describe("gestionarDesdeAyuda — el borde autentica ANTES de tocar nada", () =>
 });
 
 describe("gestionarDesdeAyuda — el borde REVALIDA (R1/R12/R13/R14)", () => {
-  it.each(["entregada", "devuelta", "incidente", "cualquier-cosa"])(
+  it.each(["entregado", "novedad", "incidente", "cualquier-cosa"])(
     "R1: `resultado = %s` ⇒ `validation_error`, sin llegar al servicio",
     async (resultado) => {
       const service = fakeService();
@@ -143,7 +143,7 @@ describe("gestionarDesdeAyuda — el borde REVALIDA (R1/R12/R13/R14)", () => {
     }).format(new Date());
     const service = fakeService();
     const r = await gestionarDesdeAyuda(
-      formData({ resultado: "reprogramada", fechaReprogramacion: hoy }),
+      formData({ resultado: "reprogramado", fechaReprogramacion: hoy }),
       { service, getActor: actorTienda },
     );
     expect(r.status).toBe("validation_error");
@@ -152,7 +152,7 @@ describe("gestionarDesdeAyuda — el borde REVALIDA (R1/R12/R13/R14)", () => {
 
   it("R14: reprogramar SIN fecha ⇒ `validation_error`", async () => {
     const service = fakeService();
-    const r = await gestionarDesdeAyuda(formData({ resultado: "reprogramada" }), {
+    const r = await gestionarDesdeAyuda(formData({ resultado: "reprogramado" }), {
       service,
       getActor: actorTienda,
     });
@@ -188,19 +188,19 @@ describe("gestionarDesdeAyuda — lo que llega al servicio", () => {
       gestionar: vi.fn(async () => ({
         status: "ok" as const,
         ordenId: ORDEN_ID,
-        resultado: "reprogramada" as const,
+        resultado: "reprogramado" as const,
       })),
     });
     const r = await gestionarDesdeAyuda(
-      formData({ resultado: "reprogramada", fechaReprogramacion: manana() }),
+      formData({ resultado: "reprogramado", fechaReprogramacion: manana() }),
       { service, getActor: actorTienda },
     );
-    expect(r).toEqual({ status: "ok", ordenId: ORDEN_ID, resultado: "reprogramada" });
+    expect(r).toEqual({ status: "ok", ordenId: ORDEN_ID, resultado: "reprogramado" });
     const input = (service.gestionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       resultado: string;
       fechaReprogramacion: string;
     };
-    expect(input.resultado).toBe("reprogramada");
+    expect(input.resultado).toBe("reprogramado");
     expect(input.fechaReprogramacion).toBe(manana());
   });
 

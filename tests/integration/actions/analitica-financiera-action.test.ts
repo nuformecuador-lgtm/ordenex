@@ -338,8 +338,11 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
       // ⚠️ DADO VUELTA por la 183 (R25): esto afirmaba ademas `neto === "1500.00"`, que era el
       // bruto copiado. ⟨D12⟩ retiro esa copia; lo que se afirma ahora es la FORMA —que la clave
       // no esta— ademas de la cifra, que no cambia.
-      expect(soloBruto(vista.total, "ingreso_flete / total").bruto).toBe("1500.00");
-      expect(JSON.stringify(vista.total)).not.toContain("neto");
+      // FICHA 458-B (revision B2): `ingreso_flete` vuelve a publicar neto porque su lista gana el
+      // reverso de la anulacion de un cobro por rechazo. Sin reverso sembrado, neto = bruto.
+      const total = conNeto(vista.total, "ingreso_flete / total");
+      expect(total.bruto).toBe("1500.00");
+      expect(total.neto).toBe("1500.00");
     });
   });
 
@@ -368,8 +371,9 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
       const diaA = vistasDe(await consultarDia(tx, "ingreso_comision_cod", DIA_A))[0];
       const diaB = vistasDe(await consultarDia(tx, "ingreso_comision_cod", DIA_B))[0];
 
-      // El movimiento de las 22:00 CR pertenece al DIA_A y a ningun otro.
-      expect(diaA.total.bruto).toBe("300.00");
+      // El movimiento de las 22:00 CR pertenece al DIA_A y a ningun otro. (458-B: la comision es
+      // la unica metrica de caja que sigue `solo_bruto`; se afirma la forma contra Postgres aqui.)
+      expect(soloBruto(diaA.total, "ingreso_comision_cod / dia A").bruto).toBe("300.00");
       // El de las 00:30 CR, al DIA_B. Con medianoche UTC los dos caerian en el mismo dia.
       expect(diaB.total.bruto).toBe("700.00");
     });

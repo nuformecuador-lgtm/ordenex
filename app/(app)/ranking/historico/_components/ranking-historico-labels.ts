@@ -11,6 +11,7 @@
 // de la misma magnitud, y dos literales con el mismo contenido acabarían divergiendo.
 
 import { RANKING_COLUMNAS } from "../../_components/ranking-labels";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 /**
  * Encabezados de las columnas de la tabla del histórico (design §6/§7). Son los MISMOS
@@ -27,8 +28,9 @@ export const RANKING_HISTORICO_COLUMNAS = {
   posicion: RANKING_COLUMNAS.posicion,
   mensajero: RANKING_COLUMNAS.mensajero,
   porcentaje: RANKING_COLUMNAS.porcentaje,
-  entregadas: "Entregadas",
-  asignadas: "Asignadas",
+  // FICHA 455 (2026-09-24, R5): cuenta UN resultado, lleva su nombre exacto.
+  entregadas: NOMBRE_ESTADO.entregado,
+  asignadas: "Asignados",
   premio: "Premio",
 } as const;
 

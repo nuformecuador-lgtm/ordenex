@@ -245,12 +245,12 @@ describe("R7 · ninguna descripcion del catalogo cuenta estados a mano", () => {
 /* R9                                                                          */
 /* -------------------------------------------------------------------------- */
 
-describe("R9 · sin_gestionar se declara derivada de ordenes_por_estado", () => {
+describe("R9 · novedad_interna se declara derivada de ordenes_por_estado", () => {
   // MUTACION QUE LO MATA: borrar `derivadaDe: "ordenes_por_estado"` de
   // `sin_gestionar.definicion` (`metrics.ts:264`). MEDIDA: rojo.
-  it("sin_gestionar se declara derivada de ordenes_por_estado", () => {
-    const sinGestionar = getMetrica("sin_gestionar");
-    expect(sinGestionar, "el catalogo perdio la metrica sin_gestionar").toBeDefined();
+  it("novedad_interna se declara derivada de ordenes_por_estado", () => {
+    const sinGestionar = getMetrica("novedad_interna");
+    expect(sinGestionar, "el catalogo perdio la metrica novedad_interna").toBeDefined();
     expect(sinGestionar!.definicion.derivadaDe).toBe("ordenes_por_estado");
     expect(sinGestionar!.definicion.universo).toBe(UNIVERSO_B2);
   });
@@ -276,7 +276,7 @@ describe("R9 · sin_gestionar se declara derivada de ordenes_por_estado", () => 
 /* R10                                                                         */
 /* -------------------------------------------------------------------------- */
 
-describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () => {
+describe("R10 · novedad_interna se describe como del dia, no como acumulada", () => {
   // MUTACION QUE LO MATA (dos formas, ambas medidas): (a) quitar «HOY» / «del dia» de la
   // descripcion; (b) describirla como acumulada (cambiar «NO acumuladas» por «acumuladas»).
   //
@@ -285,7 +285,7 @@ describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () 
   // (`modulo-puro.guardia.test.ts` prohibe que el catalogo importe fuera de su isla). El test SI
   // puede importar las dos, asi que la coherencia entre los dos textos se ata AQUI: las nociones
   // que exige la descripcion se derivan de los tokens de la constante, no se escriben a mano.
-  const sinGestionar = getMetrica("sin_gestionar");
+  const sinGestionar = getMetrica("novedad_interna");
   const tokens = NOTA_SIN_GESTIONAR.split("_");
 
   it("la nota del contrato sigue codificando las dos nociones que se exigen", () => {
@@ -295,7 +295,7 @@ describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () 
     expect(tokens).toContain("b2");
   });
 
-  it("sin_gestionar se describe como del dia, no como acumulada", () => {
+  it("novedad_interna se describe como del dia, no como acumulada", () => {
     expect(sinGestionar).toBeDefined();
     const descripcion = normalizar(sinGestionar!.descripcion);
 
@@ -306,13 +306,15 @@ describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () 
     // frase lo dejaria pasar.
     if (tokens.includes("dia")) {
       expect(
-        /\bsin gestionar\s+(?:hoy|de hoy|del dia)\b/.test(descripcion),
-        "sin_gestionar no se describe como del dia (HOY) junto al nombre de la metrica",
+        // FICHA 455 (2026-09-24, recorrido F3): la descripcion nombra la metrica por su nombre
+        // vigente («en Novedad interna HOY»); «sin gestionar» es un nombre retirado.
+        /\ben novedad interna\s+(?:hoy|de hoy|del dia)\b/.test(descripcion),
+        "novedad_interna no se describe como del dia (HOY) junto al nombre de la metrica",
       ).toBe(true);
     }
     // Token `b2` de la nota -> la descripcion nombra el universo B2.
     if (tokens.includes("b2")) {
-      expect(descripcion, "sin_gestionar no nombra el universo B2").toContain("universo b2");
+      expect(descripcion, "novedad_interna no nombra el universo B2").toContain("universo b2");
     }
 
     // Y NO se describe como acumulada: toda aparicion de «acumulad*» debe estar negada o
@@ -325,7 +327,7 @@ describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () 
       const entorno = descripcion.slice(desde, aparicion.index + aparicion[0].length + 60);
       expect(
         /\bno\b|\bni\b|\bnunca\b|distint/.test(entorno),
-        `sin_gestionar se describe como acumulada: "...${entorno}..."`,
+        `novedad_interna se describe como acumulada: "...${entorno}..."`,
       ).toBe(true);
     }
   });
@@ -335,7 +337,7 @@ describe("R10 · sin_gestionar se describe como del dia, no como acumulada", () 
 /* R11                                                                         */
 /* -------------------------------------------------------------------------- */
 
-describe("R11 · analytics_daily no tiene columna sin_gestionar y el catalogo no la supone", () => {
+describe("R11 · analytics_daily no tiene columna novedad_interna y el catalogo no la supone", () => {
   it("el parseo del modelo AnalyticsDaily encontro columnas reales", () => {
     // Sanidad OBLIGATORIA: si el regex fallara y devolviera vacio, los tres casos de abajo
     // pasarian por vacuo y el guard seria decorativo.
@@ -349,8 +351,8 @@ describe("R11 · analytics_daily no tiene columna sin_gestionar y el catalogo no
   // `sin_gestionar` en el modelo `AnalyticsDaily` de `db/schema.prisma`. MEDIDA: rojo — y el
   // rojo obliga justamente a lo que se quiere: actualizar el catalogo (quitar `derivadaDe` y
   // reescribir la descripcion) en vez de dejarlo mintiendo.
-  it("analytics_daily no tiene columna sin_gestionar", () => {
-    expect(COLUMNAS_ANALYTICS_DAILY.has("sin_gestionar")).toBe(false);
+  it("analytics_daily no tiene columna novedad_interna", () => {
+    expect(COLUMNAS_ANALYTICS_DAILY.has("novedad_interna")).toBe(false);
     expect(COLUMNAS_ANALYTICS_DAILY.has("sinGestionar")).toBe(false);
   });
 
@@ -428,7 +430,7 @@ describe("R11 · analytics_daily no tiene columna sin_gestionar y el catalogo no
 /* R12                                                                         */
 /* -------------------------------------------------------------------------- */
 
-describe("R12 · sin_gestionar conserva clase snapshot y fuente rollup", () => {
+describe("R12 · novedad_interna conserva clase snapshot y fuente rollup", () => {
   // MUTACION QUE LO MATA (dos formas, ambas medidas): cambiar `sin_gestionar` a `clase: "live"`
   // o a `fuente: { tipo: "tabla_viva", tablas: ["orden"] }`. MEDIDA: rojo en ambas.
   //
@@ -436,8 +438,8 @@ describe("R12 · sin_gestionar conserva clase snapshot y fuente rollup", () => {
   // `snapshot <=> rollup`; aqui se fija que la correccion del universo NO lo rompio, porque
   // `sin_gestionar` se sirve de la columna `ordenes_estado_stock` de `analytics_daily`
   // (`lib/services/AnaliticaOperativaService.ts:88`), que es tabla de rollup.
-  it("sin_gestionar conserva clase snapshot y fuente rollup", () => {
-    const sinGestionar = getMetrica("sin_gestionar");
+  it("novedad_interna conserva clase snapshot y fuente rollup", () => {
+    const sinGestionar = getMetrica("novedad_interna");
     expect(sinGestionar).toBeDefined();
     expect(sinGestionar!.clase).toBe("snapshot");
     expect(sinGestionar!.fuente.tipo).toBe("rollup");

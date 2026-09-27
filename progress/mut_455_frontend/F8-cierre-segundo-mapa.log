@@ -1,0 +1,171 @@
+MUTACION F8-cierre-segundo-mapa
+archivo: app/(app)/cierres-admin/_components/cierre-labels.ts
+cambio (numstat): 1	1	app/(app)/cierres-admin/_components/cierre-labels.ts
+- export const RESULTADO_FILA_LABEL: Readonly<Record<CierreResultado, string>> = RESULTADO_LABEL;
++ export const RESULTADO_FILA_LABEL: Readonly<Record<CierreResultado, string>> = { ...RESULTADO_LABEL, entregado: "Entregada" };
+tests: ['tests/unit/components/cierre-resultado-fila-label.test.ts', 'tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/components/cierre-resultado-fila-label.test.ts (3 tests | 2 failed) 10ms
+     × fija los cinco nombres exactos, literalmente 7ms
+     × la celda y la sección son el MISMO mapa: no pueden divergir 1ms
+ ❯ tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts (36 tests | 4 failed) 30ms
+     × toda fila lleva la columna Resultado con la etiqueta singular de su resultado (R7) 6ms
+     × emite una fila por gestión y ninguna fila agregada (R5/D2) 1ms
+     × la fila de una ENTREGADA puebla sus diez específicas y deja vacías las otras siete 2ms
+     × resultado, causa y origen salen como etiqueta legible (R45) 1ms
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 33 passed (39)
+   Start at  08:10:16
+   Duration  530ms (transform 205ms, setup 110ms, import 299ms, tests 40ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/components/cierre-resultado-fila-label.test.ts > RESULTADO_FILA_LABEL (feature 230, T1.3 → 455) > fija los cinco nombres exactos, literalmente
+AssertionError: expected { entregado: 'Entregada', …(4) } to deeply equal { entregado: 'Entregado', …(4) }
+
+- Expected
++ Received
+
+  {
+    "devolucion_a_origen_por_rechazo": "Devolución a origen por rechazo",
+-   "entregado": "Entregado",
++   "entregado": "Entregada",
+    "incidente": "Incidente",
+    "novedad": "Novedad",
+    "reprogramado": "Reprogramado",
+  }
+
+ ❯ tests/unit/components/cierre-resultado-fila-label.test.ts:31:34
+     29| describe("RESULTADO_FILA_LABEL (feature 230, T1.3 → 455)", () => {
+     30|   it("fija los cinco nombres exactos, literalmente", () => {
+     31|     expect(RESULTADO_FILA_LABEL).toEqual(ESPERADO);
+       |                                  ^
+     32|     expect(RESULTADO_LABEL).toEqual(ESPERADO);
+     33|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/unit/components/cierre-resultado-fila-label.test.ts > RESULTADO_FILA_LABEL (feature 230, T1.3 → 455) > la celda y la sección son el MISMO mapa: no pueden divergir
+AssertionError: expected { entregado: 'Entregada', …(4) } to be { entregado: 'Entregado', …(4) } // Object.is equality
+
+- Expected
++ Received
+
+  {
+    "devolucion_a_origen_por_rechazo": "Devolución a origen por rechazo",
+-   "entregado": "Entregado",
++   "entregado": "Entregada",
+    "incidente": "Incidente",
+    "novedad": "Novedad",
+    "reprogramado": "Reprogramado",
+  }
+
+ ❯ tests/unit/components/cierre-resultado-fila-label.test.ts:36:34
+     34|
+     35|   it("la celda y la sección son el MISMO mapa: no pueden divergir", ()…
+     36|     expect(RESULTADO_FILA_LABEL).toBe(RESULTADO_LABEL);
+       |                                  ^
+     37|   });
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts > proyección de una gestión a una fila de la hoja fundida (T3.3) > toda fila lleva la columna Resultado con la etiqueta singular de su resultado (R7)
+AssertionError: expected [ 'Entregada', 'Reprogramado', …(3) ] to deeply equal [ 'Entregado', 'Reprogramado', …(3) ]
+
+- Expected
++ Received
+
+  [
+-   "Entregado",
++   "Entregada",
+    "Reprogramado",
+    "Novedad",
+    "Devolución a origen por rechazo",
+    "Incidente",
+  ]
+
+ ❯ tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts:276:23
+    274|       (resultado) => filaDescargaGestionFundida(gestion({ resultado })…
+    275|     );
+    276|     expect(etiquetas).toEqual([
+       |                       ^
+    277|       "Entregado",
+    278|       "Reprogramado",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts > proyección de una gestión a una fila de la hoja fundida (T3.3) > emite una fila por gestión y ninguna fila agregada (R5/D2)
+AssertionError: expected [ 'Entregada', 'Reprogramado', …(1) ] to deeply equal [ 'Entregado', 'Reprogramado', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "Entregado",
++   "Entregada",
+    "Reprogramado",
+    "Incidente",
+  ]
+
+ ❯ tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts:360:43
+    358|     // El orden recibido se conserva: la proyección no ordena ni agrup…
+    359|     // el servidor; aquí se afirma que esto no lo deshace).
+    360|     expect(filas.map((f) => f.resultado)).toEqual(["Entregado", "Repro…
+       |                                           ^
+    361|   });
+    362|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts > proyección de una gestión a una fila de la hoja fundida (T3.3) > la fila de una ENTREGADA puebla sus diez específicas y deja vacías las otras siete
+AssertionError: expected { mensajero: 'Ana Mensajera', …(30) } to deeply equal { mensajero: 'Ana Mensajera', …(30) }
+
+- Expected
++ Received
+
+@@ -25,9 +25,9 @@
+    "pago_SINPE": "1000.10",
+    "pago_efectivo": null,
+    "pago_transferencia": null,
+    "producto": "Caja mediana",
+    "recibido": "1000.10",
+-   "resultado": "Entregado",
++   "resultado": "Entregada",
+    "tienda": "Tienda X",
+    "ubicacion": "Limón · Limón · Central · Limón",
+  }
+
+ ❯ tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts:371:18
+    369|       }),
+    370|     );
+    371|     expect(fila).toEqual({
+       |                  ^
+    372|       mensajero: "Ana Mensajera",
+    373|       fechaCierre: "2026-07-11",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts > proyección de una gestión a una fila de la hoja fundida (T3.3) > resultado, causa y origen salen como etiqueta legible (R45)
+AssertionError: expected 'Entregada' to be 'Entregado' // Object.is equality
+
+Expected: "Entregado"
+Received: "Entregada"
+
+ ❯ tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts:505:33
+    503|     );
+    504|
+    505|     expect(entregada.resultado).toBe("Entregado");
+       |                                 ^
+    506|     expect(incidente.causa).toBe("Paquete perdido");
+    507|     expect(rechazada.origenRechazo).toBe("Manual");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+RESTAURADO_LIMPIO=True

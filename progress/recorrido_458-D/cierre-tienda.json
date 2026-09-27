@@ -1,0 +1,75 @@
+{
+ "rol": "tienda",
+ "pasos": [
+  {
+   "nombre": "tienda-01-mi-wallet",
+   "tarjetas": "Saldo actual ₡147.670,10 Ordenex te debe ₡147.670,10 Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10",
+   "nombreTabla": "Estado de cuenta de Tania Tienda",
+   "primeraFila": " — Saldo inicial ₡0 ",
+   "registro": false,
+   "botonesEscritura": [],
+   "verComprobante": 0,
+   "desplegar": 20,
+   "enlacesOrigen": 0,
+   "uuids": []
+  },
+  {
+   "nombre": "tienda-02-filtro-cierre",
+   "opciones": [
+    "Todos los cierres",
+    "Cierre del 2026-09-24 · 7 movimientos",
+    "Cierre del 2026-09-24 · 5 movimientos",
+    "Cierre del 2026-08-13 14:22 · 5 movimientos"
+   ],
+   "elegida": "Cierre del 2026-09-24 · 7 movimientos",
+   "filas": 8
+  },
+  {
+   "nombre": "tienda-03-descarga",
+   "archivo": "cierre-tienda-03-mi-estado-cuenta-cierre.xlsx",
+   "filas": 9,
+   "encabezados": [
+    "Fecha",
+    "Movimiento",
+    "Motivo",
+    "Origen",
+    "Cómo se pagó",
+    "Cargo",
+    "Abono",
+    "Saldo",
+    "Estado"
+   ],
+   "primera": [
+    "",
+    "Saldo inicial",
+    null,
+    null,
+    null,
+    null,
+    null,
+    "0.00"
+   ],
+   "ultima": [
+    "2026-09-24",
+    "Ordenex te cobró el flete",
+    null,
+    "Cierre del día · 2026-09-24",
+    null,
+    "3000.00",
+    null,
+    "147670.10"
+   ],
+   "uuids": 0
+  },
+  {
+   "nombre": "tienda-04-saldo-corrido",
+   "ultimaFila": " 2026-09-26 Corrección a tu favor Anulación Anulación de pago · SINPE · REC458D-admin Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · SINPE ₡1.000 ₡147.670,10 ",
+   "tarjetas": "Saldo actual ₡147.670,10 Ordenex te debe ₡147.670,10 Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10"
+  },
+  {
+   "nombre": "tienda-05-ordenes",
+   "panel": "Cierre del día 2026-08-12 0 de 12 órdenes tuyas del cierre aportan a este concepto Importe del movimiento: ₡4.343,50 Descargar Guía Destinatario Resultado Aporte Ninguna orden tuya de este cierre aporta a este concepto. Sin resultados ‹ ›",
+   "nombraMensajero": false
+  }
+ ]
+}

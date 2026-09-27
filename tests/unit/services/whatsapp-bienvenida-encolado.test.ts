@@ -22,8 +22,8 @@ const POR_RECOGER_ID = "est-por-recoger";
 
 const VALUES: ReadonlyMap<string, OrderStatusValue> = new Map<string, OrderStatusValue>([
   [EN_REPARTO_ID, "en_reparto"],
-  [ENTREGADA_ID, "entregada"],
-  [POR_RECOGER_ID, "por_recoger"],
+  [ENTREGADA_ID, "entregado"],
+  [POR_RECOGER_ID, "mensajero_recogiendo_en_bodega"],
 ]);
 
 const AHORA = new Date("2026-08-27T15:00:00.000Z");

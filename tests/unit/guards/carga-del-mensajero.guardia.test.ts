@@ -130,6 +130,16 @@ function leer(rel: string): string {
 /** El estatus que esta guardia nació vigilando. Es «el paquete sigue con él, en la calle» (R1). */
 const AYUDA = "ayuda_tienda";
 
+/**
+ * ⏳ 2026-09-23 (FICHA 454, T1.15/T1.23, R37): `ayuda_tienda` se RETIRA. La ayuda deja de ser un
+ * estatus y pasa a ser un hecho (`orden_evento`): la orden con ayuda abierta SIGUE `en_reparto`, con
+ * el paquete encima. La PROPIEDAD que esta guardia protege no cambia —toda lista de la familia cubre
+ * a la orden en ayuda—, pero se cumple ahora por `en_reparto`. Por eso la decision por miembro pasa
+ * de «nombra `ayuda_tienda`» a «nombra `en_reparto` (donde vive la ayuda abierta) y NO nombra el
+ * estatus retirado». Antes: `lista.includes("ayuda_tienda") === incluyeAyuda (true)` en los nueve.
+ */
+const DONDE_VIVE_LA_AYUDA = "en_reparto";
+
 const RUTA_CIERRE_SERVICE = "lib/services/CierreDiaService.ts";
 const RUTA_GUIA_SERVICE = "lib/services/GuiaAsignacionService.ts";
 const RUTA_GUIA_ACTION = "lib/actions/ordenes-guia.ts";
@@ -367,14 +377,16 @@ describe("0 — el censo de esta guardia no está vacío ni miente", () => {
 // 235 — la decisión sobre `ayuda_tienda`, declarada miembro a miembro
 // =============================================================================================
 
-describe("235 — el estatus de ayuda OCUPA al mensajero, y las NUEVE listas lo dicen", () => {
+describe("235 → 454 — la orden con ayuda OCUPA al mensajero, y las NUEVE listas lo dicen", () => {
   it.each(FAMILIA.map((m) => [m.nombre, m] as const))(
-    "%s incluye `ayuda_tienda`",
+    "%s cubre la ayuda abierta (`en_reparto`) y no nombra el estatus retirado",
     (_nombre, miembro) => {
       const lista = miembro.estatus();
+      // 454/R37: el estatus retirado no puede reaparecer en ninguna lista de la familia.
+      expect(lista, `${miembro.nombre} (${miembro.ruta}) nombra el estatus RETIRADO \`${AYUDA}\``).not.toContain(AYUDA);
       expect(
-        lista.includes(AYUDA),
-        `${miembro.nombre} (${miembro.ruta}) NO nombra \`${AYUDA}\`.\n\n` +
+        lista.includes(DONDE_VIVE_LA_AYUDA),
+        `${miembro.nombre} (${miembro.ruta}) NO nombra \`${DONDE_VIVE_LA_AYUDA}\`, donde vive la ayuda abierta.\n\n` +
           `Razón por la que debe: ${miembro.razon}.\n\n` +
           `Si de verdad la decisión es que NO ocupe, no basta con quitarlo de la lista: hay que ` +
           `cambiar \`incluyeAyuda\` en esta guardia y escribir aquí POR QUÉ, igual que se hizo con ` +
@@ -385,21 +397,21 @@ describe("235 — el estatus de ayuda OCUPA al mensajero, y las NUEVE listas lo 
     },
   );
 
-  it("`por_recoger` NO entra en el corte: el mensajero ni siquiera llegó a recogerla (109/R5)", () => {
+  it("`mensajero_recogiendo_en_bodega` NO entra en el corte: el mensajero ni siquiera llegó a recogerla (109/R5)", () => {
     // El caso negativo de la familia «a quién barre el corte». Sin él, «incluye ayuda_tienda»
     // pasaría igual con una lista que trajera todo el catálogo.
     for (const m of FAMILIA.filter((x) => x.pregunta === "a quien barre el corte")) {
-      expect(m.estatus(), `${m.nombre} no debe barrer \`por_recoger\``).not.toContain("por_recoger");
+      expect(m.estatus(), `${m.nombre} no debe barrer \`mensajero_recogiendo_en_bodega\``).not.toContain("mensajero_recogiendo_en_bodega");
     }
     // Y en la otra mitad de la familia SÍ está: `por_recoger` ocupa al mensajero aunque no lo haya
     // recogido todavía —es trabajo suyo— pero no es trabajo que el corte deba dar por perdido.
     const ocupacion = FAMILIA.filter((x) => x.pregunta === "que ocupa al mensajero");
-    expect(ocupacion.some((m) => m.estatus().includes("por_recoger"))).toBe(true);
+    expect(ocupacion.some((m) => m.estatus().includes("mensajero_recogiendo_en_bodega"))).toBe(true);
   });
 
   it("ningún miembro barre un DESENLACE: lo cerrado no ocupa a nadie", () => {
     for (const m of FAMILIA) {
-      for (const cerrado of ["entregada", "rechazada", "devuelta_a_tienda", "incidente"]) {
+      for (const cerrado of ["entregado", "devolucion_a_origen_por_rechazo", "devuelta_a_tienda", "incidente"]) {
         expect(m.estatus(), `${m.nombre} no debe contar \`${cerrado}\``).not.toContain(cerrado);
       }
     }
@@ -429,10 +441,10 @@ describe("235 — los gemelos dicen lo mismo (es donde vivieron los dos agujeros
     const seleccion = listaConstante(leer(RUTA_CORTE_REPO), RUTA_CORTE_REPO, "ESTADOS_A_BARRER");
     const resueltos = estatusResueltos(leer(RUTA_CORTE_SERVICE), RUTA_CORTE_SERVICE);
     // El service resuelve además el DESTINO (`sin_gestionar`), que no es un origen a barrer.
-    const origenes = resueltos.filter((v) => v !== "sin_gestionar");
+    const origenes = resueltos.filter((v) => v !== "novedad_interna");
     expect([...origenes].sort()).toEqual([...seleccion].sort());
     // Y el destino sigue estando: sin él no hay a dónde mover nada.
-    expect(resueltos).toContain("sin_gestionar");
+    expect(resueltos).toContain("novedad_interna");
   });
 
   it("el portal del mensajero y el bloqueo del cierre coinciden en lo que «está en su mano»", () => {

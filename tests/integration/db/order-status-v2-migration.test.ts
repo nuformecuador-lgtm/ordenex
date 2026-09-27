@@ -58,22 +58,22 @@ const downEjecutable = sinComentarios(downSql);
 
 /** Los 18 values del catalogo ANTES de esta feature (foto historica, transcrita a mano). */
 const PREVIOS_18 = [
-  "entregada",
-  "devuelta",
+  "entregado",
+  "novedad",
   "devolviendo_a_tienda",
-  "reprogramada",
+  "reprogramado",
   RETIRADO_155,
   "en_ruta_bodega_central",
   "en_bodega_central",
   "en_preparacion",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
   "en_ruta_bodega_satelite",
   "en_reparto",
-  "rechazada",
+  "devolucion_a_origen_por_rechazo",
   "en_bodega_satelite",
   "devuelta_a_tienda",
-  "sin_gestionar",
-  "por_devolver",
+  "novedad_interna",
+  "por_devolver_a_bodega_central",
   "devolviendo_a_bodega_central",
   "por_devolver_a_tienda",
 ];
@@ -106,7 +106,7 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
     const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
     expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
     // 20: la 157 apendio `recolectando` DESPUES de los dos de la 154.
-    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): +ayuda_tienda
+    expect(ORDER_STATUS_SEED).toHaveLength(20); // 2026-08-19 (235): +ayuda_tienda -> 22; 2026-09-23 (454): -2 -> 20
     expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });

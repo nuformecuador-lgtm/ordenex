@@ -13,43 +13,29 @@
 // `tests/unit/analytics/conteo-entregas-pliegue.test.ts`— cambia un import. Mismo patron con el
 // que `money()` se mudo a `lib/config/moneda.ts`.
 
+import { nombreDeEstado } from "@/lib/types/order-status";
+import { BUCKET_OTROS } from "@/lib/types/conteo-entregas";
+
+// ─── FICHA 455 (2026-09-24, design §2.1; R2, R3, R42) ─────────────────────────────────────────
+//
+// Hasta la 455 esta funcion PLURALIZABA el `value` del catalogo («entregada» → «Entregadas»,
+// suponiendo que los cinco desenlaces terminaban en «a») porque `order_status` no tenia nombre
+// visible. Con los codigos de la 455 eso producia «Novedads» y «Devolucion_a_origen_por_rechazos».
+// Ahora el nombre existe y tiene UNA sola fuente (`nombreDeEstado`): cada desenlace se nombra con
+// su nombre visible EXACTO — sin plural, sin minusculas, sin humanizar el codigo (R2/R3). La
+// cantidad va al lado, nunca dentro del nombre (ver `desenlaces-de-fila.ts` y `otros-resultados.ts`).
+
+/** El rotulo del cubo `otros` del conteo de entregas: un GRUPO, no un estado (R6). */
+export const ETIQUETA_BUCKET_OTROS = "Otros";
+
 /**
- * El `value` del catalogo (`entregada`, `reprogramada`) puesto en algo que se lee en una
- * leyenda. En plural, porque cada segmento cuenta ORDENES y no una sola.
- *
- * Sin tabla de etiquetas escrita a mano: `order_status` no tiene columna `label` —la etiqueta
- * ES el value— y una tabla propia se desincronizaria en silencio el proximo renombre del
- * catalogo. Los cinco desenlaces terminan en «a», asi que el plural es una «s».
- *
- * ⚠ LO QUE YA ESTA EN PLURAL NO SE VUELVE A PLURALIZAR. El bucket «otros» lo esta, y sin esta
- * guarda salia «Otross» en la leyenda. La regla se escribe sobre la FORMA de la palabra y no
- * como un caso especial para «otros»: cualquier value futuro acabado en «s» queda cubierto.
+ * El nombre visible de un desenlace del catalogo (`entregado`, `novedad`…), o el rotulo del cubo
+ * `otros`. Un codigo desconocido se lee «Estado no reconocido», nunca crudo (R10).
  */
 export function etiquetaDeDesenlace(valor: string): string {
-  return capitalizar(valor.endsWith("s") ? valor : `${valor}s`);
+  return valor === BUCKET_OTROS ? ETIQUETA_BUCKET_OTROS : nombreDeEstado(valor);
 }
 
-/**
- * FICHA 442 — el MISMO nombre, concordando con su cantidad: «4 devueltas» y «1 devuelta».
- *
- * ⚠ EL SINGULAR NO SE CALCULA, YA EXISTE: es el `value` del catalogo tal cual. `order_status`
- * guarda `devuelta`, `rechazada`, `reprogramada` — todos en singular—, y lo que `etiquetaDeDesenlace`
- * hace es pluralizarlos. Con cantidad 1 basta con NO pluralizar.
- *
- * Por eso aqui no hay ninguna regla de morfologia del español: no se quita una «s», no se busca
- * una terminacion y no hay tabla de excepciones. Un desenlace nuevo del catalogo —con la forma
- * que tenga— entra solo por los dos caminos, exactamente igual que en la funcion de arriba.
- *
- * ⚠ SE USA EN LOS DOS SITIOS QUE NOMBRAN UN DESENLACE CON SU CANTIDAD: la frase de «En qué
- * terminaron» (pantalla) y la composicion de «Otros resultados» (pantalla Y archivo descargable).
- * Si solo lo usara uno, la misma fila diria «1 devuelta» en la tabla y «1 devueltas» en el
- * `.xlsx` que se abre al lado.
- */
-export function etiquetaDeDesenlaceContada(valor: string, conteo: number): string {
-  return conteo === 1 ? capitalizar(valor) : etiquetaDeDesenlace(valor);
-}
-
-/** La primera letra en mayuscula. Escrito una vez para las dos funciones de arriba. */
-function capitalizar(palabra: string): string {
-  return palabra.charAt(0).toUpperCase() + palabra.slice(1);
-}
+// FICHA 442 → 455: aqui vivia `etiquetaDeDesenlaceContada` (singular con cantidad 1, plural si no).
+// Con un solo nombre por estado (R2: sin plural) la cantidad ya no cambia el nombre y se retira: la
+// frase de «En qué terminaron» y la composicion de «Otros resultados» usan `etiquetaDeDesenlace`.

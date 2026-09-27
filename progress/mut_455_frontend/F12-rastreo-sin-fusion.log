@@ -1,0 +1,216 @@
+MUTACION F12-rastreo-sin-fusion
+archivo: lib/services/RastreoPublicoService.ts
+cambio (numstat): 1	1	lib/services/RastreoPublicoService.ts
+-     if (linea[linea.length - 1]?.nombre === entrada.nombre) continue;
++     if (false) continue;
+tests: ['tests/integration/db/455/caracterizacion/rastreo.test.ts', 'tests/unit/services/rastreo-publico-service.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/services/rastreo-publico-service.test.ts (23 tests | 3 failed) 49ms
+     × colapsa transiciones consecutivas del mismo nombre conservando la fecha de la primera 7ms
+     × 235/R38: `en_reparto -> ayuda_tienda -> en_reparto` produce UNA sola entrada «En reparto» 2ms
+     × 235/R38: y el estado VIGENTE publicado mientras la orden esta en ayuda sigue siendo «En reparto» 1ms
+ ❯ tests/integration/db/455/caracterizacion/rastreo.test.ts (5 tests | 3 failed) 486ms
+       × 24 filas de historial se publican como 21 entradas 6ms
+       × cada entrada lleva la fecha de la PRIMERA fila de su racha, y la vigente es la ultima 3ms
+       × los textos de la linea: los nombres de estado, retirados plegados a su equivalente 1ms
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 22 passed (28)
+   Start at  08:10:55
+   Duration  3.03s (transform 979ms, setup 102ms, import 2.41s, tests 535ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/services/rastreo-publico-service.test.ts > R18 — colapso de rachas del mismo nombre (G9; FICHA 455) > colapsa transiciones consecutivas del mismo nombre conservando la fecha de la primera
+AssertionError: expected [ …(6) ] to deeply equal [ …(3) ]
+
+- Expected
++ Received
+
+@@ -2,11 +2,23 @@
+    {
+      "fecha": "2026-08-10T08:00-06:00",
+      "nombre": "En preparación",
+    },
+    {
++     "fecha": "2026-08-10T09:00-06:00",
++     "nombre": "En preparación",
++   },
++   {
++     "fecha": "2026-08-10T10:00-06:00",
++     "nombre": "En preparación",
++   },
++   {
+      "fecha": "2026-08-11T08:00-06:00",
++     "nombre": "En bodega central",
++   },
++   {
++     "fecha": "2026-08-11T12:00-06:00",
+      "nombre": "En bodega central",
+    },
+    {
+      "fecha": "2026-08-12T08:00-06:00",
+      "nombre": "Entregado",
+
+ ❯ tests/unit/services/rastreo-publico-service.test.ts:257:35
+    255|     if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+    256|
+    257|     expect(resultado.envio.linea).toEqual([
+       |                                   ^
+    258|       { nombre: "En preparación", fecha: "2026-08-10T08:00-06:00" }, /…
+    259|       { nombre: "En bodega central", fecha: "2026-08-11T08:00-06:00" },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/unit/services/rastreo-publico-service.test.ts > R18 — colapso de rachas del mismo nombre (G9; FICHA 455) > 235/R38: `en_reparto -> ayuda_tienda -> en_reparto` produce UNA sola entrada «En reparto»
+AssertionError: expected [ Array(3) ] to deeply equal [ { nombre: 'En reparto', …(1) } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "fecha": "2026-08-10T08:00-06:00",
+      "nombre": "En reparto",
+    },
++   {
++     "fecha": "2026-08-10T10:00-06:00",
++     "nombre": "En reparto",
++   },
++   {
++     "fecha": "2026-08-10T12:00-06:00",
++     "nombre": "En reparto",
++   },
+  ]
+
+ ❯ tests/unit/services/rastreo-publico-service.test.ts:318:37
+    316|       // UNA entrada, con la fecha de la PRIMERA de la racha: el desti…
+    317|       // nuestro, ni al pedir ayuda ni al rescatar.
+    318|       expect(resultado.envio.linea).toEqual([
+       |                                     ^
+    319|         { nombre: "En reparto", fecha: "2026-08-10T08:00-06:00" },
+    320|       ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/unit/services/rastreo-publico-service.test.ts > R18 — colapso de rachas del mismo nombre (G9; FICHA 455) > 235/R38: y el estado VIGENTE publicado mientras la orden esta en ayuda sigue siendo «En reparto»
+AssertionError: expected [ 'En reparto', 'En reparto' ] to deeply equal [ 'En reparto' ]
+
+- Expected
++ Received
+
+  [
+    "En reparto",
++   "En reparto",
+  ]
+
+ ❯ tests/unit/services/rastreo-publico-service.test.ts:333:58
+    331|       if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+    332|       // Sin este caso, el anterior no distinguiria «colapsa» de «la u…
+    333|       expect(resultado.envio.linea.map((e) => e.nombre)).toEqual(["En …
+       |                                                          ^
+    334|       expect(resultado.envio.nombreVigente).toBe("En reparto");
+    335|     })();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > 24 filas de historial se publican como 21 entradas
+AssertionError: expected 24 to be 21 // Object.is equality
+
+- Expected
++ Received
+
+- 21
++ 24
+
+ ❯ tests/integration/db/455/caracterizacion/rastreo.test.ts:141:26
+    139|       expect(r.estado).toBe("ok");
+    140|       expect(r.esperadas).toBe(21);
+    141|       expect(r.entradas).toBe(21);
+       |                          ^
+    142|     });
+    143|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > cada entrada lleva la fecha de la PRIMERA fila de su racha, y la vigente es la ultima
+AssertionError: expected [ '2026-09-01T06:00-06:00', …(23) ] to deeply equal [ '2026-09-01T06:00-06:00', …(20) ]
+
+- Expected
++ Received
+
+@@ -1,17 +1,20 @@
+  [
+    "2026-09-01T06:00-06:00",
++   "2026-09-01T06:07-06:00",
+    "2026-09-01T06:14-06:00",
+    "2026-09-01T06:21-06:00",
+    "2026-09-01T06:28-06:00",
+    "2026-09-01T06:35-06:00",
+    "2026-09-01T06:42-06:00",
++   "2026-09-01T06:49-06:00",
+    "2026-09-01T06:56-06:00",
+    "2026-09-01T07:03-06:00",
+    "2026-09-01T07:10-06:00",
+    "2026-09-01T07:17-06:00",
+    "2026-09-01T07:24-06:00",
++   "2026-09-01T07:31-06:00",
+    "2026-09-01T07:38-06:00",
+    "2026-09-01T07:45-06:00",
+    "2026-09-01T07:52-06:00",
+    "2026-09-01T07:59-06:00",
+    "2026-09-01T08:06-06:00",
+
+ ❯ tests/integration/db/455/caracterizacion/rastreo.test.ts:145:24
+    143|
+    144|     it("cada entrada lleva la fecha de la PRIMERA fila de su racha, y …
+    145|       expect(r.fechas).toEqual(r.fechaSola);
+       |                        ^
+    146|       expect(r.vigente).toBe(r.fechas[r.fechas.length - 1]);
+    147|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > los textos de la linea: los nombres de estado, retirados plegados a su equivalente
+AssertionError: expected [ 'En preparación', …(23) ] to deeply equal [ 'En preparación', …(20) ]
+
+- Expected
++ Received
+
+@@ -1,16 +1,19 @@
+  [
+    "En preparación",
++   "En preparación",
+    "En bodega central",
+    "En preparación",
+    "En ruta a bodega central",
+    "Mensajero recogiendo en la bodega",
+    "En reparto",
++   "En reparto",
+    "Entregado",
+    "Por recolectar en tienda",
+    "En ruta a bodega satélite",
+    "En bodega satélite",
++   "Novedad",
+    "Novedad",
+    "Por devolver a bodega central",
+    "Recolectando",
+    "Devolviendo a bodega central",
+    "Reprogramado",
+
+ ❯ tests/integration/db/455/caracterizacion/rastreo.test.ts:163:24
+    161|     // «Novedad») y se funden con su vecino igual. Mismas 21 entradas …
+    162|     it("los textos de la linea: los nombres de estado, retirados plega…
+    163|       expect(r.textos).toEqual([
+       |                        ^
+    164|         "En preparación",
+    165|         "En bodega central",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+RESTAURADO_LIMPIO=True

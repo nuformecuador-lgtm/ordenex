@@ -107,4 +107,15 @@ export interface NovedadDTO extends MiAsignacionDTO {
    * decidido. El hilo de `orden_nota` ya es la via de contacto sobre la orden.
    */
   mensajeroNombre: string | null;
+  /**
+   * ⭑ FICHA 429 (R13/R15) — el SINPE de la bodega que cobra esta orden, YA RESUELTO con la misma
+   * regla que el portal del mensajero (`resolverSinpeBodega`).
+   *
+   * REQUERIDOS, sin `?`, como `mensajeroNombre` y por el mismo motivo escrito ahi arriba: quien
+   * produzca un `NovedadDTO` tiene que decidir que SINPE pone. Y aqui pesa mas todavia, porque
+   * `/novedades` compone el mensaje en modo `wa.me` — el texto que arma el navegador ES el que
+   * recibe el cliente, no una vista previa.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
 }

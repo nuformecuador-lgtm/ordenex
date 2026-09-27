@@ -6,7 +6,7 @@ import {
   type HistorialAccionDTO,
 } from "@/lib/types/historial-accion";
 
-import { ACTOR_SISTEMA, fechaCR } from "./historial-acciones-columnas";
+import { ACTOR_SISTEMA, fechaCR, valorLegible } from "./historial-acciones-columnas";
 
 /**
  * FICHA 362 / T6.2 (design §4.6, R38) — columnas de EXPORT del registro de acciones.
@@ -69,7 +69,8 @@ export function filaDescargaHistorialAccion(fila: HistorialAccionDTO): DescargaF
     entidadTipo: ENTIDAD_LABELS[fila.entidadTipo],
     entidad: fila.entidadEtiqueta,
     monto: fila.monto,
-    anterior: fila.valorAnterior,
-    nuevo: fila.valorNuevo,
+    // FICHA 455 (R23): el MISMO texto que la pantalla (nombre visible del resultado, nunca el código).
+    anterior: valorLegible(fila.accion, fila.valorAnterior),
+    nuevo: valorLegible(fila.accion, fila.valorNuevo),
   };
 }

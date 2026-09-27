@@ -192,7 +192,7 @@ describe("listar (R20/R24)", () => {
     expect(arg.where).toEqual({
       tipo: "ingreso",
       categoria: "ingreso_flete",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     // Ficha 334 (R26, design §4): el orden es TOTAL. Este literal ES el contrato del libro —se
     // reescribe entero con el array nuevo, NO se relaja a `expect.anything()` ni se deriva de
@@ -267,6 +267,9 @@ describe("listar (R20/R24)", () => {
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
       // Feature 231 (R31): el dueño lo pone el SERVIDOR, en el unico punto de proyeccion.
       dueno: "propio",
+      // Ficha 459 (design §7.3): el repositorio no conoce los documentos; los resuelve en lote
+      // `WalletService.listarMovimientos`. Aqui la proyeccion los deja en `null`.
+      documento: null,
     });
     expect(typeof r.movimientos[0].monto).toBe("string");
   });
@@ -302,7 +305,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(arg.where).toEqual({
       tipo: "ingreso",
       categoria: "ingreso_flete",
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     expect(arg._sum).toEqual({ monto: true });
     expect(r).toEqual([
@@ -352,7 +355,7 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
     expect(prisma.walletMovimiento.groupBy.mock.calls[0][0].where).toEqual({});
   });
 
-  it("R47: la superficie del repositorio son SIETE metodos — ni update, ni delete, ni el viejo", () => {
+  it("R47: la superficie del repositorio son NUEVE metodos — ni update, ni delete, ni el viejo", () => {
     const metodos = Object.getOwnPropertyNames(WalletMovimientoRepository.prototype)
       .filter((m) => m !== "constructor")
       .sort();
@@ -374,8 +377,12 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
       "crearMovimientoRegistrado",
       "crearMovimientos",
       "listar",
+      // Ficha 461 (R68): LECTURA por la clave de idempotencia (columna UNIQUE). No es una mutacion.
+      "obtenerPorClave",
       "obtenerPorId",
       "obtenerPorOrigen",
+      // Ficha 459 (R15/R71): LECTURA del dia del primer movimiento. No es una mutacion.
+      "primerDiaDeLaCaja",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });
@@ -430,7 +437,10 @@ describe("dueno en el DTO (R31/R32)", () => {
     }
     // Y las DOS naturalezas aparecen de verdad: un `dueno` fijado a "propio" pasaria el bucle
     // de arriba en casi todo el catalogo, pero no esta afirmacion.
-    expect(new Set(movimientos.map((m) => m.dueno))).toEqual(new Set(["propio", "terceros"]));
+    // Ficha 459: y la tercera, `capital` (saldo inicial y aportes).
+    expect(new Set(movimientos.map((m) => m.dueno))).toEqual(
+      new Set(["propio", "terceros", "capital"]),
+    );
     // Nombradas, para que el fallo diga cual: el contra-entrega y el pago a tienda son de las
     // tiendas; el flete y el sueldo, de Ordenex.
     const duenoDe = (categoria: string) =>

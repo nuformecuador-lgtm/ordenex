@@ -1,0 +1,39 @@
+Ordenex
+Analítica
+Monitoreo
+Órdenes
+Cierres del día
+Incidentes
+Mi bodega
+Ayuda
+SS
+Sara Satelite
+Admin satélite
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+BODEGAS SATÉLITE
+En bodega
+Mi bodega
+Por recibir
+OFICINA
+Cierres
+Incidentes
+Monitoreo
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+
+Elegí un tema del índice
+
+Cada documento explica una pantalla: qué ves, qué podés hacer y qué no. También llegás a la ayuda de la pantalla en la que estés con el botón «?» del encabezado.

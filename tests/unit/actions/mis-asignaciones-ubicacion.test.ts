@@ -27,7 +27,7 @@ function buildService() {
       input: GestionarInput,
       actor: Actor,
     ) => Promise<{ status: "ok"; ordenId: string; estado: string }>
-  >(async () => ({ status: "ok", ordenId: "o1", estado: "reprogramada" }));
+  >(async () => ({ status: "ok", ordenId: "o1", estado: "reprogramado" }));
   const service = {
     listarMisAsignaciones: vi.fn(),
     recogerAsignaciones: recoger,
@@ -42,7 +42,7 @@ function buildService() {
 function fdReprogramada(extra: Record<string, string> = {}): FormData {
   const fd = new FormData();
   fd.set("ordenId", "o1");
-  fd.set("resultado", "reprogramada");
+  fd.set("resultado", "reprogramado");
   // Una fecha holgadamente futura: la validacion exige >= manana en calendario CR.
   fd.set("fechaReprogramacion", "2099-01-01");
   fd.set("motivo", "cliente ausente");

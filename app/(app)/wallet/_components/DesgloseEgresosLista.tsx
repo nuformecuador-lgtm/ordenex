@@ -7,6 +7,7 @@ import {
   Receipt,
   Scale,
   ShieldAlert,
+  Undo2,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -91,17 +92,26 @@ const OTROS_EGRESOS_LABEL = "Otros gastos de Ordenex";
  * Filas del desglose: etiqueta i18n-ready + el monto STRING que le corresponde + su icono + el
  * TOKEN con el que el servidor sabe que movimientos la componen.
  */
+//
+// Ficha 461 (HD3, design §7): los rotulos en la voz plural de la columna y con los nombres desde
+// Ordenex del libro («Gasto de Ordenex» → «Gastos de Ordenex»); «Gastos variables» queda retirado
+// con su singular. «Sueldos» e «Indemnizaciones» no cambian: ya decian lo que son.
 const FILAS: {
   key: keyof Omit<DesgloseEgresosDTO, "total">;
   fila: ComposicionFilaId;
   label: string;
   icono: LucideIcon;
 }[] = [
-  { key: "gastoFijo", fila: "egreso_gasto_fijo", label: "Gastos fijos", icono: CalendarClock },
+  {
+    key: "gastoFijo",
+    fila: "egreso_gasto_fijo",
+    label: "Gastos fijos de Ordenex",
+    icono: CalendarClock,
+  },
   {
     key: "gastoVariable",
     fila: "egreso_gasto_variable",
-    label: "Gastos variables",
+    label: "Gastos de Ordenex",
     icono: Receipt,
   },
   { key: "sueldo", fila: "egreso_sueldo", label: "Sueldos", icono: Users },
@@ -123,6 +133,13 @@ const FILAS: {
 const NOMBRADO_ICONO: Record<WalletEgresoNombrado, LucideIcon> = {
   egreso_pago_mensajero: Bike,
   egreso_ajuste: Scale,
+  // Ficha 461 (design §4, R27): la anulacion de un cobro de Ordenex a una tienda, tercer egreso
+  // nombrado. `Undo2` —una flecha que vuelve— porque es eso: el cobro que se DESHACE y vuelve al
+  // saldo de la tienda. Es decoracion (`aria-hidden`); el rotulo ya lo dice.
+  egreso_reverso_cobro_tienda: Undo2,
+  // Ficha 458-B (design §2.3): los dos reversos del cobro por rechazo, el mismo gesto que el anterior.
+  egreso_reverso_flete_devolucion: Undo2,
+  egreso_reverso_iva_flete_devolucion: Undo2,
 };
 
 export interface DesgloseEgresosListaProps {
@@ -158,54 +175,58 @@ export function DesgloseEgresosLista({
   filtros,
 }: DesgloseEgresosListaProps) {
   return (
-    <dl role="group" aria-label={DESGLOSE_EGRESOS_GRUPO_ARIA} className="flex flex-col gap-0.5">
-      {FILAS.map(({ key, fila, label, icono }) => (
-        <FilaComposicion
-          key={key}
-          fila={fila}
-          label={label}
-          valor={desglose[key]}
-          icono={icono}
-          tono="egreso"
-          filtros={filtros}
-        />
-      ))}
+    // 458 (O5 del recorrido final) — el `role="group"` en un envoltorio, no en la `<dl>`: sobre la
+    // lista le quitaba su semántica y axe marcaba sus `<dt>/<dd>` («dlitem»).
+    <div role="group" aria-label={DESGLOSE_EGRESOS_GRUPO_ARIA}>
+      <dl className="flex flex-col gap-0.5">
+        {FILAS.map(({ key, fila, label, icono }) => (
+          <FilaComposicion
+            key={key}
+            fila={fila}
+            label={label}
+            valor={desglose[key]}
+            icono={icono}
+            tono="egreso"
+            filtros={filtros}
+          />
+        ))}
 
-      {/* R1/R2 — las dos filas que la 343 saca del cubo, JUSTO ANTES de «Otros». */}
-      {WALLET_EGRESO_NOMBRADO_SEED.map((categoria) => (
-        <FilaComposicion
-          key={categoria}
-          fila={categoria}
-          // R5: la etiqueta legible, nunca el valor del enum.
-          label={EGRESO_NOMBRADO_LABEL[categoria]}
-          valor={egresos[categoria]}
-          icono={NOMBRADO_ICONO[categoria]}
-          tono="egreso"
-          filtros={filtros}
-        />
-      ))}
+        {/* R1/R2 — las dos filas que la 343 saca del cubo, JUSTO ANTES de «Otros». */}
+        {WALLET_EGRESO_NOMBRADO_SEED.map((categoria) => (
+          <FilaComposicion
+            key={categoria}
+            fila={categoria}
+            // R5: la etiqueta legible, nunca el valor del enum.
+            label={EGRESO_NOMBRADO_LABEL[categoria]}
+            valor={egresos[categoria]}
+            icono={NOMBRADO_ICONO[categoria]}
+            tono="egreso"
+            filtros={filtros}
+          />
+        ))}
 
-      {/* R7/R8 — la decision la trae el servidor; aqui no se compara ningun importe. */}
-      {hayOtrosEgresos ? (
-        <FilaComposicion
-          fila={COMPOSICION_FILA_OTROS}
-          label={OTROS_EGRESOS_LABEL}
-          valor={otrosEgresos}
-          icono={Ellipsis}
-          tono="egreso"
-          filtros={filtros}
-          pista={OTROS_EGRESOS_PISTA}
-        />
-      ) : null}
+        {/* R7/R8 — la decision la trae el servidor; aqui no se compara ningun importe. */}
+        {hayOtrosEgresos ? (
+          <FilaComposicion
+            fila={COMPOSICION_FILA_OTROS}
+            label={OTROS_EGRESOS_LABEL}
+            valor={otrosEgresos}
+            icono={Ellipsis}
+            tono="egreso"
+            filtros={filtros}
+            pista={OTROS_EGRESOS_PISTA}
+          />
+        ) : null}
 
-      {/* El cierre de la lista: el total es el `<dt>/<dd>` que la termina, no un dato suelto de
-          otra caja. Por eso vive DENTRO de la `<dl>`. */}
-      <div className="mt-3 flex items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3">
-        <dt className="text-sm font-medium">{DESGLOSE_EGRESOS_TOTAL_LABEL}</dt>
-        <dd className="text-base font-semibold tabular-nums text-danger-strong">
-          {money(total)}
-        </dd>
-      </div>
-    </dl>
+        {/* El cierre de la lista: el total es el `<dt>/<dd>` que la termina, no un dato suelto de
+            otra caja. Por eso vive DENTRO de la `<dl>`. */}
+        <div className="mt-3 flex items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3">
+          <dt className="text-sm font-medium">{DESGLOSE_EGRESOS_TOTAL_LABEL}</dt>
+          <dd className="text-base font-semibold tabular-nums text-danger-strong">
+            {money(total)}
+          </dd>
+        </div>
+      </dl>
+    </div>
   );
 }

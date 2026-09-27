@@ -380,7 +380,37 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("380/T3 (b) — el down recrea la lista PREV
     // convierte la comparacion en una cadena verificable —«el catalogo de hoy menos la 380 menos la
     // 381»— en vez de en algo que caduca en silencio. Cada una tiene ademas su propio archivo:
     //   · 381 — `cobro_tienda_registrado`, en `historial-accion-cobro-tienda-migration.test.ts`.
-    const POSTERIORES = ["cobro_tienda_registrado", "cierre_dia_gestion_corregida"];
+    //   · 398 — `cierre_dia_gestion_corregida`, en `correccion-resultado-gestion-migration.test.ts`.
+    //   · 429 — `zona_sinpe_cambiado`, en `historial-accion-zona-sinpe-migration.test.ts`.
+    const POSTERIORES = [
+      "cobro_tienda_registrado",
+      "cierre_dia_gestion_corregida",
+      "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
+      // Ficha 461 (2026-09-25): la anulacion del cobro de Ordenex a una tienda (migracion 1 de la
+      // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
+      "cobro_tienda_anulado",
+      "wallet_movimiento_manual_anulado",
+      // Ficha 457 (2026-09-25): el pago de una tienda a Ordenex, registrar y anular (la guardia del censo
+      // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
+      "abono_tienda_registrado",
+      "abono_tienda_anulado",
+      // Ficha 458-B (2026-09-26): la anulacion del cobro por rechazo aprobado (D7) y la de un egreso de
+      // caja (D13). Su migracion: `20260928120000_wallet_458_enums`.
+      "cobro_rechazo_tienda_anulado",
+      "egreso_caja_anulado",
+    ];
     const catalogoPrevio = HISTORIAL_ACCION_TIPOS.filter(
       (t) => t !== VALOR_NUEVO && !POSTERIORES.includes(t),
     );

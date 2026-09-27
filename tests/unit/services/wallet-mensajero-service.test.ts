@@ -88,7 +88,7 @@ describe("WalletMensajeroService.listarPagosDeMensajero (R18/R22 — vista del M
     tipo: "devengo" as const,
     categoria: "pago_devengado" as PagoMensajeroMovimientoCategoria,
     monto: "1000.00",
-    origenTipo: "cierre_dia",
+    origenTipo: "cierre_dia" as const,
     origenId: "c2",
     cierreId: "c2", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
     descripcion: null,

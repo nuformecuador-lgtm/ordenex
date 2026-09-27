@@ -77,7 +77,7 @@ describeSiHayBase("411/T4.4 — la ventana cae sobre la CARGA, nunca sobre el ci
       });
       await agregarTransicion(tx, base, x, {
         at: instanteCR(D_MAS_10, "10:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       // Y — cargada DIEZ DIAS ANTES del rango, cerrada DENTRO de la ventana.
@@ -89,7 +89,7 @@ describeSiHayBase("411/T4.4 — la ventana cae sobre la CARGA, nunca sobre el ci
       });
       await agregarTransicion(tx, base, y, {
         at: instanteCR(D, "12:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       const consulta = consultaDe(rangoDe(D, D_MAS_1), {
@@ -111,14 +111,14 @@ describeSiHayBase("411/T4.4 — la ventana cae sobre la CARGA, nunca sobre el ci
     expect(
       [...cubos.keys()],
       "la orden cargada el dia D no aparecio en su cohorte",
-    ).toContain("entregada");
-    expect(cubos.get("entregada")?.n).toBe(1);
+    ).toContain("entregado");
+    expect(cubos.get("entregado")?.n).toBe(1);
 
     // Y NO en `viva`: es la mitad que muere si alguien acota el CTE `cierre` por la ventana.
     expect(cubos.get("viva")).toBeUndefined();
 
     // El reloj tampoco se recorta: son nueve dias y pico, muy fuera de la ventana pedida.
-    const segundos = cubos.get("entregada")?.segundosAcum;
+    const segundos = cubos.get("entregado")?.segundosAcum;
     expect(segundos).toBe(
       (instanteCR(D_MAS_10, "10:00").getTime() - instanteCR(D, "10:00").getTime()) / 1000,
     );

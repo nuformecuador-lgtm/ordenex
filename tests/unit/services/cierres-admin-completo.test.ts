@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import type {
   Alcance,
   CierreAdminResumenRow,
@@ -257,6 +258,7 @@ function servicio(repo: ICierresAdminRepository) {
     // Feature 293 (T2.3): lectura de premios; "0.00" por id -> las cifras de este archivo,
     // que miden el tope y el orden del listado, no se mueven ni un centimo.
     { sumarPremiosVivosPorCierre },
+    sinRetenidas(), // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   );
   return { svc, createSignedUrls, sumarVigentesPorCierre };
 }

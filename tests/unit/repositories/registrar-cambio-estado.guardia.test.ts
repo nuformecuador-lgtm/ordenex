@@ -110,9 +110,9 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     const lote = [
-      entrada("en_reparto", "entregada"), // legal (#12)
-      entrada("entregada", "devuelta_a_tienda"), // ILEGAL
-      entrada("por_recoger", "en_reparto", "recoleccion"), // legal (#11)
+      entrada("en_reparto", "entregado"), // legal (#12)
+      entrada("entregado", "devuelta_a_tienda"), // ILEGAL
+      entrada("mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion"), // legal (#11)
     ];
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
       TransicionIlegalError,
@@ -126,9 +126,9 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
       const { tx, createMany } = buildTx();
       const emitir = vi.fn(async () => {});
       const lote = [
-        entrada("en_reparto", "devuelta"),
-        entrada("en_reparto", "rechazada"),
-        entrada("en_reparto", "reprogramada"),
+        entrada("en_reparto", "novedad"),
+        entrada("en_reparto", "devolucion_a_origen_por_rechazo"),
+        entrada("en_reparto", "reprogramado"),
       ];
       lote[posicion] = entrada("devuelta_a_tienda", "en_reparto"); // ilegal
       await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
@@ -142,9 +142,9 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
   it("el error identifica el par ofensor sin filtrar el id de la orden ni el actor", async () => {
     const { tx } = buildTx();
     const emitir = vi.fn(async () => {});
-    const lote = [entrada("rechazada", "devolviendo_a_tienda", "ajuste_estado", "orden-secreta")];
+    const lote = [entrada("devolucion_a_origen_por_rechazo", "devolviendo_a_tienda", "ajuste_estado", "orden-secreta")];
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toThrow(
-      "transicion ilegal: rechazada -> devolviendo_a_tienda",
+      "transicion ilegal: devolucion_a_origen_por_rechazo -> devolviendo_a_tienda",
     );
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.not.toThrow(
       /orden-secreta|u1|os-/,
@@ -155,7 +155,7 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     // Un maestro/admin "rescatando" una orden a un estado arbitrario (origen_tipo ajuste_estado).
-    const lote = [entrada("sin_gestionar", "entregada", "ajuste_estado")];
+    const lote = [entrada("novedad_interna", "entregado", "ajuste_estado")];
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
       TransicionIlegalError,
     );
@@ -165,7 +165,7 @@ describe("R7 — un lote con una sola transicion ilegal se rechaza ENTERO", () =
   it("R10: nacer (origen null) fuera de ESTADOS_CREACION se rechaza en el choke point", async () => {
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
-    const lote = [entrada(null, "entregada", "creacion_manual")];
+    const lote = [entrada(null, "entregado", "creacion_manual")];
     await expect(appendCambioEstado(tx as never, lote, emitir)).rejects.toBeInstanceOf(
       TransicionIlegalError,
     );
@@ -179,7 +179,7 @@ describe("R11 — con transiciones legales el comportamiento es identico al prev
     const emitir = vi.fn(async () => {});
     const lote = [
       {
-        ...entrada("en_reparto", "entregada"),
+        ...entrada("en_reparto", "entregado"),
         motivo: "entregada al cliente",
         gestionOrdenId: "g1",
       },
@@ -191,7 +191,7 @@ describe("R11 — con transiciones legales el comportamiento es identico al prev
         {
           ordenId: "o1",
           estatusOrigenId: idDe("en_reparto"),
-          estatusDestinoId: idDe("entregada"),
+          estatusDestinoId: idDe("entregado"),
           actorUsuarioId: "u1",
           origenTipo: "gestion",
           motivo: "entregada al cliente",
@@ -217,7 +217,7 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
     const { tx, $queryRaw } = buildTx();
     const emitir = vi.fn(async () => {});
     for (let i = 0; i < 5; i += 1) {
-      await appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir);
+      await appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir);
     }
     expect(consultasDeCatalogo($queryRaw)).toBe(1); // cache por proceso
   });
@@ -225,7 +225,7 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
   it("un lote de 50 transiciones no dispara una consulta por transicion", async () => {
     const { tx, $queryRaw } = buildTx();
     const emitir = vi.fn(async () => {});
-    const lote = Array.from({ length: 50 }, (_, i) => entrada("por_recoger", "en_reparto", "recoleccion", `o${i}`));
+    const lote = Array.from({ length: 50 }, (_, i) => entrada("mensajero_recogiendo_en_bodega", "en_reparto", "recoleccion", `o${i}`));
     await appendCambioEstado(tx as never, lote, emitir);
     expect(consultasDeCatalogo($queryRaw)).toBe(1);
   });
@@ -234,15 +234,16 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
     const emitir = vi.fn(async () => {});
     const primero = buildTx();
     // 2026-08-19 (feature 239): el par era `en_reparto -> devuelta`, que dejo de ser legal (la
-    // arista #14 se retiro). Se usa su SUSTITUTA, `en_reparto -> devolucion_por_confirmar`: lo
-    // que este caso mide es la cache del catalogo, no el par concreto.
+    // arista #14 se retiro), y se uso su sustituta `en_reparto -> devolucion_por_confirmar`.
+    // 2026-09-23 (ficha 454): esa sustituta sale con su estado y el par original vuelve a ser legal
+    // (#70, el anclaje al aprobar). Lo que este caso mide es la cache del catalogo, no el par.
     await appendCambioEstado(
       primero.tx as never,
-      [entrada("en_reparto", "devolucion_por_confirmar")],
+      [entrada("en_reparto", "novedad", "anclaje_devolucion")],
       emitir,
     );
     const segundo = buildTx();
-    await appendCambioEstado(segundo.tx as never, [entrada("en_reparto", "rechazada")], emitir);
+    await appendCambioEstado(segundo.tx as never, [entrada("en_reparto", "devolucion_a_origen_por_rechazo")], emitir);
     expect(consultasDeCatalogo(primero.$queryRaw)).toBe(1);
     expect(consultasDeCatalogo(segundo.$queryRaw)).toBe(0);
   });
@@ -255,10 +256,10 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
     const catalogo = vi.fn(async () =>
       new Map<string, OrderStatusValue>([
         [idDe("en_reparto"), "en_reparto"],
-        [idDe("entregada"), "entregada"],
+        [idDe("entregado"), "entregado"],
       ]),
     );
-    await appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir, catalogo);
+    await appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir, catalogo);
     expect(catalogo).toHaveBeenCalledTimes(1);
     expect(consultasDeCatalogo($queryRaw)).toBe(0);
     expect(createMany).toHaveBeenCalledTimes(1);
@@ -269,14 +270,14 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
     const emitir = vi.fn(async () => {});
     const catalogo = vi.fn(async () =>
       new Map<string, OrderStatusValue>([
-        [idDe("entregada"), "entregada"],
+        [idDe("entregado"), "entregado"],
         [idDe("devuelta_a_tienda"), "devuelta_a_tienda"],
       ]),
     );
     await expect(
       appendCambioEstado(
         tx as never,
-        [entrada("entregada", "devuelta_a_tienda")],
+        [entrada("entregado", "devuelta_a_tienda")],
         emitir,
         catalogo,
       ),
@@ -288,10 +289,10 @@ describe("resolvedor de catalogo inyectable (patron del emisor de webhooks)", ()
     const { tx, createMany } = buildTx();
     const emitir = vi.fn(async () => {});
     const catalogo = vi.fn(async () =>
-      new Map<string, OrderStatusValue>([[idDe("entregada"), "entregada"]]),
+      new Map<string, OrderStatusValue>([[idDe("entregado"), "entregado"]]),
     );
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir, catalogo),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir, catalogo),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -307,7 +308,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     const tx = { ordenHistorialEstado: { createMany } };
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
     expect(emitir).not.toHaveBeenCalled();
@@ -317,7 +318,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     const { tx, createMany } = buildTx(false); // responde [] a la consulta del catalogo
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir),
     ).rejects.toBeInstanceOf(TransicionNoValidableError);
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -332,7 +333,7 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     };
     const emitir = vi.fn(async () => {});
     await expect(
-      appendCambioEstado(tx as never, [entrada("en_reparto", "entregada")], emitir),
+      appendCambioEstado(tx as never, [entrada("en_reparto", "entregado")], emitir),
     ).rejects.toThrow("connection terminated");
     expect(createMany).not.toHaveBeenCalled();
   });
@@ -417,9 +418,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
       (fila) =>
         fila.value !== "por_recolectar_en_tienda" &&
         fila.value !== "incidente" &&
-        fila.value !== "recolectando" && // feature 157 (ampliacion): otro value posterior
-        fila.value !== "devolucion_por_confirmar" && // feature 239 (2026-08-19): idem
-        fila.value !== "ayuda_tienda", // feature 235 (2026-08-19): idem
+        fila.value !== "recolectando", // feature 157 (ampliacion): otro value posterior
+      // 2026-09-23 (ficha 454): aqui se excluian tambien `devolucion_por_confirmar` (239) y
+      // `ayuda_tienda` (235). Salieron del catalogo TS, asi que este fixture ya no los fabrica.
     );
     // 17 y no 18: la foto de la DB pre-154 tenia 18 values, pero la feature 155 retiro uno de
     // ellos del catalogo TS (y de la DB, con su migracion), asi que este fixture ya no lo
@@ -440,11 +441,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "incidente" &&
         a.destino !== "incidente" &&
         a.origen !== "recolectando" && // feature 157 (ampliacion)
-        a.destino !== "recolectando" &&
-        a.origen !== "devolucion_por_confirmar" && // feature 239 (2026-08-19)
-        a.destino !== "devolucion_por_confirmar" &&
-        a.origen !== "ayuda_tienda" && // feature 235 (2026-08-19)
-        a.destino !== "ayuda_tienda",
+        a.destino !== "recolectando",
+      // 2026-09-23 (ficha 454): aqui se excluian las aristas de `devolucion_por_confirmar` y de
+      // `ayuda_tienda`; salieron del inventario con sus estados.
     );
     // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 13. El PR 1 anadio
     // #53 (`incidente -> en_reparto`, el deshacer del mensajero) y el PR 2 las DIEZ del camino
@@ -459,7 +458,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     // rescate, #64 el corte de la noche), asi que sube de 18 a 21.
     // Feature 237 (2026-08-20): y las DOS que SALEN de `ayuda_tienda` hacia los desenlaces de la
     // tienda (#65 `-> reprogramada`, #66 `-> rechazada`), asi que sube de 21 a 23.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 23; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239) + #62/#63/#64 (235) + #65/#66 (237)
+    // Ficha 454 (2026-09-23): las OCHO de la 239/235/237 (#59-#66) salen del inventario con sus
+    // estados, asi que el descuento vuelve de 23 a 15.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 15; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );
@@ -479,14 +480,14 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     await expect(
       appendCambioEstado(
         tx as never,
-        [entrada("en_reparto", "entregada", "gestion", "orden-secreta")],
+        [entrada("en_reparto", "entregado", "gestion", "orden-secreta")],
         emitir,
       ),
     ).rejects.toThrow("transicion no validable: el catalogo de estados no esta disponible");
     await expect(
       appendCambioEstado(
         tx as never,
-        [entrada("en_reparto", "entregada", "gestion", "orden-secreta")],
+        [entrada("en_reparto", "entregado", "gestion", "orden-secreta")],
         emitir,
       ),
     ).rejects.not.toThrow(/orden-secreta|u1|os-/);

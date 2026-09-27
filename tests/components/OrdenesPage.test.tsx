@@ -35,6 +35,17 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
+// FICHA 462 (T3.5): la página lee, para maestro/admin, la franja de reprogramados retenidos. Se
+// dobla a «0 retenidos» para que estos tests sigan herméticos (sin DB): con el módulo real, los
+// casos con `admin`/`maestro` consultarían la base local. La franja se cubre en
+// `OrdenesPageFranjaRetenidas.test.tsx`. Cambio del ARNÉS: ninguna aserción de este archivo se toca.
+vi.mock("@/lib/actions/reprogramadas-retenidas", () => ({
+  resumenReprogramadasRetenidasCentral: vi.fn(async () => ({
+    status: "ok" as const,
+    resumen: { diaCR: "2026-01-01", total: 0, porForma: { reprogramado: 0, enReparto: 0 }, cierres: [], sinCierre: [] },
+  })),
+}));
+
 // Feature 144/TB2.5: la página resuelve el catálogo de filtros server-side. Se
 // mockea para que estos tests sigan siendo herméticos (sin DB), igual que
 // `listarOrdenes`. La resolución en sí se cubre en `OrdenesPageFiltros.test.tsx`.
@@ -132,7 +143,10 @@ describe("OrdenesPage", () => {
         numGuia: 1001,
         numRemision: "REM-001",
         estatusId: "est-1",
-        estatusValue: "En bodega",
+        // ⏳ 2026-09-24 (FICHA 455, R10): el fixture traía un TEXTO («En bodega») como código y el chip
+        // lo repetía crudo; ahora un código desconocido se lee «Estado no reconocido». Se usa un
+        // código real del catálogo, que es lo que la fila trae de verdad.
+        estatusValue: "en_bodega_central",
         destinatario: "Ana Pérez",
         tiendaId: "tienda-uuid-1",
         tiendaNombre: "Tienda Uno",
@@ -218,7 +232,7 @@ describe("OrdenesPage", () => {
     const c1 = within(rows[0]).getAllByRole("cell");
     expect(c1[0]).toHaveTextContent("1001"); // numGuia por column.id (R8)
     expect(c1[1]).toHaveTextContent("REM-001"); // numRemision por render-string (R7)
-    expect(c1[2]).toHaveTextContent("En bodega"); // estatusValue por render-función (R6)
+    expect(c1[2]).toHaveTextContent("En bodega central"); // estatusValue por render-función (R6)
     expect(c1[3]).toHaveTextContent("0"); // intentos de entrega (feature 160/R19)
     expect(c1[4]).toHaveTextContent("Ana Pérez"); // destinatario por column.id (R8)
     // Tienda ahora es la columna 8 (índice 7): Intentos, Producto y Dirección la preceden.

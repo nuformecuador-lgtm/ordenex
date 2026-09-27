@@ -474,12 +474,12 @@ describeSiHayBase("262/B28 — el rastro de una orden, leido de Postgres", () =>
 
       // Dos transiciones reales, para que la comparacion no sea entre dos listas vacias.
       const estados = await tx.orderStatus.findMany({
-        where: { value: { in: ["en_preparacion", "por_recoger"] } },
+        where: { value: { in: ["en_preparacion", "mensajero_recogiendo_en_bodega"] } },
         select: { id: true, value: true },
       });
       if (estados.length < 2) {
         throw new Error(
-          "el catalogo `order_status` no tiene `en_preparacion` y `por_recoger`: sin dos " +
+          "el catalogo `order_status` no tiene `en_preparacion` y `mensajero_recogiendo_en_bodega`: sin dos " +
             "transiciones esta comparacion no dice nada. Corre el seed del catalogo.",
         );
       }

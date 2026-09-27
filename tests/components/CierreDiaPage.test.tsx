@@ -62,7 +62,7 @@ const bloqueoMock = vi.mocked(estadoBloqueoMensajero);
 function resultadoBase() {
   return {
     status: "ok" as const,
-    grupos: { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] },
+    grupos: { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] },
     totales: {
       efectivo: "0.00",
       simpe: "0.00",
@@ -77,7 +77,7 @@ function resultadoBase() {
   };
 }
 
-/** Una gestión entregada mínima: solo para que la sección "Entregadas" exista. */
+/** Una gestión entregada mínima: solo para que la sección "Entregado" exista. */
 function gestionEntregada(): CierreDetalleGestion {
   return {
     gestionId: "g1",
@@ -93,7 +93,7 @@ function gestionEntregada(): CierreDetalleGestion {
     distritoNombre: null,
     producto: "Caja",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
     // Feature 212/R31: el DTO gana el desglose y CONSERVA el escalar de arriba (aqui,
@@ -132,10 +132,10 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
     listarMock.mockResolvedValue({
       ...resultadoBase(),
       grupos: {
-        entregada: [gestionEntregada()],
-        reprogramada: [],
-        devuelta: [],
-        rechazada: [],
+        entregado: [gestionEntregada()],
+        reprogramado: [],
+        novedad: [],
+        devolucion_a_origen_por_rechazo: [],
         incidente: [],
       },
     });
@@ -150,7 +150,7 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
       screen.getByRole("region", { name: "Totales del día" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Entregadas" }),
+      screen.getByRole("region", { name: "Entregado" }),
     ).toBeInTheDocument();
   });
 
@@ -160,9 +160,9 @@ describe("CierreDiaPage — control de acceso por rol (R1)", () => {
     const page = await CierreDiaPage();
     render(page);
 
-    expect(screen.queryByRole("region", { name: "Entregadas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Entregado" })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "Reprogramadas" }),
+      screen.queryByRole("region", { name: "Reprogramado" }),
     ).not.toBeInTheDocument();
   });
 

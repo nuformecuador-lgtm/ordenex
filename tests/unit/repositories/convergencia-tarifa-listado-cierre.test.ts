@@ -119,6 +119,8 @@ async function resolverPorListado(filas: readonly FilaTarifa[]): Promise<Resuelt
       count: vi.fn(async () => 1),
     },
     tarifa: { findMany: tarifaFindMany },
+    // FICHA 454 (R29, 2026-09-24): las señales de la pagina (gestion pendiente, ayuda); aqui vacias.
+    $queryRaw: vi.fn(async () => []),
   };
 
   const res = await new OrdenRepository(prisma as unknown as PrismaClient).list({

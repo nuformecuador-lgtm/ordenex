@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
@@ -105,6 +106,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
 
       const r = await svc.registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — gasto de ayer",
@@ -152,6 +154,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
         tx as unknown as PrismaClient,
       ).registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — rollup",
@@ -186,6 +189,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
         tx as unknown as PrismaClient,
       ).registrarEgreso(
         {
+          claveIdempotencia: randomUUID(),
           tipoEgreso: "gasto_variable",
           monto: MONTO_DEL_GASTO,
           descripcion: "ficha 334 — filtro desde",
@@ -216,15 +220,16 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
     await enTransaccionRevertida(prisma, async (tx) => {
       const actor = await actorDeLaBase(tx);
       const repo = repoDe(tx);
-      const svc = new WalletService(repo, tx as unknown as PrismaClient);
+      const svc = new WalletService(repo, tx as unknown as PrismaClient, SIN_SALDO_INICIAL_459, SIN_DOCUMENTOS_459);
 
-      // El rango se cierra sobre UN SOLO instante (`gte` y `lte` iguales): son exactamente las
-      // filas que comparten `fecha_movimiento`, que es donde vive el empate.
+      // El rango se cierra sobre UN SOLO instante: son exactamente las filas que comparten
+      // `fecha_movimiento`, que es donde vive el empate. Ficha 461 (R72): `hasta` es EXCLUSIVO en el
+      // repositorio (`lt`), asi que la cota superior es el milisegundo siguiente.
       const instante = new Date(`${ayerCR}T06:00:00.000Z`);
       const filtro = {
         categoria: "egreso_ajuste" as const,
         desde: instante,
-        hasta: instante,
+        hasta: new Date(instante.getTime() + 1),
       };
 
       const previo = await repo.listar({ ...filtro, page: 1, pageSize: 10 });
@@ -237,6 +242,7 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
       for (const monto of ["11.00", "22.00", "33.00"]) {
         const r = await svc.registrarMovimientoManual(
           {
+            claveIdempotencia: randomUUID(),
             tipo: "egreso",
             categoria: "egreso_ajuste",
             monto,
@@ -272,3 +278,14 @@ describeSiHayBase("ficha 334 — la fecha elegida contra Postgres (R22/R24/R25/R
     });
   });
 });
+
+// Ficha 459 (R14): el lector del estado de la caja; estos casos no registran saldo inicial.
+const SIN_SALDO_INICIAL_459 = { haySaldoInicialVigente: async () => false };
+// Ficha 459 (design §7.3): ningun documento; el libro sin acciones. Lista vacia -> sin consulta.
+const SIN_DOCUMENTOS_459 = {
+  pagosPorCuenta: { estadoDeDocumentos: async () => [] },
+  aportes: { estadoDeDocumentos: async () => [] },
+  cobros: { estadoDeDocumentos: async () => [] }, ajustes: { estadoDeDocumentos: async () => [] }, // ficha 461: lo exige `LectoresDocumentosCaja`
+  abonos: { estadoDeDocumentos: async () => [] }, // ficha 457: lo exige `LectoresDocumentosCaja`; esta suite no lee pagos de una tienda a Ordenex
+  egresos: { estadoDeDocumentos: async () => [] }, indemnizaciones: { estadoDeDocumentos: async () => [] }, rechazos: { estadoDeDocumentos: async () => [] }, pagosATienda: { estadoDeDocumentos: async () => [] }, premios: { estadoDeDocumentos: async () => [] }, // ficha 458-B: lo exige `LectoresDocumentosCaja`
+};

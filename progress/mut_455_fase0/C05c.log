@@ -1,0 +1,28 @@
+=== MUTACION C05c — 2026-09-24T04:51:17-05:00
+archivo: lib/types/order-status-transiciones.ts
+perl: s/export const ESTADOS_TERMINALES = \[\n  "entregada",\n/export const ESTADOS_TERMINALES = [\n/
+--- diff aplicado:
+diff --git a/lib/types/order-status-transiciones.ts b/lib/types/order-status-transiciones.ts
+index 81776e86..da704d06 100644
+--- a/lib/types/order-status-transiciones.ts
++++ b/lib/types/order-status-transiciones.ts
+@@ -464 +463,0 @@ export const ESTADOS_TERMINALES = [
+-  "entregada",
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts
+ × tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > las filas del rollup de D, cubo a cubo y medida a medida 8ms
+   → expected [ { …(2) }, { …(2) }, { …(2) }, …(7) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(7) ]
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el intradia de D reproduce el rollup 0ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > la cohorte de carga de D por desenlace 1ms
+   → expected [ 'devueltaATienda:1', …(2) ] to deeply equal [ 'devueltaATienda:1', …(3) ]
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el ranking: una entrega vigente de mensajero1 en D 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R3) > la etiqueta de estatus del rollup operativo es el codigo 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > las filas del rollup de D, cubo a cubo y medida a medida
+AssertionError: expected [ { …(2) }, { …(2) }, { …(2) }, …(7) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(7) ]
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > la cohorte de carga de D por desenlace
+AssertionError: expected [ 'devueltaATienda:1', …(2) ] to deeply equal [ 'devueltaATienda:1', …(3) ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

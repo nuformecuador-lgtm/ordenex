@@ -177,8 +177,50 @@ const ARBOLES_UI = ["app", "components"] as const;
 // app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx #1» antes de tocar estos
 // numeros, que es la convencion escrita en este propio archivo. Censo total: 36 = 35
 // `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 35;
-const TOTAL_INSTANCIAS_DATATABLE = 35;
+//
+// ⭑ FICHA 429 (T21-B): 35 -> 36 archivos y 35 -> 36 instancias, por el SINPE POR BODEGA
+// (`app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx`). Nace `fuera` --y por eso
+// la que sube es la cuenta de EXCLUSIONES, no la de dentro de alcance-- con un motivo distinto de
+// los ya registrados: no le falta la puerta ni es un recorte de otra descarga ni lo veto un spec;
+// es que NO ES UN LIBRO. Son las ocho bodegas de la operacion, un catalogo de configuracion que
+// cabe entero en la pantalla, sin paginacion ni accion de dataset completo. El motivo entero esta
+// en su entrada de `censo-tablas.ts`. Esta guardia se vio fallar PRIMERO con «hay tablas sin
+// registrar: app/(app)/configuracion/sinpe/_components/SinpeBodegasModule.tsx #1» antes de tocar
+// estos numeros, que es la convencion escrita en este propio archivo. Censo total: 37 = 36
+// `<DataTable>` + 1 `<table>` cruda.
+//
+// ⭑ FICHA 431 (T23, R29): 36 -> 38 archivos y 36 -> 38 instancias, por las DOS tablas de
+// `/wallet/satelites` --`SaldosSatelitesTable` (los saldos por bodega) y
+// `DesgloseConsolidacionesSatelite` (las consolidaciones de UNA bodega)--. Es la segunda vez que
+// este censo sube de dos en dos, y por el mismo motivo que la 344: son dos pantallas con dos
+// alcances distintos, no un recorte de la otra.
+//
+// LAS DOS NACEN `con_descarga`, asi que aqui sube la cuenta de DENTRO de alcance (23 -> 25) y las
+// exclusiones NO se mueven (siguen en 13/14). Precedente literal de las dos: sus gemelas de
+// tiendas (`SaldosTiendasTable` y `DesgloseMovimientosTienda`), que son libros de dinero
+// paginados en el servidor con su propia accion de conjunto completo. Declararlas `fuera` habria
+// exigido un motivo que no existe.
+//
+// Esta guardia se vio fallar PRIMERO --«expected 38 to be 36» en los archivos y «expected 39 to
+// be 37» en el censo total-- antes de tocar estos numeros, que es la convencion escrita arriba.
+// Censo total: 39 = 38 `<DataTable>` + 1 `<table>` cruda.
+//
+// ⭑ FICHA 458-D (T D.8, D14): 38 -> 37 archivos y 38 -> 37 instancias. Se RETIRAN los dos
+// desplegables de la wallet —`DesgloseMovimientosTienda` y `DesglosePagosMensajero`— y ENTRA UNA
+// tabla compartida, el extracto del ESTADO DE CUENTA (`components/shared/estado-cuenta/
+// EstadoCuenta.tsx`), que montan tres pantallas (tienda, mensajero, bodega). La de las consolidaciones
+// de una bodega NO nace ni muere: cambia de archivo (`DesgloseConsolidacionesSatelite` ->
+// `ConciliacionSatelite`). Dentro de alcance 25 -> 24 (las tres son `con_descarga`); exclusiones
+// intactas. Esta guardia se vio fallar PRIMERO con «expected 37 to be 38» y «expected 38 to be 39»
+// antes de tocar estos numeros. Censo total: 38 = 37 `<DataTable>` + 1 `<table>` cruda.
+//
+// ⭑ FICHA 458-D (T D.5, cierre de pantalla): 37 -> 36 archivos y 37 -> 36 instancias. Se RETIRA
+// `mi-wallet/_components/DesgloseTiendaLedger.tsx` («Desglose de movimientos de la tienda»): `/mi-wallet`
+// es ahora el estado de cuenta compartido, que gana su cuarto montaje (`MiEstadoCuenta`). Dentro de
+// alcance 24 -> 23; exclusiones intactas. Esta guardia se vio fallar PRIMERO con «expected 36 to be 37»
+// y «expected 37 to be 38» antes de tocar estos numeros. Censo total: 37 = 36 `<DataTable>` + 1 cruda.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 36;
+const TOTAL_INSTANCIAS_DATATABLE = 36;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -327,7 +369,11 @@ describe("guardia de cobertura del censo de tablas", () => {
     // FICHA 411 (B7/T7.2): 11 -> 12. La de mas es la cohorte de carga por dia: `fuera` y sin
     // control porque ⟨P5⟩ del spec decidio que la descarga no entra en la ficha, no porque falte
     // la puerta ni por ser un recorte de otra descarga.
-    expect(excluidas.length).toBe(12);
+    // ⭑ FICHA 429 (T21-B): 12 -> 13. La de mas es el SINPE por bodega: `fuera` y sin control
+    // porque no es un libro --ocho filas de configuracion, sin paginacion ni dataset completo--
+    // y porque exportar las ocho cuentas de cobro a un archivo no le da a quien administra nada
+    // que no vea en pantalla.
+    expect(excluidas.length).toBe(13);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -370,7 +416,16 @@ describe("guardia de cobertura del censo de tablas", () => {
     // la que entra nace `con_descarga`.
     // FICHA 411 (B7/T7.2): 35 → 36, por la cohorte de carga por día de `/analitica`. Las 23 con
     // descarga NO se mueven: la que entra nace `fuera`, con ⟨P5⟩ del spec como motivo.
-    expect(totalCensado).toBe(36);
+    // ⭑ FICHA 429 (T21-B): 36 → 37, por el SINPE de cada bodega. Las 23 con descarga NO se
+    // mueven: la que entra nace `fuera`.
+    // ⭑ FICHA 431 (T23): 37 → 39, por las DOS tablas de `/wallet/satelites`. Aquí las que suben
+    // son las de DENTRO de alcance (23 → 25): las dos nacen `con_descarga`, con el precedente
+    // literal de sus gemelas de tiendas. Las 14 exclusiones NO se mueven.
+    // ⭑ FICHA 458-D (T D.8): 39 → 38. Salen los dos desplegables de tiendas y mensajeros y entra el
+    // extracto compartido del estado de cuenta. Las 14 exclusiones NO se mueven.
+    // ⭑ FICHA 458-D (T D.5, cierre de pantalla): 38 → 37. Sale el libro de `/mi-wallet`
+    // (`DesgloseTiendaLedger`): la tienda ve el extracto compartido. Las 14 exclusiones NO se mueven.
+    expect(totalCensado).toBe(37);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -469,8 +524,21 @@ describe("guardia de cobertura del censo de tablas", () => {
     // 13. La que entra es la cohorte de carga por dia, y su motivo es el TERCERO distinto de
     // este censo: no es un recorte de algo que ya se descarga (343) ni le falta la puerta para
     // servirlo entero (347) — es que la descarga se pregunto y se decidio que no entra (⟨P5⟩).
+    // ⭑ FICHA 429 (T21-B): las 23 dentro de alcance NO se mueven y las exclusiones pasan de 13 a
+    // 14. La que entra es el SINPE por bodega, y su motivo es el CUARTO distinto de este censo:
+    // no es un recorte de algo que ya se descarga (343), ni le falta la puerta (347), ni se
+    // preguntó y se dijo que no (411) — es que NO ES UN LIBRO. Son ocho filas de configuración
+    // que caben enteras en la pantalla, sin paginación ni acción de dataset completo, y lo único
+    // exportable de ellas es la lista de las ocho cuentas a las que cobran los clientes.
+    // ⭑ FICHA 431 (T23, R29): 23 → 25 dentro de alcance y las 14 exclusiones INTACTAS. Las dos
+    // que entran son las de `/wallet/satelites`, y nacen `con_descarga` porque son libros de
+    // dinero paginados en el servidor con su propia acción de conjunto completo — el mismo caso,
+    // archivo por archivo, que sus gemelas de tiendas.
+    // ⭑ FICHA 458-D (T D.8): 25 → 24 dentro de alcance —salen dos desplegables `con_descarga` y entra
+    // uno, el extracto del estado de cuenta, también `con_descarga`—; las 14 exclusiones INTACTAS.
+    // ⭑ FICHA 458-D (T D.5, cierre de pantalla): 24 → 23 —sale el libro de `/mi-wallet`, `con_descarga`—.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(23);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(13);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(14);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

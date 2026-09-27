@@ -56,10 +56,10 @@ const LECTURA_NUEVA = "2026-08-19T20:45:00.000Z";
 function datos(lastSync: string): ConteoEntregasDTO {
   return {
     porDesenlace: {
-      entregada: 3,
-      devuelta: 0,
-      rechazada: 0,
-      reprogramada: 0,
+      entregado: 3,
+      novedad: 0,
+      devolucion_a_origen_por_rechazo: 0,
+      reprogramado: 0,
       incidente: 0,
       otros: 0,
     },
@@ -241,7 +241,7 @@ describe("Actualizar analítica — la séptima lectura entra sola (ficha 345)",
             producto: "Dr Melaxin",
             unidades: 3,
             ordenes: 3,
-            porStatus: [{ status: "entregada", conteo: 3 }],
+            porStatus: [{ status: "entregado", conteo: 3 }],
             // FICHA 347 — este caso mide el REFRESCO, no el dinero: la lectura llega sin
             // concesion, que es tambien la forma que ve un rol sin dinero concedido (R6).
             ordenesAcompanadas: 0,

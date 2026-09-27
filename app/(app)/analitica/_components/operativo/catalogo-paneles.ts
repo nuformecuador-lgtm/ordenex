@@ -108,10 +108,12 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
   },
   {
     id: "sin-gestionar",
-    titulo: "Órdenes sin gestionar",
+    titulo: "Órdenes en Novedad interna",
     grafica: "lineas",
     // R21/D6 — DERIVADA del embudo por la 126 (y antes dada por «sin productor»). No se filtra.
-    metricas: [{ metricaId: "sin_gestionar", etiqueta: "Sin gestionar", unidad: "conteo" }],
+    // FICHA 455 (2026-09-24, R5): la métrica cuenta las órdenes en UN estado, así que su leyenda es
+    // el nombre exacto de ese estado; cambia JUNTO con la etiqueta del catálogo (`metrics.ts`).
+    metricas: [{ metricaId: "novedad_interna", etiqueta: "Novedad interna", unidad: "conteo" }],
   },
   {
     id: "tasa-entrega",

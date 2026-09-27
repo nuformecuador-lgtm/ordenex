@@ -1,0 +1,18 @@
+Asistente
+
+Responde sobre cómo usar Ordenex
+
+Leer la ayuda de esta pantalla
+Monitoreo
+
+¿Qué significa cada contador de esta pantalla y en qué estados puede terminar una orden?
+
+No lo tengo claro: ¿a qué pantalla te referís? Como Maestro tenés varias con contadores de órdenes —Monitoreo (el tablero del día en curso), Órdenes (el listado general), Analítica (los números históricos)— y cada una cuenta las cosas distinto.
+
+Si es Monitoreo, ahí cada tarjeta de mensajero muestra sus gestiones del día agrupadas en: Entregado, Reprogramado, Novedad, Devolución a origen por rechazo e Incidente —esos son resultados ya cerrados—, y aparte lo que todavía no tiene gestión: Todavía no sale a reparto, En reparto y Otros estados.
+
+Decime cuál pantalla es exactamente y te explico sus contadores puntuales.
+Monitoreo
+Adjuntar una captura
+
+Lo que escribís y las imágenes que adjuntás se envían a un proveedor externo de inteligencia artificial para poder responderte. Evitá enviar datos de clientes si no hace falta.

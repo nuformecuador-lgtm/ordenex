@@ -26,6 +26,8 @@ import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ICierresAdminService } from "@/lib/interfaces/services/ICierresAdminService";
+// FICHA 462: el conteo UNICO de las reprogramadas retenidas, mismo ensamblaje que el cron y la campana.
+import { buildReprogramadasRetenidasService } from "@/lib/services/reprogramadas-retenidas-composicion";
 import {
   cierreIdSchema,
   actualizarPagosGestionSchema,
@@ -139,6 +141,12 @@ function buildService(): ICierresAdminService {
     // `conPendiente` alimenta: listado, historico y detalle. El servicio solo recibe el metodo
     // de suma (`Pick`), asi que esta pantalla no puede escribir un premio (R3).
     new PagoMensajeroMovimientoRepository(prisma),
+    // ⚠️ FICHA 462 (T2.9, R7/R26): COMPOSITION ROOT DE LA MARCA «Retiene N reprogramadas de hoy».
+    // Dependencia OBLIGATORIA (sin ella el servicio no compila), construida con el MISMO ensamblaje
+    // que usan el cron `avisos-diarios`, la campana y la franja de `/ordenes`: las cuatro
+    // superficies leen la misma cifra o el aviso queda desacreditado el primer dia. La guardia de
+    // `notificacion-notificadores-reales.test.ts` afirma que se PASA este ensamblaje y no otro.
+    buildReprogramadasRetenidasService(prisma),
     // FEATURE 271 (T6.6, R42): COMPOSITION ROOT del aviso «quedaste bloqueado». Se cablea aqui y
     // no como default del service (ver `lib/notificaciones/notificadores.ts`): el default es el
     // no-op, para que ninguna suite que instancie el service escriba avisos en la base.

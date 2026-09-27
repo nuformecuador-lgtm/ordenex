@@ -315,7 +315,7 @@ describe("listarPagosDeMensajeroAction (R18/R22/R27 — vista del MAESTRO)", () 
   it("R18/R22/R27: maestro -> ok con desglose por cierre + cuenta STRING del conjunto filtrado", async () => {
     const service = fakeService();
     const r = await listarPagosDeMensajeroAction(
-      { mensajeroId: "m1", page: 1, pageSize: 20, cierreId: "c2" },
+      { mensajeroId: "m1", page: 1, pageSize: 20, cierreId: "c0c0c0c0-0000-4000-8000-000000000002" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
@@ -325,7 +325,7 @@ describe("listarPagosDeMensajeroAction (R18/R22/R27 — vista del MAESTRO)", () 
     expect(typeof r.data.cuenta.cuentaPorPagar).toBe("string");
     // el service recibio el input parseado con el mensajeroId elegido por el maestro.
     expect(service.listarPagosDeMensajero).toHaveBeenCalledWith(
-      expect.objectContaining({ mensajeroId: "m1", cierreId: "c2" }),
+      expect.objectContaining({ mensajeroId: "m1", cierreId: "c0c0c0c0-0000-4000-8000-000000000002" }),
       MAESTRO,
     );
   });

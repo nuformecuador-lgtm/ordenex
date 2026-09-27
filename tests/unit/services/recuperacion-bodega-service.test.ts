@@ -25,7 +25,7 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 10,
     numRemision: "REM-1",
     estatusId: "os-devuelta",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store-1",
@@ -50,7 +50,7 @@ type OrdenRepoDoble = Pick<
 type ZonaRepoDoble = Pick<IZonaRepository, "findCentralZonaId">;
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
+  novedad: "os-devuelta",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
 };
@@ -200,7 +200,7 @@ describe("RecuperacionBodegaService · guardia de estado y bordes (R16)", () => 
     ).recuperar("o1", MAESTRO);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.motivo).toContain("devuelta");
+    if (r.status === "conflict") expect(r.motivo).toContain("novedad");
     expect(recuperacionRepo.recuperarABodega).not.toHaveBeenCalled();
     // La guardia corta antes de resolver zona/destino.
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe("RecuperacionBodegaService · guardia de estado y bordes (R16)", () => 
   it("catalogo sin el destino de bodega -> config_error, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({
       findById: vi.fn(async () => ordenDTO({ zonaId: "z-central" })),
-      findEstatusIdByValue: vi.fn(async (v: string) => (v === "devuelta" ? "os-devuelta" : null)),
+      findEstatusIdByValue: vi.fn(async (v: string) => (v === "novedad" ? "os-devuelta" : null)),
     });
     const recuperacionRepo = buildRecuperacionRepo();
     const r = await new RecuperacionBodegaService(

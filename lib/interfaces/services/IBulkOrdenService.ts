@@ -16,6 +16,15 @@ export interface CargaViaApiRow extends RowResult {
 }
 
 /**
+ * FICHA 455 (R27) — la fila PUBLICA de la carga por API: la fila interna sin `estatus`, con
+ * `estado` + `estadoNombre` en su lugar (presentes en `creada` y `duplicada`).
+ */
+export type CargaViaApiFila = Omit<CargaViaApiRow, "estatus"> & {
+  estado?: string;
+  estadoNombre?: string;
+};
+
+/**
  * 2026-08-31 — LAS FILAS QUE FALLAN SALEN DE `filas` Y VIAJAN AQUI.
  *
  * Hasta hoy el resumen devolvia UNA lista con las tres clasificaciones mezcladas y una clave
@@ -53,6 +62,8 @@ export interface CargaViaApiOrden {
    */
   numGuia: number | null;
   estado: string;
+  /** FICHA 455 (R24). */
+  estadoNombre: string;
   // Feature 98 (design §2, R5/R7/D2/D3): costo del envio que paga la tienda por esta orden =
   // FLETE + IVA del flete de su tarifa vigente, money-safe STRING escala 2. NUNCA `null`: el
   // gap de tarifa (tienda sin tarifa vigente) se representa con "0.00" (D1). Distinto de
@@ -78,7 +89,7 @@ export interface CargaViaApiSummary {
    * fila de esta lista lleva `resultado: "error"` ni la clave `errores`; las que fallan estan
    * en el campo hermano de abajo.
    */
-  filas: CargaViaApiRow[];
+  filas: CargaViaApiFila[];
   /** Las filas que NO entraron, con su detalle por campo. Lista vacia = ninguna fallo. */
   errores: CargaViaApiFilaError[];
   ordenes: CargaViaApiOrden[];

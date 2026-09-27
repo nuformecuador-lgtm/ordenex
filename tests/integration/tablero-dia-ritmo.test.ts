@@ -88,7 +88,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
   ): Promise<string> {
     return crearOrden(tx, base, {
       clave,
-      estatus: opciones.estatus ?? "entregada",
+      estatus: opciones.estatus ?? "entregado",
       mensajeroId: opciones.mensajeroId ?? base.mensajero1,
       zonaId: opciones.zonaId,
       asignadoAt: instanteCR(FECHA_CR, "07:00"),
@@ -119,7 +119,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
         await crearGestion(tx, {
           ordenId: orden,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_CR, hora),
         });
       }
@@ -130,23 +130,23 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: delDos,
         mensajeroId: base.mensajero2,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "10:40"),
       });
 
-      const reprogramada = await ordenDelDia(tx, base, "ruido-repro", { estatus: "reprogramada" });
+      const reprogramada = await ordenDelDia(tx, base, "ruido-repro", { estatus: "reprogramado" });
       await crearGestion(tx, {
         ordenId: reprogramada,
         mensajeroId: base.mensajero1,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         at: instanteCR(FECHA_CR, "11:00"),
       });
 
-      const devuelta = await ordenDelDia(tx, base, "ruido-devuelta", { estatus: "devuelta" });
+      const devuelta = await ordenDelDia(tx, base, "ruido-devuelta", { estatus: "novedad" });
       await crearGestion(tx, {
         ordenId: devuelta,
         mensajeroId: base.mensajero1,
-        resultado: "devuelta",
+        resultado: "novedad",
         at: instanteCR(FECHA_CR, "12:00"),
       });
 
@@ -171,19 +171,19 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         at: instanteCR(FECHA_CR, "08:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "09:00"),
       });
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "14:20"),
       });
     });
@@ -212,18 +212,18 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
     // toda su razon de ser: que no lo arreglen dentro de seis meses sin leer esto.
     const { serie, filas } = await medir(async (tx, base) => {
       const arrepentida = await ordenDelDia(tx, base, "entregada-y-luego-repro", {
-        estatus: "reprogramada",
+        estatus: "reprogramado",
       });
       await crearGestion(tx, {
         ordenId: arrepentida,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "10:00"),
       });
       await crearGestion(tx, {
         ordenId: arrepentida,
         mensajeroId: base.mensajero1,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         at: instanteCR(FECHA_CR, "15:00"),
       });
 
@@ -233,7 +233,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: buena,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "10:30"),
       });
     });
@@ -250,7 +250,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: primera,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "00:30"),
       });
 
@@ -258,7 +258,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: ultima,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "23:30"),
       });
 
@@ -267,7 +267,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: borde,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "00:00"),
       });
     });
@@ -290,7 +290,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: enA,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "09:00"),
       });
 
@@ -298,7 +298,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: enB,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "17:00"),
       });
     };
@@ -323,7 +323,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: anulada,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "08:00"),
         anuladaAt: instanteCR(FECHA_CR, "08:30"),
       });
@@ -334,13 +334,13 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: conRuido,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "11:00"),
       });
       await crearGestion(tx, {
         ordenId: conRuido,
         mensajeroId: base.mensajero1,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         at: instanteCR(FECHA_CR, "13:00"),
         anuladaAt: instanteCR(FECHA_CR, "13:30"),
       });
@@ -357,7 +357,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: new Date(VENTANA.desde.getTime() - 30 * 60_000),
       });
 
@@ -366,7 +366,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await crearGestion(tx, {
         ordenId: manana,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: VENTANA.hasta,
       });
     });
@@ -386,7 +386,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
         await crearGestion(tx, {
           ordenId,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_CR, hora),
         });
       };
@@ -394,7 +394,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await entregar(
         await crearOrden(tx, base, {
           clave: "r259-a-ayer",
-          estatus: "entregada",
+          estatus: "entregado",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR("2001-06-14", "16:00"),
           fechaReparto: diaReparto(FECHA_CR),
@@ -404,7 +404,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await entregar(
         await crearOrden(tx, base, {
           clave: "r259-a-hoy",
-          estatus: "entregada",
+          estatus: "entregado",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "07:00"),
           fechaReparto: diaReparto(FECHA_CR),
@@ -417,7 +417,7 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
       await entregar(
         await crearOrden(tx, base, {
           clave: "r259-para-manana",
-          estatus: "entregada",
+          estatus: "entregado",
           mensajeroId: base.mensajero1,
           asignadoAt: instanteCR(FECHA_CR, "14:00"),
           fechaReparto: diaReparto("2001-06-16"),

@@ -1,3 +1,5 @@
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import { z } from "zod";
 import type {
   PagoMensajeroMovimientoTipo as PrismaPagoMensajeroMovimientoTipo,
@@ -6,6 +8,7 @@ import type {
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 
 // Feature 44 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del LIBRO del pago
@@ -79,7 +82,8 @@ export type PagoMensajeroMovimientoDTO = {
   tipo: PagoMensajeroMovimientoTipo;
   categoria: PagoMensajeroMovimientoCategoria;
   monto: string; // Decimal -> STRING 2 dec (R4/R27)
-  origenTipo: string; // cierre_dia | pago_mensajero | manual (WalletOrigenTipo)
+  // Ficha 458-A (TA.2, R9): el catalogo, no `string`: un diccionario parcial ya no compila.
+  origenTipo: WalletOrigenTipo;
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
@@ -154,10 +158,13 @@ export type ListarPagosDeMensajeroResult = {
 export const listarPagosMensajeroSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  cierreId: z.string().min(1).optional(),
+  // Ficha 458-A (TA.4, R12): el cierre se elige en un selector y viaja su id; el borde rechaza todo
+  // valor que no tenga forma de identificador (antes `min(1)`: «Pegá el identificador»).
+  cierreId: z.string().uuid().optional(),
   mensajeroId: z.string().min(1).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
+  // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
 });
 
 // Vista del MAESTRO (R18/R22): el maestro DEBE elegir un mensajero, asi que `mensajeroId` pasa a
@@ -259,5 +266,6 @@ export type ListarCuentasPorPagarCompletoResult =
 // Resultado del modo completo en el BORDE (T C.2). `limite_excedido` lleva SOLO conteos
 // (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Eran DOS, uno por superficie;
 // la ficha 336 retiro `ListarMisPagosCompletoResult` con la vista propia del mensajero.
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
 export type ListarPagosDeMensajeroCompletoResult =
-  ListarCompletoResult<PagoMensajeroMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<PagoMensajeroMovimientoDTO>>;

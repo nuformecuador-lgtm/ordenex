@@ -2,35 +2,63 @@ import { describe, it, expect } from "vitest";
 
 import {
   CATEGORIA_TIENDA_LABEL,
-  CATEGORIA_TIENDA_OPTIONS,
-  DESGLOSE_TIENDA_COLUMNAS,
-  DESGLOSE_TIENDA_ERROR,
-  DESGLOSE_TIENDA_FILTRO_LABEL,
   DESGLOSE_TIENDA_LABEL,
-  DESGLOSE_TIENDA_NOMBRE,
-  DESGLOSE_TIENDA_VACIO,
   ORIGEN_TIENDA_LABEL,
   SALDO_SIGNO_LABEL,
   TIPO_TIENDA_LABEL,
   money,
   origenLabel,
 } from "@/app/(app)/wallet/tiendas/_components/desglose-tienda-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import {
+  COLUMNAS_TEXTO,
+  ESTADO_CUENTA_TEXTO,
+} from "@/components/shared/estado-cuenta/estado-cuenta-labels";
 import * as miWalletLabels from "@/app/(app)/mi-wallet/_components/mi-wallet-labels";
+import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
 import { SALDO_SIGNO_LABEL as SALDO_SIGNO_LABEL_TABLA } from "@/app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label";
-import { WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet-tienda";
+import {
+  WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED,
+  type WalletTiendaMovimientoCategoria,
+} from "@/lib/types/wallet-tienda";
 
-// Feature 171 (T2.1, R13/R20) — el desglose por tienda dice lo MISMO que `/mi-wallet` para
-// el mismo valor, y lo mismo que la tabla de saldos para el mismo signo.
+// Feature 171 (T2.1, R13/R20) — el desglose por tienda dice lo MISMO que `/mi-wallet` para el mismo
+// tipo, origen y signo, y lo mismo que la tabla de saldos para el mismo signo.
 //
-// Por qué se prueba la IDENTIDAD (`toBe`, misma referencia) y no la igualdad: dos mapas con
-// los mismos textos hoy son dos mapas que mañana divergen en cuanto alguien renombre una
-// categoría en uno de los dos, y nadie se enteraría — los dos seguirían pasando un test de
-// igualdad escrito con los valores de hoy. Compartir el objeto hace que la divergencia sea
-// imposible, no improbable.
+// Por qué se prueba la IDENTIDAD (`toBe`, misma referencia) y no la igualdad: dos mapas con los
+// mismos textos hoy son dos mapas que mañana divergen en cuanto alguien renombre uno de los dos.
+//
+// ⭑ FICHA 461 (T C.2, design §7.4, HD3, P4) — el CONCEPTO deja de ser el mismo objeto a propósito:
+// el libro se lee desde dos lados. Aquí vive el nombre DESDE ORDENEX («Ordenex le cobra a la
+// tienda»), que es el que ve la oficina y el que el diálogo promete (R43/R46); `/mi-wallet` lee
+// desde la tienda («Ordenex te cobró», R44). Los literales van escritos a mano.
 
-describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", () => {
-  it("concepto, tipo y origen son el MISMO objeto que usa /mi-wallet, no una copia", () => {
-    expect(CATEGORIA_TIENDA_LABEL).toBe(miWalletLabels.CATEGORIA_TIENDA_LABEL);
+/** design §7.4 — el libro de la tienda, desde Ordenex, los 14 conceptos. */
+const DESDE_ORDENEX: Record<WalletTiendaMovimientoCategoria, string> = {
+  cod_recaudado: "Contra-entrega cobrado a los clientes de la tienda",
+  flete: "Flete cobrado a la tienda",
+  flete_devolucion: "Flete por rechazo cobrado a la tienda",
+  comision_cod: "Comisión de contra-entrega cobrada a la tienda",
+  iva_flete: "IVA del flete cobrado a la tienda",
+  iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
+  iva_comision_cod: "IVA de la comisión cobrado a la tienda",
+  cobro_manual: "Ordenex le cobra a la tienda",
+  cobro_tienda_anulado: "Cobro de Ordenex a la tienda anulado",
+  pago_tienda: "Ordenex le paga a la tienda",
+  pago_por_cuenta: "Ordenex paga un gasto de la tienda",
+  pago_por_cuenta_anulado: "Pago de un gasto de la tienda anulado",
+  // Ficha 457 (design §2, D10): el nombre reservado por la 461 y el patron de «… de la tienda anulado».
+  abono_tienda: "La tienda le paga a Ordenex",
+  abono_tienda_anulado: "Pago de la tienda a Ordenex anulado",
+  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, desde Ordenex.
+  flete_devolucion_anulado: "Cobro por rechazo anulado",
+  iva_flete_devolucion_anulado: "IVA del cobro por rechazo anulado",
+  ajuste_credito: "Corrección a favor de la tienda",
+  ajuste_debito: "Corrección en contra de la tienda",
+};
+
+describe("etiquetas del desglose por tienda — R20: tipo, origen y moneda son los MISMOS de /mi-wallet", () => {
+  it("tipo y origen son el MISMO objeto que usa /mi-wallet, no una copia", () => {
     expect(ORIGEN_TIENDA_LABEL).toBe(miWalletLabels.ORIGEN_TIENDA_LABEL);
     expect(TIPO_TIENDA_LABEL).toBe(miWalletLabels.TIPO_TIENDA_LABEL);
     expect(origenLabel).toBe(miWalletLabels.origenLabel);
@@ -38,53 +66,76 @@ describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", 
 
   it("el helper de moneda es el MISMO, así que ninguno de los dos puede parsear un monto", () => {
     expect(money).toBe(miWalletLabels.money);
-    // Esta línea ha dicho tres cosas en tres reglas. La 201: «el céntimo
-    // sobrevive a la pantalla» (`₡1.000,10`). La 230: la cola decide el redondeo
-    // y no se pinta (`₡1.000`). La FICHA 359 la devuelve a lo primero, y por el
-    // motivo de entonces: un movimiento de wallet con céntimos —40 de 152
-    // medidos en producción— es justo el caso donde esconderlos descuadra la
-    // resta que la pantalla enseña. Que el camino no convierta a número se
-    // afirma donde se puede afirmar de verdad: el barrido de
-    // `Number(`/`parseFloat(` sobre el fuente del módulo, en `moneda-formato` y
-    // en la guardia.
     expect(money("1000.10")).toBe("₡1.000,10");
-    // Y el importe REDONDO sigue pelado, con el signo DELANTE del símbolo.
     expect(money("-452.00")).toBe("-₡452");
     // `null` = aún no cargado. NO es un cero: un cero falso en una pantalla de dinero miente.
     expect(money(null)).toBe("—");
   });
+});
 
-  it("las opciones del filtro de concepto salen del SEED del enum (R44: incluye pago_tienda)", () => {
-    expect(CATEGORIA_TIENDA_OPTIONS).toBe(miWalletLabels.CATEGORIA_TIENDA_OPTIONS);
-
-    const valores = CATEGORIA_TIENDA_OPTIONS.map((o) => o.value);
-    expect(valores[0]).toBe(""); // "todos los conceptos"
-    expect(valores.slice(1)).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED]);
-    // R44: el concepto que hoy nadie emite ya es filtrable, porque la lista NO está escrita
-    // a mano — sale del catálogo.
-    expect(valores).toContain("pago_tienda");
-    // ⭑ FICHA 381 (R35): el cobro manual también, y por el MISMO mecanismo — la opción sale sola
-    // del SEED, en las dos pantallas, sin escribir una línea de filtro.
-    expect(valores).toContain("cobro_manual");
+describe("⭑ FICHA 461 — CATEGORIA_TIENDA_LABEL: el libro de la tienda, desde Ordenex (R43, design §7.4)", () => {
+  it("dice exactamente los 14 textos aprobados, y el seed es exactamente esas 14 claves", () => {
+    expect(CATEGORIA_TIENDA_LABEL).toEqual(DESDE_ORDENEX);
+    expect([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED].sort()).toEqual(
+      Object.keys(DESDE_ORDENEX).sort(),
+    );
   });
 
-  it("⭑ FICHA 381 (R33/R34) — el cobro se llama «Cobro de Ordenex», y NO como un ajuste", () => {
-    // Literal, y ES el contrato: es el texto que ve la TIENDA en su propia wallet y el que ve el
-    // administrador en `/wallet/tiendas` — el mismo objeto, así que un solo texto para las dos
-    // pantallas y para las dos descargas.
-    expect(CATEGORIA_TIENDA_LABEL.cobro_manual).toBe("Cobro de Ordenex");
-    // ⚠️ R33: DISTINTO del de una corrección compensatoria. Ésa es la decisión D2 del humano
-    // —«sí es importante distinguir cuándo es un cobro a una tienda»— convertida en algo que se
-    // rompe si alguien las conflaciona.
+  it("NO es el diccionario de /mi-wallet: aquel lee desde la tienda (P4, R44)", () => {
+    expect(CATEGORIA_TIENDA_LABEL).not.toBe(miWalletLabels.CATEGORIA_MI_WALLET_LABEL);
+    expect(CATEGORIA_TIENDA_LABEL.cobro_manual).toBe("Ordenex le cobra a la tienda");
+    expect(miWalletLabels.CATEGORIA_MI_WALLET_LABEL.cobro_manual).toBe("Ordenex te cobró");
+    // Y el viejo diccionario compartido ya no existe en /mi-wallet: nadie puede volver a importarlo.
+    expect("CATEGORIA_TIENDA_LABEL" in miWalletLabels).toBe(false);
+    expect("CATEGORIA_TIENDA_OPTIONS" in miWalletLabels).toBe(false);
+  });
+
+  it("los seis cargos del cierre dicen EXACTAMENTE lo mismo que su contrapartida en la caja", () => {
+    // El mismo dinero con el mismo nombre en los dos libros (design §7.4: «los seis de §7.2»).
+    expect(CATEGORIA_TIENDA_LABEL.flete).toBe(CATEGORIA_LABEL.ingreso_flete);
+    expect(CATEGORIA_TIENDA_LABEL.flete_devolucion).toBe(CATEGORIA_LABEL.ingreso_flete_devolucion);
+    expect(CATEGORIA_TIENDA_LABEL.comision_cod).toBe(CATEGORIA_LABEL.ingreso_comision_cod);
+    expect(CATEGORIA_TIENDA_LABEL.iva_flete).toBe(CATEGORIA_LABEL.ingreso_iva_flete);
+    expect(CATEGORIA_TIENDA_LABEL.iva_flete_devolucion).toBe(
+      CATEGORIA_LABEL.ingreso_iva_flete_devolucion,
+    );
+    expect(CATEGORIA_TIENDA_LABEL.iva_comision_cod).toBe(CATEGORIA_LABEL.ingreso_iva_comision_cod);
+    expect(CATEGORIA_TIENDA_LABEL.cod_recaudado).toBe(CATEGORIA_LABEL.ingreso_cod_recaudado);
+    // Literal de control, para que la igualdad no sea vacía.
+    expect(CATEGORIA_TIENDA_LABEL.flete).toBe("Flete cobrado a la tienda");
+  });
+
+  it("⭑ 381 (R33/R34): el cobro es DISTINTO de una corrección y del pago que la tienda recibe", () => {
     expect(CATEGORIA_TIENDA_LABEL.cobro_manual).not.toBe(CATEGORIA_TIENDA_LABEL.ajuste_debito);
-    // Y `ajuste_debito` NO cambió: se queda intacto y reservado a su propósito original.
-    expect(CATEGORIA_TIENDA_LABEL.ajuste_debito).toBe("Ajuste (débito)");
-    // Tampoco se confunde con el pago que la tienda RECIBE, que es el movimiento contrario.
     expect(CATEGORIA_TIENDA_LABEL.cobro_manual).not.toBe(CATEGORIA_TIENDA_LABEL.pago_tienda);
-    // Ni una etiqueta repetida en todo el diccionario: dos conceptos con el mismo nombre serían
-    // indistinguibles en la tabla y en el archivo descargado (R39).
+    expect(CATEGORIA_TIENDA_LABEL.ajuste_debito).toBe("Corrección en contra de la tienda");
+    // Ni una etiqueta repetida en todo el diccionario (R39 de la 381).
     const etiquetas = Object.values(CATEGORIA_TIENDA_LABEL);
     expect(new Set(etiquetas).size).toBe(etiquetas.length);
+    for (const [clave, texto] of Object.entries(CATEGORIA_TIENDA_LABEL)) {
+      expect(texto, clave).not.toMatch(/_/);
+      expect(texto, clave).not.toMatch(/\bCOD\b/);
+    }
+  });
+
+  it("458-A (R13): las opciones son los conceptos con movimientos, con su número y el nombre desde Ordenex (R43)", () => {
+    // Reescrito en la 458-A (TA.3): ya no salen del SEED (R95). Se le pasan todos los conceptos del
+    // catálogo como «con movimientos» y cada uno sale con su nombre desde Ordenex y su cuenta.
+    const lista = opcionesDeConceptos(
+      WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 3 })),
+      CATEGORIA_TIENDA_LABEL,
+      "",
+      // 458-D: el filtro de concepto del desglose se retiró (el estado de cuenta filtra por chips);
+      // lo que este caso mide es el DICCIONARIO desde Ordenex, con la opción «todos» escrita aquí.
+      { value: "", label: "Todos los conceptos" },
+    );
+    const valores = lista.map((o) => o.value);
+    expect(lista[0]).toEqual({ value: "", label: "Todos los conceptos" });
+    expect(valores.slice(1)).toEqual([...WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED]);
+    const opciones = new Map(lista.slice(1).map((o) => [o.value, o.label]));
+    for (const [clave, texto] of Object.entries(DESDE_ORDENEX)) {
+      expect(opciones.get(clave), clave).toBe(`${texto} (3)`);
+    }
   });
 });
 
@@ -99,7 +150,7 @@ describe("etiquetas del desglose por tienda — R13: el estado del saldo", () =>
   });
 });
 
-describe("textos propios del desglose por tienda (R7, P1)", () => {
+describe("textos propios del desglose por tienda (R7, P1; 461 R45)", () => {
   it("declara los CUATRO importes con los textos decididos, y en el orden de la fórmula", () => {
     // R7: a favor − cargos − pagado = saldo. El orden del objeto es el de la pantalla.
     expect(Object.keys(DESGLOSE_TIENDA_LABEL)).toEqual([
@@ -118,47 +169,70 @@ describe("textos propios del desglose por tienda (R7, P1)", () => {
     expect(DESGLOSE_TIENDA_LABEL.saldo).toBe("Saldo a favor");
   });
 
+  it("⭑ 461 R45: las pistas nombran el cobro y su anulación con la palabra de su fila, desde Ordenex", () => {
+    expect(DESGLOSE_TIENDA_LABEL.aFavorHint).toBe(
+      "Contra-entrega cobrado, correcciones a favor, pagos de la tienda a Ordenex y devoluciones por anulaciones",
+    );
+    expect(DESGLOSE_TIENDA_LABEL.cargosHint).toBe(
+      "Fletes, comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados",
+    );
+    expect(DESGLOSE_TIENDA_LABEL.pagadoHint).toBe("Lo que Ordenex le pagó a la tienda o pagó por ella");
+    // «cobros de Ordenex a la tienda» ↔ la fila «Ordenex le cobra a la tienda» / «Cobro de Ordenex a la tienda anulado».
+    expect(DESGLOSE_TIENDA_LABEL.cargosHint).toMatch(/cobros de Ordenex a la tienda/);
+    expect(CATEGORIA_TIENDA_LABEL.cobro_tienda_anulado).toMatch(/^Cobro de Ordenex a la tienda/);
+    for (const texto of Object.values(DESGLOSE_TIENDA_LABEL)) expect(texto).not.toMatch(/\bCOD\b/);
+  });
+
   it("no reusa la cabecera del mensajero: a una tienda no se le «devenga» nada", () => {
     const textos = Object.values(DESGLOSE_TIENDA_LABEL).join(" | ");
     expect(textos).not.toMatch(/devengad/i);
     expect(textos).not.toMatch(/cuenta por pagar/i);
   });
 
-  it("las cinco columnas del ledger, en el orden de R15", () => {
-    expect(Object.keys(DESGLOSE_TIENDA_COLUMNAS)).toEqual([
-      "fecha",
-      "tipo",
-      "concepto",
-      "monto",
-      "origen",
-    ]);
+  // FICHA 458-D (T D.8): las columnas, los filtros, el vacío, el error y los nombres accesibles del
+  // DESGLOSE se retiraron con él. Sus sustitutos, los del ESTADO DE CUENTA de la tienda, se afirman aquí
+  // con los mismos criterios (orden de la pantalla, periodo, vacío y error que se explican, un nombre
+  // accesible por cuenta).
+  it("las columnas del estado de cuenta, en el orden de la pantalla (R19)", () => {
+    expect(COLUMNAS_TEXTO.tienda).toEqual({
+      fecha: "Fecha",
+      movimiento: "Movimiento y motivo",
+      cargo: "Cargo",
+      abono: "Abono",
+      saldo: "Saldo",
+      ver: "Ver",
+    });
   });
 
-  it("los filtros son cuatro: cierre, concepto y rango de fechas (R18)", () => {
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.cierre).toBe("Cierre");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.concepto).toBe("Concepto");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.desde).toBe("Desde");
-    expect(DESGLOSE_TIENDA_FILTRO_LABEL.hasta).toBe("Hasta");
+  it("el periodo se filtra con «Desde» y «Hasta» (R16/R24)", () => {
+    expect(ESTADO_CUENTA_TEXTO.desde).toBe("Desde");
+    expect(ESTADO_CUENTA_TEXTO.hasta).toBe("Hasta");
   });
 
   it("el vacío y el error se explican, no se quedan mudos (R21/R5)", () => {
-    expect(DESGLOSE_TIENDA_VACIO.length).toBeGreaterThan(0);
-    expect(DESGLOSE_TIENDA_ERROR.length).toBeGreaterThan(0);
-    expect(DESGLOSE_TIENDA_ERROR).toMatch(/desglose/i);
+    expect(ESTADO_CUENTA_TEXTO.vacio.length).toBeGreaterThan(0);
+    expect(ESTADO_CUENTA_TEXTO.error).toMatch(/estado de cuenta/i);
   });
 });
 
-describe("nombres accesibles del desglose (R4/R38)", () => {
-  it("TODOS llevan el nombre de la tienda dentro", () => {
-    // Con varias filas abiertas a la vez, un nombre genérico no identifica nada: es el
-    // motivo entero de que estos nombres sean funciones y no literales.
-    for (const construir of Object.values(DESGLOSE_TIENDA_NOMBRE)) {
+describe("nombres accesibles del estado de cuenta (R4/R38; 458-D)", () => {
+  const NOMBRES = [
+    ESTADO_CUENTA_TEXTO.tabla,
+    ESTADO_CUENTA_TEXTO.chips,
+    ESTADO_CUENTA_TEXTO.paginacion,
+    ESTADO_CUENTA_TEXTO.tarjetas,
+    ESTADO_CUENTA_TEXTO.periodo,
+    ESTADO_CUENTA_TEXTO.acciones,
+  ];
+
+  it("TODOS llevan el nombre de la cuenta dentro", () => {
+    for (const construir of NOMBRES) {
       expect(construir("Tienda Norte")).toContain("Tienda Norte");
     }
   });
 
-  it("dos tiendas distintas nunca comparten un nombre accesible", () => {
-    for (const construir of Object.values(DESGLOSE_TIENDA_NOMBRE)) {
+  it("dos cuentas distintas nunca comparten un nombre accesible", () => {
+    for (const construir of NOMBRES) {
       expect(construir("Tienda Norte")).not.toBe(construir("Tienda Sur"));
     }
   });

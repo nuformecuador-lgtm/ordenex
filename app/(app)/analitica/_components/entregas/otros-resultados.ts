@@ -34,7 +34,7 @@ import { DESENLACES } from "@/lib/types/conteo-entregas";
 import type { ConteoDeStatus } from "@/lib/types/conteo-por-status";
 
 import { DESENLACES_CON_COLUMNA_PROPIA } from "./efectividad";
-import { etiquetaDeDesenlaceContada } from "./etiqueta-desenlace";
+import { etiquetaDeDesenlace } from "./etiqueta-desenlace";
 
 /** Los cinco desenlaces como conjunto, para clasificar en O(1). Derivado, nunca reescrito. */
 const CON_DESENLACE: ReadonlySet<string> = new Set<string>(DESENLACES);
@@ -100,35 +100,23 @@ export function composicionOtrosResultados(
  * que ser el MISMO byte a byte en cualquier maquina (R56). Un separador de miles dependiente
  * del locale rompe esa igualdad.
  *
- * La etiqueta sale de `etiquetaDeDesenlace` —el mecanismo que YA existe (R55)— y se pone en
- * minusculas porque va en medio de una frase, detras de su cantidad. No hay ninguna tabla de
- * etiquetas escrita aqui: `order_status` no tiene columna `label` y una tabla propia se
- * desincronizaria en el proximo renombre.
+ * La etiqueta sale de `etiquetaDeDesenlace` (R55), que desde la FICHA 455 (2026-09-24, R2) es el
+ * nombre visible EXACTO de la fuente unica (`nombreDeEstado`): sin plural y sin minusculas. La
+ * cantidad va al lado, tras dos puntos: «Reprogramado: 7 · Novedad: 4». Antes se pluralizaba el
+ * codigo y se ponia en minusculas («7 reprogramadas · 4 devueltas»). La misma etiqueta la usa la
+ * frase de «En qué terminaron» de la tabla, para que la pantalla y el archivo que se abre al lado
+ * no digan la misma fila de dos formas distintas.
  *
- * ⚠ FICHA 442 — Y CONCUERDA EN NUMERO: «4 devueltas» pero «1 devuelta». El singular no se
- * calcula, ES el `value` del catalogo (ver `etiquetaDeDesenlaceContada`), asi que esto no
- * introduce ninguna regla de morfologia del español ni ninguna tabla de excepciones. La misma
- * funcion la usa la frase de «En qué terminaron» de la tabla, para que la pantalla y el archivo
- * que se abre al lado no digan la misma fila de dos formas distintas.
- *
- * @param etiquetar como nombrar un desenlace SEGUN su cantidad. Se INYECTA en vez de importarse
+ * @param etiquetar como nombrar un desenlace. Se INYECTA en vez de importarse
  *                  para que este modulo siga sin depender de nada de UI; el valor por defecto es
  *                  el mecanismo vivo, asi que ningun consumidor tiene que pasarlo.
  */
 export function textoComposicionOtrosResultados(
   porStatus: readonly ConteoDeStatus[],
-  etiquetar: (status: string, conteo: number) => string = etiquetaPorDefecto,
+  etiquetar: (status: string) => string = etiquetaDeDesenlace,
 ): string {
   return composicionOtrosResultados(porStatus)
-    .map((trozo) => `${trozo.conteo} ${etiquetar(trozo.status, trozo.conteo).toLowerCase()}`)
+    .map((trozo) => `${etiquetar(trozo.status)}: ${trozo.conteo}`)
     .join(SEPARADOR_COMPOSICION);
 }
 
-/**
- * El mecanismo de etiquetas VIVO (R55), envuelto en una funcion nombrada para que sea el valor
- * por defecto del parametro de arriba y quede claro que `composicionOtrosResultados` —el
- * calculo— no sabe nada de etiquetas.
- */
-function etiquetaPorDefecto(status: string, conteo: number): string {
-  return etiquetaDeDesenlaceContada(status, conteo);
-}

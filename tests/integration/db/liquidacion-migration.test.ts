@@ -217,13 +217,29 @@ describe("UP — CHECK tipo <-> categoria de los dos libros (condicion heredada 
     // propio `DROP`+`ADD` de este MISMO CHECK — exactamente el mecanismo que el libro del mensajero
     // ya usaba aqui abajo desde la 293:
     //   - `cobro_manual` (381): lo anade `20260908140100_wallet_tienda_check_cobro_manual`.
+    //   - `pago_por_cuenta` y `pago_por_cuenta_anulado` (459): los anade
+    //     `20260925120200_pago_por_cuenta_y_capital`.
     //
     // ⚠️ LA LISTA NO AFLOJA NADA, y por eso se resta en vez de comparar por inclusion: sigue siendo
     // una igualdad exacta, asi que un valor de enum que nadie clasifique NI en este CHECK NI en esta
     // lista pone el caso rojo. Que la restriccion de HOY siga cubriendo el enum de HOY se afirma en
     // `tests/integration/db/wallet-tienda-cobro-migration.test.ts`, que es donde ese CHECK vive
     // ahora.
-    const AGREGADAS_DESPUES_TIENDA = ["cobro_manual"];
+    //   - `cobro_tienda_anulado` (461): lo anade `20260926120100_cobro_tienda_461_anulacion_y_checks`.
+    //   - `abono_tienda` y `abono_tienda_anulado` (457): los anade
+    //     `20260927120100_abono_tienda_457_tablas_y_checks`.
+    //   - `flete_devolucion_anulado` e `iva_flete_devolucion_anulado` (458-B): los anade
+    //     `20260928120100_wallet_458_tablas`.
+    const AGREGADAS_DESPUES_TIENDA = [
+      "cobro_manual",
+      "pago_por_cuenta",
+      "pago_por_cuenta_anulado",
+      "cobro_tienda_anulado",
+      "abono_tienda",
+      "abono_tienda_anulado",
+      "flete_devolucion_anulado",
+      "iva_flete_devolucion_anulado",
+    ];
     const clasificadas = [...ramasTienda.values()].flat();
     expect([...clasificadas].sort()).toEqual(
       valoresDelEnum("WalletTiendaMovimientoCategoria")

@@ -1,0 +1,56 @@
+Órdenes
+
+Listado y gestión de órdenes
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Recibir paquete
+Vistas
+Estado: Novedad interna
+Filtros (1)
+Limpiar todo
+
+Descargar
+Nº Guía	Nº Remisión	Estado	Intentos	Destinatario	Producto	Dirección	Tienda	Zona	Provincia	Cantón	Distrito	Monto a cobrar	Flete + IVA	Fulfillment	Comisión + IVA	Mensajero	Fecha de creación	Tiempo	Reprogramada para	Acciones
+Pendiente	111129	
+Novedad interna
+	0	Evaristo Allen	1 * Spray Protector.	El solar casa 18 a del súper j y C 150 mts al este San Antonio -	Tania	GAM	San José	Desamparados	Desamparados	₡14.900	
+₡2.260
+	₡800	₡589,30	Mensajero test	24/7/26, 5:40 p. m.	61d 15h	—	
+
+990117	111117	
+Novedad interna
+	0	Anabelle Vargas Castro	1 * Lima Eléctrica Profesional para Pies. 1 * Gel de Abejas.	Calle el Jardín 75 Oeste, muro gris claro, verjas color vino Damas -	Tania	GAM	San José	Desamparados	Desamparados	₡14.618	
+₡2.260
+	₡800	₡578,14	Marco Mensajero	24/7/26, 5:40 p. m.	61d 15h	—	
+
+Pendiente	REM-0001	
+Novedad interna
+	0	Juan Pérez	Camiseta talla M	Av. Central, 200m norte del parque	Tania	GAM	San José	San José	Carmen	₡26	
+₡2.260
+	₡800	₡1,03	Marco Mensajero	23/7/26, 8:47 p. m.	62d 12h	—	
+
+Pendiente	63446	
+Novedad interna
+	0	Marianela Oreamuno bolaños	1 * DEPILADOR MAGICO AFEITADO FACIL.	-Corrida Bad, José María Zeledón casa WS7, casa W 17 tercera etapa casa de rejas	Tania	GAM	San José	Curridabat	Curridabat	₡11.700	
+₡2.260
+	₡800	₡462,74	Mensajero test	23/7/26, 8:24 p. m.	62d 12h	—	
+
+Pendiente	63241	
+Novedad interna
+	0	Laura Ramírez Barquero	1 * Crema Dental Blanqueadora.	Condominio Avenida 46 apto 303 Sánchez -	Tania	GAM	San José	Curridabat	Curridabat	₡14.900	
+₡2.260
+	₡800	₡589,30	Marco Mensajero	23/7/26, 8:24 p. m.	62d 12h	—	
+1-5 de 5
+«
+‹
+1
+›
+»
+10
+25
+50

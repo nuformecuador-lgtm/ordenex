@@ -41,6 +41,12 @@ export interface IVigenciaAvisoAgregado {
    * En los tres casos NO se consulta al repositorio y el error NOMBRA la causa. Quien lo llama
    * (`NotificacionService.cifrasVivas`) lo registra y muestra el aviso SIN numero (R58): lanzar
    * aqui no rompe ninguna pantalla, y devolver un numero inventado si romperia el ambito.
+   *
+   * FICHA 462 (R6/R14) — LA CUARTA RAMA: `reprogramadas_esperan_cierre`. `maestro`/`admin` -> las
+   * retenidas del ambito CENTRAL (los cierres con destino `bodega_central`, lo que ven en
+   * `/cierres-admin`; NO el total del sistema); `adminSatelite` con zona util -> las de SU zona.
+   * Sin zona util, con cualquier otro rol o sin el servicio de retenidas inyectado, LANZA con su
+   * causa: nunca devuelve `0`.
    */
   cifra(evento: NotificacionEvento, actor: Actor): Promise<number>;
 }

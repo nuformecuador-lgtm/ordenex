@@ -83,7 +83,7 @@ describe("PagoMensajeroMovimientoRepository.crearMovimientos (R2/R6)", () => {
 });
 
 describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () => {
-  it("R20: acota mensajero_id SIEMPRE en el WHERE; orderBy fecha desc; pagina", async () => {
+  it("R20: acota mensajero_id SIEMPRE en el WHERE; orderBy TOTAL (fecha, creacion, id) desc [458-B R23]; pagina", async () => {
     const prisma = buildPrisma();
     prisma.pagoMensajeroMovimiento.findMany.mockResolvedValue([movRow()]);
     prisma.pagoMensajeroMovimiento.count.mockResolvedValue(1);
@@ -93,7 +93,7 @@ describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () =>
 
     const arg = prisma.pagoMensajeroMovimiento.findMany.mock.calls[0][0];
     expect(arg.where).toEqual({ mensajeroId: "m1" });
-    expect(arg.orderBy).toEqual({ fechaMovimiento: "desc" });
+    expect(arg.orderBy).toEqual([{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }]);
     expect(arg.skip).toBe(10); // (page-1)*pageSize
     expect(arg.take).toBe(10);
     expect(r.total).toBe(1);
@@ -123,7 +123,7 @@ describe("PagoMensajeroMovimientoRepository.listarPorMensajero (R20/R22)", () =>
         { origenTipo: "cierre_dia", origenId: "c1" },
         { origenTipo: "pago_mensajero", origenId: { in: ["pago-1"] } },
       ],
-      fechaMovimiento: { gte: desde, lte: hasta },
+      fechaMovimiento: { gte: desde, lt: hasta }, // ficha 461 (R72): `hasta` EXCLUSIVO
     });
     // Los ids de pago salen de una lectura ACOTADA por el cierre, no de toda la tabla.
     expect(prisma.liquidacionPago.findMany.mock.calls[0][0]).toEqual({

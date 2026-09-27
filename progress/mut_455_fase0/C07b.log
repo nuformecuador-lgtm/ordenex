@@ -1,0 +1,24 @@
+=== MUTACION C07b — 2026-09-24T04:51:35-05:00
+archivo: lib/types/conteo-entregas.ts
+perl: s/(export const DESENLACES: readonly OrderStatusValue\[\] = \[\n  "entregada",\n)  "devuelta",\n/$1/
+--- diff aplicado:
+diff --git a/lib/types/conteo-entregas.ts b/lib/types/conteo-entregas.ts
+index 99775f3e..769c6221 100644
+--- a/lib/types/conteo-entregas.ts
++++ b/lib/types/conteo-entregas.ts
+@@ -29 +28,0 @@ export const DESENLACES: readonly OrderStatusValue[] = [
+-  "devuelta",
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el desglose por status de la cohorte 2ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el plegado en desenlaces (con el cubo `otros`) 5ms
+   → expected [ 'entregado:1', 'incidente:1', …(3) ] to deeply equal [ 'entregado:1', 'incidente:1', …(4) ]
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > las devoluciones por causa 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el ciclo de vida acumulado de las cerradas en D 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el plegado en desenlaces (con el cubo `otros`)
+AssertionError: expected [ 'entregado:1', 'incidente:1', …(3) ] to deeply equal [ 'entregado:1', 'incidente:1', …(4) ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

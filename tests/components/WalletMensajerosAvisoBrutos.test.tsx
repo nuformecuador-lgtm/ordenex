@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, within, cleanup } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
@@ -67,29 +67,16 @@ vi.mock("@/lib/actions/wallet-mensajero", () => ({
     items: [RESUMEN],
     total: 1,
   })),
-  listarPagosDeMensajeroAction: vi.fn(async () => ({
-    status: "ok",
-    page: 1,
-    pageSize: 25,
-    total: 0,
-    movimientos: [],
-    cuenta: {
-      devengado: "70000.00",
-      pagado: "20000.00",
-      cuentaPorPagar: "50000.00",
-      signo: "positivo",
-    },
-  })),
-  listarPagosDeMensajeroCompletoAction: vi.fn(async () => ({
-    status: "ok",
-    items: [],
-    total: 0,
-  })),
 }));
+vi.mock("@/lib/actions/estado-cuenta", () => ({ verEstadoCuentaAction: vi.fn(async () => ({ status: "forbidden" })) }));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
+import { EstadoCuentaMensajero } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
+import { estado } from "@/tests/fixtures/estado-cuenta";
 
 /** Vocabulario que NO puede aparecer en pantalla: es nuestro, no del maestro. */
 const JERGA = [
@@ -134,83 +121,46 @@ describe("/wallet/mensajeros — el aviso de los importes brutos (N1)", () => {
     expect(texto).toMatch(/ese es el número correcto/);
   });
 
-  it("la CABECERA del desglose lleva la salvedad PEGADA a cada importe, sin repetir el párrafo", () => {
-    envolver(<DesglosePagosMensajero resumen={RESUMEN} id="desglose-u1" />);
-
-    // El párrafo ya no se repite acá: era el mismo de la tabla, con los rótulos cambiados.
+  // FICHA 458-D (T D.8, D14): la CABECERA del desglose (con su salvedad pegada a «Total devengado» y
+  // «Total pagado») se retiró con el desplegable. Su sustituto, el ESTADO DE CUENTA, ya no enseña
+  // importes brutos: abonos y cargos del periodo son NETOS (D3 de la 458, el servidor excluye los pares
+  // anulados) y el saldo es la cuenta por pagar. No hay nada que salvar: la salvedad NO aparece allí.
+  it("el ESTADO DE CUENTA del mensajero no repite la salvedad: sus cifras ya son netas (D3)", () => {
+    envolver(
+      <EstadoCuentaMensajero
+        inicial={estado({
+          tipo: "mensajero",
+          nombre: "Ana Mensajera",
+          saldoActual: "50000.00",
+          abonos: "70000.00",
+          cargos: "20000.00",
+          saldoFinal: "50000.00",
+          filas: [],
+          total: 0,
+        })}
+        puedeRegistrar={false}
+      />,
+    );
     expect(screen.queryAllByRole("note")).toHaveLength(0);
-
-    // Pero la información NO se perdió: cada uno de los dos importes inflados dice qué incluye,
-    // y el tercero —la resta— dice que es el correcto. Es lo que antes decía el párrafo, en el
-    // sitio donde no puede quedarse fuera de pantalla.
-    const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    expect(
-      within(seccion).getByText(/Incluye la devolución de los pagos anulados/),
-    ).toBeInTheDocument();
-    expect(within(seccion).getByText(/Incluye los pagos anulados/)).toBeInTheDocument();
-    expect(
-      within(seccion).getByText(/Es el número correcto: ya tiene descontado lo anulado/),
-    ).toBeInTheDocument();
+    expect(document.body.textContent ?? "").not.toMatch(/Incluye los pagos anulados|ese es el número correcto/);
+    // Las cifras son las del SERVIDOR, tal cual (R22 lo afirma él).
+    const tarjetas = screen.getByRole("region", { name: "Saldo de Ana Mensajera" });
+    expect(within(tarjetas).getByText("₡70.000")).toBeInTheDocument();
+    expect(within(tarjetas).getByText("₡20.000")).toBeInTheDocument();
   });
 
-  it("con el desglose ABIERTO, el párrafo sigue apareciendo UNA sola vez en la pantalla", async () => {
-    // El defecto que cierra la deuda 203, reproducido tal cual se vio en la app: expandir la
-    // fila montaba el desglose DEBAJO del aviso de la tabla y los dos párrafos quedaban a la
-    // vista, diciendo lo mismo. Antes de este arreglo, este caso contaba 2.
+  it("la tabla de cuentas ya no despliega: el párrafo aparece UNA sola vez en su pantalla", () => {
     envolver(<CuentasPorPagarTable initialData={paginaInicial([RESUMEN])} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Ver desglose de Ana Mensajera" }));
-    await screen.findByRole("region", { name: "Desglose de Ana Mensajera" });
-
-    // La fila sigue abierta cuando se cuenta: sin esto, la relectura de SWR podría haber
-    // desmontado el desglose y el conteo diría «1» por no haber nada que contar.
-    const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    expect(within(seccion).getByText("₡50.000")).toBeInTheDocument();
-
-    const avisos = screen.getAllByRole("note");
-    expect(avisos).toHaveLength(1);
-    // Y el que queda es el de la TABLA: habla de «Pagado», no de «Total pagado».
-    expect(avisos[0].textContent).toContain("«Pagado»");
-    expect(avisos[0].textContent).not.toContain("«Total pagado»");
-    expect(seccion.contains(avisos[0])).toBe(false);
+    expect(screen.queryByRole("button", { name: /Ver desglose/ })).toBeNull();
+    expect(screen.getAllByRole("note")).toHaveLength(1);
   });
 
-  it("la salvedad va junto a los importes agregados, NUNCA dentro de la tabla de movimientos", () => {
-    // La asimetría dentro de la pantalla, afirmada: una lista de movimientos no necesita
-    // aviso porque el pago y su reverso se ven los dos.
-    envolver(<DesglosePagosMensajero resumen={RESUMEN} id="desglose-u1" />);
-
-    const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    const salvedad = within(seccion).getByText(/Incluye los pagos anulados/);
-    expect(salvedad.closest("table")).toBeNull();
-
-    // Y está en la misma sección que los tres importes, no colgando en otro sitio.
-    expect(within(seccion).getByText("₡70.000")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡20.000")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡50.000")).toBeInTheDocument();
-  });
-
-  it("los dos textos hablan en lenguaje claro: ni jerga contable ni siglas", () => {
+  it("el texto habla en lenguaje claro: ni jerga contable ni siglas", () => {
     envolver(<CuentasPorPagarTable initialData={paginaInicial([RESUMEN])} />);
     const deLaTabla = screen.getByRole("note").textContent ?? "";
-    cleanup();
-
-    envolver(<DesglosePagosMensajero resumen={RESUMEN} id="desglose-u1" />);
-    const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    // Las tres pistas del desglose, que son donde vive ahora la salvedad.
-    const delDesglose = [
-      /Incluye la devolución de los pagos anulados/,
-      /Incluye los pagos anulados/,
-      /Es el número correcto: ya tiene descontado lo anulado/,
-    ]
-      .map((patron) => within(seccion).getByText(patron).textContent ?? "")
-      .join(" ");
-
-    for (const texto of [deLaTabla, delDesglose]) {
-      expect(texto.length).toBeGreaterThan(0);
-      for (const palabra of JERGA) {
-        expect(texto.toLowerCase()).not.toContain(palabra.toLowerCase());
-      }
+    expect(deLaTabla.length).toBeGreaterThan(0);
+    for (const palabra of JERGA) {
+      expect(deLaTabla.toLowerCase()).not.toContain(palabra.toLowerCase());
     }
   });
 });

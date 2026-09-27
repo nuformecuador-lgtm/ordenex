@@ -124,7 +124,7 @@ describeSiHayBase("379/T4 · el resumen de consolidables sale del MISMO `where` 
   /** Zona satelite desechable: el dataset tiene que ser SOLO el que el test siembra. */
   async function sembrarZona(tx: TxDeTest, marca: string): Promise<string> {
     const fila = await tx.zona.create({
-      data: { nombre: `Zona ${SUFIJO}-${marca}`, cobroVehiculo: false, esCentral: false },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona ${SUFIJO}-${marca}`, cobroVehiculo: false, esCentral: false },
       select: { id: true },
     });
     return fila.id;
@@ -157,11 +157,15 @@ describeSiHayBase("379/T4 · el resumen de consolidables sale del MISMO `where` 
   ): Promise<void> {
     let cierreBodegaId: string | null = null;
     if (c.consolidado) {
-      // `aprobado` y no `solicitado`: el indice unico parcial de `cierre_bodega` prohibe dos
-      // solicitados por zona, y aqui el estado del cierre de BODEGA es irrelevante — lo que
-      // importa es que `cierre_bodega_id` deje de ser NULL.
+      // ⭑ FICHA 431 — ESTA LINEA CAMBIO, Y EL MOTIVO ES EL CONTRARIO DEL QUE HABIA. Decia
+      // «`aprobado` y no `solicitado`: el indice unico parcial prohibe dos solicitados por zona».
+      // Ese indice SE BORRO (`20260919120100_cierre_bodega_conciliacion`), asi que `solicitado` ya
+      // vale — y ademas AHORA ES EL UNICO QUE VALE aqui: el `CHECK` de coherencia de esa misma
+      // migracion prohibe un `aprobado` SIN los datos de la marca de conciliacion, y sembrarlos
+      // seria inventar una conciliacion que este test no mide.
+      // Lo que importa sigue siendo lo mismo: que `cierre_bodega_id` deje de ser NULL.
       const cb = await tx.cierreBodega.create({
-        data: { zonaId: c.zonaId, solicitadoPor: mensajeroId, estado: "aprobado" },
+        data: { zonaId: c.zonaId, solicitadoPor: mensajeroId, estado: "solicitado" },
         select: { id: true },
       });
       cierreBodegaId = cb.id;

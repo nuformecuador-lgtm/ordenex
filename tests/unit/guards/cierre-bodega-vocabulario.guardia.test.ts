@@ -19,6 +19,14 @@ import {
   PARA_LA_CENTRAL_NEGATIVO_NOTA,
   PARA_LA_CENTRAL_NOTA,
   PARA_LA_TIENDA_LABEL,
+  // ⭑ FICHA 431 (T18) — los cinco rótulos del vocabulario de la CONCILIACIÓN. Se importan
+  // para anclar su VALOR a mano más abajo, nunca para compararlos consigo mismos.
+  FALTA_POR_RECIBIR_LABEL,
+  MONTO_RECIBIDO_LABEL,
+  PENDIENTE_CONCILIAR_LABEL,
+  RECIBIDO_INCOMPLETO_LABEL,
+  RECIBIDO_LABEL,
+  SIN_CONCILIAR_LABEL,
 } from "@/app/(app)/cierres-admin/_components/cierre-labels";
 
 /**
@@ -233,6 +241,48 @@ const CENTRAL_DEBE = /(?:CENTRAL_DEBE_LABEL|CENTRAL_DEBE_NOTA|CentralDebeTotal|\
 const ROTULOS_NUEVOS =
   /(?:CASCADA_CENTRAL_TITULO|PARA_LA_CENTRAL_LABEL|GANA_BODEGA_SATELITE_LABEL)/u;
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 431 (T18) — EL CUARTO CENSO: EL VOCABULARIO DE LA APROBACIÓN NO VUELVE.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// ── QUÉ PROTEGE, Y POR QUÉ HACE FALTA UNA GUARDIA Y NO BASTA UN TEST DE PANTALLA
+// La 431 convierte la aprobación de nivel 2 en una MARCA DE CONCILIACIÓN: `solicitado` se lee
+// «Pendiente de conciliar», `aprobado` se lee «Recibido» y `rechazado` SE RETIRA de la pantalla
+// (D2/R16/R28). El camino viejo de aprobar/rechazar NO se arranca del árbol (Q4) —sigue ahí,
+// imposible de escribir contra la base por el `CHECK` de R15—, así que lo único que separa la
+// pantalla de hoy de la de ayer es que NADIE LO MONTE. Eso es una AUSENCIA, y una ausencia no
+// la sostiene ningún test de componente: un botón «Aprobar» que vuelva a una superficie no
+// rompe nada, simplemente vuelve a estar.
+//
+// ── ESTA GUARDIA NO AFLOJA NINGUNA DE LAS TRES AFIRMACIONES ANTERIORES: AÑADE UNA CUARTA.
+// Los censos de «Ajustes», de la cifra suelta y de «Central debe» se quedan exactamente como
+// estaban, sobre las mismas seis superficies. Éste es un detector MÁS, y trae su canario y su
+// contraprueba como el de `AJUSTES`.
+//
+// ── LO QUE EL DETECTOR NO PUEDE VIGILAR, DICHO EN VOZ ALTA
+// `ESTADO_LABEL` (el mapa del enum, con «Aprobado» y «Rechazado» dentro) NO se toca y NO puede
+// entrar aquí: lo comparte el cierre del MENSAJERO, donde esos rótulos siguen siendo los
+// correctos (D3). Lo que esta guardia persigue es que una superficie de BODEGA vuelva a
+// PINTARLOS, y eso se ve porque el literal o el identificador reaparece en su código.
+const APROBACION =
+  /(?:Esperando aprobación|pendiente de aprobación|Aprobar cierre|Rechazar cierre|APROBAR_LABEL|RECHAZAR_LABEL|\bAprobado\b|\bRechazado\b)/u;
+
+/**
+ * ⭑ FICHA 431 (T18) — la AUTOCOMPROBACIÓN del censo de arriba, y es obligatoria.
+ *
+ * Un censo que tiene que salir VACÍO es la forma más fácil de que una guardia mienta: si el
+ * extractor dejara de leer —un archivo renombrado, un recorte que corta a nada, el quitador de
+ * comentarios devolviendo cadena vacía— el censo saldría vacío igual y el verde no significaría
+ * absolutamente nada.
+ *
+ * Por eso se exige lo contrario en el mismo barrido: que el vocabulario que la ficha SÍ pone
+ * aparezca, y en MÁS DE UNA superficie. Son los identificadores por los que la conciliación
+ * llega a cada pantalla: el componente de las acciones en la cola del maestro, y la prop de la
+ * marca en el comprobante que ven las dos partes.
+ */
+const CONCILIACION_PUESTA =
+  /(?:marcaConciliacion|ConciliacionAcciones|ESTADO_CONCILIACION_LABEL|MONTO_RECIBIDO_LABEL|FALTA_POR_RECIBIR_LABEL|PENDIENTE_CONCILIAR_LABEL|RECIBIDO_LABEL)/u;
+
 describe("393 — autocomprobación del censo (una guardia estática rota no falla: calla)", () => {
   it("los archivos censados existen y el recorrido ve `cierres-admin` entero", () => {
     for (const archivo of SUPERFICIES_ENTERAS) {
@@ -299,6 +349,33 @@ describe("393 — autocomprobación del censo (una guardia estática rota no fal
     expect([...donde].some((n) => n.startsWith("cierre-factura.tsx"))).toBe(true);
   });
 
+  it("⭑ 431/T18: el MISMO extractor encuentra el vocabulario de la CONCILIACIÓN, en MÁS DE UNA superficie", () => {
+    // ESTE ES EL CASO QUE SOSTIENE EL CENSO DE ABAJO. El de `APROBACION` tiene que salir VACIO,
+    // y un censo vacio es indistinguible de un extractor roto: si el barrido dejara de leer, la
+    // ficha estaria «cumplida» sin haber mirado una linea. Aqui se afirma lo contrario —que el
+    // MISMO barrido, sobre las MISMAS superficies, SI encuentra lo que la 431 puso— y en dos
+    // sitios distintos, que es lo que distingue «lee» de «lee un archivo».
+    const puestos = censar(CONCILIACION_PUESTA);
+    expect(
+      puestos.length,
+      "el vocabulario de la conciliación no aparece en ninguna superficie del cierre de bodega. " +
+        "O la 431 no está montada, o el extractor dejó de leer. En los dos casos, el censo vacío " +
+        "de `APROBACION` no prueba nada.",
+    ).toBeGreaterThan(1);
+
+    const donde = new Set(puestos.map((h) => h.split(":")[0]));
+    expect(
+      donde.size,
+      `el vocabulario de la conciliación sale en UNA sola superficie (${[...donde].join(", ")}). ` +
+        "Son dos como mínimo: la cola donde la central marca y el comprobante que ven las dos " +
+        "partes. Con una sola, este caso pasaría leyendo un archivo y dando los otros cinco por " +
+        "buenos.",
+    ).toBeGreaterThan(1);
+    // Y son EXACTAMENTE esas dos, nombradas: la cola del maestro y el comprobante de bodega.
+    expect([...donde]).toContain("CierresBodegaAdminModule.tsx");
+    expect([...donde].some((n) => n.startsWith("cierre-factura.tsx"))).toBe(true);
+  });
+
   it("el detector marca el literal y NO marca el comentario", () => {
     const conLiteral = 'const X = "Ajustes";';
     const enComentario = "// La columna se llamaba Ajustes hasta la ficha 393.\nconst y = 1;";
@@ -312,6 +389,38 @@ describe("393 — autocomprobación del censo (una guardia estática rota no fal
     expect(lineasQueCasan('label={NETO_ORDENEX_LABEL}', CIFRA_SUELTA)).toEqual([]);
     expect(lineasQueCasan('<CentralDebeTotal value={x} />', CENTRAL_DEBE)).toEqual([1]);
     expect(lineasQueCasan('<CascadaDinero titulo={x} />', CENTRAL_DEBE)).toEqual([]);
+
+    // ⭑ 431/T18 — el canario y la contraprueba del CUARTO detector, en las dos direcciones.
+    // El canario: los seis literales e identificadores que persigue, uno por uno.
+    for (const canario of [
+      'const t = "Esperando aprobación";',
+      'const t = "Tu cierre está pendiente de aprobación";',
+      '<Button>{APROBAR_LABEL}</Button>',
+      '<Button>{RECHAZAR_LABEL}</Button>',
+      'title="Rechazar cierre de bodega"',
+      'const x = "Aprobado";',
+    ]) {
+      expect(lineasQueCasan(canario, APROBACION), canario).toEqual([1]);
+    }
+
+    // La CONTRAPRUEBA, y es la que hace que el detector sea usable: el vocabulario NUEVO no lo
+    // dispara. Sin esto, «Pendiente de conciliar» podría estar casando por la palabra
+    // «pendiente» y el censo sería rojo por lo que la ficha vino a poner.
+    for (const inocente of [
+      'const t = PENDIENTE_CONCILIAR_LABEL;',
+      'const t = RECIBIDO_LABEL;',
+      '<ConciliacionAcciones marca={c} />',
+      'marcaConciliacion={{ conciliado: true }}',
+      'const t = "Recibido incompleto";',
+    ]) {
+      expect(lineasQueCasan(inocente, APROBACION), inocente).toEqual([]);
+    }
+
+    // Y el comentario NO cuenta: el que explica el cambio nombra a propósito lo que retira.
+    const enComentario431 = ["// Aquí decía «Aprobado» hasta la ficha 431.", "const y = 1;"].join(
+      "\n",
+    );
+    expect(lineasQueCasan(quitarComentarios(enComentario431), APROBACION)).toEqual([]);
   });
 });
 
@@ -332,6 +441,22 @@ describe("393 — censo: el vocabulario del cierre de bodega (R23/R24/R34/R35)",
         "cierre de bodega. Es el defecto con el que empezó la ficha: la misma cifra dos veces, " +
         "con dos nombres, en la misma pantalla. Los componentes siguen existiendo para el cierre " +
         "de MENSAJERO (R30), pero aquí no se montan.",
+    ).toEqual([]);
+  });
+
+  it("⭑ 431/R16/R28: el vocabulario de la APROBACIÓN no vuelve a ninguna superficie de bodega", () => {
+    expect(
+      censar(APROBACION),
+      "una superficie del cierre de bodega volvió a hablar de aprobar o rechazar. Desde la ficha " +
+        "431 la aprobación de nivel 2 NO existe como puerta: lo que hay es una MARCA DE " +
+        "CONCILIACIÓN —«Pendiente de conciliar» / «Recibido» / «Recibido incompleto»— que dice si " +
+        "el efectivo llegó, y «Rechazado» se retiró de la pantalla (R16). El código viejo sigue en " +
+        "el árbol a propósito (Q4) y es imposible de escribir contra la base por el `CHECK` de " +
+        "R15: lo ÚNICO que lo mantiene fuera de la vista es que nadie lo monte, y eso es una " +
+        "AUSENCIA que ningún test de componente sostiene. Por eso existe este censo. " +
+        "⚠️ `ESTADO_LABEL` NO es el problema y no se toca: lo comparte el cierre del MENSAJERO, " +
+        "donde «Aprobado» sigue siendo el rótulo correcto (D3). Lo que aquí está prohibido es que " +
+        "una superficie de BODEGA lo PINTE.",
     ).toEqual([]);
   });
 
@@ -394,6 +519,59 @@ describe("393 — el VALOR de los rótulos y las notas, escrito a mano (R19/R23/
     ["GANA_BODEGA_SATELITE_LABEL", GANA_BODEGA_SATELITE_LABEL, "Gana la bodega satélite"],
   ])("%s dice exactamente lo aprobado", (_nombre, constante, literal) => {
     expect(constante).toBe(literal);
+  });
+
+  // ⭑ FICHA 431 (T18, Q5) — LOS SEIS RÓTULOS DE LA CONCILIACIÓN, con su literal escrito A MANO.
+  //
+  // Es el vocabulario que el humano decidió el 2026-09-16 al cerrar Q5, y el que la pantalla de
+  // la satélite y la de la central usan a la vez. Anclarlo aquí cuesta un cambio visible y a
+  // propósito el día que se quiera cambiar, que es exactamente lo que se quiere que pase —el
+  // mismo criterio, palabra por palabra, que los ocho de arriba.
+  //
+  // ⚠️ NO se comparan contra sí mismos ni contra `ESTADO_CONCILIACION_LABEL`, que es el mapa que
+  // los reúne: una aserción contra su propia fuente está siempre verde y dejaría pasar cualquier
+  // renombrado. El esperado es el literal, tecleado.
+  it.each([
+    ["PENDIENTE_CONCILIAR_LABEL", PENDIENTE_CONCILIAR_LABEL, "Pendiente de conciliar"],
+    ["RECIBIDO_LABEL", RECIBIDO_LABEL, "Recibido"],
+    ["RECIBIDO_INCOMPLETO_LABEL", RECIBIDO_INCOMPLETO_LABEL, "Recibido incompleto"],
+    ["MONTO_RECIBIDO_LABEL", MONTO_RECIBIDO_LABEL, "Monto recibido"],
+    ["FALTA_POR_RECIBIR_LABEL", FALTA_POR_RECIBIR_LABEL, "Falta por recibir"],
+    ["SIN_CONCILIAR_LABEL", SIN_CONCILIAR_LABEL, "Sin conciliar"],
+  ])("⭑ 431/Q5 — %s dice exactamente lo aprobado", (_nombre, constante, literal) => {
+    expect(constante).toBe(literal);
+  });
+
+  it("⭑ 431/R28: ningún rótulo de la conciliación reusa el vocabulario de la APROBACIÓN", () => {
+    // El caso de arriba fija los textos de HOY; éste fija la REGLA, así que el siguiente rótulo
+    // que se proponga tiene que cumplirla también. Es el mismo par —texto y regla— con el que la
+    // 393 protegió «Gana la bodega satélite».
+    //
+    // Por qué importa: el fallo natural al renombrar esto es volver a la palabra de la que se
+    // viene. Un «Aprobado (recibido)» pasaría el `toBe` de arriba si alguien lo cambiara en los
+    // dos sitios, y esta regla no.
+    const prohibidos = ["aprobado", "aprobación", "rechazado", "rechazo", "aprobar", "rechazar"];
+    const rotulos: [string, string][] = [
+      ["PENDIENTE_CONCILIAR_LABEL", PENDIENTE_CONCILIAR_LABEL],
+      ["RECIBIDO_LABEL", RECIBIDO_LABEL],
+      ["RECIBIDO_INCOMPLETO_LABEL", RECIBIDO_INCOMPLETO_LABEL],
+      ["MONTO_RECIBIDO_LABEL", MONTO_RECIBIDO_LABEL],
+      ["FALTA_POR_RECIBIR_LABEL", FALTA_POR_RECIBIR_LABEL],
+      ["SIN_CONCILIAR_LABEL", SIN_CONCILIAR_LABEL],
+    ];
+    for (const [nombre, valor] of rotulos) {
+      for (const prohibido of prohibidos) {
+        expect(
+          valor.toLowerCase(),
+          `${nombre} volvió al vocabulario de la aprobación («${prohibido}»). La 431 existe ` +
+            "justamente para que esa consolidación deje de leerse como algo que alguien autoriza " +
+            "y pase a leerse como algo que llegó o no llegó.",
+        ).not.toContain(prohibido);
+      }
+    }
+    // Y los tres estados son DISTINTOS entre sí: «Recibido incompleto» no puede colapsar en
+    // «Recibido», que es justo la confusión que hace desaparecer una diferencia de ₡15.000.
+    expect(new Set([PENDIENTE_CONCILIAR_LABEL, RECIBIDO_LABEL, RECIBIDO_INCOMPLETO_LABEL]).size).toBe(3);
   });
 
   it.each([

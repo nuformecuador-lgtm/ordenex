@@ -23,6 +23,7 @@ import {
   type ListarHistorialAccionesResult,
 } from "@/lib/types/historial-accion";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
+import { codigoVigente } from "@/lib/types/order-status";
 
 // FICHA 362 (design §4.1) — servicio de LECTURA del historial de acciones.
 //
@@ -86,6 +87,18 @@ export function resolverTiposDelFiltro(
  * `parseFloat(`, ni una suma sobre el importe en todo este archivo (R6). Un `Number(fila.monto)`
  * aqui es la mutacion que la guardia money-safe caza.
  */
+/**
+ * FICHA 455 (T1.12, R23; design §3.4) — las acciones cuyo `valor_*` es un SNAPSHOT de un codigo de
+ * resultado de gestion. La fila dice lo que dijo en su dia y NO se reescribe: se TRADUCE AL LEER con
+ * `codigoVigente` (un codigo anterior a la 455 sale con el vigente; cualquier otro valor, tal cual).
+ * Solo estas acciones: el `valor_*` de las demas es otra cosa (un rol, una fecha, un nombre).
+ */
+const ACCIONES_CON_SNAPSHOT_DE_RESULTADO: ReadonlySet<string> = new Set(["cierre_dia_gestion_corregida"]);
+
+function valorLeido(accion: string, valor: string | null): string | null {
+  return valor !== null && ACCIONES_CON_SNAPSHOT_DE_RESULTADO.has(accion) ? codigoVigente(valor) : valor;
+}
+
 export function aDTO(fila: FilaHistorialAccion): HistorialAccionDTO {
   return {
     id: fila.id,
@@ -101,8 +114,8 @@ export function aDTO(fila: FilaHistorialAccion): HistorialAccionDTO {
     actorNombre: fila.actorNombre,
     actorRol: fila.actorRol,
     monto: fila.monto === null ? null : fila.monto.toFixed(2),
-    valorAnterior: fila.valorAnterior,
-    valorNuevo: fila.valorNuevo,
+    valorAnterior: valorLeido(fila.accion, fila.valorAnterior),
+    valorNuevo: valorLeido(fila.accion, fila.valorNuevo),
     loteId: fila.loteId,
   };
 }

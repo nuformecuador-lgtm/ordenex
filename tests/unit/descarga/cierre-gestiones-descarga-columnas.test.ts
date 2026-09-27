@@ -313,7 +313,7 @@ function gestionEntregada(
     distritoNombre: "Carmen",
     producto: "Caja",
     tiendaNombre: "Tienda Uno",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago,
     pagos,
@@ -455,7 +455,7 @@ describe("FICHA 408 — el motivo del cron de plazos vencidos en el archivo del 
     // La cadena de entrada es la que hay guardada HOY en producción: se traduce sin migración
     // ninguna y sin campo nuevo en el DTO (R10).
     const fila = filaDescargaGestionRechazada(
-      gestionConMotivo("rechazada", "escalado SLA wrong_address", true),
+      gestionConMotivo("devolucion_a_origen_por_rechazo", "escalado SLA wrong_address", true),
     );
 
     expect(fila.motivo).toBe("Dirección errada");
@@ -465,7 +465,7 @@ describe("FICHA 408 — el motivo del cron de plazos vencidos en el archivo del 
 
   it("ni la sigla ni el value del enum acaban dentro del archivo (R4)", () => {
     const fila = filaDescargaGestionRechazada(
-      gestionConMotivo("rechazada", "escalado SLA not_found", true),
+      gestionConMotivo("devolucion_a_origen_por_rechazo", "escalado SLA not_found", true),
     );
 
     expect(fila.motivo).toBe("Cliente no localizado");
@@ -475,7 +475,7 @@ describe("FICHA 408 — el motivo del cron de plazos vencidos en el archivo del 
 
   it("el motivo que escribió el mensajero sale intacto (R2)", () => {
     const fila = filaDescargaGestionRechazada(
-      gestionConMotivo("rechazada", "El cliente no contesta el timbre", false),
+      gestionConMotivo("devolucion_a_origen_por_rechazo", "El cliente no contesta el timbre", false),
     );
 
     expect(fila.motivo).toBe("El cliente no contesta el timbre");
@@ -485,9 +485,9 @@ describe("FICHA 408 — el motivo del cron de plazos vencidos en el archivo del 
   it("un motivo AUSENTE deja la celda VACÍA, y nunca el guion de pantalla (R3)", () => {
     // Éste es el caso que el traductor no puede colapsar: `"—"` es un marcador de PANTALLA y
     // en una hoja de cálculo sería un dato falso (R10 de la feature 170).
-    const rechazada = filaDescargaGestionRechazada(gestionConMotivo("rechazada", null, true));
+    const rechazada = filaDescargaGestionRechazada(gestionConMotivo("devolucion_a_origen_por_rechazo", null, true));
     const reprogramada = filaDescargaGestionReprogramada(
-      gestionConMotivo("reprogramada", null, false),
+      gestionConMotivo("reprogramado", null, false),
     );
 
     expect(rechazada.motivo).toBeNull();

@@ -150,7 +150,7 @@ describeSiHayBase("descarga detallada — las fechas de gestion y de reparto (20
       data: {
         ordenId: orden.id,
         mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId,
         // El dato que esta ficha lleva a la hoja. Se estampa a mano porque el default es
         // `now()`, y con `now()` los tres dias del escenario serian el mismo.

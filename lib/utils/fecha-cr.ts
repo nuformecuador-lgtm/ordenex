@@ -141,6 +141,21 @@ export function inicioDeUltimosNDiasCREnUtc(dias: number, now: Date = new Date()
 }
 
 /**
+ * ⭑ FICHA 431 — INSTANTE UTC en el que empezo el mes EN CURSO del calendario de Costa Rica.
+ *
+ * Es la cota inferior de «Recibido este mes» en `/wallet/satelites`. Se compone de las dos piezas
+ * que ya existen —`periodoMensualCR` para saber QUE mes es en CR, e `inicioDelDiaCREnUtc` para
+ * convertir su dia 1 al instante UTC correcto— en vez de reescribir el offset: la trampa de las
+ * 6 h esta documentada en `inicioDelDiaCREnUtc` y ya se pago una vez.
+ *
+ * Ejemplos: `2026-09-01T06:00:00Z` (00:00 CR del 1 sep) -> `2026-09-01T06:00:00Z`;
+ * `2026-09-01T05:59:00Z` (23:59 CR del 31 ago) -> `2026-08-01T06:00:00Z`.
+ */
+export function inicioDelMesCREnUtc(now: Date = new Date()): Date {
+  return inicioDelDiaCREnUtc(`${periodoMensualCR(now)}-01`);
+}
+
+/**
  * Feature 45 (R30) — periodo mensual `YYYY-MM` de la fecha CALENDARIO de Costa Rica (UTC-6)
  * correspondiente a `now`. Consistente con `startOfDayCR` (mismo offset). Se usa como parte
  * de la clave de idempotencia del cron de gastos fijos (`<plantillaId>:<YYYY-MM>`). Ejemplos:
@@ -152,4 +167,27 @@ export function periodoMensualCR(now: Date = new Date()): string {
   const anio = crWall.getUTCFullYear();
   const mes = String(crWall.getUTCMonth() + 1).padStart(2, "0");
   return `${anio}-${mes}`;
+}
+
+/**
+ * ⭑ FICHA 431 (R21) — DIAS NATURALES transcurridos entre dos instantes, contados en el CALENDARIO
+ * de Costa Rica. Es la antiguedad de la consolidacion mas vieja sin conciliar.
+ *
+ * SE CUENTAN DIAS DE CALENDARIO, NO PERIODOS DE 24 HORAS, y la diferencia importa: una
+ * consolidacion creada ayer a las 23:50 y mirada hoy a las 00:10 lleva **1 dia** (cambio de fecha),
+ * no 0. Es lo que una persona responde cuando le preguntan «¿de cuando es?», y es lo que la
+ * pantalla va a ensenar.
+ *
+ * Se apoya en `startOfDayCR`, que ya normaliza a la medianoche de pared de CR, asi que el resultado
+ * no depende de la hora ni del huso de quien lo pregunte. La resta entre dos medianoches UTC es
+ * exacta en milisegundos: Costa Rica no tiene horario de verano.
+ *
+ * Nunca negativo: un instante futuro devuelve `0` en vez de un numero que la pantalla no sabria
+ * leer. Y se deriva EN EL SERVIDOR: la pantalla no resta fechas (R20).
+ */
+export function diasNaturalesCRDesde(desde: Date, now: Date = new Date()): number {
+  const dias = Math.round(
+    (startOfDayCR(now).getTime() - startOfDayCR(desde).getTime()) / UN_DIA_MS,
+  );
+  return dias > 0 ? dias : 0;
 }

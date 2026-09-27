@@ -88,6 +88,68 @@ function fuentesDe(carpeta: string): string[] {
 
 const FUENTES = [...fuentesDe("lib"), ...fuentesDe("scripts")];
 
+// ── Revision M1 (458-E): las reglas del SQL del repositorio de la caja, como funciones PURAS ──────
+// Se aplican al fuente real (abajo) y a fragmentos que las violan (bloque «M1 — contrapruebas»): una
+// regla que no se ha visto fallar no dice nada.
+
+const REPO_CAJA = "lib/repositories/WalletMovimientoRepository.ts";
+const CRUCE_A_QUIEN = "lib/repositories/libro-caja-a-quien-sql.ts";
+/** Los modulos de `lib/repositories/` que el repositorio de la caja importa, y por que. */
+const MODULOS_IMPORTADOS_DECLARADOS = [
+  "lib/repositories/registrar-accion.ts", // auditoria (362): escribe por delegado, lo cuenta R31
+  CRUCE_A_QUIEN, // el cruce «A quién» (458-E): SQL de solo lectura, sin montos
+];
+
+/** El codigo sin las lineas de `import … from "…"` (su `from` no es SQL). */
+function sinImports(codigo: string): string {
+  return codigo.replace(/\bimport\s[^;]*?\bfrom\s+"[^"]+";/g, "");
+}
+
+/** Lo que va dentro de cada `sum(…)` del codigo, SIN distinguir mayusculas y con o sin espacio. */
+function sumasSql(codigo: string): string[] {
+  return [...sinImports(codigo).matchAll(/\bsum\s*\(\s*([^)]*?)\s*\)/gi)].map((m) => m[1]);
+}
+
+function sumasAjenas(codigo: string): string[] {
+  return sumasSql(codigo).filter((s) => s !== 'w."monto"');
+}
+
+/** Cada `FROM` / `JOIN` del SQL: la tabla, su alias y si le sigue una coma (otra tabla). */
+function tablasSql(codigo: string): { tabla: string; alias: string | null; coma: boolean; texto: string }[] {
+  return [...sinImports(codigo).matchAll(/\b(?:from|join)\s+([^\s,()]+)(?:\s+(?:as\s+)?([A-Za-z_]\w*))?(\s*,)?/gi)].map(
+    (m) => ({ tabla: m[1], alias: m[2] ?? null, coma: m[3] !== undefined, texto: m[0].trim() }),
+  );
+}
+
+/** Todo lo que el SQL lee y NO es `"wallet_movimiento"` con alias `w` (ni una segunda tabla tras coma). */
+function tablasAjenas(codigo: string): string[] {
+  return tablasSql(codigo)
+    .filter((t) => t.tabla !== '"wallet_movimiento"' || t.alias !== "w" || t.coma)
+    .map((t) => t.texto);
+}
+
+/** Sumas de importes en JavaScript: `.reduce`, `.add`, `.plus` (la aritmetica de `Decimal`). */
+function sumasEnJs(codigo: string): string[] {
+  return [...sinImports(codigo).matchAll(/\.(?:reduce|reduceRight|add|plus)\s*\(/g)].map((m) => m[0]);
+}
+
+/**
+ * Escrituras por SQL crudo: los metodos crudos que escriben o que no parametrizan, y las palabras de
+ * escritura del SQL sin distinguir mayusculas (las de un delegado —`.update(`— las cuenta R31).
+ */
+function escriturasCrudas(codigo: string): string[] {
+  const c = sinImports(codigo);
+  return [
+    ...[...c.matchAll(/\$executeRaw(?:Unsafe)?\b|\$queryRawUnsafe\b|\bPrisma\.raw\b/g)].map((m) => m[0]),
+    ...[...c.matchAll(/(?<![.\w$])\b(?:insert|update|delete|merge|truncate|returning)\b/gi)].map((m) => m[0]),
+  ];
+}
+
+/** Los modulos de `lib/repositories/` que importa un fuente (por alias `@/`). */
+function modulosDeRepositorioImportados(fuente: string): string[] {
+  return [...new Set([...fuente.matchAll(/from\s+"@\/(lib\/repositories\/[^"]+)"/g)].map((m) => `${m[1]}.ts`))];
+}
+
 describe("R31 — ninguna escritura NUEVA en el ledger por tienda ni en el libro del mensajero", () => {
   for (const libro of LIBROS_AJENOS) {
     it(`el unico modulo del arbol que escribe en \`${libro.tabla}\` sigue siendo su repositorio`, () => {
@@ -148,6 +210,13 @@ describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otro
       $transaction: {} as PrismaClient["$transaction"],
       historialAccion: {} as PrismaClient["historialAccion"],
       usuario: {} as PrismaClient["usuario"],
+      // ⚠️ FICHA 458-E (R59): `$queryRaw`, para el filtro «A quién». El cruce por origen (a que
+      // tienda o mensajero pertenece el documento de una fila) es un `EXISTS` que el `where` de
+      // Prisma no expresa. Con el, el repositorio SI puede nombrar otras tablas en SQL —la de los
+      // debitos de la tienda entre ellas, para saber DE QUE TIENDA es un cobro—, pero solo como
+      // CRITERIO de pertenencia: lo que se suma sigue siendo `wallet_movimiento.monto` y nada mas.
+      // Eso lo afirma el caso «el filtro «A quién» solo SUMA la caja» de abajo.
+      $queryRaw: {} as PrismaClient["$queryRaw"],
     };
     const repo = new WalletMovimientoRepository(clienteDeUnaSolaTabla);
 
@@ -170,6 +239,38 @@ describe("R33 — el repositorio que sirve las dos cifras NO puede leer los otro
     expect(codigo).toMatch(/Pick<\s*PrismaClient,\s*\n?\s*"walletMovimiento"/);
     for (const ajena of ["walletTiendaMovimiento", "pagoMensajeroMovimiento", "gestionOrden", "cierreDia"]) {
       expect(codigo, `WalletMovimientoRepository nombra ${ajena}`).not.toContain(ajena);
+    }
+  });
+
+  it("el filtro «A quién» (458-E) solo SUMA la caja: otras tablas, solo como criterio de pertenencia", () => {
+    // Revision M1 (458-E): endurecida. El repositorio suma UNA columna en SQL —el monto de la fila de
+    // la caja (`w`)— y lee UNA tabla —`wallet_movimiento` con alias `w`—; no suma importes en
+    // JavaScript ni escribe por SQL crudo. Las otras tablas solo aparecen dentro del modulo del cruce,
+    // que no nombra un monto. Cada regla tiene su contraprueba en el bloque «M1 — contrapruebas».
+    const repo = codigoSinComentarios(REPO_CAJA);
+    // CONTROL DE NO-VACUIDAD: las reglas miran algo que existe.
+    expect(sumasSql(repo).length, "el repositorio ya no suma en SQL: la regla mira el vacio").toBeGreaterThan(0);
+    expect(tablasSql(repo).length, "el repositorio ya no lee en SQL: la regla mira el vacio").toBeGreaterThan(0);
+
+    expect(sumasAjenas(repo), 'SUM de algo que no es w."monto"').toEqual([]);
+    expect(tablasAjenas(repo), 'SQL que lee algo que no es "wallet_movimiento" w').toEqual([]);
+    expect(sumasEnJs(repo), "suma de importes en JavaScript").toEqual([]);
+    expect(escriturasCrudas(repo), "escritura por SQL crudo").toEqual([]);
+
+    // Y el modulo del cruce no suma nada ni lee un monto: solo dice QUE filas son de quien.
+    const cruce = codigoSinComentarios(CRUCE_A_QUIEN);
+    expect(cruce).not.toMatch(/monto/i);
+    expect(escriturasCrudas(cruce), "escritura por SQL crudo en el cruce").toEqual([]);
+  });
+
+  it("M1 (458-E): todo modulo de `lib/repositories/` que el repositorio importa esta declarado y no escribe por SQL crudo", () => {
+    // El SQL puede vivir en otro modulo importado (como el cruce): el censo cubre TODOS. Uno nuevo no
+    // pasa hasta declararse aqui (y someterse a las reglas de arriba que le toquen).
+    const importados = modulosDeRepositorioImportados(readFileSync(path.join(RAIZ, REPO_CAJA), "utf8"));
+    expect(importados.length, "CONTROL DE NO-VACUIDAD: el censo de imports no encuentra nada").toBeGreaterThan(0);
+    expect([...importados].sort()).toEqual([...MODULOS_IMPORTADOS_DECLARADOS].sort());
+    for (const modulo of importados) {
+      expect(escriturasCrudas(codigoSinComentarios(modulo)), `${modulo} escribe por SQL crudo`).toEqual([]);
     }
   });
 
@@ -231,7 +332,29 @@ const CATALOGOS_PREEXISTENTES = [
   "lib/types/wallet.ts",
   "lib/analytics/metrics.ts",
   "lib/utils/aporte-por-orden.ts",
+  // FICHA 459 (T A.5): la tabla de la invariante R8. Nombra `ingreso_cod_recaudado` e
+  // `ingreso_reverso_pago_tienda` para declarar que son la CONTRAPARTIDA en la caja del credito
+  // `cod_recaudado` y del `ajuste_credito` de la tienda. Es un `Record` TOTAL de dos columnas
+  // (tipo y pareja), sin aritmetica: no calcula dinero, lo clasifica.
+  "lib/utils/invariante-tiendas.ts",
+  // Revision 458-A (m2): `CATEGORIA_LABEL` (el nombre en pantalla de cada categoria de la caja) se
+  // mudo de `app/(app)/wallet/_components/wallet-labels.ts` a `lib/` porque lo lee un servicio. Es
+  // un `Record` TOTAL de textos, sin aritmetica: rotula, no calcula dinero.
+  "lib/constants/wallet-rotulos.ts",
 ];
+
+/**
+ * Verificadores de SOLO LECTURA que nombran las categorias nuevas sin ser formula ni catalogo.
+ *
+ * `scripts/contraste-454.ts` (ficha 454, T3.1/T3.3): corredor local del contraste historico. Nombra
+ * `ingreso_cod_recaudado` solo en las filas FICTICIAS de `--autocomprobacion`, que se inyectan en el
+ * TEXTO de la consulta —nunca en la base— para provocar una diferencia por bloque. Ejecuta todo
+ * dentro de una transaccion `SET TRANSACTION READ ONLY` y no escribe en ningun libro.
+ *
+ * Declararlo aqui no lo exime de nada: el `it` «los verificadores de solo lectura no escriben» de
+ * abajo exige, sobre el codigo real, la transaccion de solo lectura y cero escrituras.
+ */
+const VERIFICADORES_SOLO_LECTURA = ["scripts/contraste-454.ts"];
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // R66 — el pago al mensajero entra en la caja EXACTAMENTE como antes. `[P2]` = (a).
@@ -242,6 +365,53 @@ const ARCHIVOS_DEL_FEED_DEL_MENSAJERO = [
   "lib/services/WalletMensajeroFeedService.ts",
   "tests/unit/services/wallet-mensajero-feed-service.test.ts",
 ];
+
+describe("M1 (revision 458-E) — contrapruebas: cada regla del repositorio de la caja SI caza su violacion", () => {
+  it("`sum(` sin distinguir mayusculas y con espacio: una suma de otra columna se ve", () => {
+    expect(sumasAjenas('SELECT sum(d."monto") FROM "wallet_movimiento" w')).toEqual(['d."monto"']);
+    expect(sumasAjenas('SELECT SUM (d."monto") FROM "wallet_movimiento" w')).toEqual(['d."monto"']);
+    expect(sumasAjenas('SELECT Sum(w."monto") FROM "wallet_movimiento" w')).toEqual([]);
+  });
+
+  it('solo `"wallet_movimiento" w`: otra tabla con alias `w`, una coma o un JOIN se ven', () => {
+    expect(tablasAjenas('SELECT SUM(w."monto") FROM "wallet_tienda_movimiento" w')).toEqual([
+      'FROM "wallet_tienda_movimiento" w',
+    ]);
+    expect(tablasAjenas('SELECT 1 from "wallet_movimiento" w, "cierre_dia" d WHERE TRUE')).toHaveLength(1);
+    expect(tablasAjenas('SELECT 1 FROM "wallet_movimiento" w JOIN "cierre_dia" d ON TRUE')).toEqual([
+      'JOIN "cierre_dia" d',
+    ]);
+    expect(tablasAjenas('SELECT 1 FROM "wallet_movimiento" WHERE TRUE')).toHaveLength(1); // sin alias `w`
+    expect(tablasAjenas("SELECT 1 FROM ${otra} w")).toHaveLength(1); // tabla interpolada
+    expect(tablasAjenas('SELECT 1 FROM "wallet_movimiento" w WHERE TRUE')).toEqual([]);
+    // El `from` de un import no es SQL.
+    expect(tablasAjenas('import { x } from "@/lib/y";\nSELECT 1 FROM "wallet_movimiento" w')).toEqual([]);
+  });
+
+  it("ninguna suma de importes en JavaScript: `.reduce`, `.add` y `.plus` se ven", () => {
+    expect(sumasEnJs("grupos.reduce((acc, g) => acc.add(g.total), new Prisma.Decimal(0))")).toEqual([".reduce(", ".add("]);
+    expect(sumasEnJs("a.plus(b)")).toEqual([".plus("]);
+    expect(sumasEnJs("grupos.find((g) => g.categoria === c)")).toEqual([]);
+  });
+
+  it("ninguna escritura por SQL crudo: `$executeRaw`, `insert … returning` en minusculas y `Prisma.raw` se ven", () => {
+    expect(escriturasCrudas('prisma.$executeRaw`INSERT INTO "wallet_tienda_movimiento" VALUES (1)`')).toEqual([
+      "$executeRaw",
+      "INSERT",
+    ]);
+    expect(escriturasCrudas('prisma.$queryRaw`insert into "x" (a) values (1) returning id`')).toEqual(["insert", "returning"]);
+    expect(escriturasCrudas('prisma.$queryRaw`UPDATE "wallet_movimiento" SET x = 0`')).toEqual(["UPDATE"]);
+    expect(escriturasCrudas('prisma.$queryRaw`DELETE FROM "x"`')).toEqual(["DELETE"]);
+    expect(escriturasCrudas("Prisma.raw(texto)")).toEqual(["Prisma.raw"]);
+    // Un delegado (`.update(`) no es SQL crudo: lo mide R31.
+    expect(escriturasCrudas("tx.walletMovimiento.update({})")).toEqual([]);
+  });
+
+  it("el censo de imports ve un modulo de SQL nuevo", () => {
+    const fuente = 'import { a } from "@/lib/repositories/libro-caja-a-quien-sql";\nimport { b } from "@/lib/repositories/otro-sql";';
+    expect(modulosDeRepositorioImportados(fuente)).toEqual([CRUCE_A_QUIEN, "lib/repositories/otro-sql.ts"]);
+  });
+});
 
 describe("R66 [P2]=(a) — el pago al mensajero se carga en la caja como siempre", () => {
   it("CONTROL DE NO-VACUIDAD: los dos archivos del feed del mensajero existen vivos y con contenido", () => {
@@ -473,7 +643,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
   it("MEDIDO: flete, IVA del flete, comision COD e IVA de la comision, importe a importe", () => {
     // Entregada, zona CENTRAL, 20 000 de contra-entrega, con comision.
     const r = derivarIngresoOrden(
-      { resultado: "entregada", esCentral: true, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "entregado", esCentral: true, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -491,7 +661,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // FICHA 301 (2026-08-28): este caso medía `devuelta`. El flete de devolucion y su IVA no
     // cambiaron de formula ni de importe — cambio QUIEN los paga: solo `rechazada`.
     const r = derivarIngresoOrden(
-      { resultado: "rechazada", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "devolucion_a_origen_por_rechazo", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -507,7 +677,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // formula) y una devuelta dejo de facturar. Queda medido aqui para que el proximo cambio
     // "de pasada" en ingreso-ordenex.ts tenga que pasar tambien por este archivo.
     const r = derivarIngresoOrden(
-      { resultado: "devuelta", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "novedad", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
     expect(r).toEqual({});
@@ -515,12 +685,12 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
 
   it("MEDIDO: el pago al mensajero por gestion — solo `entregada` paga, y paga `cobroEntregado`", () => {
     const tarifa = { cobroEntregado: "1200.00", cobroRechazado: "600.00" };
-    expect(pagoPorResultado("entregada", tarifa)).toBe("1200.00");
+    expect(pagoPorResultado("entregado", tarifa)).toBe("1200.00");
     // El `cobroRechazado` NUNCA se paga al mensajero, y es distinto a proposito.
-    expect(pagoPorResultado("rechazada", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("devuelta", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("reprogramada", tarifa)).toBe("0.00");
-    expect(pagoPorResultado("entregada", null)).toBe("0.00");
+    expect(pagoPorResultado("devolucion_a_origen_por_rechazo", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("novedad", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("reprogramado", tarifa)).toBe("0.00");
+    expect(pagoPorResultado("entregado", null)).toBe("0.00");
   });
 
   it("MEDIDO: `min(P, E)` sigue neteando por cierre, con los tres importes", () => {
@@ -559,9 +729,34 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
     // `toEqual([])` de abajo pasaria sin haber mirado nada.
     expect(conCategoriasNuevas.length).toBeGreaterThan(0);
 
-    const declarados = new Set([...MODULOS_DE_LA_173, ...CATALOGOS_PREEXISTENTES]);
+    const declarados = new Set([
+      ...MODULOS_DE_LA_173,
+      ...CATALOGOS_PREEXISTENTES,
+      ...VERIFICADORES_SOLO_LECTURA,
+    ]);
     const sinDeclarar = conCategoriasNuevas.filter((ruta) => !declarados.has(ruta));
     expect(sinDeclarar).toEqual([]);
+  });
+
+  it("los verificadores de solo lectura no escriben: transaccion READ ONLY y cero escrituras", () => {
+    // Control de no-vacuidad: la lista no esta vacia y sus archivos existen.
+    expect(VERIFICADORES_SOLO_LECTURA.length).toBeGreaterThan(0);
+    for (const ruta of VERIFICADORES_SOLO_LECTURA) {
+      const codigo = codigoSinComentarios(ruta);
+      expect(codigo, `${ruta} no abre una transaccion de solo lectura`).toContain(
+        "SET TRANSACTION READ ONLY",
+      );
+      // Ninguna escritura por delegado de Prisma, del libro que sea.
+      const escrituraDelegado = new RegExp(`\\.\\w+\\.(${ESCRITURAS.join("|")})\\s*\\(`);
+      expect(codigo, `${ruta} escribe por un delegado de Prisma`).not.toMatch(escrituraDelegado);
+      // Toda sentencia cruda de escritura es, exactamente, la que fija la transaccion READ ONLY.
+      // El acento grave va como `\x60` y no literal: el quitacomentarios no reconoce regex
+      // y un acento grave suelto abriria una plantilla que se come los comentarios que siguen.
+      const crudas = codigo.match(/\$executeRaw(?:Unsafe)?\s*\(?\x60?[^;]*/g) ?? [];
+      for (const cruda of crudas) {
+        expect(cruda, `${ruta} ejecuta SQL de escritura`).toContain("SET TRANSACTION READ ONLY");
+      }
+    }
   });
 });
 

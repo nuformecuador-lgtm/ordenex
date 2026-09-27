@@ -1,0 +1,20 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 13761058
+Incidente
+En preparación
+2026-09-24 · 01:37
+En bodega central
+2026-09-24 · 01:38
+Mensajero recogiendo en la bodega
+2026-09-24 · 01:40
+En reparto
+2026-09-24 · 01:42
+Incidente
+2026-09-24 · 01:53
+Cerrar

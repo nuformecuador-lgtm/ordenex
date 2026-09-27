@@ -65,7 +65,7 @@ function gestion(
 
 /** La entrega MIXTA de referencia del design §4: ₡8.000 = 5.000 efectivo + 3.000 transferencia. */
 function mixta(): CierreGestionPendienteRow {
-  return gestion("mix", "entregada", "8000.00", [
+  return gestion("mix", "entregado", "8000.00", [
     { metodo: "efectivo", monto: "5000.00" },
     { metodo: "transferencia", monto: "3000.00" },
   ]);
@@ -150,7 +150,7 @@ describe("computeTotales — caso 3 (R24/R28): MUTACIÓN de monto en ±0.01", ()
 describe("computeTotales — caso 4 (R25): MUTACIÓN de resultado", () => {
   it("la MISMA gestión como `reprogramada` aporta 0.00 en los cuatro totales", () => {
     const entregada = mixta();
-    const reprogramada: CierreGestionPendienteRow = { ...entregada, resultado: "reprogramada" };
+    const reprogramada: CierreGestionPendienteRow = { ...entregada, resultado: "reprogramado" };
     expect(computeTotales([reprogramada])).toEqual({
       efectivo: "0.00",
       simpe: "0.00",
@@ -163,7 +163,7 @@ describe("computeTotales — caso 4 (R25): MUTACIÓN de resultado", () => {
   });
 
   it("ninguno de los otros tres resultados aporta, aunque lleve líneas", () => {
-    for (const resultado of ["devuelta", "rechazada", "incidente"] as const) {
+    for (const resultado of ["novedad", "devolucion_a_origen_por_rechazo", "incidente"] as const) {
       const g: CierreGestionPendienteRow = { ...mixta(), resultado };
       expect(computeTotales([g])).toEqual({
         efectivo: "0.00",
@@ -190,7 +190,7 @@ describe("computeTotales — caso 5 (R26): BORRADO de línea", () => {
   });
 
   it("una `entregada` SIN ninguna línea no aporta a ningún balde", () => {
-    const sinLineas = gestion("sin", "entregada", "8000.00", [], "efectivo");
+    const sinLineas = gestion("sin", "entregado", "8000.00", [], "efectivo");
     expect(sinLineas.pagos).toEqual([]);
     expect(computeTotales([sinLineas])).toEqual({
       efectivo: "0.00",
@@ -209,7 +209,7 @@ describe("computeTotales — caso 5 (R26): BORRADO de línea", () => {
  */
 function conjuntoGenerado(): CierreGestionPendienteRow[] {
   const metodos: MetodoPagoValue[] = ["efectivo", "SINPE", "transferencia"];
-  const resultados = ["entregada", "reprogramada", "devuelta", "rechazada"] as const;
+  const resultados = ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] as const;
   const filas: CierreGestionPendienteRow[] = [];
   for (let i = 0; i < 12; i++) {
     const metodo = metodos[i % 3];
@@ -220,23 +220,23 @@ function conjuntoGenerado(): CierreGestionPendienteRow[] {
   }
   // Entregas MIXTAS: dos y tres métodos en la misma gestión.
   filas.push(
-    gestion("mix-2", "entregada", "8000.00", [
+    gestion("mix-2", "entregado", "8000.00", [
       { metodo: "efectivo", monto: "5000.00" },
       { metodo: "transferencia", monto: "3000.00" },
     ]),
   );
   filas.push(
-    gestion("mix-3", "entregada", "1000.05", [
+    gestion("mix-3", "entregado", "1000.05", [
       { metodo: "efectivo", monto: "333.35" },
       { metodo: "SINPE", monto: "333.35" },
       { metodo: "transferencia", monto: "333.35" },
     ]),
   );
   // Entrega SIN cobro (R14): cero líneas, aunque el par escalar histórico dijera `efectivo`/0.
-  filas.push(gestion("sin-cobro", "entregada", "0.00", [], "efectivo"));
+  filas.push(gestion("sin-cobro", "entregado", "0.00", [], "efectivo"));
   // Gestión no entregada CON líneas (el histórico inconsistente de la pregunta abierta 1).
   filas.push(
-    gestion("rechazada-con-linea", "rechazada", "500.00", [{ metodo: "efectivo", monto: "500.00" }]),
+    gestion("rechazada-con-linea", "devolucion_a_origen_por_rechazo", "500.00", [{ metodo: "efectivo", monto: "500.00" }]),
   );
   return filas;
 }
@@ -270,7 +270,7 @@ describe("computeTotales — caso 6 (R28): la invariante de suma", () => {
   it("general = Σ montoRecibido de las `entregada` CON líneas, al céntimo", () => {
     const esperado = sumaCentimos(
       gestiones
-        .filter((g) => g.resultado === "entregada" && g.pagos.length > 0)
+        .filter((g) => g.resultado === "entregado" && g.pagos.length > 0)
         .map((g) => g.montoRecibido ?? "0.00"),
     );
     expect(totales.general).toBe(esperado);
@@ -281,7 +281,7 @@ describe("computeTotales — caso 6 (R28): la invariante de suma", () => {
     const porMetodo = (metodo: MetodoPagoValue): string =>
       sumaCentimos(
         gestiones
-          .filter((g) => g.resultado === "entregada")
+          .filter((g) => g.resultado === "entregado")
           .flatMap((g) => g.pagos.filter((p) => p.metodo === metodo).map((p) => p.monto)),
       );
     expect(totales.efectivo).toBe(porMetodo("efectivo"));
@@ -304,7 +304,7 @@ describe("computeTotales — caso 7 (R27): paridad al céntimo con el modelo esc
       transferencia: [],
     };
     for (const g of gestiones) {
-      if (g.resultado !== "entregada" || g.montoRecibido === null || g.metodoPago === null) continue;
+      if (g.resultado !== "entregado" || g.montoRecibido === null || g.metodoPago === null) continue;
       acumulado[g.metodoPago].push(g.montoRecibido);
     }
     const efectivo = sumaCentimos(acumulado.efectivo);
@@ -330,7 +330,7 @@ describe("computeTotales — caso 7 (R27): paridad al céntimo con el modelo esc
   it("la entrega SIN cobro escalar (`efectivo`/0.00) no mueve ningún total", () => {
     // El backfill excluye `monto_recibido = 0`, así que la gestión queda con CERO líneas: es
     // la equivalencia exacta con el `+0.00` que sumaba el modelo escalar.
-    const sinCobro = gestion("sin-cobro", "entregada", "0.00", [], "efectivo");
+    const sinCobro = gestion("sin-cobro", "entregado", "0.00", [], "efectivo");
     expect(pagosDesdeEscalar("0.00", "efectivo")).toEqual([]);
     expect(computeTotales([sinCobro])).toEqual(totalesEscalares([sinCobro]));
   });
@@ -339,7 +339,7 @@ describe("computeTotales — caso 7 (R27): paridad al céntimo con el modelo esc
 describe("computeTotales — caso 8 (R30): exactitud decimal", () => {
   it("33.33 × 3 repartido en dos métodos da 99.99 exacto, no 99.99000000000001", () => {
     const totales = computeTotales([
-      gestion("dec", "entregada", "99.99", [
+      gestion("dec", "entregado", "99.99", [
         { metodo: "efectivo", monto: "33.33" },
         { metodo: "SINPE", monto: "66.66" },
       ]),
@@ -355,8 +355,8 @@ describe("computeTotales — caso 8 (R30): exactitud decimal", () => {
 
   it("0.10 + 0.20 en dos líneas del MISMO método da 0.30 (la trampa clásica del float)", () => {
     const totales = computeTotales([
-      gestion("g-a", "entregada", "0.10", [{ metodo: "efectivo", monto: "0.10" }]),
-      gestion("g-b", "entregada", "0.20", [{ metodo: "efectivo", monto: "0.20" }]),
+      gestion("g-a", "entregado", "0.10", [{ metodo: "efectivo", monto: "0.10" }]),
+      gestion("g-b", "entregado", "0.20", [{ metodo: "efectivo", monto: "0.20" }]),
     ]);
     expect(totales.efectivo).toBe("0.30");
     expect(totales.general).toBe("0.30");

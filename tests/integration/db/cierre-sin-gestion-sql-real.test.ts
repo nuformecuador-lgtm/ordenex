@@ -99,11 +99,11 @@ describeSiHayBase("264/B7 — la lista de ordenes sin gestionar contra Postgres 
       );
     }
     const catalogo = await prisma.orderStatus.findMany({
-      where: { value: { in: ["en_reparto", "sin_gestionar", "en_bodega_central"] } },
+      where: { value: { in: ["en_reparto", "novedad_interna", "en_bodega_central"] } },
       select: { id: true, value: true },
     });
     const idPorValue = new Map(catalogo.map((c) => [c.value, c.id]));
-    for (const v of ["en_reparto", "sin_gestionar", "en_bodega_central"]) {
+    for (const v of ["en_reparto", "novedad_interna", "en_bodega_central"]) {
       if (!idPorValue.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en el catalogo \`order_status\`. Corre \`pnpm run db:seed\`: ` +
@@ -112,7 +112,7 @@ describeSiHayBase("264/B7 — la lista de ordenes sin gestionar contra Postgres 
       }
     }
     const enReparto = idPorValue.get("en_reparto") as string;
-    const sinGestionar = idPorValue.get("sin_gestionar") as string;
+    const sinGestionar = idPorValue.get("novedad_interna") as string;
     const enBodega = idPorValue.get("en_bodega_central") as string;
 
     // `cierre_dia.mensajero_id` es FK -> `usuario`. Se reusan dos usuarios REALES distintos: lo

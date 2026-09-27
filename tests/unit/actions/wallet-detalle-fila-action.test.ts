@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletService } from "@/lib/interfaces/services/IWalletService";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
+import { ORIGENES_FALSOS } from "@/tests/fixtures/origenes-falsos";
 
 /**
  * Ficha 339 (T3.4, design §4.5) — el BORDE del detalle de una fila. Cubre **R32 y R34**.
@@ -30,6 +31,7 @@ function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO 
     registradoPor: null,
     fechaMovimiento: "2026-08-25T06:00:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...overrides,
   };
 }
@@ -53,7 +55,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     const service = fakeService();
     const r = await listarMovimientosDeFilaAction(
       { fila: "egreso_pago_mensajero" },
-      { service, getActor: async () => null },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => null },
     );
 
     expect(r).toEqual({ status: "unauthenticated" });
@@ -66,7 +68,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     });
     const r = await listarMovimientosDeFilaAction(
       { fila: "egreso_pago_mensajero" },
-      { service, getActor: async () => OTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => OTRO },
     );
 
     expect(r).toEqual({ status: "forbidden" });
@@ -80,7 +82,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
         fila: "egreso_pago_mensajero",
         pageSize: composicionDetalleConfig.MAX_PAGE_SIZE + 1,
       },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     expect(r.status).toBe("validation_error");
@@ -94,7 +96,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     // Control de no-vacuidad: JUSTO en el tope, la misma entrada pasa.
     const enElTope = await listarMovimientosDeFilaAction(
       { fila: "egreso_pago_mensajero", pageSize: composicionDetalleConfig.MAX_PAGE_SIZE },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(enElTope.status).toBe("ok");
   });
@@ -105,7 +107,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     for (const fila of ["egreso_pago_tienda", "otros", "", "otros_egresos_x"]) {
       const r = await listarMovimientosDeFilaAction(
         { fila },
-        { service, getActor: async () => MAESTRO },
+        { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
       );
       expect(r.status, `fila=${fila}`).toBe("validation_error");
     }
@@ -116,7 +118,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     // Control de no-vacuidad: el token del complemento SI es una fila valida.
     const r = await listarMovimientosDeFilaAction(
       { fila: "otros_egresos" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
   });
@@ -131,6 +133,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     ]) {
       const r = await listarMovimientosDeFilaAction(entrada, {
         service,
+        origenes: ORIGENES_FALSOS,
         getActor: async () => MAESTRO,
       });
       expect(r.status, JSON.stringify(entrada)).toBe("validation_error");
@@ -138,7 +141,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
 
     await listarMovimientosDeFilaAction(
       { fila: "egreso_ajuste" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     const entrada = (service.listarMovimientosDeFila as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(entrada.page).toBe(1);
@@ -157,7 +160,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
         desde: "2026-08-01",
         hasta: "2026-08-31",
       },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
 
     const entrada = (service.listarMovimientosDeFila as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -167,8 +170,10 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
     expect(entrada.pageSize).toBe(5);
     expect(entrada.tipo).toBe("egreso");
     expect(entrada.categoria).toBe("egreso_gasto");
-    expect(entrada.desde).toEqual(new Date("2026-08-01"));
-    expect(entrada.hasta).toEqual(new Date("2026-08-31"));
+    // Ficha 461 (R72): dias de Costa Rica — `desde` es el inicio del 1 de agosto en CR (06:00Z) y
+    // `hasta` el inicio del dia SIGUIENTE al 31 (cota exclusiva), no las medianoches UTC.
+    expect(entrada.desde).toEqual(new Date("2026-08-01T06:00:00.000Z"));
+    expect(entrada.hasta).toEqual(new Date("2026-09-01T06:00:00.000Z"));
   });
 
   it("R34: todo importe cruza la frontera como TEXTO, nunca como numero", async () => {
@@ -189,7 +194,7 @@ describe("listarMovimientosDeFilaAction — el borde (R32/R34)", () => {
 
     const r = await listarMovimientosDeFilaAction(
       { fila: "egreso_pago_mensajero" },
-      { service, getActor: async () => MAESTRO },
+      { service, origenes: ORIGENES_FALSOS, getActor: async () => MAESTRO },
     );
     if (r.status !== "ok") throw new Error("esperado ok");
 

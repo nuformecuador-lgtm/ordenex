@@ -116,11 +116,73 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // Ficha 425 (2026-09-14): la tabla del vinculo de revision `cierre_rechazo_tienda`. Nace
       // despues de toda migracion aplicada y no toca `orden_traspaso_mensajero`.
       "20260917120200_cierre_rechazo_tienda",
+      // Ficha 429 (2026-09-15): el SINPE por bodega. Tres migraciones —el valor de enum, las tres
+      // columnas de `zona` nullables y el `NOT NULL` + los dos `CHECK` una vez sembradas—. Ninguna
+      // toca `orden_traspaso_mensajero`.
+      "20260918120000_historial_accion_zona_sinpe",
+      "20260918120100_zona_sinpe",
+      "20260918120200_zona_sinpe_no_nulo",
+      // Ficha 431 (2026-09-16): la conciliacion de las consolidaciones de bodega. DOS migraciones
+      // —los dos valores de `historial_accion_tipo`, que van solos porque Postgres prohibe usar un
+      // valor de enum en la misma transaccion que lo añade; y las cuatro columnas de la marca con
+      // su backfill, sus dos CHECK y el borrado del indice unico parcial de la feature 40—.
+      // Ninguna toca `orden_traspaso_mensajero`.
+      "20260919120000_historial_accion_conciliacion_bodega",
+      "20260919120100_cierre_bodega_conciliacion",
+      // Ficha 436 (2026-09-17): `asistente_uso_diario`, el contador del tope del asistente de
+      // ayuda. ADITIVA PURA: crea una tabla nueva y su FK a `usuario`; no toca
+      // `orden_traspaso_mensajero` ni ningun otro objeto preexistente, y no crea ningun enum.
+      "20260920120000_asistente_uso_diario",
       // Ficha 453 (2026-09-21): `vista_filtro`, las combinaciones de filtros guardadas con nombre.
       // ADITIVA PURA: crea una tabla nueva, su unico `(usuario_id, superficie, nombre)` y su FK a
       // `usuario`; no toca `orden_traspaso_mensajero` ni ningun otro objeto preexistente, no lleva
       // backfill y no crea ningun enum.
       "20260921120000_vista_filtro",
+      // Ficha 454 (2026-09-23): M1, el valor `webhook_evento` de `job_tipo` (sola, por el 55P04), y
+      // M2, la tabla `orden_evento` con su enum. ADITIVAS: ninguna toca `orden_traspaso_mensajero`.
+      "20260923120000_job_tipo_webhook_evento",
+      "20260923120100_orden_evento",
+      // Ficha 454 (2026-09-23): M3, backfill y retiro condicional de `ayuda_tienda` y
+      // `devolucion_por_confirmar`. Toca `orden`, `orden_historial_estado`, `orden_evento` y
+      // `order_status`; no toca `orden_traspaso_mensajero` ni crea ningun enum.
+      "20260923120200_retiro_estados_454",
+      // Ficha 455 (2026-09-24): M1 renombra 7 values de `order_status` (UPDATE de catalogo), M2
+      // renombra 4 etiquetas de `gestion_resultado` (RENAME VALUE) y M3 retira los dos huerfanos del
+      // catalogo si nadie los referencia. Ninguna toca `orden_traspaso_mensajero` ni crea ningun enum.
+      "20260924120000_order_status_nombre_unico",
+      "20260924120100_gestion_resultado_nombre_unico",
+      "20260924120200_order_status_retiro_huerfanos",
+      // Ficha 459 (2026-09-25): los valores de enum de la caja, de la tienda y de origen; los del
+      // historial; las cuatro tablas del pago por cuenta y del saldo inicial o aporte (con los dos
+      // CHECK de los libros ampliados); y la reclasificacion de los 203 cobros (solo INSERT en
+      // `wallet_movimiento`). Ninguna toca `orden_traspaso_mensajero`.
+      "20260925120000_caja_459_enums",
+      "20260925120100_historial_accion_459",
+      "20260925120200_pago_por_cuenta_y_capital",
+      "20260925120300_reclasificar_cobros_459",
+      // Ficha 462 (2026-09-25): los dos valores de enum del aviso «reprogramadas de hoy que esperan la
+      // aprobacion de un cierre». Sola, aditiva, `down.sql` dinamico; no toca `orden_traspaso_mensajero`.
+      "20260925130000_notificacion_evento_reprogramadas_esperan_cierre",
+      // Ficha 461 (2026-09-25): los enums del cobro de Ordenex a una tienda; la tabla de su anulacion
+      // con los dos CHECK ampliados; la linea de caja de los cobros previos (solo INSERT en
+      // `wallet_movimiento`); el enum de la anulacion de una correccion; las claves de idempotencia y
+      // `ajuste_caja_anulacion`; y el backfill +6 h de los asientos de pago (solo UPDATE de
+      // `fecha_movimiento` en los tres libros). Ninguna toca `orden_traspaso_mensajero`. Van DESPUES de
+      // la de la 462 porque su timestamp (20260926…) es posterior: es el orden real de aplicacion.
+      "20260926120000_cobro_tienda_461_enums",
+      "20260926120100_cobro_tienda_461_anulacion_y_checks",
+      "20260926120200_cobro_tienda_461_completar_caja",
+      "20260926120300_wallet_461_enum_anulacion_correccion",
+      "20260926120400_wallet_461_idempotencia_y_anulacion_correccion",
+      "20260926120500_wallet_461_fechas_cr_pagos",
+      // Ficha 457 (2026-09-25): los ocho valores de enum del pago de una tienda a Ordenex (down dinamico)
+      // y sus dos tablas con los dos CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
+      "20260927120000_abono_tienda_457_enums",
+      "20260927120100_abono_tienda_457_tablas_y_checks",
+      // Ficha 458-B (2026-09-26): seis valores de enum de la wallet (down dinamico) y sus tres tablas
+      // laterales con los CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
+      "20260928120000_wallet_458_enums",
+      "20260928120100_wallet_458_tablas",
     ]);
   });
 });

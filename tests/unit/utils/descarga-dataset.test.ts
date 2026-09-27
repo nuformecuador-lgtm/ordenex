@@ -5,7 +5,12 @@ import ExcelJS from "exceljs";
 import { describe, it, expect } from "vitest";
 
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
-import { construirDescarga, nombreHoja, CSV_MIME } from "@/lib/utils/descarga-dataset";
+import {
+  construirDescarga,
+  nombreArchivoDescarga,
+  nombreHoja,
+  CSV_MIME,
+} from "@/lib/utils/descarga-dataset";
 import { XLSX_MIME } from "@/lib/utils/xlsx-template";
 
 // Feature 151 (T4) — despachador comun de la descarga: R1, R2, R3, R5, R6, R7, R8, R9, R10.
@@ -336,5 +341,32 @@ describe("nombreHoja — reglas de Excel sobre el nombre de la pestaña", () => 
 
     const workbook = await leerLibro(archivo.contenido);
     expect(workbook.worksheets[0].name).toBe("Entregadas · Ana-Beto");
+  });
+});
+
+// Ficha 457 (observacion O3 del recorrido) — el nombre del archivo lleva el dia de COSTA RICA, no el
+// del reloj del navegador. Los instantes van en UTC explicito: el test no depende de la zona de la
+// maquina que lo corre (la del equipo es UTC−5; la de Vercel, UTC).
+describe("nombreArchivoDescarga — la fecha del nombre es el dia calendario en Costa Rica", () => {
+  it("a las 23:00 de CR (05:00Z del dia siguiente) el archivo se nombra con el dia de CR, no con el de UTC ni el de UTC−5", () => {
+    const las23EnCR = new Date("2026-09-26T05:00:00.000Z"); // 2026-09-25 23:00 en CR
+    expect(nombreArchivoDescarga("Libro de movimientos", "xlsx", las23EnCR)).toBe(
+      "libro-de-movimientos-2026-09-25.xlsx",
+    );
+  });
+
+  it("un minuto despues de la medianoche de CR ya es el dia siguiente", () => {
+    const medianocheCR = new Date("2026-09-26T06:01:00.000Z"); // 2026-09-26 00:01 en CR
+    expect(nombreArchivoDescarga("Libro de movimientos", "csv", medianocheCR)).toBe(
+      "libro-de-movimientos-2026-09-26.csv",
+    );
+  });
+
+  it("construirDescarga usa el mismo nombre (a las 23:00 de CR)", async () => {
+    const archivo = await construirDescarga(
+      { tipo: "csv", titulo: "Ordenes", columnas: COLUMNAS, filas: FILAS },
+      new Date("2026-09-26T05:00:00.000Z"),
+    );
+    expect(archivo.nombreArchivo).toBe("ordenes-2026-09-25.csv");
   });
 });

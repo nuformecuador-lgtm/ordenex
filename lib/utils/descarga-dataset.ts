@@ -18,6 +18,7 @@ import type {
   DescargaTipo,
 } from "@/lib/types/descarga";
 import { buildCsvRows } from "@/lib/utils/csv-template";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 
 /** MIME del CSV con codificacion explicita, para el `Blob` de descarga (R7). */
@@ -105,27 +106,22 @@ export function nombreHoja(titulo: string): string {
   return `${saneado.slice(0, MAX_NOMBRE_HOJA - 1).trimEnd()}…`;
 }
 
-/** Cero-rellena a 2 digitos (componentes locales de la fecha). */
-function dos(valor: number): string {
-  return String(valor).padStart(2, "0");
-}
-
-/** `YYYY-MM-DD` con los componentes LOCALES de la fecha recibida. */
-function fechaISO(fecha: Date): string {
-  return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
-}
-
 /**
  * Nombre del archivo (R7, R8): `<slug del titulo>-YYYY-MM-DD.<extension>`. La fecha
  * llega por parametro para ser determinista en test, mismo patron que
  * `nombreArchivoErrores` (feature 143) y `manifiestoFileName` (feature 148).
+ *
+ * La fecha es el DIA CALENDARIO EN COSTA RICA de ese instante (`fechaCalendarioCR`), no el del
+ * reloj del navegador: el recorrido de la 457 (observacion O3) midio un navegador en UTC−5 que a
+ * las 23:xx de CR ya nombraba el archivo con el dia siguiente, mientras la columna Fecha de dentro
+ * salia en hora de CR. El nombre y el contenido hablan ahora del mismo dia.
  */
 export function nombreArchivoDescarga(
   titulo: string,
   tipo: DescargaTipo,
   fecha: Date,
 ): string {
-  return `${slugTitulo(titulo)}-${fechaISO(fecha)}.${tipo}`;
+  return `${slugTitulo(titulo)}-${fechaCalendarioCR(fecha)}.${tipo}`;
 }
 
 /**

@@ -39,8 +39,8 @@ function esEnumDeEstado(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every((v) => typeof v === "string") &&
-    (value as string[]).includes("entregada") &&
-    (value as string[]).includes("por_recoger")
+    (value as string[]).includes("entregado") &&
+    (value as string[]).includes("mensajero_recogiendo_en_bodega")
   );
 }
 
@@ -166,17 +166,19 @@ describe("268/R29 — el enum de `data.estado` se DERIVA de la politica, no se c
     expect(dataTs.properties.estado.enum).toEqual([...EVENTOS_PUBLICOS].sort());
   });
 
-  it("son 13 values y NO incluye los estados internos que el webhook nunca emite", () => {
+  // ⏳ 2026-09-23 (FICHA 454, R34): 13 -> 12, sale `ayuda_tienda` (el estado se retira; la ayuda
+  // viaja como `orden.ayuda_*` en `WebhookOrdenEvento`).
+  it("son 12 values y NO incluye los estados internos que el webhook nunca emite", () => {
     const publicados = dataTs.properties.estado.enum;
-    expect(publicados).toHaveLength(13);
+    expect(publicados).toHaveLength(12);
     // ⏳ 2026-08-31 — `en_preparacion` SALE de esta lista de internos: desde el parche de hoy SI se
     // publica, como evento de NACIMIENTO de la rama de fulfillment. Los tres que quedan son los de
     // ruteo satelite, y esos siguen sin viajar nunca en un evento.
-    for (const interno of ["por_recoger", "en_bodega_satelite", "en_ruta_bodega_satelite"]) {
+    for (const interno of ["mensajero_recogiendo_en_bodega", "en_bodega_satelite", "en_ruta_bodega_satelite"]) {
       expect(publicados, `el webhook no emite ${interno}`).not.toContain(interno);
     }
-    // Y si lleva los dos que la 268 añade a la politica, mas el del parche del 2026-08-31.
-    expect(publicados).toContain("ayuda_tienda");
+    // Y lleva `incidente` (268) y el del parche del 2026-08-31; `ayuda_tienda` ya NO (454/R34).
+    expect(publicados).not.toContain("ayuda_tienda");
     expect(publicados).toContain("incidente");
     expect(publicados).toContain("en_preparacion");
   });
@@ -205,7 +207,7 @@ describe("268/R28 — `evidenciasUrl` es OPCIONAL y las otras cuatro siguen REQU
   // `evidenciasUrl` siga siendo la UNICA fuera de `required`.
   it("`data.required` son EXACTAMENTE numGuia, numRemision, estado, motivo y mensajero", () => {
     expect([...dataTs.required].sort()).toEqual(
-      ["estado", "mensajero", "motivo", "numGuia", "numRemision"].sort(),
+      ["estado", "estadoNombre", "mensajero", "motivo", "numGuia", "numRemision"].sort(),
     );
     expect(dataTs.required).not.toContain("evidenciasUrl");
     // Y dicho de la otra forma, que es la que se rompe si alguien añade una segunda opcional:
@@ -293,7 +295,7 @@ describe("268/R30 — el .yaml publica el MISMO bloque que el objeto TS", () => 
     const requeridas = requiredDelBloque(DATA_YAML);
     // ⏳ 2026-09-09 (feature 404/R24): el espejo textual gana `mensajero` en `required`, en el
     // mismo orden que el objeto TS. `evidenciasUrl` sigue fuera.
-    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "motivo", "mensajero"]);
+    expect(requeridas).toEqual(["numGuia", "numRemision", "estado", "estadoNombre", "motivo", "mensajero"]);
     expect(requeridas).not.toContain("evidenciasUrl");
   });
 });
@@ -312,7 +314,7 @@ describe("268/R28 — documentar el cuerpo NO añadio un 5.º catalogo de estado
     expect(enumsDeEstado(openApiSpec.components.schemas.WebhookOrdenEstadoActualizado)).toEqual([]);
     // Y la razon concreta: el enum del webhook lleva `entregada` pero no el estado interno de
     // recogida, que es la otra mitad que el predicado exige.
-    expect(dataTs.properties.estado.enum).toContain("entregada");
+    expect(dataTs.properties.estado.enum).toContain("entregado");
     expect(esEnumDeEstado(dataTs.properties.estado.enum)).toBe(false);
   });
 });

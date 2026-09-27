@@ -67,7 +67,7 @@ describe("371/T-G0 — el detector se prueba a si mismo", () => {
   it("CONTRAPRUEBA: reconoce una correlacion escrita en linea", () => {
     expect(
       CORRELACION_EN_LINEA.test(
-        `gestiones: { where: { resultado: "reprogramada" }, orderBy: { createdAt: "desc" }, take: 1 }`,
+        `gestiones: { where: { resultado: "reprogramado" }, orderBy: { createdAt: "desc" }, take: 1 }`,
       ),
     ).toBe(true);
   });
@@ -118,7 +118,7 @@ describe("371 — la gestion vigente se elige en UN solo sitio", () => {
         // Solo interesa la coincidencia de las DOS cosas: elegir la mas reciente Y filtrar por
         // `resultado: "reprogramada"`. Un `orderBy` por `createdAt` sobre otra tabla no es esto.
         return (
-          CORRELACION_EN_LINEA.test(codigo) && /resultado:\s*"?reprogramada"?/.test(codigo)
+          CORRELACION_EN_LINEA.test(codigo) && /resultado:\s*"?reprogramado"?/.test(codigo)
         );
       });
     expect(
@@ -226,7 +226,7 @@ describe("371 — el `FOR UPDATE` fotografia la fecha ANTES de pisarla", () => {
   it("el `UPDATE` va GUARDADO por el estado de la orden y por la vigencia de la gestion", () => {
     const texto = codigo();
     for (const guarda of [
-      '"resultado" = \'reprogramada\'',
+      '"resultado" = \'reprogramado\'',
       '"anulada_at" IS NULL',
       '"fecha_reprogramacion" IS NOT NULL',
       'o."estatus_id" = ${input.estatusReprogramadaId}',

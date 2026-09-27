@@ -66,6 +66,7 @@ import {
 } from "@/lib/utils/aviso-ubicacion-denegada";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
@@ -165,10 +166,10 @@ function ubicacionRaw(captura: CapturaConDesenlace): Record<string, unknown> {
 // sino el reporte de que el paquete ya no existe o no sirve — por eso se ofrece APARTE de
 // los cuatro botones normales (ver `RESULTADO_BOTONES.aparte`).
 type Resultado =
-  | "entregada"
-  | "reprogramada"
-  | "devuelta"
-  | "rechazada"
+  | "entregado"
+  | "reprogramado"
+  | "novedad"
+  | "devolucion_a_origen_por_rechazo"
   | "incidente";
 
 /** Pasos del flujo de gestión dentro del panel. */
@@ -210,28 +211,28 @@ const RESULTADO_BOTONES: {
   aparte?: boolean;
 }[] = [
   {
-    value: "entregada",
+    value: "entregado",
     label: "Entregar",
     Icon: PackageCheck,
     className:
       "border-primary bg-primary text-primary-foreground hover:bg-primary/90",
   },
   {
-    value: "rechazada",
+    value: "devolucion_a_origen_por_rechazo",
     label: "Rechazar",
     Icon: XCircle,
     className:
       "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20",
   },
   {
-    value: "reprogramada",
+    value: "reprogramado",
     label: "Reprogramar",
     Icon: RotateCcw,
     className:
       "border-warning/40 bg-warning/10 text-warning-strong hover:bg-warning/20",
   },
   {
-    value: "devuelta",
+    value: "novedad",
     label: "Devolver",
     Icon: Undo2,
     className: "border-border bg-muted/40 text-foreground hover:bg-muted",
@@ -408,7 +409,7 @@ export function GestionarOrdenPanel({
   // que el estado interno arranca limpio: si la orden ya está activa, directo en
   // los 4 botones; si no, en el detalle.
   const [paso, setPaso] = useState<Paso>(yaActiva ? "resultados" : "detalle");
-  const [resultado, setResultado] = useState<Resultado>("entregada");
+  const [resultado, setResultado] = useState<Resultado>("entregado");
   // Feature 213 (R1/R2): el método ÚNICO del recaudo pasa a ser un DESGLOSE de líneas
   // (método + monto). El estado es la lista EN EDICIÓN; lo que viaja al servidor lo derivan
   // `lineasParaEnviar` (R12) y `buildFormData` (R15).
@@ -545,7 +546,7 @@ export function GestionarOrdenPanel({
   function buildRaw(captura: CapturaConDesenlace): Record<string, unknown> {
     const base = { ordenId: orden.id, resultado, ...ubicacionRaw(captura) };
     switch (resultado) {
-      case "entregada":
+      case "entregado":
         // Feature 119 (R5/R6): la evidencia es una LISTA; una lista vacía dispara `min(1)`.
         // Feature 213 (R15/R17): se envía el DESGLOSE puro y NINGÚN `metodoPago` escalar. El
         // borde acepta las dos formas pero no juntas (regla 1 de `validarRecaudoEntrega`).
@@ -555,9 +556,9 @@ export function GestionarOrdenPanel({
           pagos: lineasParaEnviar(lineas),
           evidencias,
         };
-      case "reprogramada":
+      case "reprogramado":
         return { ...base, fechaReprogramacion, motivo };
-      case "devuelta":
+      case "novedad":
         // Feature 73/R6: `|| undefined` reproduce el patrón de `metodoPago` (:159) para que zod
         // diga "requerido" y no "valor inválido" cuando no se eligió ninguna causa.
         // Feature 75/119: la evidencia (lista de fotos) es OBLIGATORIA en `devuelta`, igual que
@@ -568,7 +569,7 @@ export function GestionarOrdenPanel({
           motivo,
           evidencias,
         };
-      case "rechazada":
+      case "devolucion_a_origen_por_rechazo":
         return { ...base, motivo, evidencias };
       case "incidente":
         // Feature 158 (R9/R10/R11): causa tipificada + motivo libre + 1..N fotos, obligatorias
@@ -604,7 +605,7 @@ export function GestionarOrdenPanel({
     const anexarEvidencias = () => {
       for (const foto of evidencias) fd.append("evidencia", foto);
     };
-    if (resultado === "entregada") {
+    if (resultado === "entregado") {
       fd.set("montoRecibido", String(montoACobrar));
       // Feature 213 (R15): el desglose viaja como pares REPETIDOS emparejados por índice, en el
       // orden en que se capturaron (mismo patrón `append` que las evidencias de la 119, y
@@ -615,10 +616,10 @@ export function GestionarOrdenPanel({
         fd.append("pagoMonto", String(linea.monto));
       }
       anexarEvidencias();
-    } else if (resultado === "reprogramada") {
+    } else if (resultado === "reprogramado") {
       fd.set("fechaReprogramacion", fechaReprogramacion);
       fd.set("motivo", motivo);
-    } else if (resultado === "devuelta") {
+    } else if (resultado === "novedad") {
       fd.set("causaDevolucion", causaDevolucion); // feature 73 (R9)
       fd.set("motivo", motivo);
       anexarEvidencias(); // feature 75/119: evidencia obligatoria
@@ -732,7 +733,7 @@ export function GestionarOrdenPanel({
     // que el mensajero concede de buena gana. El `gestionarSchema` de más abajo sigue siendo la
     // segunda barrera (R17) y el borde del servidor la tercera: aquí no se duplica la REGLA
     // —la suma la decide el mismo `sumaCuadra` de la 212—, solo el MOMENTO en que se dice.
-    if (resultado === "entregada" && !sinCobro && !revisarDesglose()) return;
+    if (resultado === "entregado" && !sinCobro && !revisarDesglose()) return;
 
     // Feature 193 (R16/R22): la ubicación se pide AQUÍ, al confirmar, y no al abrir el panel
     // ni al navegar. Pedir el permiso sin una acción que lo justifique es como se consigue
@@ -833,7 +834,7 @@ export function GestionarOrdenPanel({
   // El desglose que no cuadra no llega ni a intentarlo: «Guardar gestión» se deshabilita mientras
   // la suma no iguale el monto a cobrar. `revisarDesglose` (:538) sigue siendo la barrera de
   // verdad —el botón puede habilitarse con las líneas a medias—; esto solo evita el pulso inútil.
-  const desgloseBloquea = resultado === "entregada" && cuadreError !== undefined;
+  const desgloseBloquea = resultado === "entregado" && cuadreError !== undefined;
   // Feature 119: la evidencia es una LISTA -> tanto el cliente (`safeParse`) como el servidor
   // cuelgan sus errores del campo `evidencias`.
   const evidenciaError = firstError(fieldErrors, "evidencias");
@@ -842,7 +843,9 @@ export function GestionarOrdenPanel({
   const causaError = firstError(fieldErrors, "causaDevolucion");
   const causaIncidenteError = firstError(fieldErrors, "causaIncidente"); // feature 158/R9
 
-  const resultadoLabel =
+  // FICHA 456: renombrada (antes `resultadoLabel`, homónima del alias de la 455): es el rótulo del
+  // BOTÓN de acción elegido («Entregar», «Reprogramar»…), no el nombre de un estado.
+  const tituloAccionElegida =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
 
   // Feature 276 (T11, R8/R10): el juego de desenlaces que esta orden admite. `enElTope` llega YA
@@ -870,9 +873,12 @@ export function GestionarOrdenPanel({
               : `Parada ${orden.secuenciaRuta} de ${count}`}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-warning/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-warning-strong">
-          {estatusLabel(orden.estatusValue)}
-        </span>
+        {/* FICHA 456 (T3.6, R9): el estado en la cabecera del panel, con su botón de información. */}
+        <EstadoConInfo
+          codigo={orden.estatusValue}
+          className="shrink-0"
+          chipClassName="rounded-full bg-warning/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-warning-strong"
+        />
       </header>
 
       <div className="flex flex-col gap-4 px-4 py-4">
@@ -1109,7 +1115,7 @@ export function GestionarOrdenPanel({
       {paso === "formulario" ? (
         <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold">{resultadoLabel}</h3>
+            <h3 className="text-base font-semibold">{tituloAccionElegida}</h3>
             <Button
               type="button"
               variant="ghost"
@@ -1123,7 +1129,7 @@ export function GestionarOrdenPanel({
             </Button>
           </div>
 
-          {resultado === "entregada" ? (
+          {resultado === "entregado" ? (
             <>
               {/* Sin cobro (montoCobrar 0/null): no hay nada que repartir, así que no se monta
                   el editor y la entrega se registra con recaudo 0 y CERO líneas (213/R16). En su
@@ -1155,7 +1161,7 @@ export function GestionarOrdenPanel({
             </>
           ) : null}
 
-          {resultado === "reprogramada" ? (
+          {resultado === "reprogramado" ? (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="gestion-fecha">Nueva fecha</Label>
@@ -1181,7 +1187,7 @@ export function GestionarOrdenPanel({
             </>
           ) : null}
 
-          {resultado === "devuelta" ? (
+          {resultado === "novedad" ? (
             <>
               <CausaField
                 value={causaDevolucion}
@@ -1202,7 +1208,7 @@ export function GestionarOrdenPanel({
             </>
           ) : null}
 
-          {resultado === "rechazada" ? (
+          {resultado === "devolucion_a_origen_por_rechazo" ? (
             <>
               <EvidenciasField
                 inputId="gestion-evidencia-rechazo"

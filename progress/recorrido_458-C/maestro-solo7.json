@@ -1,0 +1,81 @@
+{
+  "rol": "maestro",
+  "pasos": [
+    {
+      "paso": 7,
+      "que": "cobro por rechazo: «Ver» → «Anular…»; dos reversos en la caja y dos créditos en la tienda; ganancia −(flete+IVA), «De las tiendas» +(flete+IVA), «Entró» igual; la cola no lo vuelve a ofrecer",
+      "resultado": "OK",
+      "numeros": {
+        "colaAntes": "Cobros por rechazo de tienda por aprobar La tienda rechazó estas devoluciones desde novedades. Todavía no se le cobró nada: esperan tu decisión. 1 por aprobar Tienda Guía Remisión Flete por rechazo IVA Rechazado el Acciones Tania 990001 QA-R-0001 ₡1.800 ₡234 26 de septiembre de 2026 Cobrar No cobrar",
+        "panel": "Flete por rechazo cobrado a la tienda 2026-09-26 · Entra ₡1.800 Es un cobro a la tienda por el flete de un rechazo: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja. A quién Tania Tienda Por qué — De dónde sale Gestión de orden · cobro por rechazo · guía 990001 Ver Comprobante Sin comprobante. Registró Maestro QA Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.473.932,72 Ganancia de Ordenex ₡13.338.296,62 Lo que Ordenex les debe a las tiendas ₡135.636,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡137.436,10 Anular… Close",
+        "toast": "Anulado. Se registró el movimiento contrario.",
+        "reversos": [
+          {
+            "categoria": "egreso_reverso_flete_devolucion",
+            "monto": "1800.00"
+          },
+          {
+            "categoria": "egreso_reverso_iva_flete_devolucion",
+            "monto": "234.00"
+          }
+        ],
+        "creditos": [
+          {
+            "categoria": "flete_devolucion_anulado",
+            "monto": "1800.00"
+          },
+          {
+            "categoria": "iva_flete_devolucion_anulado",
+            "monto": "234.00"
+          }
+        ],
+        "estadoCobro": {
+          "estado": "aprobado"
+        },
+        "deltaGanancia": "-2034.00",
+        "deltaDeTiendas": "2034.00",
+        "entroAntes": "13550733.22",
+        "entroDespues": "13550733.22",
+        "seccionesColaDespues": 0
+      }
+    }
+  ],
+  "r7r8": [
+    {
+      "etiqueta": "antes",
+      "entro": "13550733.22",
+      "salio": "76800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "137670.10",
+      "capital": "0",
+      "suma_saldos": "137670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras aprobar el cobro por rechazo",
+      "entro": "13550733.22",
+      "salio": "76800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13338296.62",
+      "de_tiendas": "135636.10",
+      "capital": "0",
+      "suma_saldos": "135636.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    },
+    {
+      "etiqueta": "tras anular el cobro por rechazo",
+      "entro": "13550733.22",
+      "salio": "76800.50",
+      "cifra": "13473932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "137670.10",
+      "capital": "0",
+      "suma_saldos": "137670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    }
+  ]
+}

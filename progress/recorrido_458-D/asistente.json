@@ -1,0 +1,26 @@
+[
+  {
+    "rol": "maestro",
+    "ruta": "/wallet/tiendas",
+    "pregunta": "¿Cómo veo cuánto le debo a una tienda y qué significa el saldo que aparece en cada fila de su estado de cuenta?",
+    "respuesta": "¿Cómo veo cuánto le debo a una tienda y qué significa el saldo que aparece en cada fila de su estado de cuenta? Vas a Wallet · Tiendas. Ahí tenés la tabla de saldos, una fila por tienda, con su signo: - A favor: le debés a la tienda (es lo recaudado de sus clientes que todavía no le pagaste). - En contra: la tienda te debe a vos (sus cargos superaron lo recaudado). - En cero: está cuadrado. Para el detalle, tocás Ver estado de cuenta en la fila de esa tienda. Se abre su extracto completo, del movimiento más antiguo al más reciente: - La primera fila es el saldo inicial del periodo que estás mirando. - Cada fila siguiente es un movimiento (cierre, cobro, pago, corrección) con su fecha, concepto, motivo, quién lo registró, y el cargo o abono correspondiente. - La columna de saldo en cada fila no es el movimiento aislado: es el saldo de la cuenta entera de esa tienda justo después de ese movimiento. Por eso aunque filtrés por concepto (con los chips Todo · Cierres · Pagos · Cobros · Corre"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet/mensajeros",
+    "pregunta": "Registré un pago a un mensajero por error. ¿Cómo lo anulo desde la wallet?",
+    "respuesta": "Registré un pago a un mensajero por error. ¿Cómo lo anulo desde la wallet? Se anula desde el estado de cuenta de ese mensajero, no editando el pago: 1. Entrá a Wallet · Mensajeros. 2. Buscá al mensajero y tocá Ver estado de cuenta. 3. En el extracto, ubicá la fila del pago (podés filtrar con el chip Pagos) y tocá Ver. 4. Ahí tenés Anular…. Tenés que escribir el motivo — es obligatorio. Al anular, el pago vuelve a quedar por pagar y la fila queda tachada, mostrando quién lo anuló, cuándo y por qué. Es la misma anulación que existe en Cierres, así que también podés hacerlo desde ahí si te resulta más a mano. Wallet · Mensajeros"
+  },
+  {
+    "rol": "admin",
+    "ruta": "/wallet/satelites",
+    "pregunta": "¿Dónde marco que llegó el efectivo de una bodega satélite y qué pasa con su estado de cuenta?",
+    "respuesta": "¿Dónde marco que llegó el efectivo de una bodega satélite y qué pasa con su estado de cuenta? Se marca en Wallet · Satélites. Cómo se hace: 1. En la tabla de bodegas, buscás la que te interesa y tocás Ver estado de cuenta. 2. Ahí abajo están las consolidaciones de esa bodega. Las que están Pendiente de conciliar son las que ya envió la bodega pero vos todavía no confirmaste que llegaron. 3. Tocás Marcar recibido. Se abre un diálogo con el monto ya puesto —el efectivo que la bodega declaró—. - Si contaste lo mismo, confirmás y queda como Recibido. - Si contaste otra cosa, cambiás el número: queda como Recibido incompleto, la diferencia se anota y sigue contando como pendiente de esa bodega. Qué pasa con el estado de cuenta: al marcar, tanto el estado de cuenta de esa bodega como su fila en la tabla de bodegas se actualizan solos, mostrando lo que tiene por entregar en ese momento. Un par de cosas importantes: - Marcar no mueve dinero. Esa plata ya entró a la caja de Ordenex cuando se aprobó el cierre de cada mensajero. Marcar solo dice si el efectivo llegó físicamente a la central, así que se"
+  },
+  {
+    "rol": "tienda",
+    "ruta": "/mi-wallet",
+    "pregunta": "¿Puedo ver el comprobante del pago que Ordenex hizo por mí a Facebook?",
+    "respuesta": "¿Puedo ver el comprobante del pago que Ordenex hizo por mí a Facebook? Sí, podés verlo. En Mi wallet, buscá la línea del movimiento «Ordenex pagó un gasto por ti» (te va a decir algo como «A Facebook · Pauta de publicidad · [método] · [referencia]»). Ahí, en esa fila, tocá Ver comprobante y se te abre en otra pestaña con un enlace que dura poco. Si esa fila en particular no tiene comprobante cargado, te lo va a decir: «Este registro no tiene comprobante.» Mi wallet"
+  }
+]

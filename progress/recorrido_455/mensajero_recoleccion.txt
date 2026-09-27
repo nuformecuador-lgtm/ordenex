@@ -1,0 +1,16 @@
+Toggle Sidebar
+Recolección
+
+Órdenes por recolectar en tienda
+
+Tema claro activado.
+1 por hacer
+Salir
+Por recolectar en tienda
+Recolectar en tienda
+
+No tienes órdenes por recolectar en tienda ahora mismo. Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.
+
+Recolectadas hoy
+
+Todavía no has recolectado ninguna orden hoy. Las que escanees aparecerán aquí.

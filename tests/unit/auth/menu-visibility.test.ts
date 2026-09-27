@@ -153,6 +153,12 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       // ningún rol y por eso el ítem no necesita `destinoInicial: false`. La lista se
       // sigue comparando por IGUALDAD: un ítem nuevo no declarado aquí pone el caso rojo.
       "Histórico",
+      // ⭑ Ficha 433: «Ayuda» entra LA ÚLTIMA, detrás de «Histórico». Es el ÚNICO ítem visible
+      // para los cinco roles, así que es también el único capaz de mover el aterrizaje de
+      // TODOS a la vez: arriba, `primerDestino` habría mandado a los cinco a `/ayuda`. La
+      // lista se sigue comparando por IGUALDAD: un ítem nuevo no declarado aquí pone el caso
+      // rojo.
+      "Ayuda",
     ]);
   });
 
@@ -171,7 +177,8 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Wallet",
       "Cierres del día",
       "Incidentes", // feature 158 (Q-I)
-      "Histórico", // feature 321 (R2/R9): el ÚLTIMO, para no mover el aterrizaje de nadie
+      "Histórico", // feature 321 (R2/R9): para no mover el aterrizaje de nadie
+      "Ayuda", // ⭑ ficha 433: LA ÚLTIMA, y por el mismo motivo — la ven los cinco roles
     ]);
     expect(visibles).not.toContain("Configuración");
   });
@@ -192,7 +199,9 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // marcado `destinoInicial: false`, así que el aterrizaje post-login del rol sigue siendo
     // «Órdenes» (R35). Si algún día este literal pasara a ser
     // `["Analítica", "Mi wallet", "Órdenes", …]`, el rol habría cambiado de puerta de entrada.
-    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades", "Mi wallet"]);
+    // ⭑ Ficha 433: entra «Ayuda», DETRÁS de «Mi wallet». Sigue comparándose por IGUALDAD y el
+    // aterrizaje del rol sigue siendo «Órdenes»: `/ayuda` va la última de `SIDEBAR_ITEMS`.
+    expect(visibles).toEqual(["Analítica", "Órdenes", "Novedades", "Mi wallet", "Ayuda"]);
     expect(visibles).not.toContain("Incidentes"); // feature 158 (R48)
     expect(visibles).not.toContain("Configuración");
     // "Ranking" es solo del maestro.
@@ -221,6 +230,10 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
       "Recolección",
       "Ranking",
       "Cierre del día",
+      // ⭑ Ficha 433: «Ayuda», la última. El mensajero es el rol que más la necesita —18 de los
+      // 37 usuarios, en la calle— y su aterrizaje NO se mueve: «Entregas» sigue siendo el
+      // primero de su barra.
+      "Ayuda",
     ]);
     expect(visibles).not.toContain("Analítica");
     expect(visibles).not.toContain("Órdenes");
@@ -231,7 +244,7 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     expect(visibles).not.toContain("Incidentes");
   });
 
-  it("adminSatelite ve Analítica + Órdenes + Cierres del día + Incidentes", () => {
+  it("adminSatelite ve Analítica + Órdenes + Cierres del día + Incidentes + Mi bodega", () => {
     // Feature 158 (R48): el adminSatelite SÍ resuelve incidentes, acotado a su zona por el
     // service; por eso gana el ítem. Su "Órdenes" apunta a /recepcion-satelite.
     // Feature 133 (T2.3, R1): "Analítica" entra PRIMERA (posición 2 de SIDEBAR_ITEMS; este
@@ -241,8 +254,27 @@ describe("itemsVisibles por rol (mapeo real de SIDEBAR_ITEMS)", () => {
     // Feature 192 (R53): gana "Monitoreo", en segunda posición de su barra. Su aterrizaje
     // post-login SIGUE siendo `/recepcion-satelite` (R54): el ítem lleva
     // `destinoInicial: false` y `primerDestino` lo salta, igual que a "Analítica".
+    // ⭑ Ficha 429 (T23, Q3): gana «Mi bodega», y entra LA ÚLTIMA. La lista se sigue comparando
+    // por IGUALDAD y NO se relaja a `toContain`: es el contrato de qué ve este rol, y un ítem
+    // nuevo no declarado aquí tiene que seguir poniendo el caso rojo.
+    //
+    // Que vaya al final NO es cosmético: `primerDestino` devuelve el primer visible no marcado
+    // `destinoInicial: false`, así que el aterrizaje post-login de este rol sigue siendo
+    // `/recepcion-satelite/por-recibir`. Si algún día este literal pasara a ser
+    // `["Analítica", "Monitoreo", "Mi bodega", "Órdenes", …]`, el rol habría cambiado EN
+    // SILENCIO de puerta de entrada — el incidente de la 133 y la 192.
     expect(labels(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")))).toEqual(
-      ["Analítica", "Monitoreo", "Órdenes", "Cierres del día", "Incidentes"],
+      [
+        "Analítica",
+        "Monitoreo",
+        "Órdenes",
+        "Cierres del día",
+        "Incidentes",
+        "Mi bodega",
+        // ⭑ Ficha 433: «Ayuda», DETRÁS de «Mi bodega». El aterrizaje de este rol sigue siendo
+        // `/recepcion-satelite/por-recibir`, que es lo que protege que ambas vayan al final.
+        "Ayuda",
+      ],
     );
   });
 
@@ -317,6 +349,10 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
       // a proposito: `primerDestino` mira el primer hijo del primer item visible, asi que
       // añadir al final no mueve el aterrizaje post-login de ningun rol.
       "/configuracion/geografia",
+      // ⭑ Ficha 429 (T21-B/T23): el SINPE de las ocho bodegas. Va EL ÚLTIMO por el mismo motivo
+      // que «Geografía»: `primerDestino` mira el primer hijo del primer ítem visible, así que
+      // añadir al final no mueve el aterrizaje post-login de ningún rol.
+      "/configuracion/sinpe",
     ]);
   });
 
@@ -348,10 +384,12 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
   // 2026-07-31 (decisión del humano): el portal del mensajero se partió en dos pantallas
   // hermanas y "Entregas" pasó a ser un ítem con submenú. El ORDEN importa y es parte de
   // la decisión: Reparto primero, porque es donde el mensajero pasa el turno.
-  it("Entregas declara el submenú Reparto (primero) + Por recoger", () => {
+  // ⏳ 2026-09-24 (FICHA 455, T2.2; R6/R51): el subítem nombra la ACCIÓN, «Recoger en bodega»
+  // («Por recoger» era el nombre viejo de un estado). La RUTA no cambia (R51).
+  it("Entregas declara el submenú Reparto (primero) + Recoger en bodega", () => {
     expect(entregas.children?.map((c) => [c.label, c.href])).toEqual([
       ["Reparto", "/mis-asignaciones/reparto"],
-      ["Por recoger", "/mis-asignaciones/recoger"],
+      ["Recoger en bodega", "/mis-asignaciones/recoger"],
     ]);
   });
 

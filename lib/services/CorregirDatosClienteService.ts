@@ -216,7 +216,8 @@ export class CorregirDatosClienteService implements ICorregirDatosClienteService
 
     // 4. VENTANA POR ROL (312/R8-R11, 327/R27), leida del modulo puro que la pantalla tambien
     //    consulta. `estatusValue` ausente -> `false`: fallo cerrado.
-    if (!rolAdmiteCorreccion(actor.rol, orden.estatusValue)) return null;
+    //    FICHA 454 (R64): + la ayuda ABIERTA, que ya no es un estado (la deriva el repositorio).
+    if (!rolAdmiteCorreccion(actor.rol, orden.estatusValue, orden.ayudaAbierta)) return null;
 
     return orden;
   }

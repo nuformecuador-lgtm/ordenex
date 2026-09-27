@@ -164,6 +164,7 @@ import { DetalleSecciones } from "@/app/(app)/cierres-admin/_components/cierre-d
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
+import { marcaPorEstado } from "@/tests/fixtures/marca-conciliacion";
 // --- Datos ---------------------------------------------------------------
 
 const TOTALES: CierreTotales = {
@@ -201,6 +202,11 @@ function cierreAdmin(
 function cierreBodega(
   over: Partial<CierreBodegaResumen> & { cierreBodegaId: string },
 ): CierreBodegaResumen {
+  // ⭑ FICHA 431: la marca la decide el ESTADO, y se aplica DESPUÉS de `over`. Desde el `CHECK`
+  // `cierre_bodega_conciliacion_coherente`, un `aprobado` SIN marca es una fila que Postgres
+  // rechaza: un doble así describiría un mundo que no existe, y los tests que corrieran contra
+  // él estarían midiendo otra cosa. `marcaPorEstado` la cuadra con el efectivo de este doble.
+  const estado = over.estado ?? "solicitado";
   return {
     zonaId: "z1",
     zonaNombre: "Limón",
@@ -219,6 +225,8 @@ function cierreBodega(
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
     ...over,
+    // La marca va la ÚLTIMA, y por eso: tiene que corresponder al estado FINAL de la fila.
+    ...marcaPorEstado(estado, TOTALES.efectivo),
   };
 }
 
@@ -268,7 +276,7 @@ function gestion(
 }
 
 function gruposVacios(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 function cierrePasado(i: number): CierrePasadoDTO {
@@ -338,10 +346,10 @@ function ingreso(): IngresoOrdenexDTO {
 function gruposConEvidencia(): CierreGrupos {
   return {
     ...gruposVacios(),
-    entregada: [
+    entregado: [
       gestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: "1000.10",
         metodoPago: "SINPE",
         // Feature 213 (T8): desglose COHERENTE con el escalar ya declarado (R23).
@@ -349,10 +357,10 @@ function gruposConEvidencia(): CierreGrupos {
         ingresoOrdenex: ingreso(),
       }),
     ],
-    rechazada: [
+    devolucion_a_origen_por_rechazo: [
       gestion({
         gestionId: "g2",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: "Cliente ausente",
         evidenciaUrl: EVIDENCIA_FIRMADA,
         esRechazoSla: true,
@@ -588,8 +596,8 @@ const TABLAS = [
   },
   { control: "Cierres solicitados", montar: renderCierreDia, filas: 2 },
   // El detalle compartido: UNA descarga por sección (P2 ratificada), no un archivo único.
-  { control: "Entregadas", montar: renderDetalle, filas: 1 },
-  { control: "Rechazadas", montar: renderDetalle, filas: 1 },
+  { control: "Entregado", montar: renderDetalle, filas: 1 },
+  { control: "Devolución a origen por rechazo", montar: renderDetalle, filas: 1 },
 ] as const;
 
 beforeEach(() => {
@@ -673,7 +681,7 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderDetalle();
 
-    for (const seccion of ["Rechazadas", "Incidentes"]) {
+    for (const seccion of ["Devolución a origen por rechazo", "Incidente"]) {
       await user.click(screen.getByRole("button", { name: `Descargar ${seccion}` }));
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalled());
 
@@ -714,14 +722,14 @@ describe("Cierres · descarga", () => {
     // La causa del incidente y el origen del rechazo, en el detalle.
     const user2 = userEvent.setup();
     renderDetalle();
-    await user2.click(screen.getByRole("button", { name: "Descargar Incidentes" }));
+    await user2.click(screen.getByRole("button", { name: "Descargar Incidente" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [, filasIncidente] = buildXlsxRowsMock.mock.calls[0];
     expect(filasIncidente[0].causa).toBe("Paquete robado");
     // La indemnización, money-safe: el STRING tal cual, sin símbolo.
     expect(filasIncidente[0].indemnizacion).toBe("2500.00");
 
-    await user2.click(screen.getByRole("button", { name: "Descargar Rechazadas" }));
+    await user2.click(screen.getByRole("button", { name: "Descargar Devolución a origen por rechazo" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(2));
     const [, filasRechazo] = buildXlsxRowsMock.mock.calls[1];
     expect(filasRechazo[0].origenRechazo).toBe("Automático");
@@ -845,7 +853,11 @@ describe("Cierres · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];
-    expect(filas.map((f) => f.estado)).toEqual(["Rechazado", "Aprobado"]);
+    // ⭑ FICHA 431 (R28): los dos estados se leen ahora con el vocabulario de la CONCILIACIÓN.
+    // Siguen siendo DOS valores DISTINTOS —que es lo que hace que este caso mida el orden— pero
+    // ya no son los del enum: la `rechazado` no tiene marca y se lee «Pendiente de conciliar»
+    // (R16: se retira el rótulo, no la fila), y la `aprobado` llegó entera y se lee «Recibido».
+    expect(filas.map((f) => f.estado)).toEqual(["Pendiente de conciliar", "Recibido"]);
   });
 
   it("un fallo de la lectura del conjunto no produce archivo y el mensaje no lleva datos personales (R7)", async () => {
@@ -1032,7 +1044,7 @@ describe("Cierres · descarga", () => {
     //  2. y el doble del compuesto está VIVO y trae evidencias FIRMADAS: si la pantalla lo
     //     llamara, respondería. No llamarlo es una decisión de la pantalla, no del arnés.
     const compuesto = await listarCierreDia();
-    expect(compuesto.status === "ok" && compuesto.grupos.rechazada[0].evidenciaUrl).toBe(
+    expect(compuesto.status === "ok" && compuesto.grupos.devolucion_a_origen_por_rechazo[0].evidenciaUrl).toBe(
       EVIDENCIA_FIRMADA,
     );
   });
@@ -1612,12 +1624,12 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderDetalle();
 
-    const tabla = screen.getByRole("table", { name: "Entregadas" });
+    const tabla = screen.getByRole("table", { name: "Entregado" });
     const expandir = within(tabla).getAllByRole("button", { name: /Desglose de ingreso/ })[0];
     await user.click(expandir);
     expect(expandir).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(screen.getByRole("button", { name: "Descargar Entregadas" }));
+    await user.click(screen.getByRole("button", { name: "Descargar Entregado" }));
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     // Sigue desplegada, y el listado no se ha reordenado ni recortado.

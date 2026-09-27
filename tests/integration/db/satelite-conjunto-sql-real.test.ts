@@ -59,7 +59,7 @@ describeSiHayBase("SQL real de la bodega satélite (feature 184, T A.1/T A.2)", 
     await expect(
       repo.findRecepcionSateliteCompleta({
         zonaId: ZONA_INEXISTENTE,
-        estatusValues: ["devuelta"],
+        estatusValues: ["novedad"],
         cantonIds: ["c-escazu"],
         distritoIds: ["d-san-rafael"],
       }),
@@ -95,7 +95,7 @@ describeSiHayBase("SQL real de la bodega satélite (feature 184, T A.1/T A.2)", 
     await expect(
       repo.findRecepcionSateliteCompleta({
         zonaId: ZONA_INEXISTENTE,
-        estatusValues: ["devuelta"],
+        estatusValues: ["novedad"],
         busqueda: "guapiles",
       }),
     ).resolves.toEqual([]);

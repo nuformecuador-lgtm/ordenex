@@ -146,7 +146,7 @@ const SELECT_DETALLE_106 = {
     where: {
       OR: [
         {
-          resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27
+          resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] }, // 268/R27
           evidenciaStoragePath: { not: null },
         },
         { anuladaAt: null }, // 405/R11
@@ -164,6 +164,14 @@ const SELECT_DETALLE_106 = {
       causaIncidente: true, // 405/R8
       mensajero: {
         select: { id: true, nombre: true, primerApellido: true, segundoApellido: true },
+      },
+      // ⏳ 2026-09-23 (FICHA 454, R32): el evento de registro de CALLE de la gestion, a lo sumo
+      // uno. Uso INTERNO del mapeo (deriva `pendienteConfirmacion`); ni su id, ni la familia, ni el
+      // actor se publican (lo afirma `gestiones-detalle-lista-blanca.guardia`).
+      eventos: {
+        where: { tipo: "gestion_registrada" },
+        select: { id: true, familiaAplicacion: true, actorUsuarioId: true },
+        take: 1,
       },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }], // 405/R10: empate determinista

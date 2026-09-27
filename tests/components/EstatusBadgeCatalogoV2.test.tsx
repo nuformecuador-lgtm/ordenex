@@ -20,7 +20,9 @@ afterEach(() => {
 
 function classesDe(value: string): string[] {
   const { container } = render(<EstatusBadge value={value} />);
-  const el = container.firstElementChild as HTMLElement;
+  // FICHA 456 (2026-09-24, T2.3): el chip ya no es el primer hijo: va dentro de `EstadoConInfo`,
+  // junto a su botón de información. Se localiza por su `data-slot`; las aserciones de clase no cambian.
+  const el = container.querySelector('[data-slot="badge"]') as HTMLElement;
   return el.className.split(/\s+/).filter(Boolean);
 }
 
@@ -31,10 +33,10 @@ describe("154/R29 — por_recolectar_en_tienda se presenta con etiqueta y varian
     expect(screen.getByText("Por recolectar en tienda")).toBeInTheDocument();
   });
 
-  it("usa la variante de ESPERA: mismo chip que `por_devolver` (warning), sin acento de marca", () => {
+  it("usa la variante de ESPERA: mismo chip que `por_devolver_a_bodega_central` (warning), sin acento de marca", () => {
     const nuevo = classesDe("por_recolectar_en_tienda");
     cleanup();
-    const espera = classesDe("por_devolver");
+    const espera = classesDe("por_devolver_a_bodega_central");
     expect(nuevo).toEqual(espera);
     expect(nuevo).not.toContain("bg-brand-soft");
   });
@@ -42,7 +44,7 @@ describe("154/R29 — por_recolectar_en_tienda se presenta con etiqueta y varian
   it("NO comparte chip con un cierre en error (`rechazada`)", () => {
     const nuevo = classesDe("por_recolectar_en_tienda");
     cleanup();
-    const error = classesDe("rechazada");
+    const error = classesDe("devolucion_a_origen_por_rechazo");
     expect(nuevo).not.toEqual(error);
   });
 });
@@ -57,16 +59,19 @@ describe("154/R30 — incidente se presenta con etiqueta y variante propias", ()
   it("usa la variante de ERROR: mismo chip que `rechazada` (danger), sin acento de marca", () => {
     const nuevo = classesDe("incidente");
     cleanup();
-    const rechazada = classesDe("rechazada");
+    const rechazada = classesDe("devolucion_a_origen_por_rechazo");
     expect(nuevo).toEqual(rechazada);
     expect(nuevo).not.toContain("bg-brand-soft");
   });
 });
 
-describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista", () => {
-  it("muestra el value CRUDO con la variante neutra", () => {
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R3/R10): el chip ya no enseña el value CRUDO de un estatus fuera
+// del catálogo (R3 lo prohíbe): dice «Estado no reconocido». La variante neutra no cambia.
+describe("154/R31 · 455/R10 — un estatus fuera del catalogo del build no rompe la vista", () => {
+  it("dice «Estado no reconocido» (nunca el código) con la variante neutra", () => {
     const desconocido = classesDe("estado_del_futuro");
-    expect(screen.getByText("estado_del_futuro")).toBeInTheDocument();
+    expect(screen.getByText("Estado no reconocido")).toBeInTheDocument();
+    expect(screen.queryByText("estado_del_futuro")).toBeNull();
     cleanup();
     // Neutro = ni el chip de espera ni el de error; y sin refuerzo de marca.
     const espera = classesDe("por_recolectar_en_tienda");
@@ -81,21 +86,39 @@ describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista"
 // Feature 235 (T1.4, R37) — la etiqueta y la variante del estatus de la AYUDA, EXACTAS y escritas
 // a mano. No se derivan del mapa: si se derivaran, este bloque diria que el mapa coincide consigo
 // mismo (el fallo «aserción contra su propia fuente» que ya costo un tope mal validado en el repo).
-describe("235/R37 — `ayuda_tienda`: etiqueta y variante firmadas (P1, 2026-08-19)", () => {
-  it("la etiqueta dice A QUIEN se le pidio la ayuda, no solo que se pidio", () => {
-    expect(ORDER_STATUS_LABELS.ayuda_tienda).toBe("Ayuda solicitada a la tienda");
+//
+// ⏳ 2026-09-23 (FICHA 454, R37/R40): el estado sale del catalogo, asi que ya no esta en
+// `ORDER_STATUS_LABELS`. Sus filas HISTORICAS se siguen leyendo igual —misma etiqueta y misma
+// variante— por `ORDER_STATUS_LABELS_RETIRADOS`: los tres casos de este bloque se conservan y
+// ahora afirman esa lectura historica (R40). El primero cambia su fuente, no su literal.
+//
+// ⏳ 2026-09-24 (FICHA 455, T2.1; R11): el mapa `ORDER_STATUS_LABELS_RETIRADOS` se absorbe en la
+// fuente única (`ESTADO_RETIRADO`, `lib/types/order-status.ts`) y una fila histórica de un estado
+// retirado se lee «<nombre histórico> (estado retirado)». La variante (`warning`) no cambia.
+describe("235/R37 -> 454/R40 -> 455/R11 — `ayuda_tienda` historico: etiqueta y variante", () => {
+  it("la etiqueta dice A QUIEN se le pidio la ayuda, y que es un estado retirado", () => {
+    expect(Object.keys(ORDER_STATUS_LABELS)).not.toContain("ayuda_tienda");
     render(<EstatusBadge value="ayuda_tienda" />);
-    expect(screen.getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
+    expect(screen.getByText("Ayuda solicitada a la tienda (estado retirado)")).toBeInTheDocument();
   });
 
-  it("usa la variante de ESPERA (`warning`): mismo chip que `sin_gestionar`, sin acento de marca", () => {
+  // (El retirado de la 155 lo cubre `EstatusBadgeRetiroFulfillment.test.tsx`.)
+  it("los otros retirados también se leen con su nombre histórico marcado", () => {
+    render(<EstatusBadge value="devolucion_por_confirmar" />);
+    expect(screen.getByText("Devolución por confirmar (estado retirado)")).toBeInTheDocument();
+    cleanup();
+    render(<EstatusBadge value="pendiente" />);
+    expect(screen.getByText("Pendiente (estado retirado)")).toBeInTheDocument();
+  });
+
+  it("usa la variante de ESPERA (`warning`): mismo chip que `novedad_interna`, sin acento de marca", () => {
     // `ORDER_STATUS_VARIANT` es privado del modulo, asi que la variante se verifica sobre el DOM
     // y POR COMPARACION con su gemelo semantico — el mismo metodo que usa el resto del archivo.
     // Que comparta chip con `sin_gestionar` es la afirmacion: `danger` diria que algo se rompio y
     // `info` que la orden avanza, y lo que hay es una parada esperando a alguien.
     const ayuda = classesDe("ayuda_tienda");
     cleanup();
-    const espera = classesDe("sin_gestionar");
+    const espera = classesDe("novedad_interna");
     expect(ayuda).toEqual(espera);
     expect(ayuda).not.toContain("bg-brand-soft");
   });
@@ -105,7 +128,7 @@ describe("235/R37 — `ayuda_tienda`: etiqueta y variante firmadas (P1, 2026-08-
     // iguales.
     const ayuda = classesDe("ayuda_tienda");
     cleanup();
-    const error = classesDe("rechazada");
+    const error = classesDe("devolucion_a_origen_por_rechazo");
     expect(ayuda).not.toEqual(error);
   });
 });
@@ -115,8 +138,8 @@ describe("154 — el mapa de presentacion sigue cubriendo el catalogo EXACTO", (
   // se retira el estado interno de fulfillment en bodega). El conteo se mantiene escrito
   // a mano a proposito: es la red que caza un sobrante en el mapa de presentacion, que el
   // `Record<OrderStatusValue, ...>` solo caza si FALTA una clave, no si sobra en runtime.
-  it("tiene una etiqueta por cada uno de los 22 values, sin sobrantes", () => {
+  it("tiene una etiqueta por cada uno de los 20 values, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
-    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(22); // +1: 157 (recolectando); +1: 239 (devolucion_por_confirmar); +1: 235 (ayuda_tienda, 2026-08-19)
+    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(20); // +1: 157 (recolectando); +1: 239 (devolucion_por_confirmar); +1: 235 (ayuda_tienda, 2026-08-19); -2: 454 (2026-09-23, los dos retirados)
   });
 });

@@ -12,7 +12,21 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   verDetalleDeMiMovimientoCompletoAction: (...a: unknown[]) => detalleCompletoMock(...a),
 }));
 
-import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
+// FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda
+// (`MiEstadoCuenta`); sus filas de cierre despliegan el MISMO panel de la 344. Se monta el módulo
+// nuevo con las filas equivalentes (`comoFilaDelEstadoDeCuenta`) y cada caso mide lo mismo.
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: vi.fn(),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: vi.fn(),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
+import type { FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
+import { estado, fila } from "@/tests/fixtures/estado-cuenta";
 import { ToastProvider } from "@/providers/ToastProvider";
 import { DETALLE_MI_MOVIMIENTO_VACIO } from "@/app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels";
 import type { OrdenAporteDTO } from "@/lib/types/detalle-movimiento";
@@ -72,7 +86,7 @@ function orden(over: Partial<OrdenAporteDTO> = {}): OrdenAporteDTO {
     guia: "48127",
     destinatario: "María Fernández",
     tiendaNombre: "Tienda Central",
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     aporte: "1700.00",
     ...over,
   };
@@ -117,14 +131,37 @@ function envolver(nodo: ReactElement) {
   );
 }
 
-function pintar(movimientos: WalletTiendaMovimientoDTO[] = [movimiento()]) {
-  return envolver(<DesgloseTiendaLedger movimientos={movimientos} />);
+/** El mismo movimiento como fila del estado de cuenta de la tienda (vista tienda: sin nombres). */
+function comoFilaDelEstadoDeCuenta(m: WalletTiendaMovimientoDTO): FilaEstadoCuentaDTO {
+  const naceDeUnCierre = m.origenTipo === "cierre_dia";
+  return fila({
+    ref: { libro: "tienda", movimientoId: m.id },
+    fecha: m.fechaMovimiento.slice(0, 10),
+    categoria: m.categoria,
+    origenTipo: m.origenTipo,
+    descripcion: m.descripcion,
+    cargo: m.tipo === "debito" ? m.monto : null,
+    abono: m.tipo === "credito" ? m.monto : null,
+    chip: naceDeUnCierre ? "cierres" : "pagos",
+    naceDeUnCierre,
+    registro: { nombre: null, automatico: null },
+  });
 }
 
-const ABRIR_FLETE = `Ver las órdenes que componen Flete del ${FECHA_FILA}`;
-const ABRIR_COMISION = `Ver las órdenes que componen Comisión COD del ${FECHA_FILA}`;
-const PANEL_FLETE = `Órdenes que componen Flete del ${FECHA_FILA}`;
-const PANEL_COMISION = `Órdenes que componen Comisión COD del ${FECHA_FILA}`;
+function pintar(movimientos: WalletTiendaMovimientoDTO[] = [movimiento()]) {
+  const filas = movimientos.map(comoFilaDelEstadoDeCuenta);
+  return envolver(
+    <MiEstadoCuenta
+      inicial={estado({ filas, total: filas.length })}
+      cierres={{ opciones: [], hayMas: false, disponible: true }}
+    />,
+  );
+}
+
+const ABRIR_FLETE = `Ver las órdenes que componen Ordenex te cobró el flete del ${FECHA_FILA}`;
+const ABRIR_COMISION = `Ver las órdenes que componen Ordenex te cobró la comisión de contra-entrega del ${FECHA_FILA}`;
+const PANEL_FLETE = `Órdenes que componen Ordenex te cobró el flete del ${FECHA_FILA}`;
+const PANEL_COMISION = `Órdenes que componen Ordenex te cobró la comisión de contra-entrega del ${FECHA_FILA}`;
 
 function abrir(nombre: string) {
   return userEvent.click(screen.getByRole("button", { name: nombre }));
@@ -164,7 +201,7 @@ describe("Ficha 344 — /mi-wallet: abrir una fila del libro (R1–R8)", () => {
     pintar([movimiento(), OTRA_DE_CIERRE, PAGO]);
 
     expect(
-      await screen.findByRole("table", { name: "Desglose de movimientos" }),
+      await screen.findByRole("table", { name: "Estado de cuenta de Tania Tienda" }),
     ).toBeInTheDocument();
     expect(detalleMock).not.toHaveBeenCalled();
 
@@ -259,7 +296,7 @@ describe("Ficha 344 — /mi-wallet: abrir una fila del libro (R1–R8)", () => {
       await dentro.findByText(/No se pudo cargar el detalle de este movimiento/),
     ).toBeInTheDocument();
     // El libro entero sigue en pie.
-    expect(screen.getByRole("table", { name: "Desglose de movimientos" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Estado de cuenta de Tania Tienda" })).toBeInTheDocument();
     expect(screen.getByText(/Transferencia del viernes/)).toBeInTheDocument();
   });
 
@@ -270,6 +307,12 @@ describe("Ficha 344 — /mi-wallet: abrir una fila del libro (R1–R8)", () => {
     await abrir(ABRIR_FLETE);
     const dentro = within(await screen.findByRole("region", { name: PANEL_FLETE }));
     expect(await dentro.findByText(DETALLE_MI_MOVIMIENTO_VACIO)).toBeInTheDocument();
+    // FICHA 458-D (cierre): el literal ES el contrato (el vacío se explica, no contradice el importe).
+    expect(
+      dentro.getByText(
+        "Con los datos que el cierre guardó de tus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -290,8 +333,8 @@ describe("Ficha 344 — /mi-wallet: qué dice el detalle (R9–R14)", () => {
 
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
     // R13: la etiqueta legible, nunca el valor del enum.
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
-    expect(dentro.queryByText("entregada")).toBeNull();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
+    expect(dentro.queryByText("entregado")).toBeNull();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 
@@ -505,7 +548,7 @@ describe("Ficha 344 — /mi-wallet: el detalle en un teléfono (R50/R52)", () =>
       await dentro.findByRole("link", { name: "Ver en órdenes la guía 48127" }),
     ).toBeInTheDocument();
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
     // R14 también en el teléfono: la tienda no aparece ni apilada.
     expect(dentro.queryByText("Tienda Central")).toBeNull();

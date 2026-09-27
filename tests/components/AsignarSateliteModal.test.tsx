@@ -130,8 +130,8 @@ describe("AsignarSateliteModal", () => {
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
 
@@ -209,7 +209,18 @@ describe("AsignarSateliteModal", () => {
     );
   });
 
-  it("R22 (41): resultado 'bodega_bloqueada' por cierre de bodega → toast con la causa (ii)", async () => {
+  it("⭑ 431/R16: la causa (ii) ya no tiene línea propia — y el toast NO dice «pendiente de aprobación»", async () => {
+    // ESTE CASO ESTABA INVERTIDO y se invierte a propósito, no se borra.
+    //
+    // Afirmaba que un `bodega_bloqueada` por consolidación pendiente sacaba el toast «Tu cierre
+    // de bodega hacia la central está pendiente de aprobación». Desde la ficha 431 ese texto no
+    // es cierto en ninguno de sus dos extremos: no hay aprobación —es una MARCA DE CONCILIACIÓN
+    // (D2)— y esa causa no frena (D4, `bloqueada: false` siempre).
+    //
+    // ⚠️ LA RAMA SIGUE VIVA a propósito (Q4): `AsignacionSateliteService.asignar` conserva su
+    // desenlace `bodega_bloqueada` por si vuelve una causa. Lo que este caso fija es que, SI
+    // llegara, el toast diría el título genérico y NUNCA el texto retirado — que es lo que
+    // impide que la línea vuelva por la puerta de atrás al reactivar la rama.
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "bodega_bloqueada",
@@ -227,11 +238,16 @@ describe("AsignarSateliteModal", () => {
     );
     await user.click(screen.getByRole("button", { name: "Asignar" }));
 
-    await vi.waitFor(() =>
-      expect(errorMock).toHaveBeenCalledWith(
-        expect.stringMatching(/cierre de bodega hacia la central está pendiente de aprobación/i),
-      ),
-    );
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    const mensaje = String(errorMock.mock.calls.at(-1)?.[0] ?? "");
+
+    // El texto RETIRADO no vuelve por aquí.
+    expect(mensaje).not.toMatch(/pendiente de aprobación/i);
+    expect(mensaje).not.toMatch(/cierre de bodega hacia la central/i);
+    // Queda el título, que sigue siendo cierto si algún día algo bloquea de verdad.
+    expect(mensaje).toMatch(/No puedes asignar órdenes/i);
+    // Y NO se cuela la línea de la OTRA causa, que no aplica en este caso.
+    expect(mensaje).not.toMatch(/cierres pendientes de tus mensajeros/i);
   });
 
   // ── Feature 92/R9 ───────────────────────────────────────────────────────────
@@ -380,8 +396,8 @@ describe("AsignarSateliteModal — asignación parcial (368/R2/R10-R14)", () => 
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "partial",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
       ],
       bloqueadas: [{ ordenId: "o3", motivo: "direccion_no_geocodificable" }],
     });
@@ -419,7 +435,7 @@ describe("AsignarSateliteModal — asignación parcial (368/R2/R10-R14)", () => 
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "partial",
-      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }],
       bloqueadas: [{ ordenId: "o2", motivo: "geocodificacion_encolada" }],
     });
     renderModal([
@@ -438,7 +454,7 @@ describe("AsignarSateliteModal — asignación parcial (368/R2/R10-R14)", () => 
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "partial",
-      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }],
       bloqueadas: [{ ordenId: "o2", motivo: "geocodificacion_encolada" }],
     });
     const ordenes = [
@@ -460,7 +476,7 @@ describe("AsignarSateliteModal — asignación parcial (368/R2/R10-R14)", () => 
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }],
     });
     renderModal([makeOrden({ id: "o1", numRemision: "REM-001" })]);
 
@@ -515,7 +531,7 @@ describe("AsignarSateliteModal — día de reparto (feature 246)", () => {
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }],
     });
     renderModal([makeOrden({ id: "o1" })]);
 
@@ -537,8 +553,8 @@ describe("AsignarSateliteModal — día de reparto (feature 246)", () => {
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
     renderModal([makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]);
@@ -561,7 +577,7 @@ describe("AsignarSateliteModal — día de reparto (feature 246)", () => {
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }],
     });
     renderModal([makeOrden({ id: "o1" })]);
 
@@ -700,8 +716,8 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "orden-uno", estado: "por_recoger" },
-        { ordenId: "orden-dos", estado: "por_recoger" },
+        { ordenId: "orden-uno", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "orden-dos", estado: "mensajero_recogiendo_en_bodega" },
       ],
       sinUbicacion: 2,
     });
@@ -729,8 +745,8 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "orden-uno", estado: "por_recoger" },
-        { ordenId: "orden-dos", estado: "por_recoger" },
+        { ordenId: "orden-uno", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "orden-dos", estado: "mensajero_recogiendo_en_bodega" },
       ],
       sinUbicacion: 1,
     });
@@ -751,8 +767,8 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "orden-sin-ubicacion-1", estado: "por_recoger" },
-        { ordenId: "orden-sin-ubicacion-2", estado: "por_recoger" },
+        { ordenId: "orden-sin-ubicacion-1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "orden-sin-ubicacion-2", estado: "mensajero_recogiendo_en_bodega" },
       ],
       sinUbicacion: 2,
     });
@@ -787,7 +803,7 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "orden-uno", estado: "por_recoger" }],
+      resultados: [{ ordenId: "orden-uno", estado: "mensajero_recogiendo_en_bodega" }],
       ...(sinUbicacion === undefined ? {} : { sinUbicacion }),
     });
     renderModal([makeOrden({ id: "orden-uno", numRemision: "NA-901" })]);
@@ -810,8 +826,8 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "partial",
       resultados: [
-        { ordenId: "orden-uno", estado: "por_recoger" },
-        { ordenId: "orden-dos", estado: "por_recoger" },
+        { ordenId: "orden-uno", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "orden-dos", estado: "mensajero_recogiendo_en_bodega" },
       ],
       bloqueadas: [{ ordenId: "orden-tres", motivo: "direccion_no_geocodificable" }],
       sinUbicacion: 2,
@@ -848,7 +864,7 @@ describe("AsignarSateliteModal — órdenes asignadas sin ubicación (400/R31-R3
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "orden-uno", estado: "por_recoger" }],
+      resultados: [{ ordenId: "orden-uno", estado: "mensajero_recogiendo_en_bodega" }],
       sinUbicacion: 1,
     });
     renderModal([makeOrden({ id: "orden-uno", numRemision: "NA-901" })]);

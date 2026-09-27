@@ -38,7 +38,7 @@ describeSiHayBase("379/T5 · `contarAdminSatelitesActivos` corta en el WHERE (Po
 
   async function sembrarZona(tx: TxDeTest, marca: string): Promise<string> {
     const fila = await tx.zona.create({
-      data: { nombre: `Zona ${SUFIJO}-${marca}`, cobroVehiculo: false, esCentral: false },
+      data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona ${SUFIJO}-${marca}`, cobroVehiculo: false, esCentral: false },
       select: { id: true },
     });
     return fila.id;

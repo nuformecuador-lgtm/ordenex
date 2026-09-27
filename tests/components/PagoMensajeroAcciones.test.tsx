@@ -170,7 +170,9 @@ function montar(onRegistrado?: () => void | Promise<void>) {
   );
 }
 
-const abrir = () => screen.getByRole("button", { name: "Registrar pago" });
+// FICHA 458-D (T D.3, R29): el botón que ABRE el formulario se llama «Ordenex le paga al mensajero»
+// (antes «Registrar pago»); el que confirma, dentro del formulario, no cambia.
+const abrir = () => screen.getByRole("button", { name: "Ordenex le paga al mensajero" });
 const dialogo = () => screen.getByRole("dialog");
 const confirmar = () => within(dialogo()).getByRole("button", { name: "Registrar pago" });
 /** El bloque de lo APLICADO. Se busca acotado: el total repartido y el imputable coinciden. */

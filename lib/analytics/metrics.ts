@@ -217,7 +217,7 @@ const CATALOGO = [
     id: "entregas",
     etiqueta: "Entregas",
     descripcion:
-      "Gestiones VIGENTES con resultado entregada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado entregado; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -227,7 +227,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["entregada"],
+      categorias: ["entregado"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -237,7 +237,7 @@ const CATALOGO = [
     id: "devoluciones",
     etiqueta: "Devoluciones",
     descripcion:
-      "Gestiones VIGENTES con resultado devuelta; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado novedad; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -247,7 +247,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["devuelta"],
+      categorias: ["novedad"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -257,7 +257,7 @@ const CATALOGO = [
     id: "rechazos",
     etiqueta: "Rechazos",
     descripcion:
-      "Gestiones VIGENTES con resultado rechazada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES con resultado devolucion_a_origen_por_rechazo; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -267,7 +267,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["rechazada"],
+      categorias: ["devolucion_a_origen_por_rechazo"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -277,7 +277,7 @@ const CATALOGO = [
     id: "reprogramaciones",
     etiqueta: "Reprogramaciones",
     descripcion:
-      "Gestiones VIGENTES con resultado reprogramada; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL), y una misma orden puede aportar varias.",
+      "Gestiones VIGENTES con resultado reprogramado; no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL), y una misma orden puede aportar varias.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -287,7 +287,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      categorias: ["reprogramada"],
+      categorias: ["reprogramado"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       sinAsignar: "incluir",
       atribucionZona: "orden",
@@ -318,10 +318,13 @@ const CATALOGO = [
     },
   },
   {
-    id: "sin_gestionar",
-    etiqueta: "Sin gestionar",
+    id: "novedad_interna",
+    // FICHA 455 (2026-09-24, R5): la métrica cuenta las órdenes en UN estado y se rotula con su
+    // nombre exacto, igual que la leyenda del panel (`catalogo-paneles.ts`; la guardia
+    // `etiquetas-visibles` exige que digan lo mismo). Antes, «Sin gestionar».
+    etiqueta: "Novedad interna",
     descripcion:
-      "ORDENES sin gestionar HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus sin_gestionar (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
+      "ORDENES en Novedad interna HOY, NO acumuladas: es una proyeccion de la medida ordenes_estado_stock sobre el estatus novedad_interna (no tiene medida ni columna propia en el rollup diario), sobre el universo B2 de la 124 (las vivas en ese estado al corte mas las que llegaron a un estado terminal ese mismo dia); leida como acumulada es un numero muy distinto. Cuenta ordenes, no gestiones, y son justamente las que no tienen gestion vigente del dia (las gestiones anuladas tampoco las rescatan).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -335,7 +338,7 @@ const CATALOGO = [
     fuente: { tipo: "rollup", tablas: ["analytics_daily"] },
     alcance: ALCANCE_OPERATIVA,
     definicion: {
-      estados: ["sin_gestionar"],
+      estados: ["novedad_interna"],
       // D5/R12: `clase: "snapshot"` y `fuente: rollup` se CONSERVAN — si se sirve del rollup,
       // de la columna `ordenes_estado_stock`; lo que faltaba no era la fuente, era decir que
       // no tiene medida propia y que su semantica es la del dia.
@@ -454,7 +457,7 @@ const CATALOGO = [
     id: "primer_intento_ok",
     etiqueta: "Entrega al primer intento",
     descripcion:
-      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion rechazada, devuelta o reprogramada), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada. DERIVA DECLARADA (feature 215): el criterio de «intento previo» CAMBIO —antes se derivaba de los destinos de transicion del historial, ahora de las gestiones dentro de un cierre APROBADO— y el historico ya escrito en el rollup diario NO se re-backfillea: el escalon de la serie se ASUME a proposito, porque reescribirlo falsearia meses de KPI ya reportados y aquellos cierres no estaban aprobados en el momento de aquel calculo. CORTE POR `updated_at`, NO POR `fecha`: toda fila del rollup diario cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO y toda fila con `updated_at` posterior, con el NUEVO, sea cual sea su `fecha`; una fila de una fecha ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el criterio NUEVO, porque el job recalcula dias pasados y el upsert refresca `updated_at` en cada recalculo, de modo que el corte es por cuando se calculo, no por que dia mide (`updated_at` ya existe por fila: no hace falta columna, tabla ni migracion nuevas, ni una constante de fecha de corte en codigo). EFECTO INTRADIA, propiedad NUEVA y PERMANENTE: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos y cuenta como primer intento, asi que el KPI SUBE durante el dia y BAJA al aprobarse los cierres; no es un artefacto de la migracion de criterio ni desaparece con la deriva declarada, y el mismo dia puede dar dos valores distintos segun cuando se recalcule. El KPI sigue remitiendo al punto unico de conteo del repo, sin COUNT propio, y se mantiene primer_intento_ok <= entregas.",
+      "Entregas logradas sin intento previo, contadas con el criterio UNICO ya existente en el repo (numero de cierres APROBADOS distintos en los que la orden tuvo un resultado de gestion devolucion_a_origen_por_rechazo, novedad o reprogramado), que excluye las gestiones anuladas; esta metrica NO define umbral propio ni columna materializada. DERIVA DECLARADA (feature 215): el criterio de «intento previo» CAMBIO —antes se derivaba de los destinos de transicion del historial, ahora de las gestiones dentro de un cierre APROBADO— y el historico ya escrito en el rollup diario NO se re-backfillea: el escalon de la serie se ASUME a proposito, porque reescribirlo falsearia meses de KPI ya reportados y aquellos cierres no estaban aprobados en el momento de aquel calculo. CORTE POR `updated_at`, NO POR `fecha`: toda fila del rollup diario cuyo `updated_at` sea ANTERIOR al despliegue de la 215 esta calculada con el criterio VIEJO y toda fila con `updated_at` posterior, con el NUEVO, sea cual sea su `fecha`; una fila de una fecha ANTERIOR al corte que se RECALCULA despues del corte pasa a estar calculada con el criterio NUEVO, porque el job recalcula dias pasados y el upsert refresca `updated_at` en cada recalculo, de modo que el corte es por cuando se calculo, no por que dia mide (`updated_at` ya existe por fila: no hace falta columna, tabla ni migracion nuevas, ni una constante de fecha de corte en codigo). EFECTO INTRADIA, propiedad NUEVA y PERMANENTE: una entrega cuya orden tiene cierres sin aprobar reporta 0 intentos previos y cuenta como primer intento, asi que el KPI SUBE durante el dia y BAJA al aprobarse los cierres; no es un artefacto de la migracion de criterio ni desaparece con la deriva declarada, y el mismo dia puede dar dos valores distintos segun cuando se recalcule. El KPI sigue remitiendo al punto unico de conteo del repo, sin COUNT propio, y se mantiene primer_intento_ok <= entregas.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "porcentaje",
@@ -480,7 +483,7 @@ const CATALOGO = [
     id: "motivos_devolucion",
     etiqueta: "Motivos de devolución",
     descripcion:
-      "Gestiones VIGENTES de resultado devuelta agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
+      "Gestiones VIGENTES de resultado novedad agrupadas por su causa tipificada (not_found, wrong_number, wrong_address); no cuenta ordenes ni gestiones anuladas (anulada_at IS NOT NULL).",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "conteo",
@@ -492,7 +495,7 @@ const CATALOGO = [
     definicion: {
       // OJO: `GestionCausaDevolucion` tiene TRES valores en el esquema vigente
       // (`db/schema.prisma`), no cinco como dice de memoria `design.md §3.3`.
-      categorias: ["devuelta", "not_found", "wrong_number", "wrong_address"],
+      categorias: ["novedad", "not_found", "wrong_number", "wrong_address"],
       excluye: EXCLUYE_GESTIONES_ANULADAS,
       atribucionZona: "orden",
     },
@@ -501,7 +504,7 @@ const CATALOGO = [
     id: "tiempo_ciclo",
     etiqueta: "Tiempo de ciclo",
     descripcion:
-      "Segundos entre la creacion de la orden y su llegada a un estado terminal (entregada, devuelta_a_tienda, incidente); mide tiempo de ORDENES, no volumen de gestiones, y no lo alteran las gestiones anuladas.",
+      "Segundos entre la creacion de la orden y su llegada a un estado terminal (entregado, devuelta_a_tienda, incidente); mide tiempo de ORDENES, no volumen de gestiones, y no lo alteran las gestiones anuladas.",
     dominio: "operativa",
     clase: "snapshot",
     unidad: "segundos",
@@ -555,7 +558,7 @@ const CATALOGO = [
     id: "ingreso_flete",
     etiqueta: "Ingreso por flete",
     descripcion:
-      "Ingreso de Ordenex por flete y por flete de devolucion segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "Ingreso de Ordenex por flete y por flete de devolucion segun el libro append-only de la wallet; DESDE LA FICHA 458-B la ANULACION de un cobro por rechazo se DESCUENTA de esta cifra: su reverso (egreso_reverso_flete_devolucion) entra en la definicion, de modo que el bruto cuenta los DOS movimientos y el neto es el flete que Ordenex de verdad cobro. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -564,7 +567,18 @@ const CATALOGO = [
     granos: ["fecha"],
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
-    definicion: { categorias: ["ingreso_flete", "ingreso_flete_devolucion"] },
+    definicion: {
+      categorias: [
+        "ingreso_flete",
+        "ingreso_flete_devolucion",
+        // FICHA 458-B (revision B2, decision del leader 2026-09-26): el reverso del flete que emite
+        // la ANULACION de un cobro por rechazo. Mismo patron que `ingreso_ajuste` en `egresos`
+        // (⟨D12⟩ de la 183): la lista deja de ser homogenea de prefijo y la metrica publica NETO
+        // (`bruto_y_neto`), que es lo que D7 de la 458 protege —flete e IVA por separado, para que
+        // la analitica cuadre con la ganancia—. Sin esta linea, anular dejaba el flete inflado.
+        "egreso_reverso_flete_devolucion",
+      ],
+    },
   },
   {
     id: "ingreso_comision_cod",
@@ -585,7 +599,7 @@ const CATALOGO = [
     id: "ingreso_iva",
     etiqueta: "Ingreso por IVA",
     descripcion:
-      "IVA facturado sobre flete, flete de devolucion y comision COD segun el libro append-only de la wallet; se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "IVA facturado sobre flete, flete de devolucion y comision COD segun el libro append-only de la wallet; DESDE LA FICHA 458-B la ANULACION de un cobro por rechazo se DESCUENTA de esta cifra: el reverso de su IVA (egreso_reverso_iva_flete_devolucion) entra en la definicion, de modo que el bruto cuenta los DOS movimientos y el neto es el IVA que de verdad se facturo. Se lee del ledger, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -595,7 +609,14 @@ const CATALOGO = [
     fuente: { tipo: "ledger", tablas: ["wallet_movimiento"] },
     alcance: ALCANCE_FINANCIERA,
     definicion: {
-      categorias: ["ingreso_iva_flete", "ingreso_iva_flete_devolucion", "ingreso_iva_comision_cod"],
+      categorias: [
+        "ingreso_iva_flete",
+        "ingreso_iva_flete_devolucion",
+        "ingreso_iva_comision_cod",
+        // FICHA 458-B (revision B2): el reverso del IVA del flete por rechazo. Mismo motivo que en
+        // `ingreso_flete`: la metrica pasa a publicar NETO (`bruto_y_neto`).
+        "egreso_reverso_iva_flete_devolucion",
+      ],
     },
   },
   {
@@ -644,6 +665,9 @@ const CATALOGO = [
         // emite. Va AL FINAL y sin reordenar las ocho para que el diff se lea de un vistazo.
         // Sin ella la lista es homogenea de prefijo y el neto seria `-bruto` siempre.
         "ingreso_ajuste",
+        // FICHA 459 (P13): el pago por cuenta de una tienda es dinero que SALE de la caja, como el
+        // pago a tienda. Su reverso NO entra (decision de la 457 para los reversos de terceros).
+        "egreso_pago_por_cuenta_tienda",
       ],
     },
   },
@@ -663,7 +687,7 @@ const CATALOGO = [
     id: "dinero_en_caja",
     etiqueta: "Dinero en caja",
     descripcion:
-      "TESORERIA: todo lo que entro menos todo lo que salio de la caja principal, sin distinguir de quien es el dinero — incluye el contra-entrega cobrado a nombre de las tiendas y aun no entregado. NO es lo que Ordenex gano (eso es ganancia_ordenex) ni lo que les debe a las tiendas (es MAYOR: de ese dinero Ordenex aun descuenta flete, comision e IVA). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "TESORERIA: el flujo de dinero registrado de la caja principal — el dinero que entro de verdad menos todo lo que salio, sin distinguir de quien es: incluye el contra-entrega cobrado a nombre de las tiendas, lo que las tiendas le pagan a Ordenex y su anulacion, los reversos y los ajustes. NO suma aparte el flete, la comision ni sus impuestos: son la parte de Ordenex que se descuenta del contra-entrega de la tienda (o una deuda de la tienda), no dinero que entre a la caja; ni el cobro de Ordenex a una tienda ni su anulacion, que tampoco son dinero que entre o salga (se toman del saldo de la tienda y se le devuelven). Es la misma cifra principal de la tarjeta de la caja; solo es el saldo real si hay un saldo inicial registrado. NO es lo que Ordenex gano (eso es ganancia_ordenex). Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -692,6 +716,25 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // FICHA 459: los cuatro conceptos nuevos de la caja (pago por cuenta y capital, con sus
+        // anulaciones). La caja entera, ahora 21.
+        "egreso_pago_por_cuenta_tienda",
+        "ingreso_reverso_pago_por_cuenta_tienda",
+        "ingreso_aporte_capital",
+        "egreso_reverso_aporte_capital",
+        // FICHA 461 (R29): el cobro de Ordenex a una tienda y su anulacion. La caja entera, ahora 23.
+        // La cifra NO cambia con ellos (son cargos: no entran ni salen), pero la lista es «la caja
+        // entera» y la guardia la compara con el seed.
+        "ingreso_cobro_tienda",
+        "egreso_reverso_cobro_tienda",
+        // FICHA 457 (R52): lo que las tiendas le pagan a Ordenex y su anulacion. La caja entera, ahora
+        // 25. Los dos SI mueven la cifra (efectivo de terceros: entra y sale de verdad).
+        "ingreso_abono_tienda",
+        "egreso_reverso_abono_tienda",
+        // FICHA 458-B (design §2.3): los dos reversos de cargo del cobro por rechazo. La caja entera,
+        // ahora 27. La cifra NO cambia con ellos (son reversos de cargo: no sale dinero).
+        "egreso_reverso_flete_devolucion",
+        "egreso_reverso_iva_flete_devolucion",
       ],
     },
   },
@@ -699,7 +742,7 @@ const CATALOGO = [
     id: "ganancia_ordenex",
     etiqueta: "Ganancia de Ordenex",
     descripcion:
-      "RESULTADO: ingresos propios de Ordenex menos sus egresos propios, dejando fuera el dinero de terceros que solo pasa por la caja (el contra-entrega y su devolucion a la tienda). Es, numero por numero, lo que `derivarBalance` devolvia sobre el libro entero antes de la 173: no cambia de valor, cambia de nombre. Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
+      "RESULTADO: ingresos propios de Ordenex menos sus egresos propios, dejando fuera el dinero de terceros que solo pasa por la caja (el contra-entrega y su devolucion a la tienda). Incluye lo que Ordenex les cobra a las tiendas (el cobro de Ordenex a una tienda es ganancia: se toma del saldo que le guardaba) y descuenta sus anulaciones. Es, numero por numero, lo que `derivarBalance` devolvia sobre el libro entero antes de la 173: no cambia de valor, cambia de nombre. Se lee del libro append-only de la wallet, no de ordenes, y las gestiones anuladas no generan movimiento que contar.",
     dominio: "financiera",
     clase: "live",
     unidad: "moneda",
@@ -726,6 +769,14 @@ const CATALOGO = [
         "egreso_gasto_fijo",
         "egreso_gasto_variable",
         "egreso_indemnizacion",
+        // FICHA 461 (R29): DIECISEIS. El cobro de Ordenex a una tienda ES ganancia (HD1) y su
+        // anulacion la devuelve; los dos son propios en `NATURALEZA_POR_CATEGORIA`.
+        "ingreso_cobro_tienda",
+        "egreso_reverso_cobro_tienda",
+        // FICHA 458-B (design §2.3): DIECIOCHO. La anulacion de un cobro por rechazo baja la ganancia
+        // (flete e IVA por separado); los dos son propios en `NATURALEZA_POR_CATEGORIA`.
+        "egreso_reverso_flete_devolucion",
+        "egreso_reverso_iva_flete_devolucion",
       ],
     },
   },
@@ -759,6 +810,19 @@ const CATALOGO = [
         // `Record` totales sobre la categoria—. Sin esta linea el catalogo describiria una metrica
         // que suma una categoria que no nombra.
         "cobro_manual",
+        // FICHA 459: el pago por cuenta de la tienda y su anulacion (mismo motivo: `string[]`).
+        "pago_por_cuenta",
+        "pago_por_cuenta_anulado",
+        // FICHA 461 (R29): el credito de la anulacion de un cobro de Ordenex (mismo motivo).
+        "cobro_tienda_anulado",
+        // FICHA 457 (R52): el pago de la tienda a Ordenex (credito) y su anulacion (debito). Mismo
+        // motivo: `string[]`, el compilador no obliga.
+        "abono_tienda",
+        "abono_tienda_anulado",
+        // FICHA 458-B (design §2.3): los dos creditos espejo de la anulacion de un cobro por rechazo.
+        // Mismo motivo: `string[]`, el compilador no obliga.
+        "flete_devolucion_anulado",
+        "iva_flete_devolucion_anulado",
       ],
     },
   },

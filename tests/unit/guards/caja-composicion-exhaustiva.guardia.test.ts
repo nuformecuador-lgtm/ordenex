@@ -116,10 +116,10 @@ const LIBRO_COMPLETO: AgregadoCajaRow[] = WALLET_MOVIMIENTO_CATEGORIA_SEED.map((
 }));
 
 describe("R32 — la clasificacion por naturaleza cubre el SEED entero (runtime)", () => {
-  it("CONTROL DE NO-VACUIDAD: el catalogo tiene categorias, y de las DOS naturalezas", () => {
+  it("CONTROL DE NO-VACUIDAD: el catalogo tiene categorias, y de las TRES naturalezas (ficha 459)", () => {
     expect(WALLET_MOVIMIENTO_CATEGORIA_SEED.length).toBeGreaterThan(10);
     const naturalezas = WALLET_MOVIMIENTO_CATEGORIA_SEED.map((c) => NATURALEZA_POR_CATEGORIA[c]);
-    expect(new Set(naturalezas)).toEqual(new Set(["propio", "terceros"]));
+    expect(new Set(naturalezas)).toEqual(new Set(["propio", "terceros", "capital"]));
   });
 
   it("R32: toda categoria del catalogo tiene una naturaleza declarada, sin huecos", () => {
@@ -213,7 +213,21 @@ describe("R23/R26 — la particion de la ganancia cubre TODAS las categorias pro
       (c) => NATURALEZA_POR_CATEGORIA[c] === "propio" && tipoDe(c) === "ingreso",
     );
     expect([...WALLET_INGRESO_PROPIO_SEED].sort()).toEqual([...derivados].sort());
-    expect(derivados.length).toBe(7); // D5: los seis del feed MAS el ajuste
+    // D5: los seis del feed MAS el ajuste; ficha 461 (R27): MAS el cobro de Ordenex a una tienda.
+    expect(derivados.length).toBe(8);
+    expect(derivados).toContain("ingreso_cobro_tienda");
+  });
+
+  it("⭑ 461 (R27) + 458-B: el reverso del cobro es el TERCER egreso nombrado y los dos del cobro por rechazo el cuarto y el quinto (3→5); «otros» sigue siendo solo `egreso_gasto`", () => {
+    expect([...WALLET_EGRESO_NOMBRADO_SEED]).toEqual([
+      "egreso_pago_mensajero",
+      "egreso_ajuste",
+      "egreso_reverso_cobro_tienda",
+      "egreso_reverso_flete_devolucion", // ficha 458-B
+      "egreso_reverso_iva_flete_devolucion", // ficha 458-B
+    ]);
+    expect(NATURALEZA_POR_CATEGORIA.egreso_reverso_cobro_tienda).toBe("propio");
+    expect(OTROS_EGRESOS_DE_ORDENEX).toEqual(["egreso_gasto"]);
   });
 });
 

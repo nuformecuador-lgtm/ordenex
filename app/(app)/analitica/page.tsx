@@ -103,7 +103,7 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
 // de la MISMA constante: si el titulo visible dijera «Detalle entregas» y el registrado para
 // la busqueda siguiera siendo «Entregas», teclear lo que se ve en pantalla no encontraria
 // nada. `coincideSeccion` busca por subcadena, asi que «entregas» a secas sigue valiendo.
-const TITULO_ENTREGAS = "Detalle - Movimiento de las ordenes";
+const TITULO_ENTREGAS = "Detalle - Movimiento de las órdenes";
 // FICHA 345 — el titulo de la seccion de productos. Mismo criterio que el de arriba: el rotulo
 // visible ES la etiqueta que registra el campo de secciones, asi que teclear lo que se ve en
 // pantalla la encuentra. `coincideSeccion` busca por subcadena: «productos» a secas vale.
@@ -462,7 +462,7 @@ export default async function AnaliticaPage() {
           proveedor de filtro (R31): si colgara de fuera no sería descendiente de quien filtra y
           la barra de arriba no la movería.
 
-          ⚠ POR QUÉ NO VA DENTRO DE «Detalle - Movimiento de las ordenes», que es donde uno la
+          ⚠ POR QUÉ NO VA DENTRO DE «Detalle - Movimiento de las órdenes», que es donde uno la
           pondría: aquella sección reparte las órdenes por su FECHA EFECTIVA (última gestión
           vigente, o la creación si nunca se gestionó) y su ventana cae ahí; ésta las reparte por
           su FECHA DE CARGA y las sigue HASTA SU DESENLACE, caiga donde caiga en el tiempo. Son

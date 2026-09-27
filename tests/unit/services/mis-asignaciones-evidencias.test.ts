@@ -47,7 +47,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -62,10 +65,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> {
   const ids: Record<string, string> = {
     en_reparto: "os-reparto",
-    entregada: "os-entregada",
-    rechazada: "os-rechazada",
-    devuelta: "os-devuelta",
-    reprogramada: "os-reprogramada",
+    entregado: "os-entregada",
+    devolucion_a_origen_por_rechazo: "os-rechazada",
+    novedad: "os-devuelta",
+    reprogramado: "os-reprogramada",
   };
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ids[v] ?? null),
@@ -127,7 +130,7 @@ function foto(n: number) {
 function rechazoConFotos(k: number): GestionarInput {
   return {
     ordenId: "o1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     motivo: "cliente rechazo",
     evidencias: Array.from({ length: k }, (_v, i) => foto(i)),
   };
@@ -141,12 +144,12 @@ describe("R9: subida secuencial de N fotos + persistencia en una transaccion", (
 
     expect(r.status).toBe("ok");
     expect(storage.upload).toHaveBeenCalledTimes(3);
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
     const evidencias = gArg.gestion.evidencias as { storagePath: string; indice: number }[];
     expect(evidencias.map((e) => e.indice)).toEqual([0, 1, 2]);
     // Cada path lleva el sufijo -i de su posicion (unicidad entre fotos de la misma gestion).
-    expect(evidencias[0].storagePath).toMatch(/o1\/rechazada-\d+-0\./);
-    expect(evidencias[2].storagePath).toMatch(/o1\/rechazada-\d+-2\./);
+    expect(evidencias[0].storagePath).toMatch(/o1\/devolucion_a_origen_por_rechazo-\d+-0\./);
+    expect(evidencias[2].storagePath).toMatch(/o1\/devolucion_a_origen_por_rechazo-\d+-2\./);
   });
 });
 
@@ -172,7 +175,7 @@ describe("R10: falla la subida #k -> compensa las k-1 previas y NO persiste", ()
     const removed = (storage.remove as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
     expect(removed).toHaveLength(2);
     // R10: nada en la base (el repo ni se invoca).
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("si falla la PRIMERA subida no hay nada que compensar (remove no se invoca)", async () => {
@@ -186,7 +189,7 @@ describe("R10: falla la subida #k -> compensa las k-1 previas y NO persiste", ()
       "storage caido",
     );
     expect(storage.remove).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -194,7 +197,7 @@ describe("R11: la transaccion falla DESPUES de subir -> borra las N y propaga", 
   it("remove con las N evidencias subidas; el error se propaga (no es resultado de dominio)", async () => {
     const storage = fakeStorage();
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("tx caida");
       }),
     });
@@ -228,7 +231,7 @@ describe("R13: exito -> N URLs firmadas (TTL de config), nunca el path crudo", (
   it("reprogramada (sin foto) -> evidenciaUrls undefined y no firma nada", async () => {
     const signed = fakeSignedUrls();
     const r = await newService(fakeRepo(), fakeStorage(), signed).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");

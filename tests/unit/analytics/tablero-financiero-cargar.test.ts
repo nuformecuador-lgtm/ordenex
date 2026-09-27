@@ -33,6 +33,13 @@ vi.mock("@/lib/actions/analitica-financiera", () => ({
   consultarMetricaFinanciera: consultar,
 }));
 
+// Ficha 459 (revision m3): el cargador pide ademas el ESTADO de la caja para nombrar la cifra de
+// `dinero_en_caja`. Se mockea por lo mismo que el otro borde; por defecto, «no te toca».
+const resumenCaja = vi.hoisted(() => vi.fn<(input: unknown) => Promise<unknown>>());
+vi.mock("@/lib/actions/wallet", () => ({
+  verResumenCajaAction: resumenCaja,
+}));
+
 // `vi.mock` se iza por encima de este import, asi que `cargar.ts` recibe el doble
 // y no el Server Action real.
 const { cargarTableroFinanciero } = cargador;
@@ -71,6 +78,8 @@ function respuestaOk(metricaId: string): RespuestaFinanciera {
 
 beforeEach(() => {
   consultar.mockReset();
+  resumenCaja.mockReset();
+  resumenCaja.mockResolvedValue({ status: "forbidden" });
 });
 
 describe("R13, R27 · se piden EXACTAMENTE las diez metricas del contrato", () => {
@@ -199,5 +208,57 @@ describe("R23 · un fallo de validacion es un error, nunca un panel vacio", () =
     expect(mensaje).toContain("hasta");
     expect(mensaje).toContain("rango");
     expect(mensaje.length).toBeGreaterThan(0);
+  });
+});
+
+// Reescrito en la 458-A (TA.7, R62): el panel es MENSUAL (una cifra de periodo), así que se nombra
+// «Movimiento neto del periodo» en los tres casos; antes (459, m3) decía «Flujo de dinero
+// registrado» o «Dinero en caja» según el estado de la caja entera. Literales a mano.
+describe("FICHA 459 (m3) → 458-A R62 · la cifra de la caja del panel mensual es la de un periodo", () => {
+  function etiquetaDe(paneles: readonly cargador.PanelFinanciero[], id: string): string | undefined {
+    const panel = paneles.find((p) => p.id === id);
+    return panel?.estado === "ok" ? panel.datos.etiqueta : undefined;
+  }
+
+  it("sin saldo inicial: «Movimiento neto del periodo», nunca «Dinero en caja» ni «Flujo…»", async () => {
+    consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
+    resumenCaja.mockResolvedValue({
+      status: "ok",
+      resumen: { estado: "flujo", periodoFiltrado: false },
+    });
+
+    const paneles = await cargarTableroFinanciero();
+
+    // Literal escrito a mano (design §3.3), no leido de `CAJA_RESUMEN_LABEL`.
+    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Movimiento neto del periodo");
+    // Revision 458-A (m5): con periodo el nombre no depende del estado de la caja, y el resumen
+    // entero de la caja ya NO se pide en cada carga (antes: `toHaveBeenCalledWith({})`).
+    expect(resumenCaja).not.toHaveBeenCalled();
+    // Las demas metricas conservan la etiqueta de su catalogo.
+    expect(etiquetaDe(paneles, "ganancia_ordenex")).toBe("Etiqueta de ganancia_ordenex");
+  });
+
+  it("con saldo inicial vigente: tampoco «Dinero en caja» (es un periodo)", async () => {
+    consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
+    resumenCaja.mockResolvedValue({
+      status: "ok",
+      resumen: { estado: "saldo", periodoFiltrado: false },
+    });
+
+    expect(etiquetaDe(await cargarTableroFinanciero(), "dinero_en_caja")).toBe("Movimiento neto del periodo");
+  });
+
+  it("si el estado de la caja no se conoce (denegado o caido), sigue siendo el nombre del periodo", async () => {
+    consultar.mockImplementation((metricaId) => Promise.resolve(respuestaOk(metricaId)));
+    resumenCaja.mockResolvedValue({ status: "error", message: "x" });
+    expect(etiquetaDe(await cargarTableroFinanciero(), "dinero_en_caja")).toBe(
+      "Movimiento neto del periodo",
+    );
+
+    resumenCaja.mockRejectedValue(new Error("caida"));
+    const paneles = await cargarTableroFinanciero();
+    expect(etiquetaDe(paneles, "dinero_en_caja")).toBe("Movimiento neto del periodo");
+    // Y no se lleva ninguna cifra por delante: los diez paneles siguen en `ok`.
+    expect(paneles.filter((p) => p.estado === "ok")).toHaveLength(10);
   });
 });

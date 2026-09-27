@@ -1,0 +1,13 @@
+// GET /api/ordenes/api-key?estado=por_recoger -> HTTP 422
+{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": {
+    "fieldErrors": {
+      "estado": [
+        "'por_recoger' ya no existe: ahora se llama 'mensajero_recogiendo_en_bodega' («Mensajero recogiendo en la bodega»). Ver docs/api/CHANGELOG.md."
+      ]
+    }
+  }
+}

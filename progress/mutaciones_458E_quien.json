@@ -1,0 +1,100 @@
+{
+ "ficha": "458-E «A quien» (R59, servidor)",
+ "metodo": "una a una: reemplazo exacto (count==1) -> vitest del test de integracion + unitario -> restauracion byte a byte y `git diff --quiet` del archivo",
+ "tests": [
+  "tests/integration/db/libro-caja-filtro-a-quien.test.ts",
+  "tests/unit/services/filtros-wallet-quienes-458e.test.ts"
+ ],
+ "mutaciones": [
+  {
+   "id": "M1",
+   "que": "la cuenta sale del WHERE (EXISTS sin `= id`)",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 4,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M2",
+   "que": "el nombre libre no se compara (cualquier anotacion casa)",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 2,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M3",
+   "que": "el repositorio ignora �A quien� en todo (vuelve al where de Prisma)",
+   "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+   "rojos": 8,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M4",
+   "que": "las tarjetas y el desglose agregan sin el WHERE",
+   "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+   "rojos": 3,
+   "corridos": 26,
+   "restaurado": true,
+   "nota": "re-medida tras mover la agregacion a una funcion del modulo (gate: superficie R47 de la clase): 3 rojos de 26; restaurada byte a byte sobre el arbol con el arreglo sin commitear"
+  },
+  {
+   "id": "M5",
+   "que": "el desglose no pasa �A quien� al repositorio",
+   "archivo": "lib/services/WalletEgresoService.ts",
+   "rojos": 2,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M6",
+   "que": "el libro/tarjetas no pasan �A quien� (construirFiltros)",
+   "archivo": "lib/services/WalletService.ts",
+   "rojos": 9,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M7",
+   "que": "el selector de nombres ignora el periodo",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 1,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M8",
+   "que": "el cobro por rechazo se atribuye al mensajero",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 4,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M9",
+   "que": "los conceptos ignoran �A quien�",
+   "archivo": "lib/repositories/FiltrosWalletRepository.ts",
+   "rojos": 2,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M10",
+   "que": "el filtro comun de direccion se pierde con �A quien�",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 1,
+   "corridos": 25,
+   "restaurado": true
+  },
+  {
+   "id": "M11",
+   "que": "`hasta` pasa a inclusivo en el camino SQL",
+   "archivo": "lib/repositories/libro-caja-a-quien-sql.ts",
+   "rojos": 1,
+   "corridos": 26,
+   "restaurado": true,
+   "nota": "sobrevivio en la primera tanda (0 rojos de 25); se anadio el caso del instante 06:00Z y en la segunda corrida dio 1 rojo de 26"
+  }
+ ]
+}

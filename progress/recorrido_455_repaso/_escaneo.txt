@@ -1,0 +1,11 @@
+archivos=50 exactos=3 minuscula=7 codigos_crudos=0
+MINUSC  admin_analitica.txt «en proceso» … rdenes que entraron Entregado 18 Otro desenlace 33 Todavía en proceso 34 35,3% de las 51 órdenes con desenlace terminaron en Ent
+EXACTO  admin_historial_111117.txt «Ayuda solicitada a la tienda» … n: retiro de En fulfillment (estado retirado) En reparto → Ayuda solicitada a la tienda (estado retirado) 19 ago 2026, 2:31 p. m. Por Marco Mensa
+EXACTO  admin_historial_111117.txt «Ayuda solicitada a la tienda» … do retirado) 19 ago 2026, 2:31 p. m. Por Marco Mensajero Ayuda solicitada a la tienda (estado retirado) → En reparto 19 ago 2026, 2:32 p. m. Po
+EXACTO  admin_historial_111117.txt «Ayuda solicitada a la tienda» … → En reparto 19 ago 2026, 2:32 p. m. Por Marco Mensajero Ayuda solicitada a la tienda 24 sept 2026, 1:05 a. m. Por Marco Mensajero (Mensajero) 
+MINUSC  mensajero_ayuda_mensajero_cierre_del_dia.txt «entregada» … revisar el detalle ves que una orden entró mal —la marcaste entregada por error, por ejemplo— tenés Devolver la orden a gestión. 
+MINUSC  mensajero_ayuda_mensajero_recoleccion.txt «por recolectar» …  que escaneaste o escribiste no corresponde a ninguna orden por recolectar. Revisá el número; si el código está estropeado, escribilo 
+MINUSC  satelite_ayuda_compartido_analitica.txt «en tránsito» … ía no repartida entre las partes. No es un error: es dinero en tránsito. «Cobertura incompleta del rango». Del período que pediste
+MINUSC  satelite_ayuda_satelite_mi_bodega.txt «asignada» … ién lo cambió y cuándo. Si dice «Tu cuenta todavía no está asignada a una bodega» Sin bodega no hay un SINPE que configurar. N
+MINUSC  tienda_ayuda_compartido_analitica.txt «en tránsito» … ía no repartida entre las partes. No es un error: es dinero en tránsito. «Cobertura incompleta del rango». Del período que pediste
+MINUSC  tienda_ayuda_tienda_novedades.txt «En Ayuda» … emás un filtro propio: En Novedad: la causa de devolución. En Ayuda solicitada: sin intentos de contacto — las que el mensajero

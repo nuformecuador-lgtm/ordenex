@@ -28,7 +28,7 @@ function buildService(
   return {
     asignar: vi.fn(async () => ({
       status: "ok" as const,
-      resultados: [{ ordenId: ORDEN, estado: "por_recoger" as const }],
+      resultados: [{ ordenId: ORDEN, estado: "mensajero_recogiendo_en_bodega" as const }],
     })),
     ...overrides,
   };
@@ -75,7 +75,7 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
     );
     expect(r).toEqual({
       status: "ok",
-      resultados: [{ ordenId: ORDEN, estado: "por_recoger" }],
+      resultados: [{ ordenId: ORDEN, estado: "mensajero_recogiendo_en_bodega" }],
     });
     // Feature 246 (T3.1, R2/R4): el borde pasa el `dia` TAL CUAL al servicio, sin coercion. La
     // peticion no lo traia, asi que zod le puso el default `"hoy"` — el comportamiento anterior a
@@ -94,7 +94,7 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
   it("368/R15-R16: resultado de dominio `partial` pasa tal cual, sin envolverlo ni alterarlo", async () => {
     const partial = {
       status: "partial" as const,
-      resultados: [{ ordenId: ORDEN, estado: "por_recoger" as const }],
+      resultados: [{ ordenId: ORDEN, estado: "mensajero_recogiendo_en_bodega" as const }],
       bloqueadas: [{ ordenId: "o-bloqueada", motivo: "direccion_no_geocodificable" }],
     };
     const service = buildService({

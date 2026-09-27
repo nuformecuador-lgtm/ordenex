@@ -169,9 +169,9 @@ describeSiHayBase("⭑ 376/T11 — la zona central: guarda, borrado y rastro (Po
 
       const nombres = { A: `376 A ${unico()}`, B: `376 B ${unico()}`, C: `376 C ${unico()}` };
       const [a, b, c] = await Promise.all([
-        tx.zona.create({ data: { nombre: nombres.A }, select: { id: true } }),
-        tx.zona.create({ data: { nombre: nombres.B }, select: { id: true } }),
-        tx.zona.create({ data: { nombre: nombres.C }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.A }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.B }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.C }, select: { id: true } }),
       ]);
       const ids = { A: a.id, B: b.id, C: c.id };
       if (centralInicial !== "ninguna") {
@@ -665,7 +665,7 @@ describeSiHayBase("⭑ 376/T11 — la zona central: guarda, borrado y rastro (Po
       const distrito = await e.crearDistrito([]);
       const nombre = `376 NUEVA ${unico()}`;
       const dto = await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre,
           cobroVehiculo: false,
           esCentral: true,
@@ -710,7 +710,7 @@ describeSiHayBase("⭑ 376/T11 — la zona central: guarda, borrado y rastro (Po
     const medido = await conEscenario("A", async (e) => {
       const distrito = await e.crearDistrito([]);
       const dto = await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre: `376 NUEVA SIN MARCA ${unico()}`,
           cobroVehiculo: false,
           esCentral: false,

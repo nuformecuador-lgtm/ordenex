@@ -1,4 +1,5 @@
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 import type { SelectOption } from "@/components/ui/select";
 import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";
 
@@ -6,10 +7,9 @@ import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";
  * FICHA 335 (design §4.3) — el catalogo de cierres del libro de ESTA tienda, tal como lo
  * necesita el selector del filtro. Modulo PURO: sin React, sin dinero, sin estado.
  *
- * ⛔ POR QUE NO VIVE EN `mi-wallet-labels.ts`: ese modulo lo REEXPORTA ENTERO
- * `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts`. Meter aqui las opciones del
- * selector se las regalaria a una pantalla que no las usa, y ampliaria un precedente
- * (`CATEGORIA_TIENDA_OPTIONS` ya viaja en esa lista) que conviene no ampliar.
+ * ⛔ POR QUE NO VIVE EN `mi-wallet-labels.ts`: de ese modulo REEXPORTA varias piezas
+ * `app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts` (tipo, origen, `money`). Meter
+ * aqui las opciones del selector se las regalaria a una pantalla que no las usa.
  */
 
 /**
@@ -31,7 +31,7 @@ export interface CierresDeLaTienda {
 /**
  * La opcion de partida: no filtrar por cierre (R25). Su `value` es la cadena vacia, que es lo
  * que `buildInput` omite del input de la action — el mismo criterio que las otras tres claves
- * del filtro. Precedente en esta misma pantalla: `CATEGORIA_TIENDA_OPTIONS[0]`.
+ * del filtro. Precedente en esta misma pantalla: `CATEGORIA_MI_WALLET_OPTIONS[0]`.
  */
 export const CIERRE_TODOS_OPTION: SelectOption = { value: "", label: "Todos los cierres" };
 
@@ -43,18 +43,18 @@ function contarMovimientos(n: number): string {
 /**
  * El dia del cierre, en el MISMO formato que pinta la columna «Fecha» de la tabla.
  *
- * `fechaDiaISO` es la misma funcion que ya usa la descarga, y produce el mismo dia que
- * `DesgloseTiendaLedger` (que hace `slice(0, 10)`). ⚠️ Trampa horaria deliberada: los dos son
- * el dia UTC. Usar aqui un formateador de calendario local haria que la opcion dijera un dia y
- * las filas de al lado otro.
+ * Ficha 459 (recorrido F1): `fechaDiaMovimientoCR` es la misma funcion con la que el servidor fecha
+ * cada fila del estado de cuenta (`EstadoCuentaService`, la columna «Fecha» y la descarga), y todas
+ * dan el dia de COSTA RICA (antes daban el dia UTC y un cierre de las 22:00 salia fechado al dia
+ * siguiente). Usar aqui otra funcion haria que la opcion dijera un dia y las filas de al lado otro.
  */
 function diaDe(cierre: CierreTiendaOpcionDTO): string {
-  return fechaDiaISO(cierre.fecha);
+  return fechaDiaMovimientoCR(cierre.fecha);
 }
 
-/** `14:30` del ISO, SIN parsear a `Date`: el instante viaja como texto y no se reinterpreta. */
+/** `08:30`: la hora de pared de Costa Rica, coherente con el dia de `diaDe`. */
 function horaDe(cierre: CierreTiendaOpcionDTO): string {
-  return cierre.fecha.slice(11, 16);
+  return horaCostaRica(cierre.fecha);
 }
 
 /**

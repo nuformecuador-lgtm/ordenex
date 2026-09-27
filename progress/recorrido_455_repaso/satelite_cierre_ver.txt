@@ -1,0 +1,150 @@
+Detalle del cierre
+
+Mensajero test · Bodega satélite · Quepos
+
+De quién es el dinero
+Total general
+₡0
+Lo que Ordenex facturó
+-₡18.903,27
+Gana la tienda
+Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.
+Ordenex le factura más de lo que se recaudó en este cierre: a la tienda no le queda nada y pasa a deber la diferencia.
+-₡18.903,27
+Lo que Ordenex le factura a la tienda
+Cobrado sobre lo recaudado
+Flete + IVA y comisión + IVA de lo que sí se entregó: sale del dinero que el mensajero recaudó.
+₡18.903,27
+Flete por rechazo + IVA
+Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.
++₡0
+Lo que Ordenex facturó
+₡18.903,27
+Total general
+₡0
+Cobrado sobre lo recaudado
+-₡18.903,27
+Pago a tienda
+Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.
+-₡18.903,27
+Lo que le queda a Ordenex
+Lo que Ordenex facturó
+₡18.903,27
+Pago al mensajero
+-₡0
+Ingreso de bodega por rechazos
+-₡0
+Neto de Ordenex
+Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.
+₡18.903,27
+Cierre del día
+Vencido
+Bodega satélite · Quepos · Mensajero Mensajero test
+Solicitud #91636886
+Solicitado 2026-09-24
+Pago a tienda
+-₡18.903,27
+Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.
+Ingreso de bodega por rechazos
+₡0
+Automático (por plazo vencido)
+₡0
+·
+Manual (mensajero)
+₡0
+TOTAL GENERAL
+₡0
+TOTAL ORDENEX
+₡18.902,56
+PAGO AL MENSAJERO
+₡0
+GESTIONES
+8
+TOTALES DEL CIERRE
+Efectivo
+₡0
+SINPE
+₡0
+Transferencia
+₡0
+Total general
+₡0
+INGRESO DE ORDENEX
+Flete + IVA
+₡14.690
+Comisión + IVA
+₡4.213,27
+Flete por rechazo + IVA
+₡0
+Total Ordenex
+₡18.903,27
+LIQUIDACIÓN
+Ingreso bruto
+Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.
+₡18.903,27
+Pago al mensajero
+₡0
+Ingreso de bodega por rechazos
+₡0
+Entregado
+6
+Reprogramado
+1
+Novedad
+0
+Devolución a origen por rechazo
+1
+Incidente
+0
+Guía
+Destinatario
+Cobrado
+Total Ordenex
+—
+Yendri
+111138 · 2 * Crema Dental Blanqueadora.
+₡27.040
+₡3.329,43
+—
+Jenny Villegas Ramírez
+111130 · 1 * Lima Eléctrica Profesional para Pies.
+₡11.900
+₡2.730,65
+—
+Joaquín Gerardo Ruiz Bravo
+111125 · 2 * Parche Antivarices L.
+₡13.900
+₡2.809,75
+—
+Miguel -
+111137 · 1 * Crema anti verrugas.
+₡14.990
+₡3.982,85
+—
+Gustavo Herrera
+111131 · 2 * Spray Herbal para Hemorroides l Alivio Natural.
+₡21.000
+₡3.090,55
+—
+Randall flores
+111135 · 1 * TURKESTERONE.
+₡17.700
+₡2.960,04
+PASARON A NOVEDAD INTERNA
+2
+
+El corte del día las cerró sin gestión. No tienen dinero asociado.
+
+Guía
+Destinatario
+Tienda
+—
+Evaristo Allen
+111129 · 1 * Spray Protector. · En reparto
+Tania
+—
+Marianela Oreamuno bolaños
+63446 · 1 * DEPILADOR MAGICO AFEITADO FACIL. · En reparto
+Tania
+Total recaudado ₡0 · 6 entregas
+Cerrar

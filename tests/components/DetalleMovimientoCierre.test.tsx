@@ -58,6 +58,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
     registradoPor: null,
     fechaMovimiento: `${FECHA_FILA}T10:00:00.000Z`,
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...over,
   };
 }
@@ -86,7 +87,7 @@ function orden(over: Partial<OrdenAporteDTO> = {}): OrdenAporteDTO {
     guia: "48127",
     destinatario: "María Fernández",
     tiendaNombre: "Tienda Central",
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     aporte: "1700.00",
     ...over,
   };
@@ -138,10 +139,10 @@ function pintar(movimientos: WalletMovimientoDTO[] = [movimiento()]) {
 }
 
 /** Nombres accesibles compuestos con el concepto y la fecha de SU fila (R5). */
-const ABRIR_FLETE = `Ver las órdenes que componen Flete del ${FECHA_FILA}`;
-const ABRIR_COMISION = `Ver las órdenes que componen Comisión COD del ${FECHA_FILA}`;
-const PANEL_FLETE = `Órdenes que componen Flete del ${FECHA_FILA}`;
-const PANEL_COMISION = `Órdenes que componen Comisión COD del ${FECHA_FILA}`;
+const ABRIR_FLETE = `Ver las órdenes que componen Flete cobrado a la tienda del ${FECHA_FILA}`;
+const ABRIR_COMISION = `Ver las órdenes que componen Comisión de contra-entrega cobrada a la tienda del ${FECHA_FILA}`;
+const PANEL_FLETE = `Órdenes que componen Flete cobrado a la tienda del ${FECHA_FILA}`;
+const PANEL_COMISION = `Órdenes que componen Comisión de contra-entrega cobrada a la tienda del ${FECHA_FILA}`;
 
 function abrir(nombre: string) {
   return userEvent.click(screen.getByRole("button", { name: nombre }));
@@ -306,13 +307,21 @@ describe("Ficha 344 — abrir una fila del libro (R1–R7)", () => {
 
     const dentro = within(await screen.findByRole("region", { name: PANEL_FLETE }));
     expect(await dentro.findByText(DETALLE_MOVIMIENTO_VACIO)).toBeInTheDocument();
+    // FICHA 458-D (cierre): el literal ES el contrato. Junto al importe de la cabecera, el vacío se
+    // explica («no se puede repartir») en vez de parecer un error («ninguna aporta» a secas).
+    expect(
+      dentro.getByText(
+        "Con los datos que el cierre guardó de sus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.",
+      ),
+    ).toBeInTheDocument();
+    expect(dentro.getByText("0 de 23 órdenes del cierre aportan a este concepto")).toBeInTheDocument();
   });
 });
 
 describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
   it("R10/R13/R14: cada orden muestra guía, destinatario, tienda, resultado y aporte", async () => {
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
@@ -329,21 +338,21 @@ describe("Ficha 344 — qué dice el detalle (R9–R14)", () => {
     // R14: la caja principal SÍ dice de qué tienda es cada orden.
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
     // R13: la etiqueta legible del catálogo, NUNCA el valor del enum.
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
-    expect(dentro.queryByText("entregada")).toBeNull();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
+    expect(dentro.queryByText("entregado")).toBeNull();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 
   it("R20: una orden con DOS gestiones sale UNA vez y nombra los dos resultados", async () => {
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada", "reprogramada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado", "reprogramado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
     await abrir(ABRIR_FLETE);
     const region = await screen.findByRole("region", { name: PANEL_FLETE });
 
-    expect(within(region).getByText("Entregada · Reprogramada")).toBeInTheDocument();
+    expect(within(region).getByText("Entregado · Reprogramado")).toBeInTheDocument();
     // UNA fila de datos, no dos: el grano es la ORDEN.
     expect(filasDeDatos(region)).toHaveLength(1);
   });
@@ -411,10 +420,10 @@ describe("Ficha 344 — el concepto que no se reparte (R48)", () => {
     });
     pintar([movimiento({ categoria: "egreso_pago_mensajero", tipo: "egreso" })]);
 
-    await abrir(`Ver las órdenes que componen Pago a mensajero del ${FECHA_FILA}`);
+    await abrir(`Ver las órdenes que componen Ordenex le paga a un mensajero del ${FECHA_FILA}`);
 
     const region = await screen.findByRole("region", {
-      name: `Órdenes que componen Pago a mensajero del ${FECHA_FILA}`,
+      name: `Órdenes que componen Ordenex le paga a un mensajero del ${FECHA_FILA}`,
     });
 
     // MUTACIÓN QUE ESTE CASO MATA: que la rama `sin_reparto` se quede MUDA (un panel vacío, o
@@ -654,7 +663,7 @@ describe("Ficha 344 — el detalle en un teléfono (R50/R52)", () => {
   it("R52: apilar cuatro columnas en una no esconde NINGÚN dato", async () => {
     fingirTelefono();
     detalleMock.mockResolvedValue(
-      pagina([orden({ resultados: ["entregada"], aporte: "1700.00" })], 1),
+      pagina([orden({ resultados: ["entregado"], aporte: "1700.00" })], 1),
     );
     pintar();
 
@@ -668,7 +677,7 @@ describe("Ficha 344 — el detalle en un teléfono (R50/R52)", () => {
     ).toBeInTheDocument();
     expect(dentro.getByText("María Fernández")).toBeInTheDocument();
     expect(dentro.getByText("Tienda Central")).toBeInTheDocument();
-    expect(dentro.getByText("Entregada")).toBeInTheDocument();
+    expect(dentro.getByText("Entregado")).toBeInTheDocument();
     expect(dentro.getByText("₡1.700")).toBeInTheDocument();
   });
 

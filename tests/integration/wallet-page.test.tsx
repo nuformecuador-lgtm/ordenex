@@ -6,8 +6,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/app/_components/LogoutButton", () => ({
   LogoutButton: () => <button data-testid="logout-stub">Salir</button>,
 }));
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import type { RolValue } from "@prisma/client";
+
+import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 
@@ -77,6 +79,24 @@ vi.mock("@/lib/actions/rechazo-tienda-cobro", () => ({
   rechazarCobroRechazoTiendaAction: vi.fn(),
 }));
 
+// FICHA 458-E (T E.1/T E.2): el libro nuevo lee «A quién» y «Registró» de la página y el filtro de
+// concepto pide los conceptos del periodo. Con el módulo REAL montado, sin estos dobles las dos
+// lecturas correrían contra la base.
+vi.mock("@/lib/actions/libro-caja-autoria", () => ({
+  autoriaDelLibroCajaAction: vi.fn(async ({ movimientoIds }: { movimientoIds: string[] }) => ({
+    status: "ok",
+    filas: movimientoIds.map((id) => ({
+      movimientoId: id,
+      aQuien: { nombre: "Mario Mensajero", beneficiario: null, cuenta: null, esOrdenex: false },
+      registro: { nombre: null, automatico: { accion: "aprobacion_cierre", por: "Ana Maestra" } },
+    })),
+  })),
+}));
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: vi.fn(async () => ({ status: "ok", conceptos: [] })),
+  cierresDeLaCuentaAction: vi.fn(),
+}));
+
 class NotFoundError extends Error {
   constructor() {
     super("NEXT_NOT_FOUND");
@@ -117,6 +137,8 @@ import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { listarPlantillasPaginadoAction } from "@/lib/actions/gasto-fijo-plantilla";
 import { listarCobrosPendientesAction } from "@/lib/actions/gasto-fijo-cobro";
 import { listarCobrosRechazoTiendaAction } from "@/lib/actions/rechazo-tienda-cobro";
+import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
+import { money } from "@/app/(app)/wallet/_components/wallet-labels";
 
 const resolveActorMock = vi.mocked(resolveActorFromSession);
 const listarMock = vi.mocked(listarMovimientosAction);
@@ -141,6 +163,8 @@ const MOVIMIENTOS_OK = {
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "propio" as const, // feature 231 (R31): el flete es dinero de Ordenex
+        documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
       // Feature 173 (R62): un movimiento de una de las categorías NUEVAS viaja por el mismo
       // camino, con la misma forma y sin ningún campo de más.
@@ -155,6 +179,8 @@ const MOVIMIENTOS_OK = {
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
         dueno: "terceros" as const, // feature 231 (R31): el contra-entrega es de las tiendas
+        documento: null, // ficha 459 (design §7.3): fila sin documento
+        origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
       },
     ],
     total: 2,
@@ -184,6 +210,14 @@ const RESUMEN_OK = {
     // Feature 231 (R9/R10): 10 000 / 11 500 x 100 = 86.9565… -> "86.96".
     porcentajeTiendas: "86.96",
     modoComposicion: "dos_bolsillos" as const,
+    // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+    capital: "0.00",
+    signoCapital: "cero" as const,
+    deOrdenex: "1500.00",
+    signoDeTerceros: "positivo" as const,
+    deTercerosAbsoluto: "10000.00",
+    estado: "flujo" as const,
+    flujoDesde: "2026-08-25",
   },
   // Feature 231 (design §2.4): la composición viaja HERMANA del resumen, no anidada dentro —
   // por eso el barrido de STRING sobre `props.resumen` sigue afirmando lo mismo que hoy.
@@ -196,6 +230,7 @@ const RESUMEN_OK = {
       ingreso_iva_flete_devolucion: "0.00",
       ingreso_iva_comision_cod: "0.00",
       ingreso_ajuste: "0.00",
+      ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     totalIngresos: "1500.00",
     // Ficha 339 (T1.3/T6.2): un importe por egreso propio CON FILA que el desglose no abre.
@@ -204,6 +239,9 @@ const RESUMEN_OK = {
     egresos: {
       egreso_pago_mensajero: "0.00",
       egreso_ajuste: "0.00",
+      egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+      egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+      egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
     },
     otrosEgresos: "0.00",
     totalEgresos: "0.00",
@@ -361,9 +399,24 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // STRING. Se barre el objeto completo, no tres campos elegidos a mano: cualquier importe
     // que alguien añada mañana como `number` cae aquí. `periodoFiltrado` es el único
     // no-STRING y no es dinero.
+    //
+    // Ficha 459 (design §2.6, T A.8) — la excepción se AMPLÍA a conciencia, y solo a dos campos
+    // que no son dinero: `estado` (una de dos palabras, R14) y `flujoDesde` (un día `YYYY-MM-DD`
+    // o `null` con el libro vacío). Cada uno se afirma con SU forma exacta, no se salta: un
+    // importe que alguien colara ahí como `number` seguiría cayendo.
     for (const [clave, valor] of Object.entries(props.resumen)) {
       if (clave === "periodoFiltrado") {
         expect(typeof valor).toBe("boolean");
+        continue;
+      }
+      if (clave === "estado") {
+        expect(["flujo", "saldo"]).toContain(valor);
+        continue;
+      }
+      if (clave === "flujoDesde") {
+        expect(valor === null || /^\d{4}-\d{2}-\d{2}$/.test(String(valor)), "resumen.flujoDesde").toBe(
+          true,
+        );
         continue;
       }
       expect(typeof valor, `resumen.${clave}`).toBe("string");
@@ -411,7 +464,7 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     // cantidad; lo que la 231 se negó a hacer fue meter una cantidad como `number`.
     const { ingresos, egresos, hayOtrosEgresos, ...totales } = props.composicion;
     // Control de no-vacuidad: el desglose trae las siete categorías, no un objeto vacío.
-    expect(Object.keys(ingresos)).toHaveLength(7);
+    expect(Object.keys(ingresos)).toHaveLength(8); // ficha 461 (R27): + `ingreso_cobro_tienda`
     for (const [categoria, valor] of Object.entries(ingresos)) {
       expect(typeof valor, `composicion.ingresos.${categoria}`).toBe("string");
     }
@@ -471,14 +524,18 @@ describe("WalletPage — la descripción de la página (R59)", () => {
     expect(document.body.textContent?.toLowerCase()).not.toContain("balance");
   });
 
-  it("R59: y nombra las dos cifras con los mismos nombres que la tarjeta", async () => {
+  // Ficha 458-A (TA.6, R101) REESCRIBE este caso de la 173: la tarjeta ya no se llama siempre «Dinero
+  // en caja» (la 459 la rotula «Flujo de dinero registrado» en estado «flujo»), así que el subtítulo
+  // —que no conoce el estado— deja de nombrarla. Sustituto: `wallet-textos-458.guardia` (T9).
+  it("R59/R101: nombra la ganancia y las cifras de la caja, y NO dice «dinero en caja» (estado flujo)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
     const { default: WalletPage } = await import("@/app/(app)/wallet/page");
 
     render(await WalletPage());
 
     const texto = (document.body.textContent ?? "").toLowerCase();
-    expect(texto).toContain("dinero en caja");
+    expect(texto).not.toContain("dinero en caja");
+    expect(texto).toContain("cifras de la caja");
     expect(texto).toContain("ganancia de ordenex");
   });
 });
@@ -507,7 +564,7 @@ describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () =
   it("la wallet ofrece un solo botón para registrar dinero", async () => {
     await pintarLaWalletEntera();
 
-    const botones = screen.getAllByRole("button", { name: "Registrar movimiento" });
+    const botones = screen.getAllByRole("button", { name: "Registrar un movimiento" });
     expect(botones).toHaveLength(1);
   });
 
@@ -530,7 +587,54 @@ describe("WalletPage — un solo control para mover dinero a mano (R1/R2)", () =
       .getAllByRole("button")
       .filter((b) => (b.textContent ?? "").trim().startsWith("Registrar"));
     expect(registradores.map((b) => (b.textContent ?? "").trim())).toEqual([
-      "Registrar movimiento",
+      "Registrar un movimiento", // 458-C (R37): el diálogo único se llama así
     ]);
   });
 });
+
+// =================================================================================================
+// FICHA 458-E (T E.1/T E.2, R53–R57) — LA PÁGINA MONTA EL LIBRO NUEVO
+// =================================================================================================
+//
+// Sobre las props que la página le pasa al módulo REAL: las tarjetas de la 459 con las cifras del
+// pre-fetch (R53), el filtro Todo / Entra / Sale en su sitio (R54) y «A quién» / «Registró» leídos
+// con los ids de la página pre-obtenida (R56/R57). El detalle de cada pieza vive en
+// `tests/components/WalletLibroCaja458E.test.tsx`.
+describe("WalletPage — el libro de caja de la 458-E (R53–R57)", () => {
+  it("R53/R54/R56/R57: tarjetas del pre-fetch, filtro Todo / Entra / Sale y autoría de la página", async () => {
+    montarModuloReal = true;
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletPage } = await import("@/app/(app)/wallet/page");
+    // Caché de SWR PROPIA: los casos de arriba montan el mismo módulo con la misma página y dejarían
+    // la autoría servida desde su caché (0 lecturas en este caso).
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ToastProvider>{await WalletPage()}</ToastProvider>
+      </SWRConfig>,
+    );
+
+    // R53: la ganancia de la tarjeta es la del resumen pre-obtenido (1 500), no la cifra de la caja.
+    const ganancia = screen.getByRole("region", { name: "Ganancia de Ordenex" });
+    expect(ganancia.textContent).toContain(money("1500.00"));
+    expect(ganancia.textContent).not.toContain(money("11500.00"));
+
+    // R54: el filtro segmentado, con «Todo» elegido al entrar.
+    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
+    expect(
+      within(grupo).getAllByRole("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]),
+    ).toEqual([
+      ["Todo", "true"],
+      ["Entra", "false"],
+      ["Sale", "false"],
+    ]);
+
+    // R56/R57: UNA lectura de la autoría con los ids de la página pre-obtenida.
+    const autoria = vi.mocked(autoriaDelLibroCajaAction);
+    await waitFor(() => expect(autoria).toHaveBeenCalledTimes(1));
+    expect(autoria).toHaveBeenCalledWith({ movimientoIds: ["m1", "m2"] });
+    expect(
+      await screen.findAllByText("Automático · Aprobación del cierre por Ana Maestra"),
+    ).toHaveLength(2);
+  });
+});
+

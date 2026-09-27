@@ -28,7 +28,7 @@ const FOTO = { type: "image/jpeg", size: 1024 };
 function rechazo(over: Record<string, unknown> = {}) {
   return {
     ordenId: "11111111-1111-4111-8111-111111111111",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     motivo: "el cliente no la quiere",
     evidencias: [FOTO],
     ...over,
@@ -38,7 +38,7 @@ function rechazo(over: Record<string, unknown> = {}) {
 function reprogramacion(over: Record<string, unknown> = {}) {
   return {
     ordenId: "11111111-1111-4111-8111-111111111111",
-    resultado: "reprogramada",
+    resultado: "reprogramado",
     fechaReprogramacion: diaCR(2), // pasado mañana: futuro sin depender del borde del dia
     motivo: "el cliente pidio otro dia",
     evidencias: [FOTO],
@@ -61,7 +61,7 @@ describe("R1 — la tienda tiene EXACTAMENTE dos desenlaces desde ayuda", () => 
   it("la lista es `reprogramada` y `rechazada`, en ese orden y sin nada mas", () => {
     // Censo cerrado. Un tercer literal aqui abriria una arista que el grafo no declara y el choke
     // point del historial rechazaria en runtime (guardia de fallo cerrado, 140).
-    expect([...RESULTADOS_DESDE_AYUDA]).toEqual(["reprogramada", "rechazada"]);
+    expect([...RESULTADOS_DESDE_AYUDA]).toEqual(["reprogramado", "devolucion_a_origen_por_rechazo"]);
   });
 
   it("los DOS parsean con sus campos completos", () => {
@@ -69,7 +69,7 @@ describe("R1 — la tienda tiene EXACTAMENTE dos desenlaces desde ayuda", () => 
     expect(gestionarDesdeAyudaSchema.safeParse(reprogramacion()).success).toBe(true);
   });
 
-  it.each(["entregada", "devuelta", "incidente"])(
+  it.each(["entregado", "novedad", "incidente"])(
     "`%s` NO es un valor posible: la tienda no puede registrarlo desde ayuda",
     (resultado) => {
       // Y no hace falta un `if` que lo compruebe: al ser una `discriminatedUnion` sobre dos

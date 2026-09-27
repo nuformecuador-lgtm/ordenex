@@ -132,13 +132,20 @@ describe("262/R39 — la rama de corrección no toca el catálogo de estados", (
     expect(CORRECCION, "la corrección se está etiquetando con un estado").not.toContain(
       "estatusLabel",
     );
+    // FICHA 456 (2026-09-24): el nombre de estado de la transición se pinta ahora con
+    // `EstadoConInfo` (nombre + botón de información); la corrección tampoco puede usarlo.
+    expect(CORRECCION, "la corrección se está etiquetando con un estado").not.toContain(
+      "EstadoConInfo",
+    );
     expect(CORRECCION).not.toContain("→");
     expect(CORRECCION).not.toContain("Creación");
   });
 
-  it("ANTI-VACUIDAD: la rama de TRANSICIÓN sí llama a `estatusLabel` y sí pinta la flecha", () => {
+  it("ANTI-VACUIDAD: la rama de TRANSICIÓN sí nombra sus estados (`EstadoConInfo`, 456) y sí pinta la flecha", () => {
     // Sin esta mitad, lo de arriba estaría verde con un extractor que devolviera cadena vacía.
-    expect(TRANSICION).toContain("estatusLabel");
+    // FICHA 456 (2026-09-24): la transición nombra sus estados con `EstadoConInfo` (que llama a
+    // `nombreDeEstado` y pone el botón de información), ya no con `estatusLabel` directo.
+    expect(TRANSICION).toContain("EstadoConInfo");
     expect(TRANSICION).toContain("→");
   });
 

@@ -28,10 +28,10 @@ function desglose(pares: readonly (readonly [string, number])[]): ConteoDeStatus
 
 /** La captura del 2026-08-29 que abrió la ficha 346, con sus cinco cubos. */
 const CREMA = desglose([
-  ["entregada", 3],
-  ["rechazada", 2],
-  ["devuelta", 4],
-  ["reprogramada", 2],
+  ["entregado", 3],
+  ["devolucion_a_origen_por_rechazo", 2],
+  ["novedad", 4],
+  ["reprogramado", 2],
   [EN_CURSO, 13],
 ]);
 
@@ -65,7 +65,7 @@ describe("FICHA 442 · los tres tramos son una PARTICIÓN del universo de la fil
     // la barra en silencio, que es exactamente el defecto que la ficha 346 reparó.
     const sexto = DESENLACES[DESENLACES.length - 1];
     const soloElSexto = desglose([
-      ["entregada", 1],
+      ["entregado", 1],
       [sexto, 5],
       [EN_CURSO, 2],
     ]);
@@ -83,10 +83,15 @@ describe("FICHA 442 · los tres tramos son una PARTICIÓN del universo de la fil
   });
 });
 
+// ⏳ 2026-09-24 (FICHA 455, T2.6; R2/R3/R5/R6): la frase nombra cada desenlace con su nombre visible
+// EXACTO (`nombreDeEstado`: sin plural, sin minúsculas) y la cantidad al lado, tras dos puntos. Antes
+// pluralizaba el código («3 entregadas · 2 rechazadas…»), lo que con los códigos de la 455 daba
+// «novedads». El grupo de lo que sigue vivo se llama «Sin desenlace todavía» («en proceso» era un
+// nombre retirado, §0.3). Los invariantes (qué cubos, en qué orden, que sumen la fila) no cambian.
 describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órdenes»", () => {
-  it("la captura de la 346: «3 entregadas · 2 rechazadas · 4 devueltas · 2 reprogramadas · 13 en proceso»", () => {
+  it("la captura de la 346, con los nombres exactos de la 455", () => {
     expect(textoDesenlacesDeFila(CREMA)).toBe(
-      "3 entregadas · 2 rechazadas · 4 devueltas · 2 reprogramadas · 13 en proceso",
+      "Entregado: 3 · Devolución a origen por rechazo: 2 · Novedad: 4 · Reprogramado: 2 · Sin desenlace todavía: 13",
     );
   });
 
@@ -94,50 +99,50 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     // ⚠ SE SUMA LO QUE LA FRASE DICE, no lo que la función sabe: se extraen los números del
     // texto. Antes del arreglo de la 346 la cuenta daba 18 sobre un universo de 24, y ése es
     // exactamente el defecto que esta forma nueva NO puede reintroducir.
-    const numeros = [...textoDesenlacesDeFila(CREMA).matchAll(/(\d+)\s/g)].map((m) =>
+    const numeros = [...textoDesenlacesDeFila(CREMA).matchAll(/: (\d+)/g)].map((m) =>
       Number(m[1]),
     );
     expect(numeros).toEqual([3, 2, 4, 2, 13]);
     expect(numeros.reduce((a, b) => a + b, 0)).toBe(tramosDeFila(CREMA).total);
   });
 
-  it("FICHA 442 — concuerda en número: «1 rechazada», no «1 rechazadas»", () => {
-    // ⚠ EL SINGULAR NO SE CALCULA, ES EL `value` DEL CATÁLOGO. `order_status` guarda
-    // `rechazada` y `devuelta` en singular; lo que hace `etiquetaDeDesenlace` es pluralizarlos.
-    // Por eso aquí no hay ninguna regla de morfología del español que pueda equivocarse con un
-    // desenlace nuevo: con cantidad 1 se usa el value tal cual.
+  it("FICHA 442 → 455 — el nombre no cambia con la cantidad: ni plural ni singular", () => {
+    // ⚠ FICHA 455 (R2): un nombre de estado no se pluraliza. La concordancia de la 442 («1 rechazada»
+    // frente a «2 rechazadas») desaparece con él: la cantidad va al lado del nombre, entero.
     const una = desglose([
-      ["entregada", 4],
-      ["rechazada", 1],
-      ["devuelta", 1],
+      ["entregado", 4],
+      ["devolucion_a_origen_por_rechazo", 1],
+      ["novedad", 1],
       [EN_CURSO, 1],
     ]);
-    expect(textoDesenlacesDeFila(una)).toBe("4 entregadas · 1 rechazada · 1 devuelta · 1 en proceso");
-    // Y el plural sigue intacto con dos.
-    expect(textoDesenlacesDeFila(desglose([["rechazada", 2]]))).toBe("2 rechazadas");
-    // «en proceso» es invariante: no es un value del catálogo y no se pluralizaba nunca.
-    expect(textoDesenlacesDeFila(desglose([[EN_CURSO, 1]]))).toBe("1 en proceso");
+    expect(textoDesenlacesDeFila(una)).toBe(
+      "Entregado: 4 · Devolución a origen por rechazo: 1 · Novedad: 1 · Sin desenlace todavía: 1",
+    );
+    // Con dos, el mismo nombre.
+    expect(textoDesenlacesDeFila(desglose([["devolucion_a_origen_por_rechazo", 2]]))).toBe(
+      "Devolución a origen por rechazo: 2",
+    );
+    expect(textoDesenlacesDeFila(desglose([[EN_CURSO, 1]]))).toBe("Sin desenlace todavía: 1");
   });
 
   it("y el archivo descargable dice lo MISMO: una sola redacción para los dos", () => {
-    // La composición de «Otros resultados» viaja al `.xlsx` y se lee al lado de la tabla. Si la
-    // concordancia viviera sólo en la pantalla, la misma fila diría «1 devuelta» en una y
-    // «1 devueltas» en el otro — que es el tipo de diferencia que nadie mira dos veces.
+    // La composición de «Otros resultados» viaja al `.xlsx` y se lee al lado de la tabla: la misma
+    // fila tiene que decir lo mismo en los dos (FICHA 455: «Novedad: 1» en ambos).
     const una = desglose([
-      ["entregada", 4],
-      ["devuelta", 1],
+      ["entregado", 4],
+      ["novedad", 1],
     ]);
-    expect(textoComposicionOtrosResultados(una)).toBe("1 devuelta");
-    expect(textoDesenlacesDeFila(una)).toContain("1 devuelta");
+    expect(textoComposicionOtrosResultados(una)).toBe("Novedad: 1");
+    expect(textoDesenlacesDeFila(una)).toContain("Novedad: 1");
   });
 
   it("un cubo en CERO no se nombra: «0 rechazadas» es ruido, no información", () => {
     const sinRechazos = desglose([
-      ["entregada", 4],
+      ["entregado", 4],
       [EN_CURSO, 2],
     ]);
-    expect(textoDesenlacesDeFila(sinRechazos)).toBe("4 entregadas · 2 en proceso");
-    expect(textoDesenlacesDeFila(sinRechazos)).not.toContain("0 ");
+    expect(textoDesenlacesDeFila(sinRechazos)).toBe("Entregado: 4 · Sin desenlace todavía: 2");
+    expect(textoDesenlacesDeFila(sinRechazos)).not.toContain(": 0");
   });
 
   it("y sin ninguna orden la frase es VACÍA: una línea en blanco hace la fila más alta y no dice nada", () => {
@@ -145,10 +150,11 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     expect(partesDesenlaceDeFila([])).toEqual([]);
   });
 
-  it("«en proceso» se escribe UNA vez y no es un `value` del catálogo", () => {
+  it("el rótulo de lo que sigue vivo se escribe UNA vez y no es un `value` del catálogo", () => {
     // Se define por NEGACIÓN («lo que no tiene desenlace»), así que no hay ninguna fila de
     // `order_status` de la que sacarlo: es el único rótulo escrito a mano del módulo.
-    expect(ETIQUETA_EN_PROCESO).toBe("en proceso");
+    // ⏳ 2026-09-24 (FICHA 455, R6): «Sin desenlace todavía» (antes «en proceso», nombre retirado).
+    expect(ETIQUETA_EN_PROCESO).toBe("Sin desenlace todavía");
     expect(DESENLACES).not.toContain(ETIQUETA_EN_PROCESO);
     const partes = partesDesenlaceDeFila(CREMA);
     expect(partes[partes.length - 1]).toEqual({
@@ -173,16 +179,16 @@ describe("FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órd
     // la misma frase — que importa porque este texto se lee al lado del archivo descargable.
     const mezclado = desglose([
       [EN_CURSO, 1],
-      ["reprogramada", 2],
-      ["entregada", 9],
-      ["devuelta", 2],
-      ["rechazada", 3],
+      ["reprogramado", 2],
+      ["entregado", 9],
+      ["novedad", 2],
+      ["devolucion_a_origen_por_rechazo", 3],
     ]);
     expect(partesDesenlaceDeFila(mezclado).map((p) => p.clave)).toEqual([
-      "entregada",
-      "rechazada",
-      "devuelta",
-      "reprogramada",
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
+      "novedad",
+      "reprogramado",
       "en_proceso",
     ]);
   });

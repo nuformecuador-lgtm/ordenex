@@ -1,0 +1,54 @@
+-- ⭑ FICHA 429 (T4) — EL SINPE DE CADA BODEGA: las tres columnas, NULLABLES.
+--
+-- QUE AÑADE: `zona.sinpe_numero`, `zona.sinpe_nombre` y `zona.sinpe_revisado_at`.
+--
+-- ═════════════════════════════════════════════════════════════════════════════════════════════
+-- ⚠️ POR QUE ESTA MIGRACION NO SIEMBRA NINGUN VALOR, Y POR QUE LAS COLUMNAS NACEN NULLABLES
+-- ═════════════════════════════════════════════════════════════════════════════════════════════
+-- El `design.md` de esta ficha proponia sembrar aqui, con el numero y el titular vigentes escritos
+-- como LITERALES en este archivo. El leader lo veto el 2026-09-15 con un motivo medido:
+-- ESTE REPOSITORIO ES PUBLICO (`gh repo view` → PUBLIC). Un literal aqui publica en internet, de
+-- forma PERMANENTE, un movil real de Costa Rica y el nombre de una persona: quitarlo despues no
+-- sirve, `git` conserva la historia.
+--
+-- La siembra va, por tanto, en TRES PASOS:
+--   1. ESTA migracion crea las columnas NULLABLES y SIN `CHECK`;
+--   2. `scripts/seed-sinpe-inicial.ts` lee `NEXT_PUBLIC_SINPE_NUMERO`/`NEXT_PUBLIC_SINPE_NOMBRE`
+--      DEL ENTORNO —donde ya viven— y rellena las bodegas que esten en NULL. Es idempotente y
+--      falla ruidosamente si las variables faltan o el numero no cumple el formato;
+--   3. `20260918120200_zona_sinpe_no_nulo` pone el `NOT NULL` y los dos `CHECK`, una vez lleno.
+--
+-- ⚠️ EL ORDEN DE DESPLIEGUE NO ES OPCIONAL: el paso 3 FALLA si el 2 no ha corrido, y falla a
+-- proposito (ver su cabecera). Lo que NO se pierde es la garantia de «ningun hueco»: la aplicacion
+-- no lee estas columnas hasta que la funcionalidad se despliega, y para entonces ya estan llenas.
+--
+-- ⚠️ SIN `DEFAULT`, Y NO ES ESTETICO. Con un `DEFAULT` la siembra seria mas corta y dejaria el
+-- default vivo PARA SIEMPRE: crear una bodega SIN SINPE seguiria siendo posible y produciria en
+-- silencio el numero de otra. El `DEFAULT` es justamente lo que esta ficha no puede permitirse
+-- (R6/R11). El test comprueba que las tres columnas quedan sin `column_default`.
+--
+-- POR QUE COLUMNAS EN `zona` Y NO UNA TABLA `zona_sinpe`: una tabla 1:0..1 introduce exactamente
+-- el estado que esta ficha viene a eliminar —una bodega SIN FILA—, que resolveria `""` o un
+-- fallback mudo. Ademas `zona` ya se lee con `select { nombre }` en los diez sitios que importan
+-- (`OrdenEnvioReader`, `OrdenRepository`, `GestionOrdenRepository`…), asi que dos columnas mas no
+-- añaden NI UNA consulta, mientras que una tabla aparte añade un `join` a cada uno de esos caminos.
+--
+-- `sinpe_revisado_at` — NULL SIGNIFICA ALGO, y es la tercera capa de D3: «la semilla, y nadie lo ha
+-- mirado todavia dentro de la aplicacion». Es lo que dispara la revision obligatoria del primer
+-- inicio de sesion (R26). Se queda NULLABLE PARA SIEMPRE: una bodega sin revisar es un estado
+-- legitimo, y confundirlo con «revisada» es justo lo que R5 prohibe.
+--
+-- ANCHOS: `sinpe_numero` es `VARCHAR(8)` porque un movil de Costa Rica son OCHO digitos y el
+-- `CHECK` del paso 3 no admite otra cosa; el ancho es la primera barrera y es gratis.
+-- `sinpe_nombre` es `VARCHAR(60)`, el mismo ancho que `historial_accion.valor_*`, y el borde
+-- (`sinpeNombreSchema`) recorta antes para que Postgres no truncue en silencio.
+--
+-- RLS: NO HAY TABLA NUEVA. `zona` tiene RLS habilitada sin policies desde
+-- `20260709130000_ordenes_catalogos_geografia` (solo service role) y esta ficha no la toca. El
+-- anti-patron «tabla nueva sin RLS» NO APLICA, y se declara aqui para que el reviewer no lo busque.
+--
+-- ADITIVA Y REVERSIBLE: tres `ADD COLUMN` nullable, ningun dato escrito, ningun indice.
+
+ALTER TABLE "zona" ADD COLUMN "sinpe_numero" VARCHAR(8);
+ALTER TABLE "zona" ADD COLUMN "sinpe_nombre" VARCHAR(60);
+ALTER TABLE "zona" ADD COLUMN "sinpe_revisado_at" TIMESTAMP(3);

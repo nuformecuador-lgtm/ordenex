@@ -48,7 +48,7 @@ const ADMIN_SATELITE: Actor = { usuarioId: "u-adminsat", rol: "adminSatelite" };
 const ZONA_CENTRAL = "z-central";
 const ZONA_SATELITE = "z-satelite";
 const ESTATUS_ID: Record<string, string> = {
-  por_recoger: "os-por-recoger",
+  mensajero_recogiendo_en_bodega: "os-por-recoger",
   en_reparto: "os-en-reparto",
   en_bodega_central: "os-bodega-central",
   en_bodega_satelite: "os-bodega-satelite",

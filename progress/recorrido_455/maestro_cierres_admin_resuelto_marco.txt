@@ -1,0 +1,136 @@
+Detalle del cierre
+
+Marco Mensajero · Bodega central · GAM
+
+De quién es el dinero
+Total general
+₡0
+Lo que Ordenex facturó
+-₡0
+Gana la tienda
+Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.
+₡0
+Lo que Ordenex le factura a la tienda
+Cobrado sobre lo recaudado
+Flete + IVA y comisión + IVA de lo que sí se entregó: sale del dinero que el mensajero recaudó.
+₡0
+Flete por rechazo + IVA
+Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.
++₡0
+Lo que Ordenex facturó
+₡0
+Total general
+₡0
+Cobrado sobre lo recaudado
+-₡0
+Pago a tienda
+Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.
+₡0
+Lo que le queda a Ordenex
+Lo que Ordenex facturó
+₡0
+Pago al mensajero
+-₡0
+Ingreso de bodega por rechazos
+-₡1.000
+Neto de Ordenex
+Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.
+Ordenex pagó más de lo que facturó en este cierre: ese neto es una pérdida, no una ganancia.
+-₡1.000
+Cierre del día
+Aprobado
+Bodega central · GAM · Mensajero Marco Mensajero
+Comprobante #404B272A
+Solicitado 2026-08-20 · Resuelto 2026-08-20
+Pago a tienda
+₡0
+Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.
+Ingreso de bodega por rechazos
+₡1.000
+Automático (por plazo vencido)
+₡0
+·
+Manual (mensajero)
+₡1.000
+TOTAL GENERAL
+₡0
+TOTAL ORDENEX
+₡0
+PAGO AL MENSAJERO
+₡0
+GESTIONES
+4
+TOTALES DEL CIERRE
+Efectivo
+₡0
+SINPE
+₡0
+Transferencia
+₡0
+Total general
+₡0
+INGRESO DE ORDENEX
+Flete + IVA
+₡0
+Comisión + IVA
+₡0
+Flete por rechazo + IVA
+₡0
+Total Ordenex
+₡0
+LIQUIDACIÓN
+Ingreso bruto
+Todo lo que facturó Ordenex en el cierre (flete + IVA + comisión + IVA), sin descontar nada.
+₡0
+Pago al mensajero
+₡0
+Ingreso de bodega por rechazos
+₡1.000
+Entregado
+0
+Reprogramado
+0
+Novedad
+3
+Devolución a origen por rechazo
+1
+Incidente
+0
+Guía
+Destinatario
+Cobrado
+Total Ordenex
+990008
+Fernando Castro
+QA-R-0008 · Reloj inteligente
+₡45.000
+₡0
+990009
+Gabriela Nunez
+QA-R-0009 · Bolso de mano
+₡18.500
+₡0
+990013
+Valeria Segura
+QA-R-0013 · Lampara de escritorio
+₡15.000
+₡0
+ÓRDENES SIN GESTIONAR
+
+Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.
+
+Total recaudado ₡0 · 0 entregas
+Pago al mensajero
+
+Pendiente de liquidar:
+Liquidado
+
+Este cierre ya está liquidado: no queda nada por pagar.
+
+Descargar
+Fecha del pago	Monto	Método	Referencia	Nota	Registró	Registrado el	Estado	Acciones
+
+
+Todavía no hay pagos registrados.
+
+Cerrar

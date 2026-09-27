@@ -44,7 +44,9 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
   return {
     tiendaId: "tienda-1",
     mensajeroAsignadoId: "mensajero-1",
-    estatusValue: "ayuda_tienda",
+    // ⏳ 2026-09-23 (FICHA 454, T1.15): `en_reparto` con la ayuda ABIERTA (ya no hay estatus de ayuda).
+    estatusValue: "en_reparto",
+    ayudaAbierta: true,
     deletedAt: null,
     fechaReparto: null,
     ...over,
@@ -53,8 +55,8 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
 
 const CATALOGO: Record<string, string> = {
   ayuda_tienda: "os-ayuda",
-  reprogramada: "os-reprogramada",
-  rechazada: "os-rechazada",
+  reprogramado: "os-reprogramada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
 };
 
@@ -86,7 +88,7 @@ function montar(opts: { orden?: OrdenParaHilo; crearDevuelve?: string | null } =
 
 const RECHAZO: GestionDesdeAyudaInput = {
   ordenId: "o1",
-  resultado: "rechazada",
+  resultado: "devolucion_a_origen_por_rechazo",
   motivo: "el cliente no la quiere",
   evidencias: [
     { contentType: "image/jpeg", bytes: new Uint8Array([0]) },

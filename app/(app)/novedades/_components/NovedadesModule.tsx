@@ -28,7 +28,7 @@ import {
 } from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { NovedadDTO } from "@/lib/types/novedad";
-import { grupoDeEstatus, type GrupoNovedad } from "@/lib/types/novedad-grupo";
+import { grupoDeFila, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 // FICHA 312 (F2) — la correccion de los datos del cliente. La ventana la COMPARTE con el
@@ -81,7 +81,8 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // desde el Server Component padre (que ya valido rol adminTienda y pre-fetch pagina 1, R18):
 // componente PRIVADO (datos sensibles de la tienda por props, arquitectura §private). Al
 // cambiar de pagina re-fetch por Server Action (lectura interna, NO fetch a /api; el telefono
-// es PII), patron `MiWalletModule` (R22). Lista vacia -> estado vacio legible (R10).
+// es PII), el patron de las lecturas paginadas de `/mi-wallet` (R22). Lista vacia -> estado vacio
+// legible (R10).
 //
 // ⚠️ FEATURE 236 (T4.1/T4.2, design §5) — EL MISMO MODULO SIRVE A DOS PESTAÑAS, y por eso recibe
 // `grupo`. Hasta el 2026-08-19 esta pantalla listaba DOS POBLACIONES bajo UNA sola pestaña, porque
@@ -316,10 +317,12 @@ function causaLabel(causa: NovedadDTO["causa"]): string {
  * Para la devolucion no cambia nada: su señal sigue siendo la causa, que es lo unico que distingue
  * una devolucion de otra en la lista (R7/R11 de la 87).
  */
-function badgeNovedad(novedad: NovedadDTO): string {
-  const grupo = grupoDeEstatus(novedad.estatusValue);
-  const chipFijo = grupo ? TEXTOS_POR_GRUPO[grupo].chipFijo : null;
-  return chipFijo ?? causaLabel(novedad.causa);
+function badgeNovedad(novedad: NovedadDTO, grupoListado: GrupoNovedad): string {
+  // FICHA 454 (T2.5): el grupo de la fila es el de la lista que la trajo, confirmado contra su
+  // estado (`grupoDeFila`); la ayuda ya no se deduce del estado, que es `en_reparto`.
+  const grupo = grupoDeFila(novedad.estatusValue, grupoListado);
+  const notaFija = grupo ? TEXTOS_POR_GRUPO[grupo].notaFija : null;
+  return notaFija ?? causaLabel(novedad.causa);
 }
 
 export function NovedadesModule({
@@ -749,10 +752,10 @@ export function NovedadesModule({
               // pinta (`mostrarRuta={false}`). Se pasa el tamaño de la página porque es el
               // dato honesto que esta pantalla tiene, no un cero de relleno.
               total={visibles.length}
-              // El badge lo decide el GRUPO DE LA FILA (ver `badgeNovedad`). No hay estado de
-              // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
-              // esa orden está en su pantalla.
-              estado={badgeNovedad(novedad)}
+              // FICHA 455 (R7): el chip dice el ESTADO de la orden («Novedad», «En reparto»); la
+              // NOTA de al lado la decide el GRUPO DE LA FILA (ver `badgeNovedad`): lo que la tienda
+              // necesita saber de un vistazo es por qué esa orden está en su pantalla.
+              nota={badgeNovedad(novedad, grupo)}
               // FICHA 296 — A QUIÉN PREGUNTARLE. Hasta hoy la tienda veía una orden pidiendo
               // ayuda y la card no nombraba a nadie. El dato es campo PROPIO de `NovedadDTO`
               // (no de `MiAsignacionDTO`, que es el contrato del portal del mensajero), así que
@@ -778,6 +781,7 @@ export function NovedadesModule({
               acciones={
                 <NovedadAcciones
                   novedad={novedad}
+                  grupoListado={grupo}
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
                   onRechazar={setOrdenARechazar}

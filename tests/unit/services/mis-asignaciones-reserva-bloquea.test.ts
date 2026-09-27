@@ -49,19 +49,19 @@ const DIA_22 = new Date("2026-08-22T00:00:00.000Z");
 const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  reprogramada: "os-reprogramada",
+  entregado: "os-entregada",
+  reprogramado: "os-reprogramada",
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   ayuda_tienda: "os-ayuda-tienda",
 };
 
 function gestionRow(over: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
   return {
     id: "o1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     deletedAt: null,
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,
@@ -91,6 +91,8 @@ function asignacionRow(over: Partial<MiAsignacionRow> = {}): MiAsignacionRow {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...over,
   };
@@ -107,7 +109,10 @@ function fakeRepo(over: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRep
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
     rechazarDesdeDevuelta: vi.fn(async () => true),
@@ -165,7 +170,7 @@ function montar(repo: IGestionOrdenRepository = fakeRepo()) {
 
 const ENTREGA: GestionarInput = {
   ordenId: "o1",
-  resultado: "entregada",
+  resultado: "entregado",
   montoRecibido: 100,
   metodoPago: "efectivo",
   pagos: [{ metodo: "efectivo", monto: 100 }],
@@ -219,7 +224,7 @@ describe("R1/R4 — recoger una orden reservada para otro dia", () => {
 
     expect(repo.recogerLote).not.toHaveBeenCalled();
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R4: un lote con UNA reservada aborta ENTERO (ninguna de las otras se recoge)", async () => {
@@ -411,7 +416,7 @@ describe("R2/R4/R27 — gestionar una orden reservada", () => {
     await service.gestionar(ENTREGA, MENSAJERO, NOCHE_DEL_21);
 
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("reservada para HOY: se gestiona con normalidad", async () => {
@@ -425,7 +430,7 @@ describe("R2/R4/R27 — gestionar una orden reservada", () => {
     const r = await service.gestionar(ENTREGA, MENSAJERO, NOCHE_DEL_21);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("sin dia de reparto: se gestiona (R8)", async () => {

@@ -109,6 +109,31 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.cierreBodega\.updateMany\(/,
   },
   {
+    // ⭑ FICHA 431 — LA MARCA DE CONCILIACION: «el bulto de efectivo de esta satelite llego».
+    //
+    // ⚠️ DOS ENTRADAS Y DOS METODOS PARA DOS TIPOS, y ESE es el punto. Si `marcarConciliado` y
+    // `revertirConciliacion` fueran UN metodo con un booleano, borrar uno de los dos
+    // `appendAccion` dejaria esta guardia VERDE: mide POR METODO, no por escritura. Medido dos
+    // veces en este repo (fichas 376 y 380) y repetido aqui a proposito.
+    //
+    // Y hay una segunda razon para que estas entradas existan, escrita en `design.md §4.2`:
+    // `appendAccion(this.prisma, …)` en vez de `appendAccion(tx, …)` NO LA CAZA NINGUN TEST DE
+    // INTEGRACION —ahi `this.prisma` ES el cliente de la transaccion del test—. Esta guardia, que
+    // exige forma `abre_tx` y el `appendAccion` DENTRO del callback, es lo unico que la caza.
+    tipos: ["cierre_bodega_conciliado"],
+    archivo: "lib/repositories/CierresBodegaAdminRepository.ts",
+    metodo: "marcarConciliado",
+    forma: "abre_tx",
+    mutacion: /tx\.cierreBodega\.updateMany\(/,
+  },
+  {
+    tipos: ["cierre_bodega_conciliacion_revertida"],
+    archivo: "lib/repositories/CierresBodegaAdminRepository.ts",
+    metodo: "revertirConciliacion",
+    forma: "abre_tx",
+    mutacion: /tx\.cierreBodega\.updateMany\(/,
+  },
+  {
     tipos: ["pago_mensajero_registrado", "pago_tienda_registrado"],
     archivo: "lib/repositories/LiquidacionPagoRepository.ts",
     metodo: "crear",
@@ -265,6 +290,30 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.tarifaZonaMensajero\.deleteMany\(/,
   },
   {
+    // ⭑ FICHA 429 — EL SINPE DE UNA BODEGA. Metodo PROPIO y no una escritura mas dentro de
+    // `update`, y eso es deliberado: esta guardia mide POR METODO, no por escritura (medido dos
+    // veces en este repo, fichas 376 y 380). Si el guardado del SINPE viviera dentro de `update`
+    // —que ya llama a `appendAccion` por otros tres tipos— borrar SU `appendAccion` dejaria esta
+    // guardia VERDE. Con metodo propio, la unica escritura del cuerpo es la que la fila documenta
+    // y el limite conocido de la guardia no muerde aqui.
+    //
+    // ⚠️ LA MUTACION QUE SE EXIGE ES EL `update` DE LAS DOS COLUMNAS, que es exactamente lo que la
+    // fila documenta: a que cuenta se le va a pedir el dinero a los clientes de esa bodega.
+    //
+    // ⚠️ NO HAY ENTRADA PARA `create` NI PARA `confirmarSinpe`, y NO es un olvido:
+    //   · `create` escribe el par en el acto de crear la bodega, y el catalogo no tiene un tipo
+    //     «zona creada» (hay `zona_borrada` y no `zona_creada`, igual que `vehiculo_borrado` sin
+    //     `vehiculo_creado`). Añadir uno aqui ensancharia el alcance firmado.
+    //   · `confirmarSinpe` NO CAMBIA NADA (R25): solo pone la fecha de revision. D6 pide el rastro
+    //     de quien lo CAMBIO; un tipo «alguien lo miro» dentro de la categoria del dinero la
+    //     convertiria en un registro de visitas.
+    tipos: ["zona_sinpe_cambiado"],
+    archivo: "lib/repositories/ZonaRepository.ts",
+    metodo: "guardarSinpe",
+    forma: "abre_tx",
+    mutacion: /tx\.zona\.update\(/,
+  },
+  {
     // ⭑ FICHA 381 — EL COBRO MANUAL A UNA TIENDA. Forma `recibe_tx`, la FUERTE: el metodo recibe la
     // transaccion como primer parametro y su tipo (`WalletTiendaHistorialTxClient`) no expone
     // `$transaction`, asi que la atomicidad es del TIPO y no de la disciplina.
@@ -280,6 +329,96 @@ const CENSO: EntradaCenso[] = [
     metodo: "registrarCobroEnHistorial",
     forma: "recibe_tx",
     mutacion: /tx\.usuario\.findUnique\(/,
+  },
+  // ⭑ FICHA 459 (R53/R78) — el pago por cuenta de una tienda y el saldo inicial o aporte. UN TIPO
+  // POR METODO, forma `recibe_tx` (el servicio abre la transaccion y el repositorio escribe el
+  // documento y su historial en ella). La mutacion exigida es la escritura DEL DOCUMENTO.
+  {
+    tipos: ["pago_por_cuenta_tienda_registrado"],
+    archivo: "lib/repositories/PagoPorCuentaTiendaRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.pagoPorCuentaTienda\.create\(/,
+  },
+  {
+    tipos: ["pago_por_cuenta_tienda_anulado"],
+    archivo: "lib/repositories/PagoPorCuentaTiendaRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.pagoPorCuentaTiendaAnulacion\.create\(/,
+  },
+  {
+    tipos: ["aporte_capital_registrado"],
+    archivo: "lib/repositories/AporteCapitalRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.aporteCapital\.create\(/,
+  },
+  {
+    tipos: ["aporte_capital_anulado"],
+    archivo: "lib/repositories/AporteCapitalRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.aporteCapitalAnulacion\.create\(/,
+  },
+  {
+    // ⭑ FICHA 461 (R10/R55) — la ANULACION de un cobro de Ordenex a una tienda. Forma `recibe_tx`
+    // (el servicio abre la transaccion; el repositorio escribe la constancia y su historial en
+    // ella). Metodo PROPIO: la guardia mide por metodo. La mutacion exigida es la escritura de la
+    // CONSTANCIA de la anulacion, que es lo que la fila documenta.
+    tipos: ["cobro_tienda_anulado"],
+    archivo: "lib/repositories/CobroTiendaAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.cobroTiendaAnulacion\.create\(/,
+  },
+  // ⭑ FICHA 457 (R61/R62) — el PAGO DE UNA TIENDA A ORDENEX. UN TIPO POR METODO, forma `recibe_tx`
+  // (el servicio abre la transaccion y el repositorio escribe el documento y su historial en ella,
+  // molde de las de la 459). La mutacion exigida es la escritura DEL DOCUMENTO (y de la CONSTANCIA).
+  {
+    tipos: ["abono_tienda_registrado"],
+    archivo: "lib/repositories/AbonoTiendaRepository.ts",
+    metodo: "crear",
+    forma: "recibe_tx",
+    mutacion: /tx\.abonoTienda\.create\(/,
+  },
+  {
+    tipos: ["abono_tienda_anulado"],
+    archivo: "lib/repositories/AbonoTiendaRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.abonoTiendaAnulacion\.create\(/,
+  },
+  {
+    // ⭑ FICHA 461 (R69, auditoria D3) — la ANULACION de una correccion de caja. Misma forma y mismo
+    // molde que la del cobro: `recibe_tx`, metodo propio, y la mutacion exigida es la escritura de
+    // la CONSTANCIA. El contra-asiento lo escribe `AjusteCajaService` en la misma transaccion.
+    tipos: ["wallet_movimiento_manual_anulado"],
+    archivo: "lib/repositories/AjusteCajaAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.ajusteCajaAnulacion\.create\(/,
+  },
+  {
+    // ⭑ FICHA 458-B (D13, R64) — la ANULACION con motivo de un EGRESO de caja (sueldo, gasto,
+    // gasto fijo, indemnizacion). MISMA tabla que la correccion, METODO PROPIO: si viviera dentro de
+    // `anular`, borrar uno de los dos `appendAccion` dejaria esta guardia verde (mide por metodo).
+    // La mutacion exigida es la constancia con `createMany` (`skipDuplicates`).
+    tipos: ["egreso_caja_anulado"],
+    archivo: "lib/repositories/AjusteCajaAnulacionRepository.ts",
+    metodo: "anularEgreso",
+    forma: "recibe_tx",
+    mutacion: /tx\.ajusteCajaAnulacion\.createMany\(/,
+  },
+  {
+    // ⭑ FICHA 458-B (D7, R64) — la ANULACION de un cobro por rechazo aprobado. `recibe_tx`; los
+    // reversos de la caja y los creditos de la tienda los escribe `RechazoTiendaCobroService` en la
+    // misma transaccion. La mutacion exigida es la constancia.
+    tipos: ["cobro_rechazo_tienda_anulado"],
+    archivo: "lib/repositories/RechazoTiendaCobroAnulacionRepository.ts",
+    metodo: "anular",
+    forma: "recibe_tx",
+    mutacion: /tx\.rechazoTiendaCobroAnulacion\.createMany\(/,
   },
   {
     // ⭑ Q2 (`usuario_fulfillment_cambiado`) comparte punto de escritura con el rol y la zona: es
@@ -816,14 +955,24 @@ describe("362/R16 — cada tipo del catalogo tiene al menos un punto de escritur
     expect(inventados, "el censo nombra un tipo que el catalogo no declara").toEqual([]);
   });
 
-  it("los 52 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380, la 381 y la 398) siguen siendo 52", () => {
+  it("los 55 tipos del Anexo A (+ Q1, Q2, la 366, la 371, la 373, la 374, la 375, la 376, la 380, la 381, la 398, la 429 y la 431) siguen siendo 55", () => {
     // Numero DURO a proposito: añadir un tipo al enum obliga a pasar por aqui, y por tanto a
     // añadirlo al censo y a escribir su productor. Es el mecanismo de R14.
-    // 52 desde la ficha 398 (`cierre_dia_gestion_corregida`); 51 lo fue desde la 381
+    // 55 desde la ficha 431 (`cierre_bodega_conciliado` y `cierre_bodega_conciliacion_revertida`,
+    // que entran DE DOS EN DOS porque la guardia mide por metodo);
+    // 53 lo fue desde la ficha 429 (`zona_sinpe_cambiado`); 52 lo fue desde la 398
+    // (`cierre_dia_gestion_corregida`); 51 lo fue desde la 381
     // (`cobro_tienda_registrado`); 50 desde la 380 (`zona_pago_mensajero_cambiado`); 49 desde la
     // 376 (`zona_central_cambiada`); 48 desde la 375 (`nodo_geografico_renombrado`); 47 desde la
     // 374 (los dos `nodo_geografico_*` de activacion); 45 desde la 373.
-    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(52);
+    // 59 desde la ficha 459 (los cuatro del pago por cuenta y del saldo inicial o aporte).
+    // 60 desde la ficha 461 (`cobro_tienda_anulado`, con su productor propio); 61 con la anulacion
+    // de una correccion de caja (`wallet_movimiento_manual_anulado`, auditoria D3, tambien propio).
+    // 63 desde la ficha 457 (`abono_tienda_registrado` y `abono_tienda_anulado`, un tipo por metodo
+    // de `AbonoTiendaRepository`).
+    // 65 desde la ficha 458-B (`cobro_rechazo_tienda_anulado` y `egreso_caja_anulado`, cada uno con
+    // su metodo propio).
+    expect(HISTORIAL_ACCION_TIPOS).toHaveLength(65);
   });
 });
 

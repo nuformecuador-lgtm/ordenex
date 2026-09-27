@@ -212,7 +212,18 @@ describe("DOWN — deja la base como estaba (R40)", () => {
     // que anadieron las features POSTERIORES: este `down.sql` es una FOTO punto-en-el-tiempo y no
     // se reescribe (en un rollback los downs corren del mas nuevo al mas viejo, asi que cuando
     // este se ejecute los valores de despues ya se habran retirado).
-    const AGREGADOS_DESPUES = ["ranking_snapshot_fila"]; // 293
+    const AGREGADOS_DESPUES = [
+      "ranking_snapshot_fila", // 293
+      // 459: los documentos del pago por cuenta y del saldo inicial o aporte, y el cobro reclasificado
+      "pago_por_cuenta_tienda",
+      "aporte_capital",
+      "cobro_manual_reclasificado",
+      // 461: las filas del cobro de Ordenex a una tienda (servicio) y las completadas por su migracion
+      "cobro_tienda",
+      "cobro_tienda_completado",
+      // 457: el documento del pago de una tienda a Ordenex (`abono-tienda-457-migration.test.ts`)
+      "abono_tienda",
+    ];
     expect(valores).toEqual(
       WALLET_ORIGEN_TIPO_SEED.filter(
         (v) => v !== "orden_incidente" && !AGREGADOS_DESPUES.includes(v),

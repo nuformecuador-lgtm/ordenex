@@ -1,0 +1,49 @@
+-- FICHA 462 (T2.1, design §7.1) — el aviso «reprogramadas de hoy que esperan la aprobacion de un
+-- cierre», en los DOS enums de `notificacion`:
+--
+--   `notificacion_evento`       += 'reprogramadas_esperan_cierre'
+--   `notificacion_entidad_tipo` += 'reprogramadas_esperan_cierre_dia'
+--
+-- POR QUE HACE FALTA. La regla 276 retiene una reprogramada nacida de una visita real hasta que se
+-- APRUEBA el cierre de su gestion. Caso real (prod, 24/09/2026): la guia 46397476 tuvo fecha de hoy
+-- desde las 11:45 y espero ~20 h a que alguien aprobara el cierre, sin que nadie en la oficina
+-- supiera que estaba retenida ni por que cierre. El humano NO cambia la regla; quiere que la oficina
+-- SEPA a primera hora cuantas siguen retenidas y por que cierre. Este aviso es esa alerta (la «M3»
+-- que la 215 §7bis dejo escrita).
+--
+-- ES EL CUARTO AVISO AGREGADO del arbol (409: novedades, represadas; 413: reparto de mañana): UNA
+-- fila por AMBITO (la administracion central, o la zona de un satelite) y por rol destinatario, una
+-- vez por dia CR, con el numero VIVO en el titulo (se recompone al leer, nunca se persiste). Lo
+-- emite el cron `avisos-diarios` a las 07:00 CR.
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien anadido
+-- en la misma transaccion que lo anadio (`55P04`) y Prisma Migrate corre cada `migration.sql`
+-- dentro de una. Aqui SOLO se anaden los valores; su primer uso ocurre en runtime
+-- (`emitirReprogramadasEsperanCierre`), en transacciones posteriores. Mismo precedente que la 427,
+-- la 413, la 412, la 409, la 401, la 403, la 333, la 271, la 262 y la 253.
+--
+-- EL TIMESTAMP (20260925130000) SE ESCRIBE A MANO (P3006 impide `db:migrate:create`) y es POSTERIOR
+-- a toda migracion de `origin/dev` al abrir el PR (la mas nueva: 20260925120300_reclasificar_cobros_459).
+-- JAMAS RENUMERAR UNA CARPETA YA APLICADA: deja una fila fantasma que `migrate status` no ve.
+--
+-- POR QUE LA ENTIDAD ES `${ambito}:${diaCR}` con `ambito ∈ { "central" } ∪ { zonaId }`. ES LA
+-- DECISION QUE EVITA UN SILENCIO TOTAL, y este repo ya la pago CUATRO veces (262, 403, 409, 412).
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`; el ALCANCE
+-- (`zona_id`) NO entra en esa clave, y `NotificacionRepository.crear` ABSORBE el `P2002`. Con el
+-- dia a secas, la PRIMERA zona de la corrida se llevaria el aviso y TODAS LAS DEMAS quedarian
+-- mudas, sin error y sin log. Con el ambito dentro:
+--   - zonas distintas el mismo dia => entidades distintas => CADA UNA recibe el suyo (R12);
+--   - dias distintos => entidades distintas => el recordatorio diario sale siempre (R11);
+--   - la misma corrida repetida el mismo dia => misma entidad => UN solo aviso (R11), y lo decide
+--     el INDICE, no un `if` previo que una carrera pueda burlar.
+-- Es `"central"` y NO `"global"` (el literal de la 409) a proposito: maestro y admin NO cuentan el
+-- total del sistema sino el ambito CENTRAL (los cierres con destino `bodega_central`), que es lo que
+-- ven en `/cierres-admin`; un aviso que dijera 5 y una pantalla con 3 marcas quedaria desacreditado
+-- el primer dia (requirements, decision 3).
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, NO CREA NINGUN INDICE y no toca RLS
+-- (`notificacion` conserva la de la 146). SIN BACKFILL: ninguna notificacion existente cambia de
+-- evento ni de entidad. `IF NOT EXISTS`: reaplicarla no falla.
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'reprogramadas_esperan_cierre';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'reprogramadas_esperan_cierre_dia';

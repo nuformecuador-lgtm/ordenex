@@ -1,0 +1,245 @@
+import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type {
+  AnulacionDeDocumento,
+  CuentaNombrada,
+  ILibroCajaAutoriaRepository,
+  MovimientoDeCajaParaAutoria,
+} from "@/lib/interfaces/repositories/ILibroCajaAutoriaRepository";
+import { tipoDeDocumentoOriginal } from "@/lib/services/WalletService";
+import type { AnulacionDeFilaDTO } from "@/lib/types/estado-cuenta";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { horaCostaRica } from "@/lib/utils/hora-cr";
+import { movimientoDeLaAnotacion } from "@/lib/utils/anotacion-de-fila";
+import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { RegistroDTO } from "@/lib/types/estado-cuenta";
+import type {
+  AQuienDTO,
+  AutoriaDeFilaDTO,
+  AutoriaLibroCajaInput,
+  ComoDTO,
+  RegistradoElDTO,
+} from "@/lib/types/libro-caja-autoria";
+import type {
+  AutoriaLibroCajaServiceResult,
+  ILibroCajaAutoriaService,
+} from "@/lib/interfaces/services/ILibroCajaAutoriaService";
+
+const NADIE: AQuienDTO = { nombre: null, beneficiario: null, cuenta: null, esOrdenex: false };
+
+function aCuenta(c: CuentaNombrada | undefined): AQuienDTO {
+  return c === undefined ? NADIE : { nombre: c.nombre, beneficiario: null, cuenta: { tipo: c.tipo, id: c.id }, esOrdenex: false };
+}
+
+/**
+ * FICHA 458-B (design §3.4, R56/R57) — «A quien» y «Registro» de las filas del libro de la caja,
+ * EN LOTE: una consulta por tipo de origen presente en la pagina.
+ *
+ *   origen                                A quien
+ *   cierre_dia                            el mensajero del cierre
+ *   pago_tienda / pago_mensajero          el beneficiario del pago (172)
+ *   gestion_orden                         la tienda del cobro por rechazo
+ *   ranking_snapshot_fila                 el mensajero del podio
+ *   orden_incidente                       la tienda de la orden
+ *   pago_por_cuenta_tienda                la tienda y el beneficiario del documento
+ *   cobro_tienda(_completado), cobro_manual_reclasificado   la tienda del cobro (el debito)
+ *   abono_tienda                          la tienda que pago
+ *   aporte_capital                        «Ordenex»
+ *   gasto / manual                        la anotacion (nombre libre); sin anotacion, «—». El
+ *                                         contra-asiento, la de su original (revision M2, 458-E)
+ *
+ * Registro: la persona (`registrado_por`) o, si es automatico, la ACCION que lo produjo y quien la
+ * decidio (aprobacion del cierre, plantilla de gasto fijo, cobro por rechazo, incidente, premio).
+ * El texto lo compone la pantalla con sus rotulos: aqui solo hay datos.
+ */
+export class LibroCajaAutoriaService implements ILibroCajaAutoriaService {
+  constructor(private readonly repo: ILibroCajaAutoriaRepository) {}
+
+  async resolver(input: AutoriaLibroCajaInput, actor: Actor): Promise<AutoriaLibroCajaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R82: antes de leer
+
+    const movs = await this.repo.movimientos(input.movimientoIds);
+    const ids = (origen: string) => [
+      ...new Set(movs.flatMap((m) => (m.origenTipo === origen && m.origenId !== null ? [m.origenId] : []))),
+    ];
+    const deTipos = (...origenes: string[]) => [...new Set(origenes.flatMap(ids))];
+
+    const nombres = await this.repo.nombres([...new Set(movs.flatMap((m) => (m.registradoPor === null ? [] : [m.registradoPor])))]);
+    const cierres = await this.repo.cierres(ids("cierre_dia"));
+    const pagos = await this.repo.pagos(deTipos("pago_tienda", "pago_mensajero"));
+    const rechazos = await this.repo.rechazos(ids("gestion_orden"));
+    const podios = await this.repo.podios(ids("ranking_snapshot_fila"));
+    const incidentes = await this.repo.incidentes(ids("orden_incidente"));
+    const pagosPorCuenta = await this.repo.pagosPorCuenta(ids("pago_por_cuenta_tienda"));
+    const debitos = await this.repo.debitosDeTienda(deTipos("cobro_tienda", "cobro_tienda_completado", "cobro_manual_reclasificado"));
+    const abonos = await this.repo.abonos(ids("abono_tienda"));
+    // Revision M2 (458-E): el contra-asiento de un egreso o de una correccion anulados lleva el nombre
+    // de su ORIGINAL (la misma regla que el filtro «A quién»).
+    const anotaciones = await this.repo.anotaciones([
+      ...new Set(movs.filter((m) => m.origenTipo === "gasto" || m.origenTipo === "manual").map(movimientoDeLaAnotacion)),
+    ]);
+
+    const aQuien = (m: MovimientoDeCajaParaAutoria): AQuienDTO => {
+      const o = m.origenId;
+      switch (m.origenTipo) {
+        case "cierre_dia":
+          return aCuenta(o === null ? undefined : cierres.get(o)?.mensajero);
+        case "pago_tienda":
+        case "pago_mensajero":
+          return aCuenta(o === null ? undefined : pagos.get(o));
+        case "gestion_orden":
+          return aCuenta(o === null ? undefined : rechazos.get(o)?.tienda);
+        case "ranking_snapshot_fila":
+          return aCuenta(o === null ? undefined : podios.get(o));
+        case "orden_incidente":
+          return aCuenta(o === null ? undefined : incidentes.get(o)?.tienda);
+        case "pago_por_cuenta_tienda": {
+          const p = o === null ? undefined : pagosPorCuenta.get(o);
+          return p === undefined ? NADIE : { ...aCuenta(p.tienda), beneficiario: p.beneficiario };
+        }
+        case "cobro_tienda":
+        case "cobro_tienda_completado":
+        case "cobro_manual_reclasificado":
+          return aCuenta(o === null ? undefined : debitos.get(o));
+        case "abono_tienda":
+          return aCuenta(o === null ? undefined : abonos.get(o));
+        case "aporte_capital":
+          return { ...NADIE, esOrdenex: true };
+        default: {
+          // gasto / manual: el nombre libre anotado; una fila anterior a la 458 no tiene («—»).
+          const nombre = anotaciones.get(movimientoDeLaAnotacion(m)) ?? null;
+          return { ...NADIE, nombre };
+        }
+      }
+    };
+
+    const registro = (m: MovimientoDeCajaParaAutoria): RegistroDTO => {
+      if (m.registradoPor !== null) return { nombre: nombres.get(m.registradoPor) ?? null, automatico: null };
+      const o = m.origenId;
+      switch (m.origenTipo) {
+        case "cierre_dia":
+          return { nombre: null, automatico: { accion: "aprobacion_cierre", por: o === null ? null : (cierres.get(o)?.aprobo ?? null) } };
+        case "gasto":
+          return { nombre: null, automatico: { accion: "plantilla_gasto_fijo", por: null } };
+        case "gestion_orden":
+          return { nombre: null, automatico: { accion: "cobro_por_rechazo", por: o === null ? null : (rechazos.get(o)?.aprobo ?? null) } };
+        case "orden_incidente":
+          return { nombre: null, automatico: { accion: "incidente", por: o === null ? null : (incidentes.get(o)?.resolvio ?? null) } };
+        case "ranking_snapshot_fila":
+          return { nombre: null, automatico: { accion: "premio_del_ranking", por: null } };
+        default:
+          return { nombre: null, automatico: { accion: "sistema", por: null } };
+      }
+    };
+
+    // ── Ficha 458-C (revision M1, R58): «Como» y la anulacion de la fila ORIGINAL ──────────────
+    // Que fila es la original de que documento lo decide la MISMA funcion que da el `documento` del
+    // libro (`tipoDeDocumentoOriginal`): el panel no puede decir «anulado por X» de una fila que el
+    // libro no da por original (un contra-asiento, una salida reclasificada, lo del cierre).
+    const documentoDe = new Map(movs.map((m) => [m.id, tipoDeDocumentoOriginal(m)]));
+    const origenesDe = (...tipos: string[]) => [
+      ...new Set(movs.flatMap((m) => (tipos.includes(documentoDe.get(m.id) ?? "") && m.origenId !== null ? [m.origenId] : []))),
+    ];
+    const anotables = movs.filter((m) => m.origenTipo === "gasto" || m.origenTipo === "manual").map((m) => m.id);
+    const comos = await this.repo.comos({
+      // El «como» de un pago de la 172 vale para el pago a una tienda Y para el de un mensajero.
+      pagos: deTipos("pago_tienda", "pago_mensajero"),
+      pagosPorCuenta: ids("pago_por_cuenta_tienda"),
+      abonos: ids("abono_tienda"),
+      movimientos: anotables,
+    });
+    const anulaciones = await this.repo.anulaciones({
+      pagos: origenesDe("pago_tienda"),
+      pagosPorCuenta: origenesDe("pago_por_cuenta_tienda"),
+      aportes: origenesDe("aporte_capital"),
+      abonos: origenesDe("abono_tienda"),
+      cobros: origenesDe("cobro_tienda"),
+      rechazos: origenesDe("rechazo_tienda_cobro"),
+      premios: origenesDe("premio_del_ranking"),
+      movimientos: movs
+        .filter((m) => ["egreso_caja", "ajuste_caja", "indemnizacion"].includes(documentoDe.get(m.id) ?? ""))
+        .map((m) => m.id),
+    });
+
+    const como = (m: MovimientoDeCajaParaAutoria): ComoDTO | null => {
+      const o = m.origenId;
+      switch (m.origenTipo) {
+        case "pago_tienda":
+        case "pago_mensajero":
+          return (o === null ? undefined : comos.pagos.get(o)) ?? null;
+        case "pago_por_cuenta_tienda":
+          return (o === null ? undefined : comos.pagosPorCuenta.get(o)) ?? null;
+        case "abono_tienda":
+          return (o === null ? undefined : comos.abonos.get(o)) ?? null;
+        case "gasto":
+        case "manual":
+          return comos.movimientos.get(m.id) ?? null;
+        default:
+          return null;
+      }
+    };
+
+    const anulacion = (m: MovimientoDeCajaParaAutoria): AnulacionDeFilaDTO | null => {
+      const tipo = documentoDe.get(m.id) ?? null;
+      const o = m.origenId;
+      let a: AnulacionDeDocumento | undefined;
+      switch (tipo) {
+        case null:
+          return null;
+        case "egreso_caja":
+        case "ajuste_caja":
+        case "indemnizacion":
+          a = anulaciones.movimientos.get(m.id);
+          break;
+        case "pago_tienda":
+          a = o === null ? undefined : anulaciones.pagos.get(o);
+          break;
+        case "pago_por_cuenta_tienda":
+          a = o === null ? undefined : anulaciones.pagosPorCuenta.get(o);
+          break;
+        case "aporte_capital":
+          a = o === null ? undefined : anulaciones.aportes.get(o);
+          break;
+        case "abono_tienda":
+          a = o === null ? undefined : anulaciones.abonos.get(o);
+          break;
+        case "cobro_tienda":
+          a = o === null ? undefined : anulaciones.cobros.get(o);
+          break;
+        case "rechazo_tienda_cobro":
+          a = o === null ? undefined : anulaciones.rechazos.get(o);
+          break;
+        case "premio_del_ranking":
+          a = o === null ? undefined : anulaciones.premios.get(o);
+          break;
+      }
+      return a === undefined
+        ? null
+        : { motivo: a.motivo, por: a.por, fecha: fechaCalendarioCR(a.fecha), hora: horaCostaRica(a.fecha.toISOString()) };
+    };
+
+    // Ficha 458-E (revision B1, R58): CUANDO se registro — el `created_at` de la fila en dia y hora de
+    // Costa Rica, no la fecha del movimiento (que la pantalla ya pinta aparte).
+    const registradoEl = (m: MovimientoDeCajaParaAutoria): RegistradoElDTO => ({
+      fecha: fechaCalendarioCR(m.createdAt),
+      hora: horaCostaRica(m.createdAt.toISOString()),
+    });
+
+    const porId = new Map(movs.map((m) => [m.id, m]));
+    const filas: AutoriaDeFilaDTO[] = input.movimientoIds.flatMap((id) => {
+      const m = porId.get(id);
+      return m === undefined
+        ? []
+        : [
+            {
+              movimientoId: id,
+              aQuien: aQuien(m),
+              registro: registro(m),
+              registradoEl: registradoEl(m),
+              como: como(m),
+              anulacion: anulacion(m),
+            },
+          ];
+    });
+    return { status: "ok", filas };
+  }
+}

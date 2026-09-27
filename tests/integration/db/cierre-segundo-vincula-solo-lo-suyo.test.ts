@@ -110,7 +110,7 @@ describeSiHayBase("271/T2.2 · R14 — el 2.º cierre vincula SOLO las gestiones
             data: {
               ordenId: await sembrarOrden(clave),
               mensajeroId: quien,
-              resultado: "entregada",
+              resultado: "entregado",
               cierreId,
               ...(anulada ? { anuladaAt: new Date("2026-08-22T18:00:00Z") } : {}),
             },

@@ -39,11 +39,12 @@ function gestionDeshacer(over: Partial<GestionDeshacerRow> = {}): GestionDeshace
     gestionId: "g1",
     ordenId: "o1",
     mensajeroId: "m1",
-    resultado: "entregada",
+    resultado: "entregado",
     cierreId: null,
     anuladaAt: null,
-    orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+    orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregado" },
     desdeAyudaTienda: false,
+    registradaComoPendiente: false, // ficha 454 (T1.11): rama LEGADA del deshacer
     ...over,
   };
 }
@@ -64,6 +65,8 @@ function fakeRepo(over: Partial<Repo> = {}): Repo {
     findGestionParaDeshacer: vi.fn(async () => gestionDeshacer()),
     findUltimaGestionNoAnuladaId: vi.fn(async () => "g1"),
     anularGestionYDevolverAGestion: vi.fn(async () => true),
+    // FICHA 454 (T1.11): la rama NUEVA del deshacer (gestion pendiente, sin transicion).
+    anularGestionPendiente: vi.fn(async () => true),
     ...over,
   } as Repo;
 }

@@ -55,7 +55,7 @@ const DIA_23 = new Date("2026-08-23T00:00:00.000Z");
 function ordenRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
   return {
     id: "o1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     numGuia: 17496963,
     deletedAt: null,
     zonaId: ZONA_SATELITE,
@@ -107,6 +107,8 @@ function fakeRepo(opts: EscenarioOpts = {}) {
     corregirDiaRepartoLote: vi.fn(
       opts.corregir ?? (async () => [aplicada()] as CorreccionDiaAplicada[]),
     ),
+    // FICHA 454 (R55): por defecto ninguna orden tiene gestion pendiente de confirmar.
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()),
   };
   return repo as unknown as CorreccionDiaRepartoRepo & typeof repo;
 }
@@ -256,7 +258,9 @@ describe("262/R12 — la zona del satelite se resuelve en el servidor y acota de
 // =================================================================================================
 
 describe("262/R6 — solo los estados donde el dia TODAVIA decide algo, y el rechazo NOMBRA el estado", () => {
-  it.each(["por_recoger", "en_reparto", "ayuda_tienda"])(
+  // ⏳ 2026-09-23 (FICHA 454): `ayuda_tienda` sale — deja de ser estado (la orden con ayuda sigue
+  // `en_reparto`, que sigue admitido).
+  it.each(["mensajero_recogiendo_en_bodega", "en_reparto"])(
     "`%s` se admite",
     async (estatusValue) => {
       const repo = fakeRepo({ ordenes: [ordenRow({ estatusValue })] });
@@ -266,7 +270,7 @@ describe("262/R6 — solo los estados donde el dia TODAVIA decide algo, y el rec
     },
   );
 
-  it.each(["entregada", "devuelta", "en_bodega_central", "sin_gestionar", "rechazada"])(
+  it.each(["entregado", "novedad", "en_bodega_central", "novedad_interna", "devolucion_a_origen_por_rechazo"])(
     "`%s` se rechaza NOMBRANDO el estado, y sin efectos",
     async (estatusValue) => {
       const repo = fakeRepo({ ordenes: [ordenRow({ estatusValue })] });
@@ -369,7 +373,7 @@ describe("262/R8 — una sola rechazada aborta el LOTE COMPLETO, sin efectos", (
       ordenes: [
         ordenRow({ id: "o1" }),
         ordenRow({ id: "o2" }),
-        ordenRow({ id: "o3", estatusValue: "entregada" }),
+        ordenRow({ id: "o3", estatusValue: "entregado" }),
       ],
     });
     const service = new CorreccionDiaRepartoService(repo);
@@ -383,7 +387,7 @@ describe("262/R8 — una sola rechazada aborta el LOTE COMPLETO, sin efectos", (
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("unreachable");
     // El detalle nombra SOLO la que falla, pero el efecto es sobre el lote entero: nada se escribe.
-    expect(r.detalle).toEqual([{ ordenId: "o3", motivo: msgEstadoSinDiaVivo("entregada") }]);
+    expect(r.detalle).toEqual([{ ordenId: "o3", motivo: msgEstadoSinDiaVivo("entregado") }]);
     expect(repo.corregirDiaRepartoLote).toHaveBeenCalledTimes(0);
   });
 
@@ -394,7 +398,7 @@ describe("262/R8 — una sola rechazada aborta el LOTE COMPLETO, sin efectos", (
       }),
       ordenes: [ordenRow({ id: "o1" }), ordenRow({ id: "o2" })],
       // Al re-leer, «o2» ya se entrego: alguien la movio entre la validacion y la escritura.
-      ordenesTrasCarrera: [ordenRow({ id: "o2", estatusValue: "entregada" })],
+      ordenesTrasCarrera: [ordenRow({ id: "o2", estatusValue: "entregado" })],
     });
     const service = new CorreccionDiaRepartoService(repo);
 
@@ -406,7 +410,7 @@ describe("262/R8 — una sola rechazada aborta el LOTE COMPLETO, sin efectos", (
 
     expect(r).toEqual({
       status: "conflict",
-      detalle: [{ ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregada") }],
+      detalle: [{ ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregado") }],
     });
   });
 
@@ -539,7 +543,9 @@ describe("262/R14 — un cierre de dia sin resolver NO bloquea la correccion", (
 
 describe("262 — guardias de configuracion y forma del resultado", () => {
   it("catalogo incompleto => `validation_error`, sin escribir nada (fallo CERRADO)", async () => {
-    const repo = fakeRepo({ catalogo: (v) => (v === "ayuda_tienda" ? null : `os-${v}`) });
+    // ⏳ 2026-09-23 (FICHA 454): el valor que falta pasa a ser `en_reparto` (`ayuda_tienda` ya no se
+    // resuelve: deja de ser estado).
+    const repo = fakeRepo({ catalogo: (v) => (v === "en_reparto" ? null : `os-${v}`) });
     const service = new CorreccionDiaRepartoService(repo);
 
     const r = await service.corregir({ ordenIds: ["o1"], dia: "hoy", motivo: MOTIVO }, MAESTRO, NOW_21_CR);
@@ -719,7 +725,7 @@ describe("262/R46 — el aviso se emite FUERA de la transaccion y solo si esta c
 
   it("y un lote rechazado en el pre-chequeo tampoco emite nada", async () => {
     const avisos: unknown[] = [];
-    const repo = fakeRepo({ ordenes: [ordenRow({ estatusValue: "entregada" })] });
+    const repo = fakeRepo({ ordenes: [ordenRow({ estatusValue: "entregado" })] });
     await new CorreccionDiaRepartoService(repo, async (ctx) => {
       avisos.push(ctx);
     }).corregir({ ordenIds: ["o1"], dia: "hoy", motivo: MOTIVO }, MAESTRO, NOW_21_CR);

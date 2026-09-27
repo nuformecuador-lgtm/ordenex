@@ -37,6 +37,35 @@ export interface ResolverCierreBodegaInput {
 // ya no esta `solicitado`, R18), `fuera_de_alcance` (no existe, R19).
 export type ResolverCierreBodegaResult = "updated" | "conflict" | "fuera_de_alcance";
 
+/**
+ * ⭑ FICHA 431 (R8/R9) — los datos de LA MARCA DE CONCILIACION: «este bulto de efectivo llego».
+ *
+ * `montoRecibido` viaja como STRING de escala 2 y NUNCA como `number`: es el mismo contrato
+ * money-safe de todo el repo, y el repositorio lo convierte a `Prisma.Decimal` en el borde de la
+ * escritura. `nota` es opcional SIEMPRE y no entra al historial (R5 de la 362: texto libre).
+ */
+export interface MarcarConciliadoInput {
+  id: string;
+  /** STRING de escala 2, ya validado en el borde (`montoPositivoSchema`, > 0). */
+  montoRecibido: string;
+  nota: string | null;
+  /** Quien marca (`esAccesoTotal`). Va a `conciliado_por` Y al espejo `resuelto_por` (§4.1). */
+  actorUsuarioId: string;
+}
+
+/** ⭑ FICHA 431 (R12) — deshacer la marca. No hace falta monto: se BORRA el que hubiera. */
+export interface RevertirConciliacionInput {
+  id: string;
+  actorUsuarioId: string;
+}
+
+/**
+ * ⭑ FICHA 431 — mismo trio de desenlaces que `ResolverCierreBodegaResult`, y a proposito: la
+ * guarda por estado vive en el `WHERE` y `count !== 1` distingue «ya estaba asi» (R11) de «no
+ * existe». Es un alias con nombre propio porque describe OTRA transicion, no la misma.
+ */
+export type MarcaConciliacionResult = "updated" | "conflict" | "fuera_de_alcance";
+
 export interface ICierresBodegaAdminRepository {
   /**
    * R15: todos los cierres de bodega, join a zona/usuario para nombres +
@@ -131,4 +160,38 @@ export interface ICierresBodegaAdminRepository {
    * Distingue updated/conflict/fuera_de_alcance.
    */
   resolverCierreBodega(input: ResolverCierreBodegaInput): Promise<ResolverCierreBodegaResult>;
+  /**
+   * ⭑ FICHA 431 (R8/R9/R11/R13) — MARCA una consolidacion como RECIBIDA, con su monto.
+   *
+   * Guarda por estado en el `WHERE` (`estado='solicitado'` Y `conciliado_at IS NULL`), atomico con
+   * su fila de historial (`cierre_bodega_conciliado`) dentro de la MISMA `$transaction`.
+   *
+   * ⚠️ ESCRIBE TAMBIEN `resuelto_at`/`resuelto_por` EN ESPEJO, y no es duplicacion por descuido:
+   * el repositorio de analitica de conciliacion de cierres (`contarCierresPorEstado`, que NO se
+   * nombra entero aqui a proposito: la guardia de fuente de la 127 mete en su censo cualquier
+   * archivo que escriba su nombre, y este no es un archivo de analitica) selecciona los cierres
+   * aprobados POR `resuelto_at` dentro del rango. Si la marca no los rellenara, los cierres de
+   * bodega desaparecerian de la analitica financiera sin que nada se pusiera rojo.
+   *
+   * NO escribe en NINGUN libro de dinero (R14): ni `wallet_movimiento`, ni
+   * `wallet_tienda_movimiento`, ni `pago_mensajero_movimiento`. La marca es seguimiento, no
+   * contabilidad.
+   */
+  marcarConciliado(input: MarcarConciliadoInput): Promise<MarcaConciliacionResult>;
+  /**
+   * ⭑ FICHA 431 (R12/R13) — DESHACE la marca: vuelve a `solicitado` y VACIA las cuatro columnas de
+   * la conciliacion mas las dos del espejo (`resuelto_at`/`resuelto_por`).
+   *
+   * ⚠️ METODO PROPIO Y NO UN BOOLEANO EN `marcarConciliado`. La guardia del censo de historial mide
+   * POR METODO, no por escritura (medido en las fichas 376 y 380): con las dos acciones en el
+   * mismo metodo, borrar uno de los dos `appendAccion` la dejaria VERDE.
+   *
+   * ⚠️ CONSECUENCIA DECLARADA: revertir CAMBIA HACIA ATRAS lo que la analitica financiera cuenta en
+   * ese periodo, porque vacia el `resuelto_at` del que se sirve. Es lo correcto —no se recibio— y
+   * se escribe aqui para que no sorprenda.
+   *
+   * El `monto` de la fila de historial es EL QUE SE BORRA: tras esto, ningun sitio de
+   * `cierre_bodega` recuerda cuanto se habia dado por recibido.
+   */
+  revertirConciliacion(input: RevertirConciliacionInput): Promise<MarcaConciliacionResult>;
 }

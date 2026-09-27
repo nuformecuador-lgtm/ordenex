@@ -206,7 +206,7 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
     // pasaria la primera mitad y la pantalla no podria filtrar por nada.
     const bueno = buildService();
     const ok = await listarOrdenesBodegaPaginado(
-      { estados: ["entregada"] },
+      { estados: ["entregado"] },
       { service: bueno, getActor: actorAdmin },
     );
     expect(ok.status).toBe("ok");
@@ -219,7 +219,7 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
       {
         page: 2,
         pageSize: 10,
-        estados: ["devuelta", "por_recoger"],
+        estados: ["novedad", "mensajero_recogiendo_en_bodega"],
         canton_id: ["Escazú"],
         distrito_id: ["San Rafael", "San Antonio"],
       },
@@ -229,7 +229,7 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
       {
         page: 2,
         pageSize: 10,
-        estados: ["devuelta", "por_recoger"],
+        estados: ["novedad", "mensajero_recogiendo_en_bodega"],
         canton_id: ["Escazú"],
         distrito_id: ["San Rafael", "San Antonio"],
       },
@@ -311,7 +311,7 @@ describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T 
 
     const bueno = buildService();
     const ok = await listarOrdenesBodegaCompleto(
-      { estados: ["entregada"] },
+      { estados: ["entregado"] },
       { service: bueno, getActor: actorAdmin },
     );
     expect(ok.status).toBe("ok");
@@ -322,7 +322,7 @@ describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T 
     const service = buildService();
     await listarOrdenesBodegaCompleto(
       {
-        estados: ["devuelta", "por_recoger"],
+        estados: ["novedad", "mensajero_recogiendo_en_bodega"],
         canton_id: ["Escazú"],
         distrito_id: ["San Rafael", "San Antonio"],
       },
@@ -330,7 +330,7 @@ describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T 
     );
     expect(service.listarOrdenesBodegaCompleto).toHaveBeenCalledWith(
       {
-        estados: ["devuelta", "por_recoger"],
+        estados: ["novedad", "mensajero_recogiendo_en_bodega"],
         canton_id: ["Escazú"],
         distrito_id: ["San Rafael", "San Antonio"],
       },
@@ -379,12 +379,12 @@ describe("listarIdsVigentesBodega — el borde de la vigencia (feature 184, T A.
       })),
     });
     const r = await listarIdsVigentesBodega(
-      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], canton_id: ["Escazú"] },
+      { ids: [uuid(1), uuid(2)], estados: ["novedad"], canton_id: ["Escazú"] },
       { service, getActor: actorAdmin },
     );
     expect(r).toEqual({ status: "ok", ids: [uuid(1)] });
     expect(service.listarIdsVigentesBodega).toHaveBeenCalledWith(
-      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], canton_id: ["Escazú"] },
+      { ids: [uuid(1), uuid(2)], estados: ["novedad"], canton_id: ["Escazú"] },
       ADMIN,
     );
   });

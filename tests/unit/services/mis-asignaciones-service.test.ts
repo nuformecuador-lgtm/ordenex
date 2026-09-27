@@ -31,12 +31,12 @@ const OTRO: Actor = { usuarioId: "m2", rol: "mensajero" };
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  reprogramada: "os-reprogramada",
-  devuelta: "os-devuelta",
-  rechazada: "os-rechazada",
+  entregado: "os-entregada",
+  reprogramado: "os-reprogramada",
+  novedad: "os-devuelta",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   // Feature 239 (2026-08-19): gestionar `devuelta` ya NO resuelve el estatus `devuelta`, sino el
   // PRE-ESTADO. El fake tiene que conocerlo o la rama cae en "catalogo incompleto".
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
@@ -64,7 +64,7 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     id: "o1",
     numGuia: 1,
     numRemision: "R-1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana",
     telefonoDest: "099",
     direccion: "calle",
@@ -80,6 +80,8 @@ function asignacionRow(overrides: Partial<MiAsignacionRow> = {}): MiAsignacionRo
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: "D",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m1",
     ...overrides,
   };
@@ -96,7 +98,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
@@ -199,7 +204,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
   it("R11/R14: ambos grupos salen con `intentosEntrega` numerico, el `0` INCLUIDO", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
         asignacionRow({ id: "c", estatusValue: "en_reparto" }),
       ]),
@@ -221,7 +226,7 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
   it("R12: UNA sola llamada al derivador con la union de los ids de los DOS grupos", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
     });
@@ -245,9 +250,8 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
     // Feature 167 (R34) + 235 (R18): y a EXACTAMENTE los TRES estados del flujo de Entregas.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
-      "ayuda_tienda",
     ]);
   });
 
@@ -269,10 +273,10 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.status).toBe("forbidden");
   });
 
-  it("R10/R13: separa por recoger (por_recoger) de por gestionar (en_reparto) + ordenEnGestionId", async () => {
+  it("R10/R13: separa por recoger (mensajero_recogiendo_en_bodega) de por gestionar (en_reparto) + ordenEnGestionId", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
       getOrdenEnGestion: vi.fn(async () => "b"),
@@ -287,16 +291,15 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     // R13: la consulta se hizo con el mensajero del actor.
     // Feature 235 (T3.1, R18): el corte pasa a TRES estados. `recolectando` SIGUE fuera (167/R34).
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
-      "ayuda_tienda",
     ]);
   });
 
   it("Feature 61: KPIs = pendientes (en_reparto), entregadas (conteo) y porCobrar (suma COD de en_reparto; null=0)", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger", montoCobrar: 999 }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega", montoCobrar: 999 }),
         asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
         asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
         asignacionRow({ id: "d", estatusValue: "en_reparto", montoCobrar: null }),
@@ -357,7 +360,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
   it("F97: el DTO propaga latitud/longitud (number|null) en porRecoger y porGestionar", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "r", estatusValue: "por_recoger", latitud: 9.9, longitud: -84.1 }),
+        asignacionRow({ id: "r", estatusValue: "mensajero_recogiendo_en_bodega", latitud: 9.9, longitud: -84.1 }),
         asignacionRow({ id: "g", estatusValue: "en_reparto", latitud: null, longitud: null }),
       ]),
     });
@@ -381,7 +384,7 @@ describe("listarMisAsignaciones (R9-R13)", () => {
   it("el DTO no emite el campo de nota privada", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "r", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "r", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "g", estatusValue: "en_reparto" }),
       ]),
     });
@@ -418,10 +421,15 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
   it("R18: las de ayuda salen en `conAyuda` y NO en `porGestionar`", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
-        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+        // ⏳ 2026-09-23 (FICHA 454, R22): la de ayuda sigue `en_reparto`; la separa la DERIVACION.
+        asignacionRow({ id: "c", estatusValue: "en_reparto" }),
       ]),
+      findPendientesYAyudas: vi.fn(async () => ({
+        conGestionPendiente: new Set<string>(),
+        conAyudaAbierta: new Set<string>(["c"]),
+      })),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
 
@@ -444,8 +452,13 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
-        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+        // ⏳ 2026-09-23 (FICHA 454, R22): la de ayuda sigue `en_reparto`; la separa la DERIVACION.
+        asignacionRow({ id: "c", estatusValue: "en_reparto" }),
       ]),
+      findPendientesYAyudas: vi.fn(async () => ({
+        conGestionPendiente: new Set<string>(),
+        conAyudaAbierta: new Set<string>(["c"]),
+      })),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
 
@@ -468,11 +481,17 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
       sumMontoCobrarGestionadas: vi.fn(async () => 400),
     });
     const despues = fakeRepo({
-      // La MISMA orden `c`, ahora en ayuda. Es lo unico que cambia entre los dos escenarios.
+      // La MISMA orden `c`, ahora con ayuda ABIERTA. Es lo unico que cambia entre los dos escenarios.
+      // ⏳ 2026-09-23 (FICHA 454): la ayuda ya no es estado — `c` sigue `en_reparto` y la derivacion
+      // la marca.
       findMisAsignaciones: vi.fn(async () => [
         asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
-        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+        asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
       ]),
+      findPendientesYAyudas: vi.fn(async () => ({
+        conGestionPendiente: new Set<string>(),
+        conAyudaAbierta: new Set<string>(["c"]),
+      })),
       contarEntregadas: vi.fn(async () => 7),
       sumMontoCobrarGestionadas: vi.fn(async () => 400),
     });
@@ -499,8 +518,13 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
     // el otro sumando.
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+        // ⏳ 2026-09-23 (FICHA 454): con ayuda ABIERTA, sigue `en_reparto`.
+        asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
       ]),
+      findPendientesYAyudas: vi.fn(async () => ({
+        conGestionPendiente: new Set<string>(),
+        conAyudaAbierta: new Set<string>(["c"]),
+      })),
       sumMontoCobrarGestionadas: vi.fn(async () => 400),
     });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
@@ -530,11 +554,11 @@ describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
     });
-    const input = { ordenId: "o1", resultado: "entregada", pagos: [] } as unknown as GestionarInput;
+    const input = { ordenId: "o1", resultado: "entregado", pagos: [] } as unknown as GestionarInput;
     const r = await newService(repo).gestionar(input, MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -544,11 +568,11 @@ describe("recogerAsignaciones (R14-R17)", () => {
     expect(r.status).toBe("forbidden");
   });
 
-  it("R15/R16: recoge el lote (por_recoger -> en_reparto) de sus ordenes", async () => {
+  it("R15/R16: recoge el lote (mensajero_recogiendo_en_bodega -> en_reparto) de sus ordenes", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "por_recoger" }),
-        gestionRow({ id: "o2", estatusValue: "por_recoger" }),
+        gestionRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega" }),
+        gestionRow({ id: "o2", estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]),
     });
     // FEATURE 261 (B4/B5, R6): el reloj se INYECTA. 22:30 CR del 21 = 04:30Z del 22, a
@@ -576,7 +600,7 @@ describe("recogerAsignaciones (R14-R17)", () => {
   it("R17: orden de OTRO mensajero -> forbidden, sin recoger", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "por_recoger", mensajeroAsignadoId: "m2" }),
+        gestionRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega", mensajeroAsignadoId: "m2" }),
       ]),
     });
     const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
@@ -584,7 +608,7 @@ describe("recogerAsignaciones (R14-R17)", () => {
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
 
-  it("R17: origen invalido (no por_recoger) -> conflict, sin recoger", async () => {
+  it("R17: origen invalido (no mensajero_recogiendo_en_bodega) -> conflict, sin recoger", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
         gestionRow({ id: "o1", estatusValue: "en_reparto" }),
@@ -597,10 +621,10 @@ describe("recogerAsignaciones (R14-R17)", () => {
 
   // Feature 46/R4: una orden reprogramada NO es origen valido de "recoger"; el bloqueo de
   // envio es inherente a la maquina de estados (se verifica explicitamente, sin codigo nuevo).
-  it("feature 46/R4: recoger una orden reprogramada -> conflict por origen, sin efectos", async () => {
+  it("feature 46/R4: recoger una orden reprogramado -> conflict por origen, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+        gestionRow({ id: "o1", estatusValue: "reprogramado", mensajeroAsignadoId: "m1" }),
       ]),
     });
     const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
@@ -646,24 +670,24 @@ describe("escogerParaGestion (R19-R21)", () => {
 describe("gestionar — guardias (R12/R18/R21/R31)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
     const r = await newService().gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MAESTRO,
     );
     expect(r.status).toBe("forbidden");
   });
 
-  it("R18: origen no en_reparto (aun por_recoger) -> conflict, sin persistir", async () => {
+  it("R18: origen no en_reparto (aun mensajero_recogiendo_en_bodega) -> conflict, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ estatusValue: "por_recoger" }),
+        gestionRow({ estatusValue: "mensajero_recogiendo_en_bodega" }),
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R31: orden ajena -> forbidden, sin persistir", async () => {
@@ -671,37 +695,37 @@ describe("gestionar — guardias (R12/R18/R21/R31)", () => {
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ mensajeroAsignadoId: "m2" })]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("forbidden");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R21: otra orden activa distinta -> conflict, sin persistir", async () => {
     const repo = fakeRepo({ getOrdenEnGestion: vi.fn(async () => "o-otra") });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   // Feature 46/R4: gestionar exige origen en_reparto; una orden reprogramada se rechaza
   // por origen (bloqueo de "envio" inherente a la maquina de estados).
-  it("feature 46/R4: gestionar una orden reprogramada -> conflict por origen, sin persistir", async () => {
+  it("feature 46/R4: gestionar una orden reprogramado -> conflict por origen, sin persistir", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [
-        gestionRow({ id: "o1", estatusValue: "reprogramada", mensajeroAsignadoId: "m1" }),
+        gestionRow({ id: "o1", estatusValue: "reprogramado", mensajeroAsignadoId: "m1" }),
       ]),
     });
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -712,7 +736,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
   // cada caso de abajo AFIRMA sigue siendo lo mismo.
   const entrega = (monto: number): GestionarInput => ({
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: monto,
     metodoPago: "efectivo",
     pagos: [{ metodo: "efectivo", monto }],
@@ -725,7 +749,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     const r = await newService(repo, storage).gestionar(entrega(50), MENSAJERO);
     expect(r.status).toBe("validation_error");
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   // menor-2: comparacion en Decimal EXACTA (no float).
@@ -736,7 +760,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     const r = await newService(repo).gestionar(entrega(100), MENSAJERO);
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.montoRecibido).toBe(100);
   });
 
@@ -750,7 +774,7 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
     if (r.status !== "validation_error") return;
     expect(r.fieldErrors.montoRecibido).toBeDefined();
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("menor-2: montoCobrar null + monto 100 -> validation_error (100 no cuadra con 0)", async () => {
@@ -785,31 +809,32 @@ describe("gestionar — ENTREGADA (R22/R23/R32)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.estado).toBe("entregada");
+    expect(r.estado).toBe("entregado");
     // Feature 119 (R13): el resultado devuelve la lista de URLs firmadas (una por foto).
     expect(r.evidenciaUrls?.[0]).toMatch(/^https:\/\/signed\//);
     expect(storage.upload).toHaveBeenCalledTimes(1);
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("entregada");
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(gArg.gestion.resultado).toBe("entregado");
     expect(gArg.gestion.montoRecibido).toBe(100);
     expect(gArg.gestion.metodoPago).toBe("efectivo");
     // Feature 119 (R1): la portada (indice 0) viaja como primera evidencia de la lista.
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/entregada-");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/entregado-");
     expect(gArg.gestion.evidencias[0].indice).toBe(0);
-    expect(gArg.nuevoEstatusId).toBe("os-entregada");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
+    expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
 
   it("R8: persiste storage_path (no URL); la URL solo se firma para mostrar", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(entrega(100), MENSAJERO);
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(gArg.gestion.evidencias[0].storagePath).not.toMatch(/^https?:\/\//);
   });
 
   it("R23: si la transaccion falla tras subir -> limpia el objeto (best-effort) y propaga", async () => {
     const storage = fakeStorage();
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("db caida");
       }),
     });
@@ -825,46 +850,47 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     expect(storage.upload).not.toHaveBeenCalled();
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("reprogramada");
-    expect(gArg.nuevoEstatusId).toBe("os-reprogramada");
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(gArg.gestion.resultado).toBe("reprogramado");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
+    expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
 
   it("R28 + 239/R2: devolucion valida -> sube foto, gestion(devuelta) con evidencia + estado PRE-CONFIRMACION", async () => {
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "no estaba", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "no estaba", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     // Pedido: la devolución ahora sube y persiste la evidencia (como rechazo/entrega).
     expect(storage.upload).toHaveBeenCalledTimes(1);
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("devuelta");
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devuelta-");
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(gArg.gestion.resultado).toBe("novedad");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/novedad-");
     expect(gArg.gestion.evidencias[0].contentType).toBe("image/jpeg");
     // 2026-08-19 (feature 239/R2): el destino ya NO es `devuelta`. La aprobacion del cierre es
     // la que lleva la orden ahi; hasta entonces la tienda no la ve y su reloj no corre.
-    expect(gArg.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
-    expect(gArg.nuevoEstatusId).not.toBe("os-devuelta");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
+    expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
 
   it("feature 75: devolucion con transaccion fallida -> limpia storage y propaga", async () => {
     const storage = fakeStorage();
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("db caida");
       }),
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "novedad", causaDevolucion: "not_found", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -875,29 +901,30 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.estado).toBe("rechazada");
+    expect(r.estado).toBe("devolucion_a_origen_por_rechazo");
     expect(storage.upload).toHaveBeenCalledTimes(1);
-    const gArg = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(gArg.gestion.resultado).toBe("rechazada");
-    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/rechazada-");
-    expect(gArg.nuevoEstatusId).toBe("os-rechazada");
+    const gArg = (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(gArg.gestion.resultado).toBe("devolucion_a_origen_por_rechazo");
+    expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devolucion_a_origen_por_rechazo-");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO; registrar ya no transiciona.
+    expect(gArg).not.toHaveProperty("nuevoEstatusId");
   });
 
   it("R30: rechazo con transaccion fallida -> limpia storage y propaga", async () => {
     const storage = fakeStorage();
     const repo = fakeRepo({
-      crearGestionYTransicionar: vi.fn(async () => {
+      registrarGestionPendiente: vi.fn(async () => {
         throw new Error("db caida");
       }),
     });
     await expect(
       newService(repo, storage).gestionar(
-        { ordenId: "o1", resultado: "rechazada", motivo: "x", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "x", evidencias: [evidencia()] },
         MENSAJERO,
       ),
     ).rejects.toThrow("db caida");
@@ -916,14 +943,14 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
 describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (feature 99 R1/R29 · 239 R2)", () => {
   const devolucion: GestionarInput = {
     ordenId: "o1",
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "not_found",
     motivo: "ausente",
     evidencias: [evidencia()],
   };
 
   function repoCall(repo: IGestionOrdenRepository) {
-    return (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+    return (repo.registrarGestionPendiente as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       nuevoEstatusId: string;
       seguimiento?: unknown;
     };
@@ -942,7 +969,9 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     // 239/R2: la orden REPOSA en el pre-estado. El intento SIGUE contandose igual (R17): el
     // criterio mira `gestion_orden.resultado` + cierre aprobado + familia `gestion`, nunca el
     // destino de la transicion.
-    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+    // no transiciona: el destino lo aplica la aprobacion del cierre.
+    expect(call).not.toHaveProperty("nuevoEstatusId");
     expect(call.nuevoEstatusId).not.toBe("os-devuelta");
     // R29: ni reintento a bodega ni escalado inmediato -> el input ya no lleva `seguimiento`.
     expect(call).not.toHaveProperty("seguimiento");
@@ -972,7 +1001,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       // `gestionar` solo resuelve el estatus del RESULTADO (`devuelta`), nunca los de bodega.
       expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega_central");
       expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_bodega_satelite");
-      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("rechazada");
+      expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolucion_a_origen_por_rechazo");
     }
   });
 
@@ -983,7 +1012,9 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     const r = await newService(repo).gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("ok");
     const call = repoCall(repo);
-    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar"); // 2026-08-19 (239)
+    // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+    // no transiciona: el destino lo aplica la aprobacion del cierre.
+    expect(call).not.toHaveProperty("nuevoEstatusId"); // 2026-08-19 (239)
     expect(call).not.toHaveProperty("seguimiento");
   });
 
@@ -1006,14 +1037,14 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolviendo_a_tienda");
   });
 
-  it("catalogo incompleto (sin el PRE-ESTADO) -> validation_error, sin persistir", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, R1): AQUI VIVIA «catalogo incompleto (sin el PRE-ESTADO) ->
+  // validation_error». Registrar una gestion ya no resuelve NINGUN estado destino (no transiciona):
+  // el catalogo lo consulta la APROBACION del cierre, que es la que falla cerrada si falta un id
+  // (`CierresAdminService`, «ids de la aplicacion»). Lo que se afirma ahora es la ausencia.
+  it("registrar una devolucion NO consulta el catalogo de estados: no transiciona (R1)", async () => {
     const repo = fakeRepo();
-    // ordenRepo que NO resuelve el destino de la rama `devuelta` (seed pendiente). 2026-08-19
-    // (feature 239): ese destino es el PRE-ESTADO, no `devuelta`.
     const ordenRepo = {
-      findEstatusIdByValue: vi.fn(async (v: string) =>
-        v === "devolucion_por_confirmar" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
-      ),
+      findEstatusIdByValue: vi.fn(async () => null),
       findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111
     };
     const service = new MisAsignacionesService(
@@ -1026,8 +1057,9 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       fakeIntentosEnLote(),
     );
     const r = await service.gestionar(devolucion, MENSAJERO);
-    expect(r.status).toBe("validation_error");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("67/R31: una orden devuelta a `en_reparto` por un deshacer es escogible (guardia 1-a-1 vigente)", async () => {
@@ -1059,7 +1091,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
   it("R4: reprogramada tampoco pasa seguimiento (rama intacta)", async () => {
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "reprogramada", fechaReprogramacion: "2027-01-01", motivo: "x" },
+      { ordenId: "o1", resultado: "reprogramado", fechaReprogramacion: "2027-01-01", motivo: "x" },
       MENSAJERO,
     );
     expect(r.status).toBe("ok");
@@ -1071,7 +1103,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     await newService(repo).gestionar(
       {
         ordenId: "o1",
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: 100,
         metodoPago: "efectivo",
         pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -1085,7 +1117,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
   it("rechazada DIRECTA NO pasa seguimiento (una sola transicion)", async () => {
     const repo = fakeRepo();
     await newService(repo).gestionar(
-      { ordenId: "o1", resultado: "rechazada", motivo: "cliente rechazo", evidencias: [evidencia()] },
+      { ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo", motivo: "cliente rechazo", evidencias: [evidencia()] },
       MENSAJERO,
     );
     expect(repoCall(repo)).not.toHaveProperty("seguimiento");
@@ -1104,12 +1136,14 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
         findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
       });
       const r = await newService(repo).gestionar(
-        { ordenId: "o1", resultado: "devuelta", causaDevolucion: causa, motivo: "ausente", evidencias: [evidencia()] },
+        { ordenId: "o1", resultado: "novedad", causaDevolucion: causa, motivo: "ausente", evidencias: [evidencia()] },
         MENSAJERO,
       );
       expect(r.status).toBe("ok");
       const call = repoCall(repo);
-      expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar"); // 2026-08-19 (239)
+      // ⏳ 2026-09-23 (FICHA 454, R1): aqui se afirmaba el estado DESTINO pasado al repositorio. Registrar ya
+      // no transiciona: el destino lo aplica la aprobacion del cierre.
+      expect(call).not.toHaveProperty("nuevoEstatusId"); // 2026-08-19 (239)
       expect(call).not.toHaveProperty("seguimiento");
     },
   );
@@ -1169,7 +1203,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
   const entrega = (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: 100,
     metodoPago: "efectivo",
     pagos: [{ metodo: "efectivo", monto: 100 }], // feature 212: desglose normalizado (R12)
@@ -1187,7 +1221,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     expect(ordenRepo.findBloqueoDetalle).toHaveBeenCalledWith("m1");
     // R3: sin efectos parciales (la guarda está ANTES de la subida y de la tx).
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("R2: mensajero NO bloqueado (Set vacío) -> gestionar procede normal", async () => {
@@ -1199,7 +1233,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(entrega(), MENSAJERO);
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("R4: recoger bloqueado -> conflict, sin transición (recogerLote no se invoca)", async () => {
@@ -1245,7 +1279,8 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167)", () => {
   const RECOLECTANDO = "recolectando";
 
-  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\", \"ayuda_tienda\"]`, ni un estado mas", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): el censo vuelve a DOS — `ayuda_tienda` deja de ser estado.
+  it("R34: pide EXACTAMENTE `[\"mensajero_recogiendo_en_bodega\", \"en_reparto\"]`, ni un estado mas", async () => {
     const repo = fakeRepo();
 
     await newService(repo).listarMisAsignaciones(MENSAJERO);
@@ -1259,9 +1294,8 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     // desde el servidor. Lo que la 167 aislo se conserva intacto y se dice abajo como negativo:
     // `recolectando` SIGUE FUERA.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
-      "ayuda_tienda",
     ]);
     const estados = (repo.findMisAsignaciones as ReturnType<typeof vi.fn>).mock
       .calls[0][1] as string[];
@@ -1294,7 +1328,7 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
         asignacionRow({ id: "o-rec", estatusValue: RECOLECTANDO }),
-        asignacionRow({ id: "o-recoger", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "o-recoger", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "o-reparto", estatusValue: "en_reparto" }),
       ]),
     });
@@ -1358,7 +1392,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R22/R26: la reservada para MAÑANA llega con `esParaManana: true`", async () => {
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     expect(cardsPorId(r).get("manana")?.esParaManana).toBe(true);
@@ -1366,8 +1400,8 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R26: la de HOY y la SIN FECHA llegan con `esParaManana: false`", async () => {
     const repo = conFilas([
-      { id: "hoy", estatusValue: "por_recoger", fechaReparto: DIA_20 },
-      { id: "sin", estatusValue: "por_recoger", fechaReparto: null },
+      { id: "hoy", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_20 },
+      { id: "sin", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: null },
       { id: "ayer", estatusValue: "en_reparto", fechaReparto: DIA_19 },
     ]);
     const cards = cardsPorId(await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H));
@@ -1381,7 +1415,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // BYTE A BYTE las mismas; lo unico que cambia es el reloj. Con una marca booleana esto no
     // podria pasar: seguiria diciendo «para mañana» hasta que alguien la apagara.
     const filas: Partial<MiAsignacionRow>[] = [
-      { id: "reservada", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "reservada", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ];
 
     const hoy = cardsPorId(
@@ -1400,10 +1434,15 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
 
   it("R23: la reservada NO se oculta — aparece en su grupo de siempre", async () => {
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
       { id: "en-reparto-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
-      { id: "ayuda-manana", estatusValue: "ayuda_tienda", fechaReparto: DIA_21 },
+      // ⏳ 2026-09-23 (FICHA 454): con ayuda ABIERTA sigue `en_reparto` (la separa la derivacion).
+      { id: "ayuda-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
     ]);
+    (repo.findPendientesYAyudas as ReturnType<typeof vi.fn>).mockResolvedValue({
+      conGestionPendiente: new Set<string>(),
+      conAyudaAbierta: new Set<string>(["ayuda-manana"]),
+    });
     const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     if (r.status !== "ok") throw new Error("se esperaba ok");
     // Los TRES grupos siguen siendo los de siempre: la ficha añade un dato por fila, NO un cuarto
@@ -1419,12 +1458,12 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // es que la card llega COMPLETA —con todo lo que la UI necesita para recogerla y gestionarla—
     // y que el unico campo nuevo es el informativo.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21, montoCobrar: 100 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21, montoCobrar: 100 },
     ]);
     const card = cardsPorId(
       await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
     ).get("manana");
-    expect(card?.estatusValue).toBe("por_recoger"); // sigue recogible
+    expect(card?.estatusValue).toBe("mensajero_recogiendo_en_bodega"); // sigue recogible
     expect(card?.montoCobrar).toBe(100);
     expect(card?.numGuia).toBe(1);
     expect(card?.esParaManana).toBe(true);
@@ -1434,7 +1473,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // Si la fecha viajara al navegador, alguien acabaria comparandola con `new Date()` alli, y la
     // etiqueta pasaria a depender del reloj del dispositivo. Se manda el booleano YA resuelto.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const card = cardsPorId(
       await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
@@ -1446,7 +1485,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
     // `2026-08-21T05:59:00Z` = 23:59 CR del 20. En UTC ya es dia 21: si el servicio comparara
     // contra el dia UTC, la reservada para el 21 dejaria de etiquetarse una hora antes de tiempo.
     const repo = conFilas([
-      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "manana", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 },
     ]);
     const cards = cardsPorId(
       await newService(repo).listarMisAsignaciones(
@@ -1460,7 +1499,7 @@ describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R
   it("R35: la proyeccion del repositorio trae el dia SIN una consulta nueva", async () => {
     // T3.7: el dato viaja en la lectura que ya existe. Si hiciera falta una consulta aparte, seria
     // un N+1 sobre la pantalla mas caliente del portal.
-    const repo = conFilas([{ id: "o1", estatusValue: "por_recoger", fechaReparto: DIA_21 }]);
+    const repo = conFilas([{ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: DIA_21 }]);
     await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
     expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
   });
@@ -1486,7 +1525,7 @@ describe("296 — `MiAsignacionDTO` no gana ningun campo de mensajero", () => {
   it("las cards que emite el portal no traen NINGUNA clave de mensajero", async () => {
     const repo = fakeRepo({
       findMisAsignaciones: vi.fn(async () => [
-        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         asignacionRow({ id: "b", estatusValue: "en_reparto" }),
       ]),
     });

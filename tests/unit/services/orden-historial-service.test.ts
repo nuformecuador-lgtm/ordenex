@@ -74,13 +74,19 @@ type HistorialRepoMethods = Pick<
   | "existeActuacionDe"
   | "contarIntentosVigentes"
   | "contarIntentosVigentesEnLote"
+  // FICHA 454 (T1.21, 2026-09-23): la cuarta fuente de la linea de tiempo. Aqui SIEMPRE vacia (la
+  // no-regresion: sin eventos, la linea es la de antes); su caso vive en
+  // `OrdenHistorialService.evento-orden.test.ts`.
+  | "findEventosByOrden"
+  // FICHA 454 (R29, 2026-09-24): las señales del detalle; aqui en reposo.
+  | "findSenalesGestion"
 >;
 
 // El catalogo de estados sigue existiendo para la AUTORIZACION y para otros consumidores; el
 // conteo de intentos ya NO lo consulta (feature 215/R9).
 const ESTATUS: Record<string, string> = {
-  devuelta: "s-devuelta",
-  reprogramada: "s-reprogramada",
+  novedad: "s-devuelta",
+  reprogramado: "s-reprogramada",
 };
 
 function ordenRepo(overrides: Partial<OrdenRepoMethods> = {}): OrdenRepoMethods {
@@ -98,6 +104,8 @@ function historialRepo(overrides: Partial<HistorialRepoMethods> = {}): Historial
     existeActuacionDe: vi.fn(async () => false),
     contarIntentosVigentes: vi.fn(async () => 0),
     contarIntentosVigentesEnLote: vi.fn(async () => new Map<string, number>()),
+    findEventosByOrden: vi.fn(async () => []),
+    findSenalesGestion: vi.fn(async () => ({ gestionPendiente: null, ayudaAbierta: false })), // 454/R29
     ...overrides,
   };
 }
@@ -250,7 +258,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
   it("67/R23: `findHistorialByOrden` devuelve TODAS las filas (no filtra las de gestiones anuladas)", async () => {
     const eGestion = entrada({
       estatusOrigenValue: "en_reparto",
-      estatusDestinoValue: "devuelta",
+      estatusDestinoValue: "novedad",
       origenTipo: "gestion",
       motivo: "cliente ausente",
       createdAt: new Date("2026-07-14T12:00:00.000Z"),
@@ -357,7 +365,7 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     const e1 = entrada({ estatusDestinoValue: "en_preparacion", createdAt: new Date("2026-07-13T10:00:00.000Z") });
     const e2 = entrada({
       estatusOrigenValue: "en_reparto",
-      estatusDestinoValue: "devuelta",
+      estatusDestinoValue: "novedad",
       origenTipo: "gestion",
       actorNombre: null,
       motivo: "cliente ausente",

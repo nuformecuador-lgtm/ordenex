@@ -38,7 +38,7 @@ describe("Feature 131 (R21) — el tablero no decide sus paneles por `estadoProd
   // es que `catalogo-paneles.ts` **no decida los paneles filtrando por `estadoProduccion`**
   // —un campo que dice si hay productor, no si el panel se pinta—. Por eso ahora la
   // independencia se comprueba sin nombrar ningun valor del catalogo real.
-  it("el tablero declara panel para `incidentes` y `sin_gestionar`, que la 126 sirve", () => {
+  it("el tablero declara panel para `incidentes` y `novedad_interna`, que la 126 sirve", () => {
     // D6 — direccion 1: las dos metricas que motivaron la regla siguen llegando a pantalla.
     // `incidentes` tiene columna en el rollup y es el cuarto termino del denominador de las
     // tres tasas; `sin_gestionar` se deriva del embudo. Este caso NO mira `estadoProduccion`
@@ -49,13 +49,13 @@ describe("Feature 131 (R21) — el tablero no decide sus paneles por `estadoProd
     const metricas = metricasDelTablero();
 
     expect(metricas, "`incidentes` la sirve la 126 y no tiene panel").toContain("incidentes");
-    expect(metricas, "`sin_gestionar` la sirve la 126 y no tiene panel").toContain(
-      "sin_gestionar",
+    expect(metricas, "`novedad_interna` la sirve la 126 y no tiene panel").toContain(
+      "novedad_interna",
     );
 
     // Y cada una llega hasta un panel de verdad, con su titulo: estar en la lista de ids
     // pero sin panel que la pinte seria el mismo agujero por otra puerta.
-    for (const id of ["incidentes", "sin_gestionar"]) {
+    for (const id of ["incidentes", "novedad_interna"]) {
       const panel = PANELES_OPERATIVOS.find((p) => p.metricas.some((m) => m.metricaId === id));
       expect(panel, `ninguna region del tablero pinta \`${id}\``).toBeDefined();
       expect(panel?.titulo.length).toBeGreaterThan(0);

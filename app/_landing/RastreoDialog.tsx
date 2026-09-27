@@ -11,11 +11,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { EstadoConInfo, SenalPendienteConInfo } from "@/components/shared/EstadoInfo";
+import { textoPendienteConfirmacion } from "@/components/shared/nota-pendiente-confirmacion";
+import { codigoDeNombre } from "@/lib/types/order-status";
 import { consultarRastreoPublico } from "@/lib/actions/rastreo-publico";
 import { PARAM_GUIA } from "./guia-en-url";
-import {
-  ETIQUETA_POR_HITO,
-  type ResultadoRastreoPublico,
+import type {
+  EntradaLineaPublica,
+  RastreoPublicoDTO,
+  ResultadoRastreoPublico,
 } from "@/lib/types/rastreo-publico";
 
 // Feature 229 (T3.1, design §4.2) — el MODAL de rastreo publico del envio.
@@ -44,8 +48,8 @@ import {
 //     (design §0, F2/F3): no hay enlace compartible del seguimiento.
 //
 // Y lo que este modal NO hace (design §4.3): no re-deriva ninguna regla del servidor. Recibe
-// hitos ya mapeados y fechas ya formateadas en la zona del negocio, y solo elige la etiqueta.
-// No conoce ningun `order_status.value`.
+// NOMBRES de estado ya resueltos (FICHA 455, R31: los mismos que ve la app interna) y fechas ya
+// formateadas en la zona del negocio, y solo los pinta. No conoce ningun `order_status.value`.
 
 /** R28 — el MISMO texto para los cuatro casos de rechazo. Fijo, sin interpolar la entrada. */
 const MENSAJE_NO_ENCONTRADO =
@@ -63,6 +67,41 @@ const CLASE_CAMPO =
 
 const CLASE_ENVIAR =
   "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-brand bg-brand px-4 text-sm font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60";
+
+/**
+ * FICHA 454 (T2.4, R31) / 455 (R33) — el texto de una entrada de la línea: el NOMBRE que publicó el
+ * servidor (FICHA 455: el nombre visible del estado, no un hito). Si el servidor la marca
+ * `pendiente` (la gestión ya se registró y su cierre no se aprobó), el nombre es el del RESULTADO y
+ * se lee «<Resultado> · pendiente de confirmación», con el formato único de
+ * `nota-pendiente-confirmacion.ts` (decisión del humano). El modal no decide nada: solo lee la marca
+ * que el servidor puso.
+ */
+function textoEntrada(entrada: EntradaLineaPublica): string {
+  return entrada.pendiente === true ? textoPendienteConfirmacion(entrada.nombre) : entrada.nombre;
+}
+
+/** La cabecera: el estado vigente, o —si la última entrada está pendiente— su mismo texto (R20). */
+function entradaCabecera(envio: Pick<RastreoPublicoDTO, "nombreVigente" | "linea">): EntradaLineaPublica {
+  const ultima = envio.linea.at(-1);
+  return ultima?.pendiente === true ? ultima : { nombre: envio.nombreVigente, fecha: ultima?.fecha ?? "" };
+}
+
+/**
+ * FICHA 456 (T3.9, design DF; R9/R11/R15/R28/R36) — una entrada con su botón de información. El
+ * servidor publica NOMBRES (455/R32, la frontera pública no cambia); el cliente los traduce a código
+ * con la inversa de `NOMBRE_ESTADO` para buscar su explicación. Un nombre que no es de un estado
+ * vigente («Estado no reconocido») se pinta tal cual, sin botón (R15). El popup lleva la paleta clara
+ * de la landing (`superficie="landing"`, R28).
+ */
+function EstadoPublico({ entrada }: { entrada: EntradaLineaPublica }) {
+  const codigo = codigoDeNombre(entrada.nombre);
+  if (codigo === null) return <>{textoEntrada(entrada)}</>;
+  return entrada.pendiente === true ? (
+    <SenalPendienteConInfo resultado={codigo} superficie="landing" />
+  ) : (
+    <EstadoConInfo codigo={codigo} superficie="landing" />
+  );
+}
 
 /**
  * La fecha que llega del servidor es ISO-8601 completa, ya en la zona del negocio y con su
@@ -266,20 +305,27 @@ export function RastreoDialog({ className, children, guiaInicial = null }: Rastr
                 Guía {envio.numGuia}
               </span>
               <span className="text-base font-semibold text-navy-deep">
-                {ETIQUETA_POR_HITO[envio.hitoVigente]}
+                {/* FICHA 454 (R31): el hito vigente ES la última entrada de la línea (R20); si esa
+                    entrada está pendiente, la cabecera lo dice igual que la línea. */}
+                <EstadoPublico entrada={entradaCabecera(envio)} />
               </span>
             </div>
 
             <ol className="flex flex-col gap-2">
-              {envio.linea.map((entrada) => (
-                <li key={`${entrada.hito}-${entrada.fecha}`} className="flex items-start gap-2">
+              {/* FICHA 455 (recorrido F9): la clave lleva la posición y la marca de pendiente; con
+                  nombre + fecha, una entrada confirmada y la pendiente del mismo instante chocaban. */}
+              {envio.linea.map((entrada, i) => (
+                <li
+                  key={`${i}-${entrada.nombre}-${entrada.fecha}-${entrada.pendiente === true ? "p" : "c"}`}
+                  className="flex items-start gap-2"
+                >
                   <span
                     aria-hidden="true"
                     className="mt-1.5 size-2 shrink-0 rounded-full bg-brand"
                   />
                   <span className="flex flex-col">
                     <span className="text-sm font-medium text-asfalto-9">
-                      {ETIQUETA_POR_HITO[entrada.hito]}
+                      <EstadoPublico entrada={entrada} />
                     </span>
                     <time dateTime={entrada.fecha} className="text-xs text-asfalto-5">
                       {fechaLegible(entrada.fecha)}

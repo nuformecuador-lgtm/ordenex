@@ -1,0 +1,13 @@
+{
+  "rol": "maestro",
+  "pasos": [
+    {
+      "paso": "11 marcar recibido en la bodega",
+      "ok": true,
+      "listadoAntes": "Quepos ₡19.000 hoy 26 sept · ₡24.000 de ₡25.000 Ver estado de cuenta",
+      "tarjetasAntes": "Por entregar hoy ₡19.000 Quepos tiene ₡19.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡24.000 Declarado en el periodo ₡43.000 Por entregar al final del periodo ₡19.000",
+      "tarjetasTras": "Por entregar hoy -₡5.000 Quepos entregó ₡5.000 de más Por entregar al inicio ₡0 Recibido en el periodo ₡48.000 Declarado en el periodo ₡43.000 Por entregar al final del periodo -₡5.000",
+      "listadoTras": "Quepos — al día 26 sept · ₡24.000 Ver estado de cuenta"
+    }
+  ]
+}

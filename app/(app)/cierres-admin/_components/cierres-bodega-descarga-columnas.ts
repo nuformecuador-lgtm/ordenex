@@ -26,11 +26,57 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
 
 import {
-  ESTADO_LABEL,
+  // ⭑ FICHA 431 (T17, R28): `ESTADO_LABEL` YA NO SE IMPORTA AQUI. En un archivo de cierre de
+  // bodega el estado se lee con el vocabulario de la conciliacion; `ESTADO_LABEL` sigue intacto
+  // para el cierre de MENSAJERO, que comparte el enum pero no el significado (D3).
+  ESTADO_CONCILIACION_LABEL,
+  FALTA_POR_RECIBIR_LABEL,
   INGRESO_BODEGA_RECHAZOS_COL,
+  MONTO_RECIBIDO_LABEL,
   PAGO_MENSAJERO_COL,
   PARA_LA_CENTRAL_LABEL,
+  estadoConciliacionDe,
 } from "./cierre-labels";
+
+/**
+ * ⭑ FICHA 431 (T17, R28) — EL ESTADO DE UNA CONSOLIDACION EN UN ARCHIVO.
+ *
+ * Sale su ETIQUETA LEGIBLE —«Pendiente de conciliar» / «Recibido» / «Recibido incompleto»— y
+ * NUNCA el valor del enum: quien abra la hoja lee lo mismo que ve en pantalla. Se deriva con la
+ * MISMA funcion que pinta el badge, asi que el archivo y la tarjeta no pueden discrepar.
+ *
+ * ⚠️ LO QUE ESTO RETIRA, dicho: «Rechazado» deja de aparecer. Una consolidacion `rechazado`
+ * —cero en produccion— se lee ahora por su marca, que esta vacia, o sea «Pendiente de
+ * conciliar». La fila sigue en la base y sigue bajando al archivo; lo que cambia es su rotulo,
+ * que es exactamente lo que R16 pide.
+ */
+function estadoDeConciliacion(cierre: CierreBodegaResumen): string {
+  return ESTADO_CONCILIACION_LABEL[estadoConciliacionDe(cierre)];
+}
+
+/**
+ * ⭑ FICHA 431 (T17, R24) — las DOS columnas de la marca, al final de los DOS listados que las
+ * llevan. Van las ultimas y ninguna columna existente se mueve, asi que un consumidor que lea
+ * por posicion no se rompe — el mismo criterio con el que la 393 metio «Para la central».
+ *
+ * `montoRecibido` sale VACIO cuando no hay marca, jamas `"0.00"`: cero recibido significa que
+ * alguien conto y no habia nada, que es otra cosa. `faltaPorRecibir` SI sale siempre —sin
+ * marcar vale el efectivo integro— y llega DERIVADO del servidor, sin recalcular aqui.
+ *
+ * La NOTA de la conciliacion NO baja al archivo: es texto libre, mismo criterio que la 362.
+ */
+const COLUMNAS_MARCA = [
+  { clave: "montoRecibido", encabezado: MONTO_RECIBIDO_LABEL },
+  { clave: "faltaPorRecibir", encabezado: FALTA_POR_RECIBIR_LABEL },
+] as const;
+
+/** Los dos valores de la marca de una fila, money-safe (STRING del servidor, tal cual). */
+function filaMarca(cierre: CierreBodegaResumen): DescargaFila {
+  return {
+    montoRecibido: cierre.montoRecibido,
+    faltaPorRecibir: cierre.faltaPorRecibir,
+  };
+}
 
 /**
  * Feature 393 (R22, D7) — «Para la central» en el archivo de los TRES listados de cierre de
@@ -83,6 +129,7 @@ export const COLUMNAS_DESCARGA_BODEGA_PENDIENTES: DescargaColumna[] = [
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
   PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
+  ...COLUMNAS_MARCA, // ⭑ ficha 431/R24
 ];
 
 /**
@@ -100,6 +147,7 @@ export function filaDescargaBodegaPendiente(cierre: CierreBodegaResumen): Descar
     pagoMensajero: cierre.totalPagoMensajero,
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
     paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
+    ...filaMarca(cierre), // ⭑ ficha 431/R24
   };
 }
 
@@ -114,6 +162,7 @@ export const COLUMNAS_DESCARGA_BODEGA_RESUELTOS: DescargaColumna[] = [
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
   { clave: "motivo", encabezado: "Motivo" },
   PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
+  ...COLUMNAS_MARCA, // ⭑ ficha 431/R24: las dos últimas, sin mover ninguna
 ];
 
 /**
@@ -122,7 +171,7 @@ export const COLUMNAS_DESCARGA_BODEGA_RESUELTOS: DescargaColumna[] = [
  */
 export function filaDescargaBodegaResuelto(cierre: CierreBodegaResumen): DescargaFila {
   return {
-    estado: ESTADO_LABEL[cierre.estado] ?? cierre.estado,
+    estado: estadoDeConciliacion(cierre), // ⭑ ficha 431/R28: el vocabulario de la conciliación
     zona: cierre.zonaNombre,
     solicito: cierre.solicitadoPorNombre,
     fechaResuelta: cierre.resueltoAt === null ? null : fechaDiaISO(cierre.resueltoAt),
@@ -131,6 +180,7 @@ export function filaDescargaBodegaResuelto(cierre: CierreBodegaResumen): Descarg
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
     motivo: cierre.motivoRechazo,
     paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
+    ...filaMarca(cierre), // ⭑ ficha 431/R24
   };
 }
 
@@ -172,6 +222,10 @@ export const COLUMNAS_DESCARGA_BODEGA_SOLICITADOS: DescargaColumna[] = [
   { clave: "ingresoBodega", encabezado: INGRESO_BODEGA_RECHAZOS_COL },
   { clave: "motivo", encabezado: "Motivo" },
   PARA_LA_CENTRAL_COLUMNA, // feature 393/R22: la última, sin mover ninguna
+  // ⭑ ficha 431/R24/R26: la satélite descarga lo MISMO que ve. Sin estas dos, su archivo no
+  // llevaría la diferencia que su pantalla sí enseña, y cuadrar fuera de la app —que es para lo
+  // que se descarga— seguiría sin poder hacerse.
+  ...COLUMNAS_MARCA,
 ];
 
 /**
@@ -181,7 +235,7 @@ export const COLUMNAS_DESCARGA_BODEGA_SOLICITADOS: DescargaColumna[] = [
  */
 export function filaDescargaBodegaSolicitado(cierre: CierreBodegaResumen): DescargaFila {
   return {
-    estado: ESTADO_LABEL[cierre.estado] ?? cierre.estado,
+    estado: estadoDeConciliacion(cierre), // ⭑ ficha 431/R28
     fechaSolicitud: fechaDiaISO(cierre.solicitadoAt),
     cierresDelDia: cierre.cantidadCierres,
     general: cierre.totales.general,
@@ -189,5 +243,6 @@ export function filaDescargaBodegaSolicitado(cierre: CierreBodegaResumen): Desca
     ingresoBodega: cierre.totalIngresoBodegaRechazos,
     motivo: cierre.motivoRechazo,
     paraLaCentral: cierre.paraLaCentral, // feature 393/R22: STRING del DTO, sin recalcular
+    ...filaMarca(cierre), // ⭑ ficha 431/R24
   };
 }

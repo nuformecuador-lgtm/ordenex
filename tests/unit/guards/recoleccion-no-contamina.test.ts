@@ -42,7 +42,7 @@ describe("Feature 157 — la recoleccion no contamina el cierre del dia (R37)", 
     expect(decl![1]).not.toContain(ESTADO);
   });
 
-  it("el corte diario solo barre en_reparto -> sin_gestionar, sin mencionar la recoleccion", () => {
+  it("el corte diario solo barre en_reparto -> novedad_interna, sin mencionar la recoleccion", () => {
     const src = sinComentarios(leer("lib/services/CorteDiarioService.ts"));
 
     expect(src).not.toContain(ESTADO);

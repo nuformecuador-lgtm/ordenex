@@ -165,7 +165,7 @@ function makeRecepcion(
     ...CAMPOS_BASE_ORDEN,
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "por_devolver",
+    estatusValue: "por_devolver_a_bodega_central",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1",
@@ -276,8 +276,8 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
     asignarDesdeBodegaMock.mockResolvedValue({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
     render(
@@ -339,7 +339,7 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
     const user = userEvent.setup();
     asignarDesdeSateliteMock.mockResolvedValue({
       status: "ok",
-      resultados: [{ ordenId: "s1", estado: "por_recoger" }],
+      resultados: [{ ordenId: "s1", estado: "mensajero_recogiendo_en_bodega" }],
     });
     render(
       <AsignarSateliteModal

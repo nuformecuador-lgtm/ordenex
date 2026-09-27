@@ -1,0 +1,30 @@
+{
+ "tienda_comprobante_caja": {
+  "status": "no_encontrado"
+ },
+ "tienda_comprobante_inexistente": {
+  "status": "no_encontrado"
+ },
+ "tienda_comprobante_suya": {
+  "status": "sin_comprobante"
+ },
+ "tienda_estado_cuenta": {
+  "status": "forbidden"
+ },
+ "tienda_anular": {
+  "status": "forbidden"
+ },
+ "mensajero_estado_cuenta": {
+  "status": "forbidden"
+ },
+ "mensajero_anular": {
+  "status": "forbidden"
+ },
+ "adminSatelite_estado_cuenta": {
+  "status": "forbidden"
+ },
+ "adminSatelite_anular": {
+  "status": "forbidden"
+ },
+ "filas_tienda": 35
+}

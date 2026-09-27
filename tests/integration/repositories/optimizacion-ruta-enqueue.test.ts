@@ -85,9 +85,17 @@ function prismaRecoger(idsGanadores: { id: string }[], falla = false) {
   return { prisma, tx };
 }
 
-/** Prisma fake de `crearGestionYTransicionar`. */
+/** Prisma fake de `registrarGestionPendiente` (antes `crearGestionYTransicionar`). */
+// ⏳ 2026-09-23 (FICHA 454, T1.4): `crearGestionYTransicionar` se sustituye por
+// `registrarGestionPendiente` (registra sin transicionar). La reoptimizacion inmediata sigue en la
+// MISMA transaccion. El doble gana el candado + re-lectura (`$queryRaw`) y el evento de registro.
 function prismaGestion(opts: { gestionId?: string; falla?: boolean } = {}) {
   const tx = {
+    $queryRaw: vi.fn(async (q: unknown) => {
+      const partes = Array.isArray(q) ? q : ((q as { strings?: string[] }).strings ?? []);
+      return partes.join(" ").includes("webhook_suscripcion") ? [] : [{ id: "o1" }];
+    }),
+    ordenEvento: { create: vi.fn(async () => ({ id: "ev-1" })) },
     gestionOrden: {
       create: vi.fn(async () => {
         if (opts.falla) throw new Error("create boom");
@@ -111,8 +119,7 @@ function repoRecoger(prisma: unknown, cola: ColaEnMemoria, ahora: Date = T0) {
 const GESTION_INPUT = {
   ordenId: "o1",
   mensajeroId: MENSAJERO,
-  gestion: { resultado: "entregada" as const, montoRecibido: 100, metodoPago: "efectivo" as const },
-  nuevoEstatusId: idEstado("entregada"),
+  gestion: { resultado: "entregado" as const, montoRecibido: 100, metodoPago: "efectivo" as const },
 };
 
 beforeEach(async () => {
@@ -124,7 +131,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
 
     expect(cola.ruta).toHaveLength(1);
     // PII: el payload lleva SOLO el id del mensajero.
@@ -143,7 +150,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     await repoRecoger(prisma, cola).recogerLote(
       ids.map((i) => i.id),
       MENSAJERO,
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_reparto"),
       DIA_CR,
     );
@@ -155,7 +162,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma, tx } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
 
     // El 4.º argumento de `enqueue` es el cliente transaccional del writer (outbox).
     expect(cola.ruta[0].tx).toBe(tx);
@@ -166,7 +173,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
 
     expect(cola.ruta).toHaveLength(0);
   });
@@ -180,7 +187,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     await repoRecoger(primera.prisma, cola, T0).recogerLote(
       ["o1"],
       MENSAJERO,
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_reparto"),
       DIA_CR,
     );
@@ -191,7 +198,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     await repoRecoger(segunda.prisma, cola, new Date(T0.getTime() + 20_000)).recogerLote(
       ["o2"],
       MENSAJERO,
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_reparto"),
       DIA_CR,
     );
@@ -204,7 +211,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     const cola = new ColaEnMemoria();
     for (const m of ["m-1", "m-2"]) {
       const { prisma } = prismaRecoger([{ id: "o1" }]);
-      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR);
     }
     expect(cola.ruta).toHaveLength(2);
   });
@@ -215,7 +222,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
     const { prisma } = prismaGestion({ gestionId: "gestion-77" });
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT);
 
     expect(cola.ruta).toHaveLength(1);
     expect(cola.ruta[0].opts.runAfter).toBeUndefined();
@@ -232,14 +239,14 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
     await repoRecoger(recogida.prisma, cola, T0).recogerLote(
       ["o1"],
       MENSAJERO,
-      idEstado("por_recoger"),
+      idEstado("mensajero_recogiendo_en_bodega"),
       idEstado("en_reparto"),
       DIA_CR,
     );
     expect(cola.ruta).toHaveLength(1);
 
     const gestion = prismaGestion({ gestionId: "gestion-77" });
-    await repoRecoger(gestion.prisma, cola, T0).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(gestion.prisma, cola, T0).registrarGestionPendiente(GESTION_INPUT);
 
     expect(cola.ruta).toHaveLength(2);
     expect(cola.ruta[1].opts.dedupeKey).toContain(":inmediato:");
@@ -249,7 +256,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
   it("el encolado va DENTRO de la transaccion de la gestion", async () => {
     const { prisma, tx } = prismaGestion();
     const cola = new ColaEnMemoria();
-    await repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT);
+    await repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT);
     expect(cola.ruta[0].tx).toBe(tx);
   });
 });
@@ -260,7 +267,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR),
+      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("mensajero_recogiendo_en_bodega"), idEstado("en_reparto"), DIA_CR),
     ).rejects.toThrow();
 
     // El encolado va DESPUES del append en la misma tx: nunca llego a ejecutarse.
@@ -272,7 +279,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).crearGestionYTransicionar(GESTION_INPUT),
+      repoRecoger(prisma, cola).registrarGestionPendiente(GESTION_INPUT),
     ).rejects.toThrow();
 
     expect(cola.ruta).toHaveLength(0);

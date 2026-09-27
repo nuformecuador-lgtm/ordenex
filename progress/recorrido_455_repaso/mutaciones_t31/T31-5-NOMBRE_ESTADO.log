@@ -1,0 +1,89 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+ ❯ tests/unit/types/nombre-estado-catalogo.test.ts (4 tests | 3 failed) 11ms
+     × 20 codigos, un nombre cada uno, igual a la tabla aprobada (§0.1) 6ms
+     × los 20 nombres son los de `specs/456-tooltip-estados/textos-aprobados.md` (leidos del disco) 2ms
+     × MUTACION (R44): un nombre cambiado, uno repetido o uno de menos ponen rojo el comparador 1ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  11:17:16
+   Duration  326ms (transform 44ms, setup 54ms, import 44ms, tests 11ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > 20 codigos, un nombre cada uno, igual a la tabla aprobada (§0.1)
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "novedad: «Novedades» en vez de «Novedad»",
++ ]
+
+ ❯ tests/unit/types/nombre-estado-catalogo.test.ts:72:50
+     70| describe("455/R1 · R43 (G4) — el catalogo de nombres es el aprobado", …
+     71|   it("20 codigos, un nombre cada uno, igual a la tabla aprobada (§0.1)…
+     72|     expect(diferenciasConLaTabla(NOMBRE_ESTADO)).toEqual([]);
+       |                                                  ^
+     73|   });
+     74|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > los 20 nombres son los de `specs/456-tooltip-estados/textos-aprobados.md` (leidos del disco)
+AssertionError: expected Set{ 'Entregado', 'Novedades', …(18) } to deeply equal Set{ 'Por recolectar en tienda', …(19) }
+
+- Expected
++ Received
+
+@@ -10,12 +10,12 @@
+    "En ruta a bodega central",
+    "En ruta a bodega satélite",
+    "Entregado",
+    "Incidente",
+    "Mensajero recogiendo en la bodega",
+-   "Novedad",
+    "Novedad interna",
++   "Novedades",
+    "Por devolver a bodega central",
+    "Por devolver a tienda",
+    "Por recolectar en tienda",
+    "Recolectando",
+    "Reprogramado",
+
+ ❯ tests/unit/types/nombre-estado-catalogo.test.ts:83:51
+     81|     const aprobados = nombresDeTextosAprobados();
+     82|     expect(aprobados).toHaveLength(20);
+     83|     expect(new Set(Object.values(NOMBRE_ESTADO))).toEqual(new Set(apro…
+       |                                                   ^
+     84|   });
+     85|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/unit/types/nombre-estado-catalogo.test.ts > 455/R1 · R43 (G4) — el catalogo de nombres es el aprobado > MUTACION (R44): un nombre cambiado, uno repetido o uno de menos ponen rojo el comparador
+AssertionError: expected [ …(2) ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+    "entregado: «Entregada» en vez de «Entregado»",
++   "novedad: «Novedades» en vez de «Novedad»",
+  ]
+
+ ❯ tests/unit/types/nombre-estado-catalogo.test.ts:87:81
+     85|
+     86|   it("MUTACION (R44): un nombre cambiado, uno repetido o uno de menos …
+     87|     expect(diferenciasConLaTabla({ ...NOMBRE_ESTADO, entregado: "Entre…
+       |                                                                                 ^
+     88|       "entregado: «Entregada» en vez de «Entregado»",
+     89|     ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

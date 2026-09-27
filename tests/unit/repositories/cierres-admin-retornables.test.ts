@@ -37,23 +37,23 @@ function filas(): FilaGestion[] {
   const satelite = { destinoTipo: "bodega_satelite", destinoZonaId: "z-sat" };
   return [
     // Los tres que VUELVEN.
-    { id: "g-dev", cierreId: "c1", resultado: "devuelta", anuladaAt: null, cierre: central, orden: { numGuia: 1001, estatusId: "os-devolucion_por_confirmar" } },
-    { id: "g-rec", cierreId: "c1", resultado: "rechazada", anuladaAt: null, cierre: central, orden: { numGuia: 1002, estatusId: "os-rechazada" } },
+    { id: "g-dev", cierreId: "c1", resultado: "novedad", anuladaAt: null, cierre: central, orden: { numGuia: 1001, estatusId: "os-devolucion_por_confirmar" } },
+    { id: "g-rec", cierreId: "c1", resultado: "devolucion_a_origen_por_rechazo", anuladaAt: null, cierre: central, orden: { numGuia: 1002, estatusId: "os-rechazada" } },
     // R4: esta orden YA se movio despues de la gestion (esta en bodega, no en `reprogramada`).
     // Sigue siendo confirmable: el conjunto sale de la GESTION, no del estatus vivo.
-    { id: "g-rep", cierreId: "c1", resultado: "reprogramada", anuladaAt: null, cierre: central, orden: { numGuia: 1003, estatusId: "os-en_bodega_central" } },
+    { id: "g-rep", cierreId: "c1", resultado: "reprogramado", anuladaAt: null, cierre: central, orden: { numGuia: 1003, estatusId: "os-en_bodega_central" } },
     // R13: la orden de esta gestion NO tiene numero de guia. NO se omite: sale con `null` para
     // que el servicio pueda bloquear diciendolo.
-    { id: "g-sin-guia", cierreId: "c1", resultado: "devuelta", anuladaAt: null, cierre: central, orden: { numGuia: null, estatusId: "os-devolucion_por_confirmar" } },
+    { id: "g-sin-guia", cierreId: "c1", resultado: "novedad", anuladaAt: null, cierre: central, orden: { numGuia: null, estatusId: "os-devolucion_por_confirmar" } },
     // Los dos que NO vuelven, en el MISMO cierre.
-    { id: "g-ent", cierreId: "c1", resultado: "entregada", anuladaAt: null, cierre: central, orden: { numGuia: 1004, estatusId: "os-entregada" } },
+    { id: "g-ent", cierreId: "c1", resultado: "entregado", anuladaAt: null, cierre: central, orden: { numGuia: 1004, estatusId: "os-entregada" } },
     { id: "g-inc", cierreId: "c1", resultado: "incidente", anuladaAt: null, cierre: central, orden: { numGuia: 1005, estatusId: "os-incidente" } },
     // Una gestion ANULADA del mismo cierre (defensa explicita del WHERE).
-    { id: "g-anulada", cierreId: "c1", resultado: "devuelta", anuladaAt: new Date("2026-08-19T10:00:00Z"), cierre: central, orden: { numGuia: 1006, estatusId: "os-en_reparto" } },
+    { id: "g-anulada", cierreId: "c1", resultado: "novedad", anuladaAt: new Date("2026-08-19T10:00:00Z"), cierre: central, orden: { numGuia: 1006, estatusId: "os-en_reparto" } },
     // La testigo del `cierreId`: mismo resultado, misma bodega, OTRO cierre.
-    { id: "g-otro-cierre", cierreId: "c2", resultado: "devuelta", anuladaAt: null, cierre: central, orden: { numGuia: 2001, estatusId: "os-devolucion_por_confirmar" } },
+    { id: "g-otro-cierre", cierreId: "c2", resultado: "novedad", anuladaAt: null, cierre: central, orden: { numGuia: 2001, estatusId: "os-devolucion_por_confirmar" } },
     // La testigo del ALCANCE: un cierre de la bodega satelite.
-    { id: "g-sat", cierreId: "c-sat", resultado: "devuelta", anuladaAt: null, cierre: satelite, orden: { numGuia: 3001, estatusId: "os-devolucion_por_confirmar" } },
+    { id: "g-sat", cierreId: "c-sat", resultado: "novedad", anuladaAt: null, cierre: satelite, orden: { numGuia: 3001, estatusId: "os-devolucion_por_confirmar" } },
   ];
 }
 
@@ -108,10 +108,10 @@ describe("238/R2 — el conjunto son las gestiones VIGENTES del cierre que vuelv
     const filas = await repo.findGestionesRetornablesDelCierre("c1", MAESTRO);
 
     expect(filas).toEqual([
-      { gestionId: "g-dev", numGuia: 1001, resultado: "devuelta" },
-      { gestionId: "g-rec", numGuia: 1002, resultado: "rechazada" },
-      { gestionId: "g-rep", numGuia: 1003, resultado: "reprogramada" },
-      { gestionId: "g-sin-guia", numGuia: null, resultado: "devuelta" },
+      { gestionId: "g-dev", numGuia: 1001, resultado: "novedad" },
+      { gestionId: "g-rec", numGuia: 1002, resultado: "devolucion_a_origen_por_rechazo" },
+      { gestionId: "g-rep", numGuia: 1003, resultado: "reprogramado" },
+      { gestionId: "g-sin-guia", numGuia: null, resultado: "novedad" },
     ]);
   });
 
@@ -178,7 +178,7 @@ describe("238/R6 — el ALCANCE va en el WHERE, nunca en memoria", () => {
     const arg = findMany.mock.calls[0][0] as { where: unknown; select: unknown };
     expect(arg.where).toEqual({
       cierreId: "c1",
-      resultado: { in: ["reprogramada", "devuelta", "rechazada"] },
+      resultado: { in: ["reprogramado", "novedad", "devolucion_a_origen_por_rechazo"] },
       anuladaAt: null,
       // El alcance viaja por la RELACION al cierre. Si viviera fuera del WHERE, un satelite
       // podria leer —y por tanto revelar— las gestiones del cierre de la bodega vecina.
@@ -216,7 +216,7 @@ describe("238/R6 — el ALCANCE va en el WHERE, nunca en memoria", () => {
     // las dos aserciones de arriba en verde.
     const { repo } = buildRepo();
     const filas = await repo.findGestionesRetornablesDelCierre("c-sat", SATELITE);
-    expect(filas).toEqual([{ gestionId: "g-sat", numGuia: 3001, resultado: "devuelta" }]);
+    expect(filas).toEqual([{ gestionId: "g-sat", numGuia: 3001, resultado: "novedad" }]);
   });
 });
 

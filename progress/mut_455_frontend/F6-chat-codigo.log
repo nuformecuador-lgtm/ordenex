@@ -1,0 +1,58 @@
+MUTACION F6-chat-codigo
+archivo: app/(app)/mis-asignaciones/_components/chat/chat-format.ts
+cambio (numstat): 1	1	app/(app)/mis-asignaciones/_components/chat/chat-format.ts
+-     label: nombreDeEstado(estatusValue),
++     label: estatusValue,
+tests: ['tests/components/textos-estado-455.test.tsx', 'tests/components/ChatContactoAntesDeRecoger.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/components/textos-estado-455.test.tsx (15 tests | 1 failed) 54ms
+     × R7: el chip dice el nombre del estado de la orden 6ms
+ ❯ tests/components/ChatContactoAntesDeRecoger.test.tsx (18 tests | 1 failed) 3304ms
+     × la fila de la asignada se anuncia con su estado, «Mensajero recogiendo en la bodega», no como en reparto 169ms
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 31 passed (33)
+   Start at  08:10:01
+   Duration  8.53s (transform 1.40s, setup 355ms, import 4.30s, tests 3.36s, environment 2.39s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/ChatContactoAntesDeRecoger.test.tsx > (4) conversar no es aceptar: el chat no ofrece trabajar la orden > la fila de la asignada se anuncia con su estado, «Mensajero recogiendo en la bodega», no como en reparto
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  Mensajero recogiendo en la bodega
+Received:
+  CSCarlos Sin RecogerR-c17001mensajero_recogiendo_en_bodegaCarmen · Central
+ ❯ tests/components/ChatContactoAntesDeRecoger.test.tsx:401:47
+    399|     const modal = await chatDesdeReparto();
+    400|
+    401|     expect(fila(modal, "Carlos Sin Recoger")).toHaveTextContent("Mensa…
+       |                                               ^
+    402|   });
+    403| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/components/textos-estado-455.test.tsx > chat del mensajero (T2.2; R7, R12) > R7: el chip dice el nombre del estado de la orden
+AssertionError: expected 'mensajero_recogiendo_en_bodega' to be 'Mensajero recogiendo en la bodega' // Object.is equality
+
+Expected: "Mensajero recogiendo en la bodega"
+Received: "mensajero_recogiendo_en_bodega"
+
+ ❯ tests/components/textos-estado-455.test.tsx:42:66
+     40| describe("chat del mensajero (T2.2; R7, R12)", () => {
+     41|   it("R7: el chip dice el nombre del estado de la orden", () => {
+     42|     expect(chipDeEstado("mensajero_recogiendo_en_bodega").label).toBe(…
+       |                                                                  ^
+     43|     expect(chipDeEstado("entregado").label).toBe("Entregado");
+     44|     expect(chipDeEstado("novedad").label).toBe("Novedad");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+RESTAURADO_LIMPIO=True

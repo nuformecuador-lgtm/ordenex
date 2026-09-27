@@ -42,10 +42,11 @@ export interface TextosGrupoNovedad {
   /** Detalle del estado vacio (R16). Dice CUANDO aparecera. */
   vacioDetalle: string;
   /**
-   * Chip de la card cuando el grupo lo fija. `null` = el chip lo decide el dato de la fila (para
-   * la devolucion, la CAUSA: es su unica señal).
+   * NOTA de la card cuando el grupo la fija. `null` = la nota la decide el dato de la fila (para
+   * la novedad, la CAUSA: es su unica señal). FICHA 455 (2026-09-24, R7): antes era el CHIP de la
+   * card y sustituia al estado; ahora el chip dice el estado de la orden y esto va a su lado.
    */
-  chipFijo: string | null;
+  notaFija: string | null;
 }
 
 /**
@@ -80,22 +81,27 @@ export const TEXTOS_POR_GRUPO = {
     vacioTitulo: "Ningún mensajero te pidió ayuda",
     vacioDetalle:
       "Cuando un mensajero necesite que resuelvas algo de una orden que lleva encima, aparecerá acá con su mensaje.",
-    chipFijo: "Esperando tu respuesta",
+    notaFija: "Esperando tu respuesta",
   },
+  // FICHA 455 (2026-09-24, design §2.1; R5/R6): la pestaña lista UN solo estado (`novedad`), asi
+  // que se rotula con su nombre exacto, «Novedad». Antes decia «En devolución», que no es el nombre
+  // de ningun estado (y la orden no esta devolviendose: espera la decision de la tienda). Los
+  // nombres accesibles y los vacios hablan de «novedad» por lo mismo. La clave `devolucion` es
+  // codigo (URL `?superficie=devolucion`, R51) y no cambia.
   devolucion: {
-    pestana: "En devolución",
-    listaAriaLabel: "Órdenes en devolución",
+    pestana: "Novedad",
+    listaAriaLabel: "Órdenes en novedad",
     // Se conserva TAL CUAL el de hoy: esta ficha no tiene ningun motivo para mover el nombre
     // accesible de un control que ya estaba bien, y cambiarlo de paso seria copy sin firma.
     paginacionAriaLabel: "Paginación de novedades",
-    buscadorAriaLabel: "Buscar entre las órdenes en devolución",
-    filtrosAriaLabel: "Filtros de las órdenes en devolución",
-    vacioTitulo: "No tenés órdenes en devolución",
+    buscadorAriaLabel: "Buscar entre las órdenes en novedad",
+    filtrosAriaLabel: "Filtros de las órdenes en novedad",
+    vacioTitulo: "No tenés órdenes en novedad",
     vacioDetalle:
-      "Cuando una de tus órdenes vuelva a la tienda, aparecerá acá con su causa y los botones de contacto.",
-    // La devolucion NO tiene chip fijo: su señal es la CAUSA, que es lo unico que distingue una
-    // devolucion de otra en la lista (R7/R11 de la 87).
-    chipFijo: null,
+      "Cuando el mensajero no pueda entregar una de tus órdenes, aparecerá acá con su causa y los botones de contacto.",
+    // La novedad NO tiene nota fija: su señal es la CAUSA, que es lo unico que distingue una
+    // novedad de otra en la lista (R7/R11 de la 87).
+    notaFija: null,
   },
 } as const satisfies Record<GrupoNovedad, TextosGrupoNovedad>;
 
@@ -108,5 +114,8 @@ export const TEXTOS_POR_GRUPO = {
  * paquete encima—, y R14 prohibe describir la pantalla con un texto que afirme de las ordenes que
  * lista algo que no es cierto.
  */
+//
+// FICHA 455 (2026-09-24, R2/R5): cada estado por su nombre exacto — «Novedad» (antes «en devolución»)
+// y «Devolución a origen por rechazo» (antes «rechazo»).
 export const SUBTITULO_NOVEDADES =
-  "Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en devolución y las que llegaron a rechazo por vencerse el plazo";
+  "Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en Novedad y las que pasaron a Devolución a origen por rechazo por vencerse el plazo";

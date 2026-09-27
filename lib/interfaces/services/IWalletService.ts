@@ -9,6 +9,8 @@ import type {
   RegistrarMovimientoManualInput,
 } from "@/lib/types/wallet";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { CamposLateralesCaja } from "@/lib/types/wallet-laterales";
+import type { ComprobanteRecibido } from "@/lib/interfaces/services/IPagoPorCuentaTiendaService";
 
 // Feature 42 (design §2.1) — contrato del servicio de la wallet (libro + balance +
 // manual). Rol autorizado: maestro (R19). Resultados de dominio (sin acoplar a HTTP);
@@ -69,8 +71,82 @@ export type ListarMovimientosDeFilaServiceResult =
 
 export type RegistrarMovimientoManualServiceResult =
   | { status: "ok"; movimiento: WalletMovimientoDTO }
+  /** Ficha 461 (R68): la MISMA clave ya tenia su fila; se devuelve esa y no se escribio nada. */
+  | { status: "ya_registrado"; movimiento: WalletMovimientoDTO }
   | { status: "forbidden" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  /** FICHA 458-B (R76): el comprobante no se pudo guardar; no se registro nada. */
+  | { status: "comprobante_no_guardado" };
+
+/**
+ * Ficha 459 (R14) — lo unico que el resumen de la caja necesita saber del capital: si hay un saldo
+ * inicial vigente. Lo implementa `AporteCapitalRepository`.
+ */
+export interface LectorSaldoInicial {
+  haySaldoInicialVigente(): Promise<boolean>;
+}
+
+/** Ficha 459 (design §6.4) — el estado de un documento, leido EN LOTE por su repositorio. */
+export interface EstadoDocumentoCaja {
+  id: string;
+  anulado: boolean;
+  tieneComprobante: boolean;
+  /**
+   * Ficha 458-B (R72) — `true` cuando esta anulado por un reverso de ANTES de esta ficha, sin
+   * constancia: la pantalla dice «motivo no registrado». Ausente en todo lo demas.
+   */
+  sinConstancia?: boolean;
+}
+
+/**
+ * Ficha 459 (design §7.3, R66/R67) — los dos lectores de documentos que el libro de la caja
+ * necesita para decir, por fila ORIGINAL, si se puede anular y si tiene comprobante. Cada uno lo
+ * implementa su repositorio (`PagoPorCuentaTiendaRepository`, `AporteCapitalRepository`) con UNA
+ * consulta por lote, y una lista vacia no consulta.
+ */
+export interface LectoresDocumentosCaja {
+  pagosPorCuenta: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  aportes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 461 (design §5.4, R20/R37) — el estado de los cobros de Ordenex a una tienda cuya linea de
+   * caja esta en la pagina (propia o completada). Lo implementa `CobroTiendaAnulacionRepository`.
+   * Tambien SIN valor por defecto: sin el, ninguna linea de cobro ofreceria «Anular…».
+   */
+  cobros: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 461 (R71, auditoria D3) — el estado de las CORRECCIONES de caja de la pagina (el id del
+   * «documento» es el de la propia fila). Lo implementa `AjusteCajaAnulacionRepository`. Sin valor
+   * por defecto: sin el, ninguna correccion ofreceria «Anular…».
+   */
+  ajustes: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 457 (design §8.5, R41) — el estado de los PAGOS DE UNA TIENDA A ORDENEX cuya entrada esta en
+   * la pagina. Lo implementa `AbonoTiendaRepository`. Sin valor por defecto: sin el, ninguna fila
+   * ofreceria «Anular…» ni «Ver comprobante».
+   */
+  abonos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-B (design §3.6, R71/R72) — el estado de los EGRESOS sin documento propio (sueldo,
+   * gasto de Ordenex, gasto fijo cobrado; origen `gasto`). El id es el de la PROPIA fila. «Anulado»
+   * lo decide el contra-asiento en la base, no la pagina. Lo implementa
+   * `EgresoCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  egresos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D8, R71) — las indemnizaciones por incidente (id = la propia fila). */
+  indemnizaciones: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /** Ficha 458-B (D7, R71) — los cobros por rechazo aprobados: id = la GESTION (sus dos lineas). */
+  rechazos: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-C (revision B3, R71) — los pagos de Ordenex a una tienda (172): id = el
+   * `liquidacion_pago`. Lo implementa `PagoTiendaCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  pagosATienda: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+  /**
+   * Ficha 458-C (revision B3, R71) — los premios del ranking (293): id = la fila del podio. Lo
+   * implementa `PremioCajaDocumentosRepository`. Sin valor por defecto.
+   */
+  premios: { estadoDeDocumentos(ids: readonly string[]): Promise<EstadoDocumentoCaja[]> };
+}
 
 export interface IWalletService {
   /** R19/R20: solo maestro; lista el libro paginado con filtros. Forbidden sin exponer datos. */
@@ -115,7 +191,9 @@ export interface IWalletService {
   ): Promise<ListarMovimientosDeFilaServiceResult>;
   /** R15/R19: solo maestro; registra un movimiento manual de AJUSTE (inmutable, R3). */
   registrarMovimientoManual(
-    input: RegistrarMovimientoManualInput,
+    input: RegistrarMovimientoManualInput & Partial<CamposLateralesCaja>,
     actor: Actor,
+    /** FICHA 458-B (R74): el comprobante opcional, ya leido por el borde. */
+    comprobante?: ComprobanteRecibido | null,
   ): Promise<RegistrarMovimientoManualServiceResult>;
 }

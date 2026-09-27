@@ -26,12 +26,13 @@ const ENVIO: ResultadoRastreoPublico = {
   estado: "ok",
   envio: {
     numGuia: 4321,
-    hitoVigente: "en_reparto",
+    // FICHA 455 (2026-09-24, T1.9/T2.8): el DTO publica NOMBRES de estado, no hitos.
+    nombreVigente: "En reparto",
     actualizadoEn: "2026-08-15T09:30-06:00",
     linea: [
-      { hito: "registrado", fecha: "2026-08-13T18:05-06:00" },
-      { hito: "en_transito", fecha: "2026-08-14T07:40-06:00" },
-      { hito: "en_reparto", fecha: "2026-08-15T09:30-06:00" },
+      { nombre: "En preparación", fecha: "2026-08-13T18:05-06:00" },
+      { nombre: "En ruta a bodega central", fecha: "2026-08-14T07:40-06:00" },
+      { nombre: "En reparto", fecha: "2026-08-15T09:30-06:00" },
     ],
   },
 };
@@ -106,7 +107,7 @@ describe("R26 — el resultado se pinta DENTRO del mismo diálogo, sin navegar",
 
     const modal = await screen.findByRole("dialog");
     expect(await within(modal).findByText(/Guía 4321/)).toBeInTheDocument();
-    // «En reparto» sale DOS veces y es correcto: es el hito vigente y, a la vez, el último
+    // «En reparto» sale DOS veces y es correcto: es el estado vigente y, a la vez, el último
     // de la línea — R20 dice que no pueden divergir.
     expect(within(modal).getAllByText("En reparto")).toHaveLength(2);
     // La línea entera vive dentro del MISMO diálogo, en orden ascendente.
@@ -115,8 +116,8 @@ describe("R26 — el resultado se pinta DENTRO del mismo diálogo, sin navegar",
         .getAllByRole("listitem")
         .map((fila) => fila.textContent),
     ).toEqual([
-      "Envío registrado2026-08-13 · 18:05",
-      "En tránsito2026-08-14 · 07:40",
+      "En preparación2026-08-13 · 18:05",
+      "En ruta a bodega central2026-08-14 · 07:40",
       "En reparto2026-08-15 · 09:30",
     ]);
     // Y no se navegó: ni ruta nueva, ni la guía en la URL (R30 se apoya en esto).

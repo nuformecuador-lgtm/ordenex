@@ -132,7 +132,7 @@ describe("(a) EN EJECUCION · `tarifaDe` no devuelve el fulfillment ni teniendol
     // y la formula lo alcanza. Aqui se FUERZA y se mide que el ingreso NO se mueve — si algun
     // dia se moviera, este caso se pone rojo y dira por que.
     const entrada = {
-      resultado: "entregada" as const,
+      resultado: "entregado" as const,
       esCentral: false,
       esZonaEspecial: false,
       montoCobrar: "10000.00",

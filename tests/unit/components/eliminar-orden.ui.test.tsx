@@ -71,8 +71,8 @@ const ACCION = "Eliminar";
 
 const CATALOGO = [
   { id: "est-en_bodega_central", value: "en_bodega_central" },
-  { id: "est-entregada", value: "entregada" },
-  { id: "est-por_recoger", value: "por_recoger" },
+  { id: "est-entregada", value: "entregado" },
+  { id: "est-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
 ];
 
 function makeOrden(
@@ -155,8 +155,8 @@ describe("la acción se ofrece en CUALQUIER estado, si la orden no se ha gestion
     ["en_bodega_central", "est-en_bodega_central"],
     // `entregada` NO tenía ninguna acción por lote: su checkbox estaba bloqueado. Ahora se
     // puede marcar, y esto es lo que lo comprueba.
-    ["entregada", "est-entregada"],
-    ["por_recoger", "est-por_recoger"],
+    ["entregado", "est-entregada"],
+    ["mensajero_recogiendo_en_bodega", "est-mensajero_recogiendo_en_bodega"],
   ])("estado %s", async (estatusValue, estatusId) => {
     listarOrdenesMock.mockResolvedValue(
       pagina([makeOrden({ id: "o1", estatusValue, estatusId })]),

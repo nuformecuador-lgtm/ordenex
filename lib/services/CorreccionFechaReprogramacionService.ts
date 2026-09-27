@@ -51,7 +51,7 @@ import {
  * argumento del molde 262 aplica literal — no bloquear por estado del cierre cuando la operación no
  * mueve dinero, y está MEDIDO que una gestión `reprogramada` no lleva importe (0 de 160).
  */
-const ESTATUS_REPROGRAMADA = "reprogramada";
+const ESTATUS_REPROGRAMADA = "reprogramado";
 
 /** Métodos de repo que el service consume (inyección por constructor, `Pick` para dobles). */
 export type CorreccionFechaOrdenRepo = Pick<IOrdenRepository, "findEstatusIdByValue">;

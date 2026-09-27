@@ -241,6 +241,7 @@ import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/Saldo
 import { GastosFijosPlantillasPanel } from "@/app/(app)/wallet/_components/GastosFijosPlantillasPanel";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 // --- Datos ---------------------------------------------------------------
 
 /** Conjunto completo de cada listado y tamaño de página: 60 filas en 3 páginas de 25. */
@@ -297,6 +298,8 @@ function cierreBodega(i: number): CierreBodegaResumen {
     // efectivo (0.00) cubre unos descuentos que tambien son cero.
     paraLaCentral: "0.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("0.00"),
   };
 }
 
@@ -365,7 +368,7 @@ function conjunto<T>(fila: (i: number) => T): T[] {
 }
 
 function gruposVacios(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 // --- Andamiaje -------------------------------------------------------------

@@ -161,8 +161,8 @@ describeSiHayBase("⭑ 380/T8 — el pago al mensajero deja rastro al guardar (P
 
       const nombres = { A: `380 A ${unico()}`, B: `380 B ${unico()}` };
       const [a, b] = await Promise.all([
-        tx.zona.create({ data: { nombre: nombres.A }, select: { id: true } }),
-        tx.zona.create({ data: { nombre: nombres.B }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.A }, select: { id: true } }),
+        tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombres.B }, select: { id: true } }),
       ]);
       const [moto, carro] = await Promise.all([
         tx.vehiculo.create({ data: { name: `380 moto ${unico()}` }, select: { id: true } }),
@@ -741,7 +741,7 @@ describeSiHayBase("⭑ 380/T8 — el pago al mensajero deja rastro al guardar (P
     const medido = await conEscenario(async (e) => {
       const d = await e.crearDistrito([]);
       const zona = await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre: `380 nueva ${unico()}`,
           cobroVehiculo: false,
           esCentral: false,
@@ -767,7 +767,7 @@ describeSiHayBase("⭑ 380/T8 — el pago al mensajero deja rastro al guardar (P
     const medido = await conEscenario(async (e) => {
       const d = await e.crearDistrito([]);
       const zona = await e.repo.create(
-        {
+        { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba",
           nombre: `380 a borrar ${unico()}`,
           cobroVehiculo: false,
           esCentral: false,

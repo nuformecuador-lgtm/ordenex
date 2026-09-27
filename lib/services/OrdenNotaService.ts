@@ -54,7 +54,11 @@ export class OrdenNotaService implements IOrdenNotaService {
       // Feature 235: la ventana ya no acepta ninguna bandera. `puedeEscribir` depende SOLO del
       // estado de la orden (R36) y por eso el mensajero lo recibe en `true` sobre una orden en
       // `ayuda_tienda`, que es lo que habilita el compositor del hilo en su card (R35).
-      puedeEscribir: estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue),
+      puedeEscribir: estaEnVentanaDeEscritura(
+        acceso.rol,
+        acceso.orden.estatusValue,
+        acceso.orden.ayudaAbierta,
+      ),
     };
   }
 
@@ -70,7 +74,7 @@ export class OrdenNotaService implements IOrdenNotaService {
     // Feature 235 (R34): `ayuda_tienda` esta en las DOS ventanas, y ese solape es el requisito -
     // es el UNICO estado en el que los dos roles pueden hablarse sobre la misma orden a la vez. Si
     // el mensajero no pudiera escribir ahi, la tienda le hablaria a un hilo mudo.
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayudaAbierta)) {
       return { status: "forbidden" };
     }
 
@@ -105,7 +109,7 @@ export class OrdenNotaService implements IOrdenNotaService {
     // notas quedan congeladas para ese actor, incluidas las SUYAS: con la orden en `en_reparto`
     // la tienda ya no puede borrar lo que escribio, y con la orden en `devuelta` el mensajero
     // tampoco. Es lo que convierte el hilo en evidencia y no en un relato editable.
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayudaAbierta)) {
       return { status: "forbidden" };
     }
 

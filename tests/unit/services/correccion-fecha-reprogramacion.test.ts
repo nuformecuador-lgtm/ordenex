@@ -59,7 +59,7 @@ const MANANA_CR = "2026-09-03";
 function ordenRow(overrides: Partial<OrdenParaCorreccionRow> = {}): OrdenParaCorreccionRow {
   return {
     ordenId: ORDEN_ID,
-    estatusValue: "reprogramada",
+    estatusValue: "reprogramado",
     deletedAt: null,
     gestionVigenteId: "g-vigente",
     fechaReprogramacion: new Date("2026-09-04T00:00:00.000Z"), // el caso real: el 4
@@ -257,7 +257,7 @@ describe("371 — solo se corrige mientras la orden sigue esperando", () => {
     });
   });
 
-  it.each(["en_reparto", "entregada", "en_bodega_central", "por_recoger"])(
+  it.each(["en_reparto", "entregado", "en_bodega_central", "mensajero_recogiendo_en_bodega"])(
     "⭑ estado `%s`: rechazada, y el motivo NOMBRA el estado",
     async (estatusValue) => {
       const { service, corregirFecha } = montar({ orden: ordenRow({ estatusValue }) });

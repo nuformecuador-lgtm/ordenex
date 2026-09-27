@@ -129,10 +129,10 @@ function gestion(
 
 function grupos(over: Partial<CierreGrupos> = {}): CierreGrupos {
   return {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
     ...over,
   };
@@ -142,7 +142,7 @@ function grupos(over: Partial<CierreGrupos> = {}): CierreGrupos {
 function rechazoDelCron(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion {
   return gestion({
     gestionId: "g-cron",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     numRemision: "REM-CRON",
     motivo: MOTIVO_GUARDADO_DEL_CRON,
     ingresoBodegaRechazo: "1500.00",
@@ -220,7 +220,7 @@ afterEach(() => {
 
 describe("R1 — en el comprobante del mensajero no se muestra el distintivo de origen", () => {
   it("la fila del rechazo del cron no lleva «Manual» ni «Automático» ni sus notas", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron()] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron()] }), "mensajero");
     await desplegar("REM-CRON");
 
     // Control de no-vacuidad ANTES de afirmar la ausencia (ver la trampa 2 de la cabecera).
@@ -230,7 +230,7 @@ describe("R1 — en el comprobante del mensajero no se muestra el distintivo de 
   });
 
   it("tampoco se la lleva la frase que le atribuía el rechazo a él", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron()] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron()] }), "mensajero");
     await desplegar("REM-CRON");
     laFilaEstaAbierta();
 
@@ -247,7 +247,7 @@ describe("R1 — en el comprobante del mensajero no se muestra el distintivo de 
     // ninguna, ni siquiera de las que acierta por casualidad.
     montar(
       grupos({
-        rechazada: [
+        devolucion_a_origen_por_rechazo: [
           rechazoDelCron({
             gestionId: "g-suyo",
             numRemision: "REM-SUYO",
@@ -271,7 +271,7 @@ describe("R1 — en el comprobante del mensajero no se muestra el distintivo de 
 
 describe("R2 — en el comprobante del admin el distintivo sigue exactamente igual", () => {
   it("un rechazo del cron mantiene «Automático» con su nota accesible completa", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron({ esRechazoSla: true })] }));
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ esRechazoSla: true })] }));
     await desplegar("REM-CRON");
 
     const badge = screen.getByText(ORIGEN_AUTOMATICO_LABEL);
@@ -280,7 +280,7 @@ describe("R2 — en el comprobante del admin el distintivo sigue exactamente igu
   });
 
   it("un rechazo del mensajero mantiene «Manual» con la suya", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron({ esRechazoSla: false })] }));
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ esRechazoSla: false })] }));
     await desplegar("REM-CRON");
 
     const badge = screen.getByText(ORIGEN_MANUAL_LABEL);
@@ -296,7 +296,7 @@ describe("R3 — ocultar el distintivo no se lleva por delante a su vecino", () 
     // El renglón vive en el MISMO fragmento `rechazada` del que sale el distintivo. Es deuda
     // heredada de la 408 y está fuera de alcance por decisión del humano: este caso existe para
     // que el arreglo no la resuelva por accidente ni la empeore.
-    montar(grupos({ rechazada: [rechazoDelCron()] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron()] }), "mensajero");
     await desplegar("REM-CRON");
 
     expect(valorDe(INGRESO_BODEGA_LABEL)).toBe(INGRESO_BODEGA_MONTO);
@@ -308,7 +308,7 @@ describe("R3 — ocultar el distintivo no se lleva por delante a su vecino", () 
 
 describe("R4 — el texto autosuficiente aparece exactamente donde no hay distintivo", () => {
   it("1. mensajero con `esRechazoSla: false` (lo que manda el servidor): texto largo y sin distintivo", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron({ esRechazoSla: false })] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ esRechazoSla: false })] }), "mensajero");
     await desplegar("REM-CRON");
 
     expect(valorDe("Motivo")).toBe(MOTIVO_LARGO);
@@ -316,7 +316,7 @@ describe("R4 — el texto autosuficiente aparece exactamente donde no hay distin
   });
 
   it("2. admin con `esRechazoSla: true`: la celda dice «Dirección errada» y el distintivo dice el resto", async () => {
-    montar(grupos({ rechazada: [rechazoDelCron({ esRechazoSla: true })] }));
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ esRechazoSla: true })] }));
     await desplegar("REM-CRON");
 
     // Exactamente el literal corto: donde hay distintivo, la celda no repite lo que él ya dice.
@@ -330,7 +330,7 @@ describe("R4 — el texto autosuficiente aparece exactamente donde no hay distin
     // componente. Es el único aserto capaz de distinguir `!esMensajero && g.esRechazoSla` de
     // `g.esRechazoSla` en el argumento del traductor — con `false` en el DTO los dos dan lo mismo.
     // Y no atornilla ningún bug: afirma la dirección correcta, «sin marcador ⇒ texto largo».
-    montar(grupos({ rechazada: [rechazoDelCron({ esRechazoSla: true })] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ esRechazoSla: true })] }), "mensajero");
     await desplegar("REM-CRON");
 
     expect(valorDe("Motivo")).toBe(MOTIVO_LARGO);
@@ -345,10 +345,10 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
   /** Dos resultados DISTINTOS, los dos registrados por la tienda, en el mismo comprobante. */
   function conLasDosDeLaTienda(): CierreGrupos {
     return grupos({
-      entregada: [
+      entregado: [
         gestion({
           gestionId: "g-ent-tienda",
-          resultado: "entregada",
+          resultado: "entregado",
           numRemision: "REM-ENT",
           destinatario: "Beto Mora",
           montoRecibido: "8000.00",
@@ -356,7 +356,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
           desdeAyudaTienda: true,
         }),
       ],
-      rechazada: [rechazoDelCron({ desdeAyudaTienda: true })],
+      devolucion_a_origen_por_rechazo: [rechazoDelCron({ desdeAyudaTienda: true })],
     });
   }
 
@@ -366,7 +366,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
     // retira— dejaría esta fila MUDA sin romper nada visible. `desdeAyudaTienda` es ORTOGONAL al
     // resultado: en la tabla en vivo vive en las columnas comunes, o sea en las cinco secciones.
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Entregadas");
+    await verSeccion("Entregado");
     await desplegar("REM-ENT", "Beto Mora");
 
     const marca = screen.getByText(TIENDA_LABEL);
@@ -376,7 +376,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
 
   it("un RECHAZO registrado por la tienda va marcado igual, con la misma nota", async () => {
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Rechazadas");
+    await verSeccion("Devolución a origen por rechazo");
     await desplegar("REM-CRON");
 
     const marca = screen.getByText(TIENDA_LABEL);
@@ -387,7 +387,7 @@ describe("R7 — el comprobante del mensajero dice cuándo la gestión la regist
   it("y en ese rechazo la marca CONVIVE con el motivo, que sigue diciendo lo suyo", async () => {
     // Las dos cosas responden preguntas distintas: el motivo dice POR QUÉ, la marca dice QUIÉN.
     montar(conLasDosDeLaTienda(), "mensajero");
-    await verSeccion("Rechazadas");
+    await verSeccion("Devolución a origen por rechazo");
     await desplegar("REM-CRON");
 
     expect(valorDe("Motivo")).toBe(MOTIVO_LARGO);
@@ -401,7 +401,7 @@ describe("R8 — la ausencia de esa marca también es una afirmación", () => {
   it("si NO la registró la tienda, el comprobante del mensajero no la marca", async () => {
     // La ausencia significa «la registraste vos», no «no lo sé»: `desdeAyudaTienda` es
     // obligatorio en el DTO y se deriva del historial. Por eso este caso va emparejado con R7.
-    montar(grupos({ rechazada: [rechazoDelCron({ desdeAyudaTienda: false })] }), "mensajero");
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ desdeAyudaTienda: false })] }), "mensajero");
     await desplegar("REM-CRON");
     laFilaEstaAbierta();
 
@@ -411,7 +411,7 @@ describe("R8 — la ausencia de esa marca también es una afirmación", () => {
   it("y en el comprobante del ADMIN no se estrena: tampoco cuando la registró la tienda", async () => {
     // Hoy el admin no tiene esta marca en NINGUNA de sus superficies. Dársela es otra decisión,
     // con otra justificación, y no se toma aquí.
-    montar(grupos({ rechazada: [rechazoDelCron({ desdeAyudaTienda: true })] }));
+    montar(grupos({ devolucion_a_origen_por_rechazo: [rechazoDelCron({ desdeAyudaTienda: true })] }));
     await desplegar("REM-CRON");
     laFilaEstaAbierta();
 
@@ -421,10 +421,10 @@ describe("R8 — la ausencia de esa marca también es una afirmación", () => {
   it("una ENTREGA del admin registrada por la tienda tampoco la estrena", async () => {
     montar(
       grupos({
-        entregada: [
+        entregado: [
           gestion({
             gestionId: "g-ent-admin",
-            resultado: "entregada",
+            resultado: "entregado",
             numRemision: "REM-ENT",
             destinatario: "Beto Mora",
             montoRecibido: "8000.00",

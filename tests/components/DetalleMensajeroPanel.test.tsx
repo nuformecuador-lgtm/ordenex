@@ -382,7 +382,9 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
     // Se compara contra el componente compartido renderizado aparte: si alguien reescribiera el
     // chip aquí (aunque acertara con el texto), las clases divergirían y esto se pondría rojo.
     const { container } = render(<EstatusBadge value="en_reparto" />);
-    const referencia = container.firstElementChild as HTMLElement;
+    // FICHA 456 (2026-09-24, T2.3): el chip va dentro de `EstadoConInfo`, junto a su botón de
+    // información; se localiza por su `data-slot`. La comparación de clases no cambia.
+    const referencia = container.querySelector('[data-slot="badge"]') as HTMLElement;
     expect(chip.className.split(/\s+/).filter(Boolean)).toEqual(
       referencia.className.split(/\s+/).filter(Boolean),
     );
@@ -392,7 +394,7 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
     leerDetalleMock.mockResolvedValue(
       okDetalle([
         orden({ id: "o-1", resultadoDelDia: null }),
-        orden({ id: "o-2", numGuia: 1002, resultadoDelDia: "reprogramada" }),
+        orden({ id: "o-2", numGuia: 1002, resultadoDelDia: "reprogramado" }),
       ]),
     );
     const usuario = userEvent.setup();
@@ -405,7 +407,7 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
     const filaConResultado = within(tabla).getByText("1002").closest("tr") as HTMLElement;
 
     expect(within(filaSinResultado).getByText("—")).toBeInTheDocument();
-    expect(within(filaConResultado).getByText("Reprogramada")).toBeInTheDocument();
+    expect(within(filaConResultado).getByText("Reprogramado")).toBeInTheDocument();
   });
 
   it("el vocabulario del listado se CONSUME, y ni el panel ni sus columnas declaran otro (censo)", () => {
@@ -425,7 +427,9 @@ describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
 
     expect(panel).toContain("./detalle-columnas");
     expect(columnas).toContain("app/(app)/ordenes/_components/ordenes-columns");
-    expect(columnas).toContain("app/(app)/ordenes/_components/estatus-label");
+    // FICHA 456 (2026-09-24, T3.10): el resultado del día se pinta con `EstadoConInfo` (nombre de la
+    // fuente única + botón de información), que es ahora el vocabulario compartido.
+    expect(columnas).toContain("components/shared/EstadoInfo");
 
     for (const senal of ["ORDER_STATUS_LABELS =", "bg-success-soft", "bg-danger-soft", "badgeVariants"]) {
       expect(panel, `el panel declara ${senal} por su cuenta`).not.toContain(senal);

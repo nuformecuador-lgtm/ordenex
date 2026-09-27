@@ -262,7 +262,7 @@ export type AsignarSateliteResult =
   // problema del sistema, no de la direccion» y aqui la direccion SI es el problema (R12).
   | {
       status: "ok";
-      resultados: { ordenId: string; estado: "por_recoger" }[];
+      resultados: { ordenId: string; estado: "mensajero_recogiendo_en_bodega" }[];
       sinUbicacion?: number;
       sinUbicacionAutorizada?: number;
     }
@@ -271,7 +271,7 @@ export type AsignarSateliteResult =
   // `lib/actions/recepcion-satelite.ts`).
   | {
       status: "partial";
-      resultados: { ordenId: string; estado: "por_recoger" }[];
+      resultados: { ordenId: string; estado: "mensajero_recogiendo_en_bodega" }[];
       bloqueadas: { ordenId: string; motivo: string }[];
       sinUbicacion?: number;
       sinUbicacionAutorizada?: number;

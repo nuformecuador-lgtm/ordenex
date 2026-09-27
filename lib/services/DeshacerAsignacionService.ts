@@ -32,7 +32,7 @@ import {
 
 /** R16: unicos estados de origen reversibles. Cualquier otro es `conflict` con su nombre. */
 const ORIGENES_REVERSIBLES: ReadonlySet<string> = new Set([
-  "por_recoger", // caso (a): asignada a un mensajero que aun no la recogio
+  "mensajero_recogiendo_en_bodega", // caso (a): asignada a un mensajero que aun no la recogio
   "en_ruta_bodega_satelite", // caso (b): ruteada a una satelite que aun no la recibio
 ]);
 

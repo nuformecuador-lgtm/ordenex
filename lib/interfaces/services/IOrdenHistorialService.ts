@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { SenalesGestionDTO } from "@/lib/types/orden";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 
 // Feature 49 (design §4.1) — contrato del servicio de LECTURA del historial. La
@@ -8,8 +9,17 @@ import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
 // Feature 47 (R15/R17): el `ok` ademas expone el conteo de intentos DERIVADO (`intentos`,
 // consume `contarIntentos`) y el `umbral` configurable (R3), para que la UI muestre
 // "intento X de N" con la MISMA autorizacion de la orden (no se añade regla nueva, R17).
+//
+// FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24): el `ok` gana las dos señales del detalle
+// —`gestionPendiente` (`{ resultado, registradaAt }` o `null`) y `ayudaAbierta`—, leidas DESPUES
+// de autorizar, con la misma visibilidad de la orden (sin regla nueva).
 export type ObtenerHistorialServiceResult =
-  | { status: "ok"; entradas: OrdenHistorialEntradaDTO[]; intentos: number; umbral: number }
+  | ({
+      status: "ok";
+      entradas: OrdenHistorialEntradaDTO[];
+      intentos: number;
+      umbral: number;
+    } & SenalesGestionDTO)
   | { status: "forbidden" }
   | { status: "not_found" };
 

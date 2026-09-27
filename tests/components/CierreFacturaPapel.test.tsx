@@ -37,10 +37,10 @@ import type {
 
 function emptyGrupos(): CierreGrupos {
   return {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -60,7 +60,7 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja mediana",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago: null,
     pagos: [],
@@ -121,7 +121,7 @@ function hojaDetalle(): HTMLElement {
   render(
     <CierreFacturaDetalle
       cierre={CABECERA}
-      grupos={{ ...emptyGrupos(), entregada: [gestion()] }}
+      grupos={{ ...emptyGrupos(), entregado: [gestion()] }}
     />,
   );
   return screen.getByRole("region", {
@@ -382,7 +382,7 @@ describe("Feature 223 — ELEGIDA: la forma del DOM y a qué engancha la regla (
             <div className="flex max-h-[70vh] flex-col gap-6 overflow-y-auto pr-1">
               <CierreFacturaDetalle
                 cierre={CABECERA}
-                grupos={{ ...emptyGrupos(), entregada: [gestion()] }}
+                grupos={{ ...emptyGrupos(), entregado: [gestion()] }}
               />
               <section aria-label="Decisión del cierre">
                 <button type="button">Aprobar</button>
@@ -559,7 +559,7 @@ describe("Feature 223 — la ruta del MENSAJERO, con la misma regla (R11)", () =
             <CierreFacturaDetalle
               audiencia="mensajero"
               cierre={CABECERA}
-              grupos={{ ...emptyGrupos(), entregada: [gestion()] }}
+              grupos={{ ...emptyGrupos(), entregado: [gestion()] }}
             />
             <p role="note">Solo lectura</p>
           </div>
@@ -718,7 +718,7 @@ function detalle(
   render(
     <CierreFacturaDetalle
       cierre={{ ...CABECERA, ...over }}
-      grupos={{ ...emptyGrupos(), entregada: [g] }}
+      grupos={{ ...emptyGrupos(), entregado: [g] }}
     />,
   );
   return screen.getByRole("region", {

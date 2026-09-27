@@ -219,20 +219,20 @@ describe("WalletMensajeroService.listarPagosDeMensajeroCompleto — desglose sin
       mov({
         id: "A-c1",
         mensajeroId: "msg-A",
-        origenId: "cierre-1",
+        origenId: "c0c0c0c0-0000-4000-8000-0000000000c1",
         fechaMovimiento: "2026-07-10T00:00:00.000Z",
       }),
       mov({
         id: "A-c2",
         mensajeroId: "msg-A",
-        origenId: "cierre-2",
+        origenId: "c0c0c0c0-0000-4000-8000-0000000000c2",
         fechaMovimiento: "2026-07-11T00:00:00.000Z",
       }),
     ];
     const { repo, listarPorMensajero } = repoEnMemoria(filas);
     const svc = servicio(repo);
 
-    const filtros = { mensajeroId: "msg-A", cierreId: "cierre-2" };
+    const filtros = { mensajeroId: "msg-A", cierreId: "c0c0c0c0-0000-4000-8000-0000000000c2" };
 
     const paginado = await svc.listarPagosDeMensajero(
       listarPagosDeMensajeroSchema.parse({ ...filtros, pageSize: 50 }),

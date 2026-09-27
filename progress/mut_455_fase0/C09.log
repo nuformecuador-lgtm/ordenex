@@ -1,0 +1,26 @@
+=== MUTACION C09 — 2026-09-24T04:51:54-05:00
+archivo: lib/types/orden-historial.ts
+perl: s/(export const RESULTADOS_QUE_CUENTAN_COMO_INTENTO = \[\n  "rechazada",\n  "devuelta",\n)  "reprogramada",\n/$1/
+--- diff aplicado:
+diff --git a/lib/types/orden-historial.ts b/lib/types/orden-historial.ts
+index 9b51350e..533248f8 100644
+--- a/lib/types/orden-historial.ts
++++ b/lib/types/orden-historial.ts
+@@ -262 +261,0 @@ export const RESULTADOS_QUE_CUENTAN_COMO_INTENTO = [
+-  "reprogramada",
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts
+ × tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > solo cuentan novedad, reprogramado y rechazo de visita real aprobada: T = umbral, B = umbral - 1 8ms
+   → expected { tope: 2, bajo: 1 } to deeply equal { tope: 3, bajo: 2 }
+ × tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > T en el tope: rechazo con UNA gestion sintetica y sale a devolucion a la tienda (orden central) 1ms
+   → expected [] to deeply equal [ 'rechazo' ]
+ ✓ tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > B bajo el umbral: vuelve a bodega central, sin mensajero y con prioridad 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > solo cuentan novedad, reprogramado y rechazo de visita real aprobada: T = umbral, B = umbral - 1
+AssertionError: expected { tope: 2, bajo: 1 } to deeply equal { tope: 3, bajo: 2 }
+ FAIL  tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > T en el tope: rechazo con UNA gestion sintetica y sale a devolucion a la tienda (orden central)
+AssertionError: expected [] to deeply equal [ 'rechazo' ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

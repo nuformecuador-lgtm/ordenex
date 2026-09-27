@@ -39,7 +39,12 @@ function distinct(values: string[]): string[] {
  * `actualizar` con un `boolean | undefined` (ausente = no tocar, R1). Sin `any` y sin duplicar la
  * validacion referencial.
  */
-type DatosSinMarca = Omit<CreateZonaData, "esCentral">;
+/**
+ * FICHA 429: el SINPE se une a `esCentral` en la lista de lo que `prepararDatos` NO decide, y por
+ * el mismo motivo estructural: `prepararDatos` lo comparten CREAR y ACTUALIZAR, y el SINPE solo
+ * existe al crear (R11). Si viajara por aqui, `actualizar` tendria que inventarse un valor.
+ */
+type DatosSinMarca = Omit<CreateZonaData, "esCentral" | "sinpeNumero" | "sinpeNombre">;
 
 type PrepararResult =
   | { ok: true; data: DatosSinMarca }
@@ -109,8 +114,16 @@ export class ZonaService implements IZonaService {
     if (!prep.ok) return { status: "validation_error", fieldErrors: prep.fieldErrors };
     // 376/R2: al CREAR, `esCentral` es siempre un `boolean` —el zod le puso el default `false`—.
     // 376/R12: QUIEN crea firma las filas del traslado que la marca provoque.
+    // FICHA 429 (R11/R12): los dos campos del SINPE viajan al repositorio en el MISMO acto de
+    // creacion. El zod del borde ya los normalizo y valido (`sinpeNumeroSchema`), asi que aqui no
+    // se vuelve a decidir nada sobre el formato: se decide una vez, en el borde y en el `CHECK`.
     const zona = await this.repo.create(
-      { ...prep.data, esCentral: input.esCentral },
+      {
+        ...prep.data,
+        esCentral: input.esCentral,
+        sinpeNumero: input.sinpeNumero,
+        sinpeNombre: input.sinpeNombre,
+      },
       actor.usuarioId,
     );
     return { status: "ok", zona };

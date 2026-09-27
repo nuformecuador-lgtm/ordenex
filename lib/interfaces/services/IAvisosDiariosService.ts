@@ -20,6 +20,15 @@ export interface AvisosDiariosResumen {
   /** Avisos de represadas efectivamente emitidos (global + una por zona). */
   avisosRepresadasEmitidos: number;
   /**
+   * FICHA 462 (R9/R52) — el TERCER agregado de la corrida: reprogramadas DE HOY que siguen
+   * retenidas por un cierre sin aprobar, en TODO el sistema (las dos formas, todos los ambitos).
+   */
+  reprogramadasRetenidas: number;
+  /** Ambitos (el central y cada zona) con al menos una retenida en el instante de la corrida. */
+  ambitosConRetenidas: number;
+  /** Avisos de retenidas efectivamente emitidos (la dedupe del dia puede reducirlo a cero). */
+  avisosRetenidasEmitidos: number;
+  /**
    * R60 — cuantas emisiones fallaron y se ABSORBIERON. La corrida termina igual; el fallo queda
    * REGISTRADO con su operacion y su causa (nunca un `catch` vacio). Un numero, no una lista: la
    * lista llevaria identificadores.

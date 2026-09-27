@@ -37,7 +37,7 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const GAM = "z-gam";
 
 const ESTATUS: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_bodega_central: "os-bodega",
   en_ruta_bodega_satelite: "os-ruta-satelite",
 };
@@ -198,7 +198,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
 
     expect(r.status).toBe("partial");
     if (r.status === "partial") {
-      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "por_recoger" }]);
+      expect(r.resultados).toEqual([{ ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" }]);
       expect(r.bloqueadas).toEqual([{ ordenId: "o1", motivo: estado }]);
     }
     expect(repo.asignarBodegaLote).toHaveBeenCalledTimes(1);
@@ -261,8 +261,8 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
     expect(r.status).toBe("partial");
     if (r.status === "partial") {
       expect(r.resultados).toEqual([
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o3", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o3", estado: "mensajero_recogiendo_en_bodega" },
       ]);
       expect(r.bloqueadas).toEqual([{ ordenId: "o2", motivo: "geocodificacion_en_curso" }]);
     }
@@ -489,9 +489,9 @@ describe("400/R6-R7, R31-R33, R35 — asignarDesdeBodega con ordenes `asignable_
     expect(r).toEqual({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
-        { ordenId: "o3", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o3", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
     expect(Object.keys(r)).not.toContain("sinUbicacion");
@@ -823,9 +823,9 @@ describe("407/R1, R6-R8, R10-R11 — asignarDesdeBodega con la marca", () => {
     expect(r).toEqual({
       status: "ok",
       resultados: [
-        { ordenId: "o1", estado: "por_recoger" },
-        { ordenId: "o2", estado: "por_recoger" },
-        { ordenId: "o3", estado: "por_recoger" },
+        { ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o2", estado: "mensajero_recogiendo_en_bodega" },
+        { ordenId: "o3", estado: "mensajero_recogiendo_en_bodega" },
       ],
     });
   });
@@ -914,7 +914,7 @@ describe("407/R6-R7 — la marca NO desactiva ninguna otra guarda", () => {
   it("una orden en un origen NO permitido -> conflict, sin escribir y sin llegar al gate", async () => {
     const repo = repoBodega2({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "por_recoger" }),
+        ordenRow({ id: "o1", estatusValue: "mensajero_recogiendo_en_bodega" }),
         ordenRow({ id: "o2", estatusValue: "en_bodega_central" }),
       ]),
     });

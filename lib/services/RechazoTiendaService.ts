@@ -27,15 +27,15 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // por significado: el origen de esta transicion es un ESTADO, no un resultado. La 239 ya rompio esa
 // identidad de nombre para `devuelta` (su resultado lleva a `devolucion_por_confirmar`), y este es
 // justo el sitio donde apoyarse en ella cuesta caro.
-const ESTADO_ORIGEN = "devuelta";
-const ESTADO_DESTINO = "rechazada";
+const ESTADO_ORIGEN = "novedad";
+const ESTADO_DESTINO = "devolucion_a_origen_por_rechazo";
 
 /**
  * 💰 FICHA 337 (segunda mitad) — el RESULTADO de gestion con el que se deriva el importe. Es el
  * MISMO que `GestionOrdenRepository.rechazarDesdeDevuelta` le pone a la gestion sintetica: si los
  * dos divergieran, se le cobraria a la tienda un concepto que su propia gestion no justifica.
  */
-const RESULTADO_DE_LA_GESTION = "rechazada" as const;
+const RESULTADO_DE_LA_GESTION = "devolucion_a_origen_por_rechazo" as const;
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declaran como `Pick` para
 // poder usar dobles de test sin DB/HTTP (patron `ReprogramacionTiendaService`).

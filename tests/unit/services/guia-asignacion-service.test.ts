@@ -28,7 +28,7 @@ const GAM_ZONA_ID = "z-gam";
 const NO_GAM_ZONA_ID = "z-limon";
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_bodega_central: "os-bodega",
   en_ruta_bodega_satelite: "os-ruta-satelite", // feature 30
   recolectando: "os-recolectando", // feature 157 (ampliacion): destino de la asignacion
@@ -192,7 +192,7 @@ describe("156 — generarGuia numera y mueve a en_bodega_central (R1/R3/R8)", ()
     expect(repo.generarGuiaLote).toHaveBeenCalledTimes(1);
   });
 
-  it("R3: en_bodega_central es el UNICO destino; nadie termina en por_recoger ni en satelite", async () => {
+  it("R3: en_bodega_central es el UNICO destino; nadie termina en mensajero_recogiendo_en_bodega ni en satelite", async () => {
     // Se mezclan zona central y zona satelite a proposito: antes de la 156 la de zona no-GAM
     // habria acabado en `en_ruta_bodega_satelite`. Ahora las dos van al mismo sitio.
     const repo = fakeRepo({
@@ -293,8 +293,8 @@ describe("156/R4 — origen UNICO en_preparacion", () => {
   it.each([
     ["por_recolectar_en_tienda"],
     ["en_bodega_central"],
-    ["por_recoger"],
-    ["entregada"],
+    ["mensajero_recogiendo_en_bodega"],
+    ["entregado"],
   ])("origen %s -> conflict con el motivo tipado, sin numerar nada", async (estatusValue) => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue })]),
@@ -366,7 +366,7 @@ describe("156/R6 — todo-o-nada por lote", () => {
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1" }),
         ordenRow({ id: "o2" }),
-        ordenRow({ id: "o3", estatusValue: "entregada" }),
+        ordenRow({ id: "o3", estatusValue: "entregado" }),
       ]),
     });
     const service = newService(repo);
@@ -376,7 +376,7 @@ describe("156/R6 — todo-o-nada por lote", () => {
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("unreachable");
     expect(r.detalle).toEqual([
-      { ordenId: "o3", motivo: "estado de origen no permitido: entregada" },
+      { ordenId: "o3", motivo: "estado de origen no permitido: entregado" },
     ]);
     // Ni o1 ni o2 se tocan aunque fueran validas.
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
@@ -429,11 +429,11 @@ describe("156/R7 — orden inexistente, borrada o reprogramada", () => {
   });
 
   // Feature 46/R2: la reprogramada tiene motivo propio, ANTES del de origen invalido.
-  it("orden reprogramada -> conflict con el motivo tipado de reprogramacion", async () => {
+  it("orden reprogramado -> conflict con el motivo tipado de reprogramacion", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1" }),
-        ordenRow({ id: "o2", estatusValue: "reprogramada" }),
+        ordenRow({ id: "o2", estatusValue: "reprogramado" }),
       ]),
     });
     const service = newService(repo);
@@ -647,10 +647,10 @@ describe("GuiaAsignacionService — el mensajero BLOQUEADO no recibe reparto (fe
 });
 
 describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2/R5)", () => {
-  it("R2: asignarDesdeBodega con una orden reprogramada -> conflict con motivo tipado, sin efectos", async () => {
+  it("R2: asignarDesdeBodega con una orden reprogramado -> conflict con motivo tipado, sin efectos", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "reprogramada" }),
+        ordenRow({ id: "o1", estatusValue: "reprogramado" }),
       ]),
     });
     const service = newService(repo);
@@ -665,7 +665,7 @@ describe("GuiaAsignacionService — bloqueo por reprogramacion (feature 46/R1/R2
 });
 
 describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
-  it("R26: en_bodega_central + mensajero -> por_recoger, sin reasignar guia", async () => {
+  it("R26: en_bodega_central + mensajero -> mensajero_recogiendo_en_bodega, sin reasignar guia", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 55 }),
@@ -684,7 +684,7 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
-    expect(r.resultados).toEqual([{ ordenId: "o1", estado: "por_recoger" }]);
+    expect(r.resultados).toEqual([{ ordenId: "o1", estado: "mensajero_recogiendo_en_bodega" }]);
     expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
       ["o1"],
       "m1",
@@ -890,7 +890,7 @@ describe("Feature 30 + 156 — rutearABodegaSatelite (R13/R16/R17 · 156/R15/R16
   it("R17: origen invalido / orden borrada -> conflict sin transaccion a medias", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "entregada", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
+        ordenRow({ id: "o1", estatusValue: "entregado", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
         ordenRow({ id: "o2", estatusValue: "en_bodega_central", deletedAt: new Date(), zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
     });
@@ -901,7 +901,7 @@ describe("Feature 30 + 156 — rutearABodegaSatelite (R13/R16/R17 · 156/R15/R16
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("unreachable");
     expect(r.detalle).toEqual([
-      { ordenId: "o1", motivo: expect.stringContaining("entregada") },
+      { ordenId: "o1", motivo: expect.stringContaining("entregado") },
       { ordenId: "o2", motivo: "orden borrada" },
     ]);
     expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
@@ -1348,10 +1348,9 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
     // paquete SIGUE CON EL, en la calle (R1), asi que ocupa igual que `en_reparto`. Censo CERRADO:
     // uno de mas bloquearia a quien no lleva nada; uno de menos —el que se cayo al mover el
     // estatus— manda a recolectar a quien va cargado.
-    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
-      ["m1"],
-      ["por_recoger", "en_reparto", "ayuda_tienda"],
-    );
+    // ⏳ 2026-09-23 (FICHA 454, R37): `ayuda_tienda` sale de la lista. La ayuda deja de ser estado:
+    // la orden con ayuda abierta sigue `en_reparto`, que ya esta aqui y la cubre.
+    expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["mensajero_recogiendo_en_bodega", "en_reparto"]);
   });
 
   // ===============================================================================================
@@ -1367,15 +1366,17 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
   // las listas que describen la OCUPACION DEL MENSAJERO. La guardia
   // `carga-del-mensajero.guardia.test.ts` censa la familia entera para que no vuelva a pasar.
   // ===============================================================================================
-  it("235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`", async () => {
+  // ⏳ 2026-09-23 (FICHA 454): la orden con ayuda ABIERTA esta `en_reparto` (antes `ayuda_tienda`);
+  // lo que la hace ocupar al mensajero es ese estado. El doble responde por `en_reparto`.
+  it("235 → 454: no se le asigna una recoleccion a quien tiene una orden con ayuda ABIERTA", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
       ]),
-      // El doble responde como responderia la query real: pregunta por los tres estados y este
-      // mensajero tiene una orden en uno de ellos.
+      // El doble responde como responderia la query real: la orden con ayuda abierta vive en
+      // `en_reparto`, que es uno de los estados por los que se pregunta.
       findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
-        estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+        estados.includes("en_reparto") ? new Set(["m1"]) : new Set<string>(),
       ),
     });
 
@@ -1391,7 +1392,7 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
     expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
   });
 
-  it("235 (CASO NEGATIVO): si `ayuda_tienda` saliera de la lista, este mensajero pasaria", async () => {
+  it("235 (CASO NEGATIVO): si el estado que ocupa no estuviera en la lista, este mensajero pasaria", async () => {
     // La contraprueba que da sentido al caso de arriba: el MISMO doble, y lo unico que decide es si
     // el service pregunta o no por el estatus de ayuda. Sin este par, el caso anterior pasaria
     // igual con un doble que dijera «ocupado» siempre.
@@ -1400,7 +1401,7 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
         ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
       ]),
       findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
-        estados.includes("por_devolver") ? new Set(["m1"]) : new Set<string>(),
+        estados.includes("por_devolver_a_bodega_central") ? new Set(["m1"]) : new Set<string>(),
       ),
     });
 

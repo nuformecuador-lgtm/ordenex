@@ -14,6 +14,9 @@ import type {
   SolicitarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import { descargaConfig } from "@/lib/config/descarga";
+// ⭑ FICHA 431 (R7): el error que el repositorio lanza cuando una consolidacion enlazaria menos
+// cierres de los que sus totales snapshot ya sumaron. Sustituye al `P2002` del indice unico parcial.
+import { ConsolidacionParcialError } from "@/lib/utils/consolidacion-parcial";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 
 // Solo el rol autorizado (R1): el adminSatelite, SIEMPRE acotado a SU zona (el filtro
@@ -24,7 +27,11 @@ const ROL_AUTORIZADO = "adminSatelite";
 const MSG_PENDIENTES =
   "Primero resolve los cierres de tus mensajeros antes de cerrar la bodega."; // R6
 const MSG_VACIO = "No hay cierres de mensajero aprobados para consolidar."; // R7
-const MSG_DUPLICADO = "Ya tenes un cierre de bodega solicitado pendiente de aprobacion."; // R8
+// ⭑ FICHA 431 — AQUI VIVIA `MSG_DUPLICADO` («Ya tenes un cierre de bodega solicitado pendiente de
+// aprobacion»), el mensaje del gate «a lo sumo una consolidacion por zona» de la feature 40. Se va
+// con su gate: con la aprobacion convertida en marca de conciliacion, esperar a que la central
+// marque para volver a consolidar seria el MISMO bloqueo mudado de sitio, y su texto ademas ya no
+// seria cierto en ninguno de sus dos extremos.
 const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R4
 
 // Metodos de repo que consume el service (Pick para dobles de test sin DB/red).
@@ -124,12 +131,6 @@ function repartirEfectivo(
 // Resta exacta con Prisma.Decimal (sin parseFloat/Number), STRING escala 2 (money-safe).
 function netoDe(general: string, pagado: string): string {
   return new Prisma.Decimal(general).minus(pagado).toFixed(2);
-}
-
-// `true` si el error es una violacion del indice unico parcial (R8): otra solicitud
-// concurrente creo el CierreBodega `solicitado` de la zona antes que esta.
-function isUniqueViolation(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
 
 /**
@@ -424,7 +425,14 @@ export class CierreBodegaService implements ICierreBodegaService {
       return { status: "validation_error", fieldErrors: { zona: [MSG_SIN_ZONA] } };
     }
 
-    // R6: precondicion — sin cierre_dia de la zona pendientes de resolver.
+    // R6 de la feature 40, **R5 DE LA FICHA 431** — EL GATE DE NIVEL 1, QUE SE QUEDA.
+    //
+    // ⚠️ NO SE CONFUNDA CON EL QUE LA 431 RETIRA. La ficha quita el freno de NIVEL 2 —la
+    // consolidacion pendiente de conciliar ya no impide asignar ni volver a consolidar—, pero este
+    // otro sigue siendo puerta y a proposito: mientras la bodega tenga cierres del dia de sus
+    // mensajeros SIN RESOLVER, no puede consolidar. Ese si es un cuadre: consolidar con cierres
+    // abiertos meteria en el bulto dinero que nadie ha aprobado todavia. Es el control que
+    // SOBREVIVE, y su test lo ancla para que nadie se lo lleve por delante creyendo que era el otro.
     if ((await this.repo.contarCierresDiaSolicitados(zonaId)) > 0) {
       return { status: "conflict", motivo: MSG_PENDIENTES };
     }
@@ -433,10 +441,11 @@ export class CierreBodegaService implements ICierreBodegaService {
     const consolidables = await this.repo.findCierresDiaConsolidables(zonaId);
     if (consolidables.length === 0) return { status: "conflict", motivo: MSG_VACIO };
 
-    // R8: a lo sumo un cierre de bodega `solicitado` por zona a la vez.
-    if (await this.repo.existeCierreBodegaSolicitado(zonaId)) {
-      return { status: "conflict", motivo: MSG_DUPLICADO };
-    }
+    // ⭑ FICHA 431 (R6) — AQUI ESTABA EL GATE «ya hay una solicitada» (R8 de la feature 40). SE
+    // RETIRA: tener una consolidacion pendiente de conciliar YA NO IMPIDE crear otra. Es el corazon
+    // de la ficha — la marca de conciliacion ocurre cuando el efectivo llega fisicamente, no cuando
+    // alguien mira una pantalla, asi que mantener el gate habria dejado a la satelite sin poder
+    // consolidar durante todo el viaje del bulto.
 
     // R10: snapshot de totales agregados (mismo calculo que listarConsolidacion).
     const totales = sumTotales(consolidables);
@@ -445,8 +454,14 @@ export class CierreBodegaService implements ICierreBodegaService {
     // Feature 56/R18: snapshot del ingreso agregado de bodega por rechazos (mismo calculo).
     const totalIngresoBodegaRechazos = sumIngresoBodega(consolidables);
 
-    // R9: transaccion todo-o-nada (INSERT + vincular). Si una solicitud concurrente
-    // gano la carrera, el indice unico parcial lanza P2002 -> conflict (R8).
+    // R9: transaccion todo-o-nada (INSERT + vincular).
+    //
+    // ⭑ FICHA 431 (R7) — LA CARRERA SE PIERDE AQUI, NO EN UN INDICE. Si otra solicitud simultanea
+    // se llevo parte de la cola, el `updateMany` del repositorio vincula menos cierres de los
+    // pedidos y lanza `ConsolidacionParcialError`, que aborta la transaccion entera: no queda ni la
+    // fila ni los enlaces. Se traduce a `conflict` con `MSG_VACIO` —el motivo que YA existe y que
+    // ademas describe lo que paso: cuando el actor vuelva a mirar, su cola estara vacia o sera otra—
+    // en vez de inventar un desenlace nuevo.
     try {
       const cierreBodegaId = await this.repo.crearCierreBodega({
         zonaId,
@@ -458,7 +473,9 @@ export class CierreBodegaService implements ICierreBodegaService {
       });
       return { status: "ok", cierreBodegaId, totales };
     } catch (e) {
-      if (isUniqueViolation(e)) return { status: "conflict", motivo: MSG_DUPLICADO }; // R8
+      if (e instanceof ConsolidacionParcialError) {
+        return { status: "conflict", motivo: MSG_VACIO }; // R7 de la 431
+      }
       throw e;
     }
   }

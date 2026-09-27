@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
 import type { ICierresAdminRepository } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ICierresBodegaAdminRepository } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
@@ -92,7 +93,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow>): CierreGestio
     producto: "Caja",
     tiendaId: "t-norte",
     tiendaNombre: "Tienda Norte",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: null,
     metodoPago: null,
     motivo: null,
@@ -120,7 +121,7 @@ const GESTIONES = (): CierreGestionPendienteRow[] => [
     ordenId: "o-1",
     tiendaId: "t-norte",
     tiendaNombre: "Tienda Norte",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "100000.00",
     metodoPago: "efectivo",
     ingresoOrdenex: ingreso({
@@ -138,7 +139,7 @@ const GESTIONES = (): CierreGestionPendienteRow[] => [
     ordenId: "o-2",
     tiendaId: "t-norte",
     tiendaNombre: "Tienda Norte",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     ingresoOrdenex: ingreso({
       fleteDevolucion: "1500.00",
       ivaFleteDevolucion: "195.00",
@@ -151,7 +152,7 @@ const GESTIONES = (): CierreGestionPendienteRow[] => [
     ordenId: "o-3",
     tiendaId: "t-sur",
     tiendaNombre: "Tienda Sur",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "40000.00",
     metodoPago: "SINPE",
     ingresoOrdenex: ingreso({
@@ -261,7 +262,7 @@ async function desgloseDelDetalleDeMensajero() {
     sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
-  });
+  }, sinRetenidas()); // FICHA 462: 7.o argumento requerido; este caso no mide la marca
 
   const r = await service.verCierreDetalle("c1", MAESTRO);
   if (r.status !== "ok") throw new Error("esperaba ok en el detalle del mensajero");

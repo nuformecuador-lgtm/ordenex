@@ -71,9 +71,12 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
 
   it("y siguen declarando exactamente las categorias con las que la 127 las publico", () => {
     // La otra mitad: "no gano ninguna de terceros" es compatible con "perdio una propia".
+    // FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` ganan, AL FINAL, el reverso que
+    // emite la anulacion de un cobro por rechazo (propio, no terceros: el caso de arriba sigue).
     expect(getMetrica("ingreso_flete")?.definicion.categorias).toEqual([
       "ingreso_flete",
       "ingreso_flete_devolucion",
+      "egreso_reverso_flete_devolucion",
     ]);
     expect(getMetrica("ingreso_comision_cod")?.definicion.categorias).toEqual([
       "ingreso_comision_cod",
@@ -82,6 +85,7 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
       "ingreso_iva_flete",
       "ingreso_iva_flete_devolucion",
       "ingreso_iva_comision_cod",
+      "egreso_reverso_iva_flete_devolucion",
     ]);
   });
 
@@ -91,9 +95,15 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
       .filter(([, n]) => n === "terceros")
       .map(([c]) => c)
       .sort();
+    // Ficha 459: + el pago por cuenta de una tienda y su anulacion (dinero de las tiendas).
+    // Ficha 457 (DH1): + el pago de una tienda a Ordenex y su anulacion (tambien dinero de las tiendas).
     expect(terceros).toEqual([
+      "egreso_pago_por_cuenta_tienda",
       "egreso_pago_tienda",
+      "egreso_reverso_abono_tienda",
+      "ingreso_abono_tienda",
       "ingreso_cod_recaudado",
+      "ingreso_reverso_pago_por_cuenta_tienda",
       "ingreso_reverso_pago_tienda",
     ]);
   });
@@ -128,7 +138,11 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
     // No es una infraccion de R51: `egresos` es la metrica de SALIDAS de la caja, y el dinero
     // entregado a la tienda sale de la caja de verdad. Es exactamente el cambio de significado
     // que `progress/decision_F2_173.md` autoriza y que la `descripcion` declara (R53).
-    expect(tercerosDeclaradasPor("egresos")).toEqual(["egreso_pago_tienda"]);
+    // Ficha 459 (P13): + el pago por cuenta de una tienda, que tambien SALE de la caja.
+    expect(tercerosDeclaradasPor("egresos")).toEqual([
+      "egreso_pago_tienda",
+      "egreso_pago_por_cuenta_tienda",
+    ]);
   });
 
   // ⚠️ DADO VUELTA por la feature 183 (R25: se da vuelta, NO se borra). Hasta ⟨D12⟩ este caso
@@ -147,7 +161,10 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
   it("gana `ingreso_ajuste` y NADA mas: el reverso del pago a tienda sigue fuera", () => {
     const categorias = getMetrica("egresos")?.definicion.categorias ?? [];
 
-    expect(categorias).toHaveLength(9);
+    // Ficha 459 (P13): DIEZ, con `egreso_pago_por_cuenta_tienda` al final. Ficha 461 (R29, P14):
+    // SIGUEN siendo diez — el reverso del cobro a una tienda NO entra: no es dinero que salga.
+    expect(categorias).toHaveLength(10);
+    expect(categorias).not.toContain("egreso_reverso_cobro_tienda");
     // Las OCHO historicas, sin que falte ninguna: sustituir una por `ingreso_ajuste` en vez de
     // anadirla —la mutacion que R5 nombra— deja aqui una lista corta.
     expect(categorias.filter((c) => c.startsWith("egreso_"))).toEqual([
@@ -159,6 +176,7 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
       "egreso_gasto_fijo",
       "egreso_gasto_variable",
       "egreso_indemnizacion",
+      "egreso_pago_por_cuenta_tienda", // ficha 459 (P13)
     ]);
     // Y la novena, la unica que no es `egreso_*`.
     expect(categorias.filter((c) => !c.startsWith("egreso_"))).toEqual(["ingreso_ajuste"]);
@@ -166,8 +184,14 @@ describe("egresos: gana el pago a tienda por diseno, y nada mas", () => {
     // lo que la cifra significa, no solo cuanto vale.
     expect(categorias).not.toContain("ingreso_reverso_pago_tienda");
     expect(categorias).not.toContain("ingreso_cod_recaudado");
+    // Ficha 459: el reverso del pago por cuenta tampoco (decision de la 457 sobre los reversos).
+    expect(categorias).not.toContain("ingreso_reverso_pago_por_cuenta_tienda");
     // R51/173 intacto: la unica de terceros sigue siendo el pago a la tienda.
-    expect(tercerosDeclaradasPor("egresos")).toEqual(["egreso_pago_tienda"]);
+    // Ficha 459 (P13): + el pago por cuenta de una tienda, que tambien SALE de la caja.
+    expect(tercerosDeclaradasPor("egresos")).toEqual([
+      "egreso_pago_tienda",
+      "egreso_pago_por_cuenta_tienda",
+    ]);
     // R13/183 — y `ingreso_ajuste` NO se reclasifico para «que no cuente»: sigue siendo propio.
     expect(NATURALEZA_POR_CATEGORIA.ingreso_ajuste).toBe("propio");
   });
@@ -427,7 +451,13 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("dinero_en_caja")?.definicion.categorias ?? [])].sort();
     expect(declaradas).toEqual(Object.keys(NATURALEZA_POR_CATEGORIA).sort());
     expect(declaradas).toEqual([...WALLET_MOVIMIENTO_CATEGORIA_SEED].sort());
-    expect(declaradas).toHaveLength(17);
+    expect(declaradas).toHaveLength(27); // ficha 459: 17 + 4; ficha 461 (R29): + 2; ficha 457 (R52): + 2; ficha 458-B: + 2
+    expect(declaradas).toContain("egreso_reverso_flete_devolucion"); // ficha 458-B
+    expect(declaradas).toContain("egreso_reverso_iva_flete_devolucion"); // ficha 458-B
+    expect(declaradas).toContain("ingreso_cobro_tienda");
+    expect(declaradas).toContain("egreso_reverso_cobro_tienda");
+    expect(declaradas).toContain("ingreso_abono_tienda");
+    expect(declaradas).toContain("egreso_reverso_abono_tienda");
   });
 
   it("`ganancia_ordenex` declara EXACTAMENTE las de naturaleza propio, y ni una de terceros", () => {
@@ -438,7 +468,11 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("ganancia_ordenex")?.definicion.categorias ?? [])].sort();
 
     expect(declaradas).toEqual(propiasDelRecord);
-    expect(declaradas).toHaveLength(14);
+    expect(declaradas).toHaveLength(18); // ficha 461 (R29): 14 + el cobro a una tienda y su reverso; ficha 458-B: + los dos reversos del cobro por rechazo
+    expect(declaradas).toContain("egreso_reverso_flete_devolucion"); // ficha 458-B
+    expect(declaradas).toContain("egreso_reverso_iva_flete_devolucion"); // ficha 458-B
+    expect(declaradas).toContain("ingreso_cobro_tienda");
+    expect(declaradas).toContain("egreso_reverso_cobro_tienda");
     // Dicho por el otro lado, que es el que rompe la cifra: el contra-entrega y su reverso no
     // pueden entrar en la ganancia. Si entraran, anular un pago a una tienda subiria la ganancia
     // de Ordenex — el fallo exacto que `design.md §10-C` descarto.
@@ -451,9 +485,18 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
   it("la diferencia entre las dos listas son las TRES de terceros, ni una mas", () => {
     const enCaja = getMetrica("dinero_en_caja")?.definicion.categorias ?? [];
     const ganancia = new Set(getMetrica("ganancia_ordenex")?.definicion.categorias ?? []);
+    // Ficha 459: + los dos de terceros del pago por cuenta y los dos de CAPITAL, que tampoco son
+    // ganancia. Ficha 457 (R52, D11): + el pago de una tienda a Ordenex y su anulacion, que son de
+    // TERCEROS (DH1) y por eso `ganancia_ordenex` no los ve: 9 categorias.
     expect(enCaja.filter((c) => !ganancia.has(c)).sort()).toEqual([
+      "egreso_pago_por_cuenta_tienda",
       "egreso_pago_tienda",
+      "egreso_reverso_abono_tienda",
+      "egreso_reverso_aporte_capital",
+      "ingreso_abono_tienda",
+      "ingreso_aporte_capital",
       "ingreso_cod_recaudado",
+      "ingreso_reverso_pago_por_cuenta_tienda",
       "ingreso_reverso_pago_tienda",
     ]);
   });

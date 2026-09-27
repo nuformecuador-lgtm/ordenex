@@ -29,7 +29,7 @@ function okListado(): ApiOrdenListadoDTO {
       {
         numGuia: 10234,
         numRemision: "REM-1",
-        estado: "en_bodega_central",
+        estado: "en_bodega_central", estadoNombre: "En bodega central",
         destinatario: "Ana",
         telefonoDest: "099",
         producto: "Caja",
@@ -103,7 +103,7 @@ describe("GET /api/ordenes/api-key — compatibilidad y borde (R1/R2/R3)", () =>
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pagination).toEqual({ limit: 50, offset: 0, total: 173 });
-    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central" });
+    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central", estadoNombre: "En bodega central" });
 
     // Los params son los de 106: limit/offset/estado. Los cuatro nuevos van SIN definir, no con
     // un valor por defecto inventado (un `desde` implicito recortaria la pagina en silencio).

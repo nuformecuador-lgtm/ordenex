@@ -134,7 +134,7 @@ describe("RepartoPage — control de acceso por rol (R9/R12)", () => {
       screen.getByRole("region", { name: "Indicadores de mis asignaciones" }),
     ).toBeInTheDocument();
     // La superficie de recogida NO está: tiene su propia pantalla.
-    expect(screen.queryByRole("region", { name: "Por recoger" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Recoger en bodega" })).toBeNull();
   });
 
   it("Feature 61: la fila de KPIs muestra pendientes, entregadas, por cobrar y total a cobrar", async () => {
@@ -154,7 +154,7 @@ describe("RepartoPage — control de acceso por rol (R9/R12)", () => {
     const kpis = screen.getByRole("region", { name: "Indicadores de mis asignaciones" });
     expect(kpis).toHaveTextContent("Pendientes");
     expect(kpis).toHaveTextContent("3");
-    expect(kpis).toHaveTextContent("Entregadas");
+    expect(kpis).toHaveTextContent("Entregado"); // FICHA 455 (R5): nombre exacto del resultado
     expect(kpis).toHaveTextContent("7");
     expect(kpis).toHaveTextContent("Por cobrar");
     expect(kpis).toHaveTextContent("350");
@@ -191,9 +191,9 @@ describe("RecogerPage — control de acceso por rol (R9/R12)", () => {
     render(await RecogerPage());
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Por recoger" }),
+      screen.getByRole("heading", { level: 1, name: "Recoger en bodega" }), // FICHA 455 (R6)
     ).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Por recoger" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recoger en bodega" })).toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "En reparto / por gestionar" }),
     ).toBeNull();

@@ -404,12 +404,19 @@ describe("R44 — cada cierre nombrado lleva el mismo enlace a su detalle", () =
     // Dos enlaces distintos, dos nombres accesibles distintos: un lector de pantalla los
     // distingue sin ver la fila. El nombre CONTIENE el texto visible («Label in Name»): quien
     // dicta por voz «ver el cierre» puede activarlo.
+    //
+    // Ficha 458-A (TA.5, R1): lo que los distingue es el DÍA del cierre y el mensajero, no el
+    // identificador que antes iba en el `sr-only`. El id queda SOLO en `href`.
     expect(
-      screen.getByRole("link", { name: new RegExp(`^Ver el cierre\\s*\\(${CIERRE_A}\\)$`) }),
+      screen.getByRole("link", { name: /^Ver el cierre\s*del 2026-07-28 de Ana Mensajera$/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: new RegExp(`^Ver el cierre\\s*\\(${CIERRE_B}\\)$`) }),
+      screen.getByRole("link", { name: /^Ver el cierre\s*del 2026-07-30 de Ana Mensajera$/ }),
     ).toBeInTheDocument();
+    for (const enlace of enlaces) {
+      expect(enlace.textContent).not.toContain(CIERRE_A);
+      expect(enlace.textContent).not.toContain(CIERRE_B);
+    }
   });
 });
 

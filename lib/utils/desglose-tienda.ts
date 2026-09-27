@@ -51,6 +51,24 @@ export const CUBETA_POR_CATEGORIA: Record<WalletTiendaMovimientoCategoria, Cubet
   // Pagado a la tienda: lo ya entregado. Hoy nadie lo emite (lo hara la 172), pero se lee de
   // la categoria REAL del ledger, no se devuelve un cero fijo (R43).
   pago_tienda: "pagado",
+  // FICHA 459 (design §5, decision de la 458 §2.6): el pago POR CUENTA de la tienda es dinero
+  // entregado a la tienda a traves de un tercero -> `pagado`; su anulacion lo devuelve -> `aFavor`
+  // (como `ajuste_credito`).
+  pago_por_cuenta: "pagado",
+  pago_por_cuenta_anulado: "aFavor",
+  // FICHA 461 (design §4): la anulacion de un cobro de Ordenex le DEVUELVE el monto a la tienda ->
+  // `aFavor`, como `ajuste_credito` y `pago_por_cuenta_anulado`. El cobro sigue en `cargos`.
+  cobro_tienda_anulado: "aFavor",
+  // FICHA 457 (design §4, R49): el pago de la tienda a Ordenex es dinero que la tienda entrego y que
+  // sube su saldo -> `aFavor` (como `cod_recaudado`); su anulacion se lo vuelve a cargar -> `cargos`.
+  // Mutacion 4 de design §13 (`abono_tienda: "cargos"`) → la cabecera dejaria de cuadrar con el saldo.
+  abono_tienda: "aFavor",
+  abono_tienda_anulado: "cargos",
+  // FICHA 458-B (design §2.3, D7): la anulacion de un cobro por rechazo le DEVUELVE a la tienda el
+  // flete y el IVA -> `aFavor`, como `cobro_tienda_anulado`. Mutacion 5 de design §8.2
+  // (`flete_devolucion_anulado: "cargos"`) → la cabecera dejaria de cuadrar con el saldo.
+  flete_devolucion_anulado: "aFavor",
+  iva_flete_devolucion_anulado: "aFavor",
 };
 
 /**

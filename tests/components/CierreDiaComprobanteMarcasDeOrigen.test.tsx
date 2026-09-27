@@ -108,7 +108,7 @@ const CIERRE_PASADO: CierrePasadoDTO = {
 };
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 /**
@@ -157,7 +157,7 @@ function makeGestion(
 function rechazoDelCron(over: Omit<Partial<CierreDetalleGestion>, "esRechazoSla"> = {}) {
   return makeGestion({
     gestionId: "g-cron",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     numGuia: 5555,
     numRemision: "REM-CRON",
     motivo: MOTIVO_GUARDADO_DEL_CRON,
@@ -227,7 +227,7 @@ describe("R5 — el mensajero, en su pantalla, ya no lee la contradicción", () 
     verCierrePasadoMock.mockResolvedValue({
       status: "ok",
       cierre: CIERRE_PASADO,
-      grupos: { ...emptyGrupos(), rechazada: [rechazoDelCron()] },
+      grupos: { ...emptyGrupos(), devolucion_a_origen_por_rechazo: [rechazoDelCron()] },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
       rechazosDeTienda: [],
@@ -288,7 +288,7 @@ describe("R9 — la tabla en vivo y el comprobante dicen la marca con las mismas
       cierre: CIERRE_PASADO,
       grupos: {
         ...emptyGrupos(),
-        rechazada: [rechazoDelCron({ desdeAyudaTienda: true })],
+        devolucion_a_origen_por_rechazo: [rechazoDelCron({ desdeAyudaTienda: true })],
       },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,
@@ -296,10 +296,10 @@ describe("R9 — la tabla en vivo y el comprobante dicen la marca con las mismas
     });
     renderModule({
       ...emptyGrupos(),
-      rechazada: [
+      devolucion_a_origen_por_rechazo: [
         makeGestion({
           gestionId: "g-viva",
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           numGuia: 7777,
           numRemision: "REM-VIVA",
           motivo: "La tienda la resolvió desde su portal",
@@ -330,7 +330,7 @@ describe("R9 — la tabla en vivo y el comprobante dicen la marca con las mismas
       cierre: CIERRE_PASADO,
       grupos: {
         ...emptyGrupos(),
-        rechazada: [rechazoDelCron({ desdeAyudaTienda: true })],
+        devolucion_a_origen_por_rechazo: [rechazoDelCron({ desdeAyudaTienda: true })],
       },
       ordenesSinGestion: [],
       sinGestionRegistrado: true,

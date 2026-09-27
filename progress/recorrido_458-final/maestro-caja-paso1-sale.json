@@ -1,0 +1,291 @@
+[
+  {
+    "id": "R7/R8 inicio del rol",
+    "estado": "OK",
+    "entro": "13524733.22",
+    "salio": "40800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "1 tarjetas = fotografía SQL",
+    "estado": "INFO",
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.524.733,22",
+      "salio": "₡40.800,50",
+      "movimientos": "36",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "sql": {
+      "entro": "13524733.22",
+      "salio": "40800.50",
+      "cifra": "13483932.72",
+      "ganancia": "13336262.62",
+      "de_tiendas": "147670.10",
+      "capital": "0",
+      "suma_saldos": "147670.10",
+      "diferencia_r8": "0.00",
+      "diferencia_r7": "0.00"
+    }
+  },
+  {
+    "id": "1 filtro de concepto con su cuenta; sin «Otro gasto de Ordenex»",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todas las categorías",
+      "Flete cobrado a la tienda (5)",
+      "Flete por rechazo cobrado a la tienda (1)",
+      "Comisión de contra-entrega cobrada a la tienda (5)",
+      "IVA del flete cobrado a la tienda (5)",
+      "IVA del flete por rechazo cobrado a la tienda (1)",
+      "IVA de la comisión cobrado a la tienda (5)",
+      "Corrección de caja (suma) (2)",
+      "Ordenex le paga a un mensajero (4)",
+      "Corrección de caja (resta) (1)",
+      "Indemnización que Ordenex paga por un incidente (2)",
+      "Contra-entrega cobrado a los clientes de la tienda (5)"
+    ],
+    "sumaCuentas": 36,
+    "filasCaja": 36
+  },
+  {
+    "id": "1 barrido /wallet",
+    "estado": "INFO",
+    "uuid": false,
+    "crudo": false,
+    "muestra": []
+  },
+  {
+    "id": "02-sueldo registrar «Sueldo»",
+    "estado": "FALLO",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.458.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.311.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": {
+      "dialogoSigueAbierto": true,
+      "texto": "No se pudo guardar el comprobante, así que no se registró nada. Probá de nuevo.",
+      "toast": null
+    },
+    "aviso": null,
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.524.733,22",
+      "salio": "₡40.800,50",
+      "movimientos": "36",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.458.932,72",
+      "entro": "₡13.524.733,22",
+      "salio": "₡65.800,50",
+      "movimientos": "37",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.311.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Sueldo Sueldo · Sueldo R458F-maestro septiembre Pedro R458F-maestro Sale ₡25.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia bajan lo mismo; De las tiendas y capital no cambian"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-sueldo",
+    "estado": "OK",
+    "entro": "13524733.22",
+    "salio": "65800.50",
+    "cifra": "13458932.72",
+    "ganancia": "13311262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-sueldo Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Sueldo del 2026-09-26 por ₡25.000",
+    "panel": "Sueldo 2026-09-26 · Sale ₡25.000 A quién Pedro R458F-maestro Por qué Sueldo R458F-maestro septiembre De dónde sale Sueldo · Sueldo R458F-maestro septiembre Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA · el 2026-09-26 a las 19:55 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.458.932,72 Ganancia de Ordenex ₡13.311.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-sueldo Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular «Sueldo» Se registrará hoy un movimiento contrario por ₡25.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Sueldo · 2026-09-26 · ₡25.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": null,
+    "original": {
+      "texto": "2026-09-26 Sueldo Sueldo · Sueldo R458F-maestro septiembre Pedro R458F-maestro Sale ₡25.000 Ordenex Maestro QA Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Sueldo R458F-maestro septiembre Pedro R458F-maestro Entra ₡25.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.524.733,22",
+      "salio": "₡40.800,50",
+      "movimientos": "36",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.549.733,22",
+      "salio": "₡65.800,50",
+      "movimientos": "38",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-sueldo",
+    "estado": "OK",
+    "entro": "13549733.22",
+    "salio": "65800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-sueldo segundo intento de anular",
+    "estado": "FALLO",
+    "aviso": null
+  },
+  {
+    "id": "02-sueldo filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  },
+  {
+    "id": "02-gasto registrar «Gasto de Ordenex»",
+    "estado": "FALLO",
+    "asiQueda": "Así queda Antes Después Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.480.932,72 Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.333.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 · no cambia Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "intentoPdf": null,
+    "aviso": null,
+    "cifrasAntes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.549.733,22",
+      "salio": "₡65.800,50",
+      "movimientos": "38",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasDespues": {
+      "cifra": "₡13.480.932,72",
+      "entro": "₡13.549.733,22",
+      "salio": "₡68.800,50",
+      "movimientos": "39",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.333.262,62",
+      "capital": "₡0"
+    },
+    "filaNueva": {
+      "texto": "2026-09-26 Gasto de Ordenex Gasto de Ordenex · Gasto R458F-maestro papelería Librería R458F-maestro Sale ₡3.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "esperado": "cifra y ganancia bajan lo mismo"
+  },
+  {
+    "id": "R7/R8 tras registrar 02-gasto",
+    "estado": "OK",
+    "entro": "13549733.22",
+    "salio": "68800.50",
+    "cifra": "13480932.72",
+    "ganancia": "13333262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-gasto Ver: panel",
+    "estado": "OK",
+    "nombreAccesible": "Ver Gasto de Ordenex del 2026-09-26 por ₡3.000",
+    "panel": "Gasto de Ordenex 2026-09-26 · Sale ₡3.000 A quién Librería R458F-maestro Por qué Gasto R458F-maestro papelería De dónde sale Gasto de Ordenex · Gasto R458F-maestro papelería Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA · el 2026-09-26 a las 19:56 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.480.932,72 Ganancia de Ordenex ₡13.333.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "02-gasto Anular…",
+    "estado": "OK",
+    "dialogoAnular": "Anular «Gasto de Ordenex» Se registrará hoy un movimiento contrario por ₡3.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Gasto de Ordenex · 2026-09-26 · ₡3.000 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": null,
+    "original": {
+      "texto": "2026-09-26 Gasto de Ordenex Gasto de Ordenex · Gasto R458F-maestro papelería Librería R458F-maestro Sale ₡3.000 Ordenex Maestro QA Anulado Ver",
+      "tachada": true
+    },
+    "contraAsiento": {
+      "texto": "2026-09-26 Corrección de caja (suma) Gasto o sueldo registrado a mano · Anulación de: Gasto R458F-maestro papelería Librería R458F-maestro Entra ₡3.000 Ordenex Maestro QA Ver",
+      "tachada": false
+    },
+    "cifrasAntesDeRegistrar": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.549.733,22",
+      "salio": "₡65.800,50",
+      "movimientos": "38",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "cifrasTrasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.552.733,22",
+      "salio": "₡68.800,50",
+      "movimientos": "40",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras anular 02-gasto",
+    "estado": "OK",
+    "entro": "13552733.22",
+    "salio": "68800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "02-gasto segundo intento de anular",
+    "estado": "FALLO",
+    "aviso": null
+  },
+  {
+    "id": "02-gasto filas en la caja con la marca",
+    "estado": "INFO",
+    "n": 2
+  }
+]

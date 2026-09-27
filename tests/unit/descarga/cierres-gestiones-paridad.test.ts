@@ -86,7 +86,7 @@ function gestion(over: Partial<CierreGestionDescargaDTO> = {}): CierreGestionDes
     // que la paridad los cubre igual. Valor DISTINTO del de la tienda: con los dos iguales, un
     // camino que cogiera el contador equivocado seguiría dando paridad y no se vería.
     intentosEntrega: 5,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "1000.10",
     pagos: [{ metodo: "SINPE", monto: "1000.10" }],
     motivo: null,

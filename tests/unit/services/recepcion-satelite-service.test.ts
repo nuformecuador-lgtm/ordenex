@@ -143,23 +143,23 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(ZONA, [
       "en_ruta_bodega_satelite",
       "en_bodega_satelite",
-      "por_devolver",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
-      "devuelta",
-      "por_recoger",
+      "novedad",
+      "mensajero_recogiendo_en_bodega",
     ]);
   });
 
   // Feature 139/T2.5/R21: bucket `porDevolver` (por_devolver de la zona del adminSatelite,
   // accionable "Enviar a central") + bucket `enTransitoACentral` (devolviendo_a_bodega_central,
   // informativo). REEMPLAZA el viejo scope `rechazada` (feature 48).
-  it("R21: clasifica por_devolver en porDevolver y devolviendo_a_bodega_central en enTransitoACentral (sin mezclar)", async () => {
+  it("R21: clasifica por_devolver_a_bodega_central en porDevolver y devolviendo_a_bodega_central en enTransitoACentral (sin mezclar)", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
         recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
-        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
-        recepcionRow({ id: "d2", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver_a_bodega_central" }),
+        recepcionRow({ id: "d2", estatusValue: "por_devolver_a_bodega_central" }),
         recepcionRow({ id: "t1", estatusValue: "devolviendo_a_bodega_central" }),
       ]),
     });
@@ -182,9 +182,9 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
         recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
-        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver_a_bodega_central" }),
         recepcionRow({ id: "t1", estatusValue: "devolviendo_a_bodega_central" }),
-        recepcionRow({ id: "v1", estatusValue: "devuelta" }),
+        recepcionRow({ id: "v1", estatusValue: "novedad" }),
       ]),
     });
     const intentos = fakeIntentosEnLote();
@@ -199,9 +199,9 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
         recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
-        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver_a_bodega_central" }),
         recepcionRow({ id: "t1", estatusValue: "devolviendo_a_bodega_central" }),
-        recepcionRow({ id: "v1", estatusValue: "devuelta" }),
+        recepcionRow({ id: "v1", estatusValue: "novedad" }),
       ]),
     });
     // Solo `v1` y `b` tienen intentos; el resto debe salir con 0, no con `undefined`.
@@ -245,10 +245,10 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.recibidas.find((o) => o.id === "n1")?.prioridad).toBe(false);
   });
 
-  it("R21: una fila por_devolver de la MISMA zona aparece en porDevolver; otros estados NO", async () => {
+  it("R21: una fila por_devolver_a_bodega_central de la MISMA zona aparece en porDevolver; otros estados NO", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
-        recepcionRow({ id: "d1", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "d1", estatusValue: "por_devolver_a_bodega_central" }),
       ]),
     });
     const r = await newService(repo).listar(ADMIN);
@@ -276,9 +276,9 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
       findRecepcionSateliteByZona: vi.fn(async () => [
         recepcionRow({ id: "a", estatusValue: "en_ruta_bodega_satelite" }),
         recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
-        recepcionRow({ id: "pd1", estatusValue: "por_devolver" }),
-        recepcionRow({ id: "d1", estatusValue: "devuelta" }),
-        recepcionRow({ id: "d2", estatusValue: "devuelta" }),
+        recepcionRow({ id: "pd1", estatusValue: "por_devolver_a_bodega_central" }),
+        recepcionRow({ id: "d1", estatusValue: "novedad" }),
+        recepcionRow({ id: "d2", estatusValue: "novedad" }),
       ]),
     });
     const r = await newService(repo).listar(ADMIN);
@@ -295,7 +295,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
   it("R12: una fila devuelta de la MISMA zona aparece en devueltas; otros estados NO", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
-        recepcionRow({ id: "d1", estatusValue: "devuelta" }),
+        recepcionRow({ id: "d1", estatusValue: "novedad" }),
       ]),
     });
     const r = await newService(repo).listar(ADMIN);
@@ -319,8 +319,8 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     // repo (query real, guardado por `zonaId` en el WHERE) SOLO devuelve las de la zona que se le
     // pasa; el service llama con la zona del actor, asi que la devuelta de `z-otra` no sale.
     const porZona: Record<string, RecepcionSateliteRow[]> = {
-      [ZONA]: [recepcionRow({ id: "d-mia", estatusValue: "devuelta" })],
-      "z-otra": [recepcionRow({ id: "d-ajena", estatusValue: "devuelta" })],
+      [ZONA]: [recepcionRow({ id: "d-mia", estatusValue: "novedad" })],
+      "z-otra": [recepcionRow({ id: "d-ajena", estatusValue: "novedad" })],
     };
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async (zonaId: string) => porZona[zonaId] ?? []),
@@ -331,7 +331,7 @@ describe("listar (R3/R4/R5/R6/R8)", () => {
     expect(r.devueltas.map((o) => o.id)).toEqual(["d-mia"]);
     expect(repo.findRecepcionSateliteByZona).toHaveBeenCalledWith(
       ZONA,
-      expect.arrayContaining(["devuelta"]),
+      expect.arrayContaining(["novedad"]),
     );
   });
 });

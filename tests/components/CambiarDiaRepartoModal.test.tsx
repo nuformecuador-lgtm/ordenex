@@ -324,7 +324,7 @@ describe("R19 — un `conflict` pinta el motivo REAL de cada orden, no un genér
   it("cada orden rechazada se nombra por su remisión y con SU causa", async () => {
     await confirmarCon([
       { ordenId: "o1", motivo: MSG_YA_ES_ESE_DIA },
-      { ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregada") },
+      { ordenId: "o2", motivo: msgEstadoSinDiaVivo("entregado") },
     ]);
 
     const aviso = await screen.findByRole("alert");
@@ -334,7 +334,7 @@ describe("R19 — un `conflict` pinta el motivo REAL de cada orden, no un genér
       "REM-1 — Esta orden ya está marcada para el día que elegiste.",
     );
     expect(aviso).toHaveTextContent(
-      "REM-2 — El día de reparto ya no decide nada para esta orden (Entregada).",
+      "REM-2 — El día de reparto ya no decide nada para esta orden (Entregado).",
     );
   });
 

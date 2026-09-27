@@ -1,0 +1,24 @@
+=== MUTACION C06b — 2026-09-24T04:51:26-05:00
+archivo: lib/services/CorteDiarioService.ts
+perl: s/const ESTADO_SIN_GESTIONAR = "sin_gestionar";/const ESTADO_SIN_GESTIONAR = "sin_gestionar_mutado";/
+--- diff aplicado:
+diff --git a/lib/services/CorteDiarioService.ts b/lib/services/CorteDiarioService.ts
+index 4b89c241..9c713e60 100644
+--- a/lib/services/CorteDiarioService.ts
++++ b/lib/services/CorteDiarioService.ts
+@@ -28 +28 @@ const ESTADO_EN_REPARTO = "en_reparto";
+-const ESTADO_SIN_GESTIONAR = "sin_gestionar";
++const ESTADO_SIN_GESTIONAR = "sin_gestionar_mutado";
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > aviso de novedades: la tienda tiene 3 en novedad (N1 con su causa, N2 y P3 sin gestion) y X no cuenta 2ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > represadas de la zona: solo P1 (anclada antes del umbral) 0ms
+ × tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > el corte crea UN vencido y barre solo E1 a novedadInterna, vinculada con origen enReparto 6ms
+   → expected [] to deeply equal [ 'E1<-enReparto' ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > el corte crea UN vencido y barre solo E1 a novedadInterna, vinculada con origen enReparto
+AssertionError: expected [] to deeply equal [ 'E1<-enReparto' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

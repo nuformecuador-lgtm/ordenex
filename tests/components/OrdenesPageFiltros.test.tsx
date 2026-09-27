@@ -41,6 +41,15 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(async () => null),
 }));
 
+// FICHA 462 (T3.5): la página lee, para maestro/admin, la franja de reprogramados retenidos. Doble a
+// «0 retenidos» para seguir herméticos (sin DB). Cambio del ARNÉS: ninguna aserción se toca.
+vi.mock("@/lib/actions/reprogramadas-retenidas", () => ({
+  resumenReprogramadasRetenidasCentral: vi.fn(async () => ({
+    status: "ok" as const,
+    resumen: { diaCR: "2026-01-01", total: 0, porForma: { reprogramado: 0, enReparto: 0 }, cierres: [], sinCierre: [] },
+  })),
+}));
+
 vi.mock("@/lib/actions/filtros-ordenes", () => ({
   obtenerCatalogoFiltrosOrdenes: vi.fn(),
 }));

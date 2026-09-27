@@ -26,9 +26,15 @@ import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
  *  · **R14** — el peso declarado tiene que ser el real. Si alguien regenera el
  *    `.ttf` y no vuelve a correr el script, el modulo miente sobre lo que ships.
  *  · **R23** — en el SERVIDOR el mecanismo es el contrario y tambien hay que
- *    vigilarlo: import estatico, nada de `fs`. `next.config.ts` no declara
- *    `outputFileTracingIncludes`, asi que un archivo suelto leido por ruta puede
- *    no llegar a la function y el fallo apareceria SOLO en produccion.
+ *    vigilarlo: import estatico, nada de `fs`. Un archivo suelto leido por ruta
+ *    puede no llegar a la function —el trazado de `next build` solo sigue los
+ *    `import`— y el fallo apareceria SOLO en produccion.
+ *    ⚠️ ACTUALIZADO POR LA FICHA 433 (2026-09-16): `next.config.ts` SI declara ya
+ *    un `outputFileTracingIncludes`, pero es **solo para `docs/ayuda/**\/*.md`**
+ *    —el modulo de ayuda, que si lee con `fs` a proposito—. NADA cubre
+ *    `assets/fuentes`, asi que la razon de R23 sigue intacta: aqui el artefacto
+ *    entra por import estatico, no por ruta. Su guardia es
+ *    `ayuda-md-viajan-a-produccion.guardia.test.ts`.
  */
 
 const RAIZ = path.resolve(__dirname, "../../..");

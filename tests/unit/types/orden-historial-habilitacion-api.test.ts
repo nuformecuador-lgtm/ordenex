@@ -79,6 +79,6 @@ describe("Feature 266 · T6.1 — la rama A SI emite evento publico (afirmado, n
     // es evento publico. Se sustituye por un interno de ruteo satelite; lo que el caso ejercita es
     // «un destino FUERA de la politica», no ese value en particular.
     expect(esTransicionEmitible("en_bodega_satelite", FAMILIA)).toBe(false);
-    expect(esTransicionEmitible("por_recoger", FAMILIA)).toBe(false);
+    expect(esTransicionEmitible("mensajero_recogiendo_en_bodega", FAMILIA)).toBe(false);
   });
 });

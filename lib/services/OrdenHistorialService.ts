@@ -12,6 +12,7 @@ import type {
 import type {
   OrdenHistorialCorreccionDiaDTO,
   OrdenHistorialEntradaDTO,
+  OrdenHistorialEventoDTO,
   OrdenHistorialTransicionDTO,
   OrdenHistorialTraspasoDTO,
 } from "@/lib/types/orden-historial";
@@ -52,6 +53,15 @@ const RANGO_POR_CLASE: Record<OrdenHistorialEntradaDTO["clase"], number> = {
    * real sobre la orden— y el traspaso es el apunte de quien la lleva a partir de ahi.
    */
   traspaso_mensajero: 2,
+  /**
+   * FICHA 454 (T1.21, design §12.4) — LA CUARTA CLASE, los hechos sin transicion (`orden_evento`).
+   * VA LA ULTIMA (rango 3): cuando comparte instante con una transicion, lo que paso primero es la
+   * transicion. El caso real es la migracion M3, que escribe en el MISMO instante el rastro
+   * `ayuda_tienda -> en_reparto` y el evento de ayuda abierta: la ayuda se lee DESPUES de volver a
+   * `en_reparto`, que es lo que la derivacion exige (`ayuda-abierta.ts`, «ninguna transicion
+   * posterior»).
+   */
+  evento_orden: 3,
 };
 
 /**
@@ -90,8 +100,16 @@ export function fusionarLineaDeTiempo(
   transiciones: readonly OrdenHistorialTransicionDTO[],
   correcciones: readonly OrdenHistorialCorreccionDiaDTO[],
   traspasos: readonly OrdenHistorialTraspasoDTO[],
+  // FICHA 454 (T1.21): la CUARTA fuente. OBLIGATORIA por lo mismo que las otras (un «sin eventos»
+  // por defecto seria un drawer que enseña menos de lo que hay sin romper nada).
+  eventos: readonly OrdenHistorialEventoDTO[],
 ): OrdenHistorialEntradaDTO[] {
-  const entradas: OrdenHistorialEntradaDTO[] = [...transiciones, ...correcciones, ...traspasos];
+  const entradas: OrdenHistorialEntradaDTO[] = [
+    ...transiciones,
+    ...correcciones,
+    ...traspasos,
+    ...eventos,
+  ];
   return entradas.sort((a, b) => {
     const delta = a.createdAt.getTime() - b.createdAt.getTime();
     if (delta !== 0) return delta;
@@ -154,12 +172,21 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // misma puerta y DESPUES de `decision === "ok"`, por lo mismo: la autorizacion de lectura NO
     // cambia y NO gana ninguna regla — quien ve la linea de tiempo de la orden ve tambien sus
     // traspasos, con los mismos recortes por rol de hoy (design §9).
-    const [transiciones, correcciones, traspasos] = await Promise.all([
+    //
+    // FICHA 454 (T1.21, R30): y una CUARTA, los hechos sin transicion (`orden_evento`): gestion
+    // registrada/anulada/corregida y la ida y vuelta de la ayuda. Misma puerta, DESPUES de la
+    // autorizacion y sin regla nueva: la ven los mismos roles que hoy ven la linea de tiempo.
+    //
+    // FICHA 454 (R29, BLOQUEO-1 de la fase 2): y las dos SEÑALES del detalle (gestion pendiente de
+    // confirmar y ayuda abierta), por la misma puerta y DESPUES de la autorizacion.
+    const [transiciones, correcciones, traspasos, eventos, senales] = await Promise.all([
       this.historialRepo.findHistorialByOrden(ordenId), // R26 cronologico
       this.correccionRepo.findCorreccionesByOrden(ordenId), // created_at asc, id asc
       this.traspasoRepo.findTraspasosByOrden(ordenId), // created_at asc, id asc
+      this.historialRepo.findEventosByOrden(ordenId), // created_at asc, id asc (454)
+      this.historialRepo.findSenalesGestion(ordenId), // 454/R29
     ]);
-    const entradas = fusionarLineaDeTiempo(transiciones, correcciones, traspasos); // R40 + 427/R29
+    const entradas = fusionarLineaDeTiempo(transiciones, correcciones, traspasos, eventos); // R40 + 427/R29 + 454/R30
     // Feature 47 (R15/R17): junto a la linea de tiempo, el conteo de intentos DERIVADO
     // (consume el derivador de la 49) y el umbral configurable, para que la UI muestre
     // "intento X de N" sin fetchear datos sensibles en el cliente. La autz NO cambia: esta
@@ -170,7 +197,14 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     // distintos en los que la orden tuvo un resultado contable, no las transiciones.
     const intentos = await this.contarIntentos(ordenId); // R1/R3
     const umbral = reintentosConfig.MIN_INTENTOS_ENTREGA; // R3
-    return { status: "ok", entradas, intentos, umbral };
+    return {
+      status: "ok",
+      entradas,
+      intentos,
+      umbral,
+      gestionPendiente: senales.gestionPendiente,
+      ayudaAbierta: senales.ayudaAbierta,
+    };
   }
 
   /**

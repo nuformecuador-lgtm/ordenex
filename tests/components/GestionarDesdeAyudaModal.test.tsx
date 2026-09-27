@@ -104,6 +104,8 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: null,
     causa: null,
     intentosEntrega: 1,
@@ -163,7 +165,7 @@ beforeEach(() => {
   gestionarMock.mockResolvedValue({
     status: "ok",
     ordenId: "o1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
   });
 });
 afterEach(cleanup);
@@ -415,7 +417,7 @@ describe("237/T7.2 — la forma del envío", () => {
 
     // El literal, a mano. Es la mutación de dinero de esta ventana: invertir el mapa modo →
     // resultado cobraría un rechazo cuando la tienda pulsó «Reprogramar».
-    await waitFor(() => expect(envio().get("resultado")).toBe("rechazada"));
+    await waitFor(() => expect(envio().get("resultado")).toBe("devolucion_a_origen_por_rechazo"));
     expect(envio().get("ordenId")).toBe("o1");
     expect(envio().get("motivo")).toBe("El cliente ya no quiere el pedido");
     // Un rechazo no lleva fecha: la clave ni se crea.
@@ -430,7 +432,7 @@ describe("237/T7.2 — la forma del envío", () => {
 
     await user.click(confirmar("reprogramar"));
 
-    await waitFor(() => expect(envio().get("resultado")).toBe("reprogramada"));
+    await waitFor(() => expect(envio().get("resultado")).toBe("reprogramado"));
     expect(envio().get("fechaReprogramacion")).toBe(mananaCalendarioCR());
   });
 
@@ -468,7 +470,7 @@ describe("237/T7.2 — la forma del envío", () => {
     // fotos huérfanas en el bucket y un segundo viaje. El `Modal` lo impide con su fase pendiente,
     // y esto lo afirma sobre ESTA ventana en vez de darlo por hecho.
     const user = userEvent.setup();
-    let resolver: (v: { status: "ok"; ordenId: string; resultado: "rechazada" }) => void = () => {};
+    let resolver: (v: { status: "ok"; ordenId: string; resultado: "devolucion_a_origen_por_rechazo" }) => void = () => {};
     gestionarMock.mockReturnValue(
       new Promise((res) => {
         resolver = res;
@@ -487,7 +489,7 @@ describe("237/T7.2 — la forma del envío", () => {
     await user.click(boton);
     expect(gestionarMock).toHaveBeenCalledTimes(1);
 
-    resolver({ status: "ok", ordenId: "o1", resultado: "rechazada" });
+    resolver({ status: "ok", ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" });
   });
 });
 
@@ -530,7 +532,7 @@ describe("237/R13 — el borde manda, y su rechazo no borra el formulario", () =
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "o1",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
     });
     const onResuelto = montar("rechazar");
     await subirFotos(user, 1);
@@ -542,7 +544,7 @@ describe("237/R13 — el borde manda, y su rechazo no borra el formulario", () =
       expect(onResuelto).toHaveBeenCalledWith({
         status: "ok",
         ordenId: "o1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
       }),
     );
   });

@@ -83,6 +83,25 @@ function build(
     movimientoTiendaRepo,
     writeClient,
     runTx,
+    // Ficha 458-B: la anulacion no se ejerce en este archivo (tiene el suyo); dobles que revientan.
+    {
+      repo: {
+        anular: vi.fn(async () => {
+          throw new Error("este archivo no anula");
+        }),
+        lineasDelCobro: vi.fn(async () => {
+          throw new Error("este archivo no anula");
+        }),
+        estadoPorGestion: vi.fn(async () => []),
+        estadoDeDocumentos: vi.fn(async () => []),
+        cobroDeGestion: vi.fn(async () => null),
+      },
+      caja: {
+        emitirReversosDeAnulacion: vi.fn(async () => {
+          throw new Error("este archivo no anula");
+        }),
+      },
+    },
     { TIENDA_DEBITA_FLETE_DEVOLUCION: opciones.debitaFleteDevolucion ?? true },
   );
   return { cobroRepo, movimientoRepo, movimientoTiendaRepo, service };

@@ -97,7 +97,7 @@ export class WebPushSender implements IPushSender {
       // 4xx que no es 404/410/429: el problema es NUESTRO (payload mal formado, claves VAPID que
       // no casan con la suscripcion). No se reintenta, y la suscripcion NO se borra: castigar a la
       // persona por un bug nuestro la dejaria sin canal hasta que volviera a activarlo a mano.
-      return { status: "rechazada", detalle: `suscripcion ${suscripcion.id}: HTTP ${status}` };
+      return { status: "devolucion_a_origen_por_rechazo", detalle: `suscripcion ${suscripcion.id}: HTTP ${status}` };
     }
   }
 }

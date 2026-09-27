@@ -121,7 +121,7 @@ function botonGuardar(): HTMLElement {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", estado: "reprogramada" } as never);
+  gestionarMock.mockResolvedValue({ status: "ok", estado: "reprogramado" } as never);
 });
 
 afterEach(() => {

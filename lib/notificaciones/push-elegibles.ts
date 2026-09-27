@@ -29,6 +29,9 @@
 // el mismo mecanismo con el que la 409 cerro su catalogo de avisos.
 import type { RolValue } from "@prisma/client";
 import type { NotificacionEvento } from "@/lib/types/notificacion";
+// FICHA 462: los roles del push de las reprogramadas retenidas viven en un modulo de configuracion
+// (puro) porque el humano puede ajustarlos; aqui se DECLARA la elegibilidad leyendo esa lista.
+import { reprogramadasRetenidasConfig } from "@/lib/config/reprogramadas-retenidas";
 
 /**
  * Que hace este evento en el canal de push. Union DISCRIMINADA a proposito: un evento marcado
@@ -42,9 +45,9 @@ export type PerfilPush =
   | { readonly push: "si"; readonly roles: readonly RolValue[] };
 
 /**
- * EL CATALOGO, evento por evento y con su porque. DIECISIETE entradas: las once de siempre, las
- * dos que anadio la 409, `cierre_dia_rechazado` de la 412, `reparto_manana` de la 413 y los DOS del
- * traspaso de la 427. ONCE son elegibles.
+ * EL CATALOGO, evento por evento y con su porque. DIECIOCHO entradas: las once de siempre, las
+ * dos que anadio la 409, `cierre_dia_rechazado` de la 412, `reparto_manana` de la 413, los DOS del
+ * traspaso de la 427 y `reprogramadas_esperan_cierre` de la 462. DOCE son elegibles.
  */
 export const PUSH_ELEGIBLE = {
   // -------------------------------------------------------------------------------------------
@@ -156,6 +159,18 @@ export const PUSH_ELEGIBLE = {
   // MAESTRO. Una suscripcion de webhook lleva fallando en racha y sus reintentos se espaciaron:
   // un integrador dejando de recibir es dinero que no se factura, y `/configuracion/api` es suya.
   webhook_suscripcion_pausada: { push: "si", roles: ["maestro"] },
+
+  // ADMIN Y BODEGA SATELITE (FICHA 462, R21/R24). Reprogramadas DE HOY que no se pueden asignar
+  // hasta aprobar un cierre: es DINERO parado (el paquete no sale) y tiene PLAZO (hoy). Y siempre
+  // AGREGADA: una fila por ambito con la cifra dentro, jamas un push por orden ni por cierre. Sale
+  // con la emision de las 07:00 CR y en ningun otro momento del dia.
+  //
+  // ⚠️ EL `maestro` NO ESTA, Y NO ES UN OLVIDO: se sigue la tabla aprobada para los dos avisos
+  // hermanos sobre cierres (`cierre_dia_por_aprobar`, `devoluciones_represadas`: «para admin y
+  // bodega satelite»). El maestro lo ve en su campana. La lista vive en
+  // `lib/config/reprogramadas-retenidas.ts` porque el humano puede ajustarla (decision del leader,
+  // 2026-09-25); incluir al maestro es UNA linea alli, y su test.
+  reprogramadas_esperan_cierre: { push: "si", roles: reprogramadasRetenidasConfig.ROLES_PUSH },
 
   // -------------------------------------------------------------------------------------------
   // NO ELEGIBLES — y esta escrito para que la ausencia sea DECISION y no olvido (R3)

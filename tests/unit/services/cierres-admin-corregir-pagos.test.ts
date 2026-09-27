@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import type {
   GestionEditableDelCierre,
   ICierresAdminRepository,
@@ -34,7 +35,7 @@ function editable(
     gestionId: GESTION,
     cierreId: "c-1",
     cierreEstado: "solicitado",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10000.00",
     pagos: [{ metodo: "efectivo", monto: "10000.00" }],
     ...overrides,
@@ -100,7 +101,7 @@ function newService(repo: ICierresAdminRepository) {
     sumarPremiosVivosPorCierre: vi.fn(async (ids: string[]) =>
       Object.fromEntries(ids.map((id) => [id, "0.00"])),
     ),
-  });
+  }, sinRetenidas()); // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
 }
 
 /** El desglose «bueno» del caso base: 10.000 repartidos entre dos métodos. */
@@ -191,7 +192,7 @@ describe("CierresAdminService.actualizarPagosGestion — qué se puede corregir"
   it("un resultado que no es `entregada` no tiene desglose que corregir", async () => {
     const repo = fakeRepo({
       findGestionEditableEnCierre: vi.fn(async () =>
-        editable({ resultado: "devuelta", montoRecibido: null, pagos: [] }),
+        editable({ resultado: "novedad", montoRecibido: null, pagos: [] }),
       ),
     });
     const r = await newService(repo).actualizarPagosGestion(

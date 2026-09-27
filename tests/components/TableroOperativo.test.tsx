@@ -642,15 +642,15 @@ describe("Feature 131 (R23) — actualizar sin cambiar el filtro", () => {
 /* ========================================================================== */
 
 describe("Feature 131 (R21) — las dos metricas `declarada` se pintan", () => {
-  it("el tablero consulta `incidentes` y `sin_gestionar`", async () => {
+  it("el tablero consulta `incidentes` y `novedad_interna`", async () => {
     renderTablero();
     await screen.findByRole("region", { name: TITULO_CREADAS });
     await waitFor(() => {
       const consultadas = accion.mock.calls.map(([e]) => e.metricaId);
       expect(consultadas).toContain("incidentes");
-      expect(consultadas).toContain("sin_gestionar");
+      expect(consultadas).toContain("novedad_interna");
     });
-    expect(region("Órdenes sin gestionar")).toBeInTheDocument();
+    expect(region("Órdenes en Novedad interna")).toBeInTheDocument();
     expect(region("Resultado de las gestiones")).toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@ function makeOrden(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO 
     numGuia: 1234,
     numRemision: "REM-001",
     estatusId: "est-uuid",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Ana Solís",
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",
@@ -31,7 +31,7 @@ function makeOrden(overrides: Partial<OrdenListItemDTO> = {}): OrdenListItemDTO 
     createdAt: new Date("2026-07-15T20:00:00Z"),
     updatedAt: new Date("2026-07-16T10:00:00Z"),
     relaciones: {
-      estatus: { id: "est-uuid", value: "entregada" },
+      estatus: { id: "est-uuid", value: "entregado" },
       tienda: {
         id: "tienda-uuid",
         nombre: "Tienda Relación",
@@ -122,7 +122,7 @@ describe("columnas de descarga del listado de órdenes", () => {
     expect(fila.distrito).toBe("San Rafael");
     expect(fila.mensajero).toBe("Luis Mora");
     // Etiqueta legible del estatus, no el `value` máquina ni el uuid.
-    expect(fila.estatus).toBe("Entregada");
+    expect(fila.estatus).toBe("Entregado");
 
     // Sin relaciones resueltas cae a los escalares legibles, nunca a un id.
     const escalares = filaDescargaOrden(
@@ -130,7 +130,7 @@ describe("columnas de descarga del listado de órdenes", () => {
     );
     expect(escalares.tienda).toBe("Tienda X");
     expect(escalares.zona).toBe("Zona Sur");
-    expect(escalares.estatus).toBe("Entregada");
+    expect(escalares.estatus).toBe("Entregado");
 
     const orden = makeOrden();
     const ids = [

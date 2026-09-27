@@ -1,0 +1,128 @@
+{
+  "pasos": [
+    {
+      "id": "tienda_mi_wallet",
+      "http": 200,
+      "saldo": "₡0",
+      "saldoDb": "0.00",
+      "pistas": [
+        "Lo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular",
+        "Fletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon"
+      ],
+      "filas": [
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡4.000\tRegistrado a mano · R457-maestro-muhxvoms preparación: deja la tienda en contra",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡10.000\tRegistrado a mano · R457-maestro-muhxtlby preparación: deja la tienda en contra",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡147.670,10\tRegistrado a mano · R457-maestro-muhxmqij preparación: deja la tienda en contra",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡10.000\tRegistrado a mano · R457-maestro-muhxkmcs preparación: deja la tienda en contra",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡5.000\tPago de una tienda a Ordenex · R457-maestro-muhxmqij salda la deuda · Efectivo",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡4.000\tPago de una tienda a Ordenex · R457-maestro-muhxmqij desde el desglose · Efectivo",
+        "\t2026-09-25\tDébito\tOrdenex anuló el pago que le hiciste\t₡4.000\tPago de una tienda a Ordenex · Anulación · R457-maestro-muhxvoms Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡4.000\tPago de una tienda a Ordenex · R457-maestro-muhxvoms desde el desglose · Efectivo",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡1.000\tPago de una tienda a Ordenex · R457-maestro-muhxmqij doble clic · Efectivo",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡5.000\tPago de una tienda a Ordenex · R457-maestro-muhxvoms salda la deuda · Efectivo",
+        "\t2026-09-25\tCrédito\tLe pagaste a Ordenex\t₡1.000\tPago de una tienda a Ordenex · R457-maestro-muhxvoms doble clic · Efectivo",
+        "\t2026-09-25\tDébito\tOrdenex anuló el pago que le hiciste\t₡4.000\tPago de una tienda a Ordenex · Anulación · R457-maestro-muhxmqij Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+      ],
+      "opcionesFiltro": [
+        "Ordenex te cobró el flete",
+        "Ordenex te cobró el flete por rechazo",
+        "Ordenex te cobró la comisión de contra-entrega",
+        "Ordenex te cobró el IVA del flete",
+        "Ordenex te cobró el IVA del flete por rechazo",
+        "Ordenex te cobró el IVA de la comisión",
+        "Ordenex te pagó",
+        "Ordenex te cobró",
+        "Ordenex pagó un gasto por ti",
+        "Ordenex anuló un pago hecho por ti",
+        "Ordenex anuló un cobro y te lo devolvió",
+        "Le pagaste a Ordenex",
+        "Ordenex anuló el pago que le hiciste"
+      ],
+      "botonesEnTabla": [
+        " [Ver las órdenes que componen Cobrado a tus clientes en contra-entrega del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró el flete por rechazo del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró el IVA de la comisión del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró el IVA del flete por rechazo del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró la comisión de contra-entrega del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró el flete del 2026-09-24]",
+        " [Ver las órdenes que componen Ordenex te cobró el IVA del flete del 2026-09-24]",
+        " [Ver las órdenes que componen Cobrado a tus clientes en contra-entrega del 2026-09-24]"
+      ],
+      "barridoPantalla": {
+        "codigos": null,
+        "uuid": null
+      },
+      "descarga": {
+        "archivo": "desglose-de-movimientos-2026-09-25.xlsx",
+        "cabecera": [
+          "Fecha",
+          "Tipo",
+          "Concepto",
+          "Monto",
+          "Origen"
+        ],
+        "marcadas": [
+          "2026-09-25 | Débito | Ordenex te cobró | 4000.00 | Registrado a mano · R457-maestro-muhxvoms preparación: deja la tienda en contra",
+          "2026-09-25 | Débito | Ordenex te cobró | 10000.00 | Registrado a mano · R457-maestro-muhxtlby preparación: deja la tienda en contra",
+          "2026-09-25 | Débito | Ordenex te cobró | 147670.10 | Registrado a mano · R457-maestro-muhxmqij preparación: deja la tienda en contra",
+          "2026-09-25 | Débito | Ordenex te cobró | 10000.00 | Registrado a mano · R457-maestro-muhxkmcs preparación: deja la tienda en contra",
+          "2026-09-25 | Débito | Ordenex anuló el pago que le hiciste | 4000.00 | Pago de una tienda a Ordenex · Anulación · R457-maestro-muhxvoms Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 5000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxvoms salda la deuda · Efectivo",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 1000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxvoms doble clic · Efectivo",
+          "2026-09-25 | Débito | Ordenex anuló el pago que le hiciste | 4000.00 | Pago de una tienda a Ordenex · Anulación · R457-maestro-muhxmqij Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 1000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxmqij doble clic · Efectivo",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxvoms desde el desglose · Efectivo",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxmqij desde el desglose · Efectivo",
+          "2026-09-25 | Crédito | Le pagaste a Ordenex | 5000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxmqij salda la deuda · Efectivo",
+          "2026-09-24 | Crédito | Le pagaste a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxmqij Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+          "2026-09-24 | Crédito | Le pagaste a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxvoms Pago de lo que debía por los fletes de septiembre · SINPE · 123456",
+          "2026-09-24 | Crédito | Le pagaste a Ordenex | 4000.00 | Pago de una tienda a Ordenex · R457-maestro-muhxtlby Pago de lo que debía por los fletes de septiembre · SINPE · 123456"
+        ]
+      },
+      "barridoDescarga": {
+        "codigos": null,
+        "uuid": null
+      }
+    },
+    {
+      "id": "tienda_actions",
+      "propio": "c0510985-426f-4ed2-ae4e-af432079fab6",
+      "ajeno": "8ffa8cac-875e-47f8-aaa1-7eafb9ede185",
+      "comprobantePropio": {
+        "http": 500,
+        "status": null,
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:E{\"digest\":\"1556021281\",\"name\":\"Error\",\"message\":\"abono-tienda: AppErrorCode inesperado INTERNAL\",\"stack\":[[\"toActionError\",\"R:\\\\job\\\\singularis\\\\projects\\\\ordenex\\\\.claude\\\\worktrees\\\\agent-aecf541b63dc98cab\\\\.next\\\\dev\\\\server\\\\chunk"
+      },
+      "comprobanteAjeno": {
+        "http": 200,
+        "status": "no_encontrado",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"no_encontrado\"}\n"
+      },
+      "anular": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "registrar": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "capturadas": {
+        "comp": true,
+        "anular": true,
+        "registrar": true
+      }
+    },
+    {
+      "id": "tienda_/wallet",
+      "http": 404,
+      "h1": "No encontramos esta página"
+    },
+    {
+      "id": "tienda_/wallet/tiendas",
+      "http": 404,
+      "h1": "No encontramos esta página"
+    }
+  ]
+}

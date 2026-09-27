@@ -1,0 +1,73 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Cierres del día
+
+Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Bodega
+Mensajero
+Filtros
+
+Pendientes
+(1)
+Resueltos
+(7)
+Descargar
+ORDENEX
+Cierre del día
+#FE596160
+Solicitado
+Ver / decidir
+Ver detalles
+Marco Mensajero
+|
+Bodega central · GAM
+|
+2026-09-24
+TOTAL
+₡6.500
+
+Motivo de rechazo: Faltan comprobantes de la entrega (recorrido 454)
+
+1-1 de 1
+«
+‹
+1
+›
+»
+10
+25
+50
+Confirmá el SINPE de GAM
+
+Hasta ahora tu bodega cobraba en el número de la central. Confirmá el tuyo para que la plata de tus clientes llegue a donde tiene que llegar.
+
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Ahora no
+Confirmar

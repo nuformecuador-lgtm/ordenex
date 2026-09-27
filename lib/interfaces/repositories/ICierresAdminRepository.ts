@@ -144,9 +144,20 @@ export interface DevolucionRechazadasConfig {
 //
 // El service resuelve los dos ids ANTES de llamar al repo y, si alguno es `null` (catalogo
 // incompleto), RECHAZA la aprobacion entera sin efectos parciales (R9, fallo cerrado).
-export interface AnclajeDevolucionConfig {
-  preEstadoId: string; // `devolucion_por_confirmar` — estado de ORIGEN (guarda del updateMany, R4a/R8)
-  devueltaId: string; // `devuelta` — destino del anclaje
+//
+// FICHA 454 (T1.7, design §7.2): el anclaje se GENERALIZA a los cinco resultados. Esta interfaz la
+// sustituye `AplicacionGestionesConfig`; el pre-estado `devolucion_por_confirmar` muere con la ficha.
+
+/**
+ * FICHA 454 (T1.7, design §7.2; R7/R8) — lo que la aprobacion necesita para APLICAR el estado real de
+ * las gestiones de calle del cierre: el estado de origen (`en_reparto`, guarda del `UPDATE` e
+ * idempotencia) y el destino de cada resultado (`ESTATUS_POR_RESULTADO`, ya resuelto a ids).
+ * OBLIGATORIO al aprobar: el servicio lo resuelve antes y, si falta un id, RECHAZA la aprobacion
+ * entera (fallo cerrado, precedente 239/R9).
+ */
+export interface AplicacionGestionesConfig {
+  enRepartoId: string;
+  destinoPorResultado: Record<GestionResultado, string>;
 }
 
 // Feature 158 (T1.14, R19/R22): UN monto de indemnizacion, ya validado en el borde. El monto
@@ -284,8 +295,9 @@ interface ResolverCierreBase {
 export type ResolverCierreInput =
   | (ResolverCierreBase & {
       nuevoEstado: "aprobado";
-      // Feature 239 (T2.1, design §3.3): OBLIGATORIO. Ver `AnclajeDevolucionConfig`.
-      anclajeDevolucion: AnclajeDevolucionConfig;
+      // FICHA 454 (T1.7): OBLIGATORIO. Sustituye al `anclajeDevolucion` de la 239. Ver
+      // `AplicacionGestionesConfig`.
+      aplicacionGestiones: AplicacionGestionesConfig;
       /**
        * Feature 238 (T3.2, design §3.4, R17): OBLIGATORIO. Puede ser `[]` —un cierre sin nada
        * que devolver, que es 3 de cada 12 medidos—, pero tiene que ESTAR.
@@ -303,7 +315,7 @@ export type ResolverCierreInput =
       nuevoEstado: "rechazado";
       // R6: un rechazo no ancla nada. `never` (no `undefined`) para que pasarlo no compile: si
       // alguien lo cablea aqui, es que espera que un rechazo mueva ordenes, y no las mueve.
-      anclajeDevolucion?: never;
+      aplicacionGestiones?: never;
       // Feature 238/R24: un rechazo NO confirma ningun paquete. `never` (no `undefined`) para que
       // pasarlo NO COMPILE: si alguien lo cablea aqui es que espera que rechazar deje marca, y no
       // la deja. La ausencia de codigo para R24 es una DECISION, y el tipo es quien la sostiene.

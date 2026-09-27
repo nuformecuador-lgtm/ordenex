@@ -286,6 +286,7 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // columnas).
       "traspaso_ordenes_recibido",
       "traspaso_ordenes_cedido",
+      "reprogramadas_esperan_cierre", // ficha 462 (2026-09-25): el cuarto agregado
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -311,6 +312,7 @@ describeSiHayBase("403/T2 — la base aplicada, y el DOWN ejercitado de verdad",
       // (`orden_traspaso_mensajero.lote_id`), no la orden ni el mensajero: con el mensajero, el
       // SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA.
       "orden_traspaso_lote",
+      "reprogramadas_esperan_cierre_dia", // ficha 462 (2026-09-25): `${ambito}:${diaCR}`, ambito central|zona
     ]);
   });
 

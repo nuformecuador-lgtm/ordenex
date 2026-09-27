@@ -1,0 +1,268 @@
+# MUTACION R35-plantilla
+archivo: lib/types/plantilla-datos.ts
+linea: 497
+- "transform: (v) => (v === null ? VACIO : nombreDeEstado(v)),"
++ "transform: (v) => (v === null ? VACIO : v),"
+tests: tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts tests/unit/types/plantilla-datos.test.ts
+exit vitest: 1
+Test Files  2 failed (2)
+Tests  4 failed | 69 passed (73)
+FAIL  tests/unit/types/plantilla-datos.test.ts > formato de cada tipo de dato > R35: el estatus se traduce a su nombre visible, nunca el value interno
+FAIL  tests/unit/types/plantilla-datos.test.ts > R12: los datos de ejemplo producen exactamente el `ejemplo` de cada entrada > 'estatus' resuelve exactamente a su `ejemplo`
+FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > el texto nunca es vacio ni el codigo
+FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R35) > el texto de cada estado es su nombre visible
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/types/plantilla-datos.test.ts (70 tests | 2 failed) 21ms
+     × R35: el estatus se traduce a su nombre visible, nunca el value interno 6ms
+     × 'estatus' resuelve exactamente a su `ejemplo` 1ms
+ ❯ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts (3 tests | 2 failed) 353ms
+       × el texto nunca es vacio ni el codigo 7ms
+       × el texto de cada estado es su nombre visible 2ms
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 69 passed (73)
+   Start at  06:22:47
+   Duration  2.93s (transform 969ms, setup 106ms, import 2.40s, tests 374ms, environment 0ms)
+
+(node:2020) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/types/plantilla-datos.test.ts > formato de cada tipo de dato > R35: el estatus se traduce a su nombre visible, nunca el value interno
+AssertionError: expected 'en_reparto' to be 'En reparto' // Object.is equality
+
+Expected: "En reparto"
+Received: "en_reparto"
+
+ ❯ tests/unit/types/plantilla-datos.test.ts:91:44
+     89|   // ya no al hito publico del rastreo: `novedad_interna` se lee «Nove…
+     90|   it("R35: el estatus se traduce a su nombre visible, nunca el value i…
+     91|     expect(valorDeCampo("estatus", DATOS)).toBe("En reparto");
+       |                                            ^
+     92|     const interno = datosPlantillaFixture({ orden: { estatusValue: "no…
+     93|     expect(valorDeCampo("estatus", interno)).toBe("Novedad interna");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/unit/types/plantilla-datos.test.ts > R12: los datos de ejemplo producen exactamente el `ejemplo` de cada entrada > 'estatus' resuelve exactamente a su `ejemplo`
+AssertionError: expected 'en_reparto' to be 'En reparto' // Object.is equality
+
+Expected: "En reparto"
+Received: "en_reparto"
+
+ ❯ tests/unit/types/plantilla-datos.test.ts:247:64
+    245| describe("R12: los datos de ejemplo producen exactamente el `ejemplo` …
+    246|   it.each(CAMPOS_PLANTILLA)("$clave resuelve exactamente a su `ejemplo…
+    247|     expect(valorDeCampo(campo.clave, DATOS_PLANTILLA_EJEMPLO)).toBe(ca…
+       |                                                                ^
+    248|   });
+    249|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > el texto nunca es vacio ni el codigo
+AssertionError: expected [ { clave: 'entregado', …(3) }, …(19) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "clave": "entregado",
++     "error": null,
++     "leido": "entregado",
++     "texto": "entregado",
++   },
++   {
++     "clave": "novedad",
++     "error": null,
++     "leido": "novedad",
++     "texto": "novedad",
++   },
++   {
++     "clave": "devolviendoATienda",
++     "error": null,
++     "leido": "devolviendo_a_tienda",
++     "texto": "devolviendo_a_tienda",
++   },
++   {
++     "clave": "reprogramado",
++     "error": null,
++     "leido": "reprogramado",
++     "texto": "reprogramado",
++   },
++   {
++     "clave": "enRutaBodegaCentral",
++     "error": null,
++     "leido": "en_ruta_bodega_central",
++     "texto": "en_ruta_bodega_central",
++   },
++   {
++     "clave": "enBodegaCentral",
++     "error": null,
++     "leido": "en_bodega_central",
++     "texto": "en_bodega_central",
++   },
++   {
++     "clave": "enPreparacion",
++     "error": null,
++     "leido": "en_preparacion",
++     "texto": "en_preparacion",
++   },
++   {
++     "clave": "recogiendo",
++     "error": null,
++     "leido": "mensajero_recogiendo_en_bodega",
++     "texto": "mensajero_recogiendo_en_bodega",
++   },
++   {
++     "clave": "enRutaBodegaSatelite",
++     "error": null,
++     "leido": "en_ruta_bodega_satelite",
++     "texto": "en_ruta_bodega_satelite",
++   },
++   {
++     "clave": "enReparto",
++     "error": null,
++     "leido": "en_reparto",
++     "texto": "en_reparto",
++   },
++   {
++     "clave": "rechazo",
++     "error": null,
++     "leido": "devolucion_a_origen_por_rechazo",
++     "texto": "devolucion_a_origen_por_rechazo",
++   },
++   {
++     "clave": "enBodegaSatelite",
++     "error": null,
++     "leido": "en_bodega_satelite",
++     "texto": "en_bodega_satelite",
++   },
++   {
++     "clave": "devueltaATienda",
++     "error": null,
++     "leido": "devuelta_a_tienda",
++     "texto": "devuelta_a_tienda",
++   },
++   {
++     "clave": "novedadInterna",
++     "error": null,
++     "leido": "novedad_interna",
++     "texto": "novedad_interna",
++   },
++   {
++     "clave": "porDevolverCentral",
++     "error": null,
++     "leido": "por_devolver_a_bodega_central",
++     "texto": "por_devolver_a_bodega_central",
++   },
++   {
++     "clave": "devolviendoABodegaCentral",
++     "error": null,
++     "leido": "devolviendo_a_bodega_central",
++     "texto": "devolviendo_a_bodega_central",
++   },
++   {
++     "clave": "porDevolverATienda",
++     "error": null,
++     "leido": "por_devolver_a_tienda",
++     "texto": "por_devolver_a_tienda",
++   },
++   {
++     "clave": "porRecolectarEnTienda",
++     "error": null,
++     "leido": "por_recolectar_en_tienda",
++     "texto": "por_recolectar_en_tienda",
++   },
++   {
++     "clave": "incidente",
++     "error": null,
++     "leido": "incidente",
++     "texto": "incidente",
++   },
++   {
++     "clave": "recolectando",
++     "error": null,
++     "leido": "recolectando",
++     "texto": "recolectando",
++   },
++ ]
+
+ ❯ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts:61:21
+     59|     it("el texto nunca es vacio ni el codigo", () => {
+     60|       const malos = r.filter((x) => x.texto === null || x.texto.trim()…
+     61|       expect(malos).toEqual([]);
+       |                     ^
+     62|     });
+     63|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R35) > el texto de cada estado es su nombre visible
+AssertionError: expected { entregado: 'entregado', …(19) } to deeply equal { entregado: 'Entregado', …(19) }
+
+- Expected
++ Received
+
+  {
+-   "devolviendoABodegaCentral": "Devolviendo a bodega central",
+-   "devolviendoATienda": "Devolviendo a tienda",
+-   "devueltaATienda": "Devuelta a tienda",
+-   "enBodegaCentral": "En bodega central",
+-   "enBodegaSatelite": "En bodega satélite",
+-   "enPreparacion": "En preparación",
+-   "enReparto": "En reparto",
+-   "enRutaBodegaCentral": "En ruta a bodega central",
+-   "enRutaBodegaSatelite": "En ruta a bodega satélite",
+-   "entregado": "Entregado",
+-   "incidente": "Incidente",
+-   "novedad": "Novedad",
+-   "novedadInterna": "Novedad interna",
+-   "porDevolverATienda": "Por devolver a tienda",
+-   "porDevolverCentral": "Por devolver a bodega central",
+-   "porRecolectarEnTienda": "Por recolectar en tienda",
+-   "rechazo": "Devolución a origen por rechazo",
+-   "recogiendo": "Mensajero recogiendo en la bodega",
+-   "recolectando": "Recolectando",
+-   "reprogramado": "Reprogramado",
++   "devolviendoABodegaCentral": "devolviendo_a_bodega_central",
++   "devolviendoATienda": "devolviendo_a_tienda",
++   "devueltaATienda": "devuelta_a_tienda",
++   "enBodegaCentral": "en_bodega_central",
++   "enBodegaSatelite": "en_bodega_satelite",
++   "enPreparacion": "en_preparacion",
++   "enReparto": "en_reparto",
++   "enRutaBodegaCentral": "en_ruta_bodega_central",
++   "enRutaBodegaSatelite": "en_ruta_bodega_satelite",
++   "entregado": "entregado",
++   "incidente": "incidente",
++   "novedad": "novedad",
++   "novedadInterna": "novedad_interna",
++   "porDevolverATienda": "por_devolver_a_tienda",
++   "porDevolverCentral": "por_devolver_a_bodega_central",
++   "porRecolectarEnTienda": "por_recolectar_en_tienda",
++   "rechazo": "devolucion_a_origen_por_rechazo",
++   "recogiendo": "mensajero_recogiendo_en_bodega",
++   "recolectando": "recolectando",
++   "reprogramado": "reprogramado",
+  }
+
+ ❯ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts:70:68
+     68|     // que ve la oficina. Literal a mano (tabla §0.1 del spec), no con…
+     69|     it("el texto de cada estado es su nombre visible", () => {
+     70|       expect(Object.fromEntries(r.map((x) => [x.clave, x.texto]))).toE…
+       |                                                                    ^
+     71|         entregado: "Entregado",
+     72|         novedad: "Novedad",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+

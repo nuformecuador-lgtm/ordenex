@@ -1,0 +1,27 @@
+=== MUTACION C10 — 2026-09-24T04:51:59-05:00
+archivo: lib/types/order-status-transiciones.ts
+perl: s/\n    \{ to: "rechazada", via: "correccion_resultado_gestion", rol: "maestro\/admin" \}, \/\/ #69 \(398\)//
+--- diff aplicado:
+diff --git a/lib/types/order-status-transiciones.ts b/lib/types/order-status-transiciones.ts
+index 81776e86..6f1eb1df 100644
+--- a/lib/types/order-status-transiciones.ts
++++ b/lib/types/order-status-transiciones.ts
+@@ -270 +269,0 @@ export const TRANSICIONES = {
+-    { to: "rechazada", via: "correccion_resultado_gestion", rol: "maestro/admin" }, // #69 (398)
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/transiciones.test.ts
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > ninguna arista nombra un codigo que el interruptor no conozca 2ms
+ × tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual al inventario de la 140 6ms
+   → expected [ …(58) ] to deeply equal [ …(59) ]
+ × tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual a la lista literal de aristas en claves 2ms
+   → expected [ …(58) ] to deeply equal [ …(59) ]
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > los estados de creacion y los terminales, en claves 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual al inventario de la 140
+AssertionError: expected [ …(58) ] to deeply equal [ …(59) ]
+ FAIL  tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual a la lista literal de aristas en claves
+AssertionError: expected [ …(58) ] to deeply equal [ …(59) ]
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

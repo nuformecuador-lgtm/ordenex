@@ -1,0 +1,46 @@
+---
+titulo: Por recibir
+modulo: recepcion-satelite
+pantalla: /recepcion-satelite/por-recibir
+roles: [adminSatelite]
+actualizado: 2026-09-15
+fuentes:
+  - app/(app)/recepcion-satelite/por-recibir/page.tsx
+  - app/(app)/recepcion-satelite/_components/PorRecibirModule.tsx
+---
+
+# Por recibir
+
+Acá **das entrada en tu bodega** a los paquetes que la central te mandó. Mientras no los recibas, para
+el sistema siguen viajando y no los podés asignar a nadie.
+
+Es el primer paso del día en la bodega: llega el envío, lo recibís, y recién ahí podés repartirlo entre
+tus mensajeros.
+
+## Cómo se recibe
+
+**Escaneás el código** de cada paquete, o **escribís el número de guía** si el código está estropeado.
+Las dos formas hacen lo mismo.
+
+Cada paquete que recibís sale de esta lista y pasa a **En bodega**, que es donde lo asignás.
+
+## Cosas que te pueden pasar
+
+**«Esta orden pertenece a otra zona».** Te llegó un paquete que no es para tu bodega. No lo recibás:
+avisá a la central, porque lo más probable es que se haya mezclado en el envío.
+
+**«Código inválido».** El número no corresponde a ninguna orden en camino hacia vos. Revisá que sea la
+guía correcta y que el paquete venga en este envío.
+
+**Un paquete que esperabas y no está en la lista.** Puede que la central todavía no lo haya despachado.
+El manifiesto del envío te dice qué venía de verdad.
+
+## El manifiesto
+
+Podés **descargar el manifiesto del último envío**: la lista de lo que la central te mandó. Sirve para
+cotejar contra lo que te llegó físicamente y reclamar diferencias con un papel en la mano.
+
+## Lo que esta pantalla NO hace
+
+- **No se asignan mensajeros acá.** Primero recibís; asignar es en **En bodega**.
+- **No se devuelve nada a la central desde acá.** Eso también es **En bodega**.

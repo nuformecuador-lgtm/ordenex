@@ -4,6 +4,8 @@
 // adminSatelite lo consume en /recepcion-satelite (envío por lote de `por_devolver`);
 // acepta tanto el `status` crudo (string) como el resultado (`{ status }`).
 
+import { nombreDeEstado } from "@/lib/types/order-status";
+
 type EnvioDevolucionCentralErrorStatus =
   | "forbidden"
   | "not_found"
@@ -18,7 +20,7 @@ const ENVIO_DEVOLUCION_CENTRAL_ERROR_MESSAGES: Record<
 > = {
   forbidden: "No tienes permiso para enviar esta orden a la bodega central.",
   not_found: "No se encontró la orden.",
-  conflict: "Alguna orden ya no está en estado “Por devolver”.",
+  conflict: `Alguna orden ya no está en estado “${nombreDeEstado("por_devolver_a_bodega_central")}”.`,
   config_error:
     "Falta configuración del catálogo de estados. Contacta a un administrador.",
   unauthenticated: "Tu sesión expiró. Inicia sesión de nuevo.",

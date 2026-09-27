@@ -1,0 +1,22 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 990014
+Reprogramado · pendiente de confirmación
+En preparación
+2026-07-23 · 05:59
+En bodega central
+2026-07-23 · 07:29
+Mensajero recogiendo en la bodega
+2026-08-13 · 08:44
+En reparto
+2026-08-13 · 08:46
+Entregado
+2026-08-13 · 08:58
+Reprogramado · pendiente de confirmación
+2026-09-24 · 00:54
+Cerrar

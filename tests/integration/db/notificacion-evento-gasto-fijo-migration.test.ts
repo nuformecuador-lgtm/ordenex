@@ -319,6 +319,7 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
       // POSTERIOR a la de la 413 y tambien a las DOS de la 410.
       "traspaso_ordenes_recibido",
       "traspaso_ordenes_cedido",
+      "reprogramadas_esperan_cierre", // ficha 462 (2026-09-25): el cuarto agregado
     ]);
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_PREVIAS,
@@ -345,6 +346,7 @@ describeSiHayBase("333/A8 — la base aplicada, y el DOWN ejercitado de verdad",
       // clave de dedupe -que NO mira el estado de lectura- admitiria UNA sola fila para siempre y
       // el SEGUNDO traspaso del dia a la misma persona no avisaria NUNCA, en silencio.
       "orden_traspaso_lote",
+      "reprogramadas_esperan_cierre_dia", // ficha 462 (2026-09-25): `${ambito}:${diaCR}`, ambito central|zona
     ]);
   });
 

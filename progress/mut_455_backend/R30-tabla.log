@@ -1,0 +1,103 @@
+# MUTACION R30-tabla
+archivo: docs/api/CHANGELOG.md
+linea: 42
+- "| `por_recoger` | `mensajero_recogiendo_en_bodega` | Mensajero recogiendo en la bodega |"
++ "| `por_recoger` | `mensajero_recogiendo_en_bodega` | Por recoger |"
+tests: tests/unit/api/changelog-455.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 3 passed (4)
+FAIL  tests/unit/api/changelog-455.test.ts > 455/R30 — la entrada del CHANGELOG > trae la tabla de los 7 estados y la de los 4 resultados, anterior → vigente → nombre
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/api/changelog-455.test.ts (4 tests | 1 failed) 10ms
+     × trae la tabla de los 7 estados y la de los 4 resultados, anterior → vigente → nombre 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  06:14:17
+   Duration  317ms (transform 44ms, setup 55ms, import 42ms, tests 10ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/api/changelog-455.test.ts > 455/R30 — la entrada del CHANGELOG > trae la tabla de los 7 estados y la de los 4 resultados, anterior → vigente → nombre
+AssertionError: expected [ …(11) ] to deep equally contain [ 'por_recoger', …(2) ]
+
+- Expected
++ Received
+
+  [
++   [
++     "entregada",
++     "entregado",
++     "Entregado",
++   ],
++   [
++     "devuelta",
++     "novedad",
++     "Novedad",
++   ],
++   [
++     "reprogramada",
++     "reprogramado",
++     "Reprogramado",
++   ],
++   [
+      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
+-   "Mensajero recogiendo en la bodega",
++     "Por recoger",
++   ],
++   [
++     "rechazada",
++     "devolucion_a_origen_por_rechazo",
++     "Devolución a origen por rechazo",
++   ],
++   [
++     "sin_gestionar",
++     "novedad_interna",
++     "Novedad interna",
++   ],
++   [
++     "por_devolver",
++     "por_devolver_a_bodega_central",
++     "Por devolver a bodega central",
++   ],
++   [
++     "entregada",
++     "entregado",
++     "Entregado",
++   ],
++   [
++     "reprogramada",
++     "reprogramado",
++     "Reprogramado",
++   ],
++   [
++     "devuelta",
++     "novedad",
++     "Novedad",
++   ],
++   [
++     "rechazada",
++     "devolucion_a_origen_por_rechazo",
++     "Devolución a origen por rechazo",
++   ],
+  ]
+
+ ❯ tests/unit/api/changelog-455.test.ts:38:50
+     36|     const anteriores = Object.entries(CODIGO_VIGENTE_DE_ANTERIOR).map(…
+     37|     // Los 7 estados, en cualquier orden, cada uno con el nombre de la…
+     38|     for (const fila of anteriores) expect(tabla).toContainEqual(fila);
+       |                                                  ^
+     39|     // Y los 4 resultados: los mismos pares, repetidos en la segunda t…
+     40|     expect(tabla).toHaveLength(11);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

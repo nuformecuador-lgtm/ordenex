@@ -38,6 +38,7 @@ import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
 import { HiloNotasAyudaModal } from "./HiloNotasAyudaModal";
 import { ChatFlotante } from "./chat/ChatFlotante";
+import { agruparContactosChat } from "./chat/chat-contactos";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { RecuperarAyudaButton } from "./RecuperarAyudaButton";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
@@ -89,6 +90,23 @@ export interface RepartoModuleProps {
    * vuelve a decidirlo.
    */
   conAyuda: MiAsignacionDTO[];
+  /**
+   * ⭑ FICHA 430 (SF-001, punto 3) — LAS ASIGNADAS Y TODAVÍA SIN RECOGER (`por_recoger`).
+   *
+   * Esta pantalla NO las pinta: sus cards viven en `/mis-asignaciones/recoger` y ahí siguen. Entran
+   * aquí por una sola razón, y es el CHAT: desde esta ficha el mensajero puede escribirle al
+   * cliente de un paquete que aún no lleva encima, así que tienen que estar entre los contactos.
+   *
+   * ⚠️ REQUERIDA, SIN `?`, Y ESO ES EL PUNTO. El typecheck enumera, uno por uno, todos los sitios
+   * que montan este módulo: una pantalla que se olvide de bajarlas NO COMPILA. Con un opcional, el
+   * chat se quedaría corto en silencio —el mensajero no vería ni la conversación ni su distintivo
+   * de sin leer— y nada fallaría, que es la familia de fallos que este repo tiene medida.
+   *
+   * ⛔ Y NO LAS VUELVE TRABAJABLES. No entran en la grilla, ni en el mapa, ni en el panel de
+   * gestión, ni en el buscador de la lista: sólo en `contactosChat`. La puerta de recoger/escoger/
+   * gestionar la sigue guardando el servidor (ficha 261) y esta ficha no la roza.
+   */
+  porRecoger: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
@@ -127,14 +145,9 @@ const AYUDA_SECCION_AYUDA =
 // Feature 235 (R35): rótulo de la acción que abre el hilo desde la card de ayuda. Dice de qué es
 // la pantalla que abre, no qué componente monta.
 const AYUDA_ACCION_HILO = "Conversación";
-// Feature 235 (T8.1) — CHIP DE ESTADO de la card de ayuda. Sigue la gramática de los otros cuatro
-// («En gestión», «En detalle», «En reparto», «Por recoger»: preposición + sustantivo) y comparte la
-// palabra «ayuda» con el encabezado de la sección y con el `EstatusBadge` de la tienda, así que no
-// es un tercer sinónimo. La forma CORTA se descartó en `/ordenes` por ambigua —allí maestro/admin
-// la ven suelta entre veintiún estados y no sabrían a quién se le pidió (R37)—, pero aquí la
-// desambiguación está pegada: el chip vive DENTRO de la sección «Con ayuda solicitada», cuyo texto
-// de ayuda ya dice que la tienda las está viendo en Novedades.
-const AYUDA_CARD_ESTADO = "En ayuda";
+// FICHA 455 (2026-09-24, R7/R8/R6; design §2.1): aquí vivía `AYUDA_CARD_ESTADO = «En ayuda»`, un
+// rótulo que SUSTITUÍA al chip de estado de la card de ayuda. La orden está `en_reparto` y el chip
+// lo dice; la ayuda de la 454 va como NOTA aparte (`NOTA_AYUDA_SOLICITADA`, texto de la 456).
 const SIN_PENDIENTES_TODAS_CON_AYUDA =
   "Todas tus órdenes en reparto tienen ayuda solicitada; están abajo.";
 
@@ -152,6 +165,7 @@ const SIN_PENDIENTES_TODAS_CON_AYUDA =
 export function RepartoModule({
   porGestionar,
   conAyuda,
+  porRecoger,
   ordenEnGestionId,
   ruta,
   bloqueo,
@@ -297,17 +311,25 @@ export function RepartoModule({
   // contiene ninguna orden con ayuda.
   const visualSinAyuda = porGestionarVisual;
 
-  // R30: la ruta no refleja el estado real si la última optimización falló
-  // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
   // Feature 235 (P8, firmada 2026-08-19) — EL CHAT CONSERVA A ESOS CLIENTES. Es una línea, y sin
   // ella el mensajero pierde EN SILENCIO la única entrada al chat que le queda sobre un paquete que
   // sigue llevando encima: al salir del grupo «en reparto», la orden se caía de la lista de
   // contactos. Contrapartida aceptada: la lista de contactos deja de coincidir con la de cards de
   // arriba.
-  const contactosChat = useMemo<MiAsignacionDTO[]>(
-    () => [...porGestionar, ...conAyuda],
-    [porGestionar, conAyuda],
+  //
+  // ⭑ FICHA 430 (SF-001, punto 3) — Y AHORA CONSERVA TAMBIÉN A LOS QUE TODAVÍA NO HA RECOGIDO.
+  // Aquí vivía `[...porGestionar, ...conAyuda]`, y ESA línea era todo lo que impedía escribirle al
+  // cliente de una orden asignada el día antes: nunca fue un permiso —el servidor autoriza el chat
+  // por propiedad de la orden y nada más—, era el efecto de listar sólo lo ya recogido. La
+  // composición se mudó a `agruparContactosChat`, que es pura y la comparten las dos pantallas del
+  // portal; la contrapartida de 2026-08-19 se ensancha y se asume igual.
+  const contactosChat = useMemo(
+    () => agruparContactosChat(porGestionar, conAyuda, porRecoger),
+    [porGestionar, conAyuda, porRecoger],
   );
+
+  // R30: la ruta no refleja el estado real si la última optimización falló
+  // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
 
   const rutaDesactualizada =
     ruta.estado === "desactualizada" || ruta.paradasSinOptimizar > 0;
@@ -566,15 +588,10 @@ export function RepartoModule({
            acción de selección—, no por diseño: cuando la 237 le devuelva las gestiones desde ayuda,
            el bloqueo del mensajero (111/R14) tiene que valer sin que nadie lo redescubra. */
         bloqueado={bloqueado}
-        /* Feature 235 (T8.1) — SIN esta prop el chip decía «En reparto», que es exactamente lo que
-           esta ficha convirtió en falso: `estadoPorDefecto(false, false)` devuelve ese literal. Para
-           los otros tres valores el chip describe la situación de la orden; aquí afirmaba la
-           contraria. El COLOR lo DECLARA `ESTADO_CLASSNAME` con entrada propia (`bg-warning
-           text-navy`, con el porqué de `warning` escrito allí). Coincide con lo que daba el fallback
-           de texto libre, y aun así se declara: el fallback significa «no sé qué es este rótulo», así
-           que heredar de él una decisión de color la vuelve indistinguible de un accidente y la
-           movería en silencio si alguien retoca «En reparto». Lo fija `RepartoAyuda.test.tsx`. */
-        estado={AYUDA_CARD_ESTADO}
+        /* FICHA 455 (R7/R8): el chip dice el estado de la orden («En reparto», que es lo cierto: la
+           ayuda de la 454 es un evento, no un estado) y la ayuda va como NOTA junto al chip. */
+        /* FICHA 456 (T3.6, R12): la nota de ayuda con su botón de información. */
+        notaAyuda
         /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
            como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
            de `paradasSinOptimizar` y del mapa, pero la card seguía luciendo el nº de parada («·»,
@@ -914,10 +931,13 @@ export function RepartoModule({
           Botón flotante fijo abajo a la derecha que abre el chat con los clientes como
           modal. Se muestra en las dos vistas (foco y lista) porque el mensajero puede
           necesitar escribir en cualquier momento.
-          Contactos = SOLO las órdenes EN REPARTO (`porGestionar`, sin filtrar: el chat es
-          una capa aparte del buscador/filtro de la lista); las de "Por recoger" no tienen
-          gestión que conversar — por eso el chat vive aquí y no en su pantalla. La marcada
-          "en gestión" es la que el módulo tiene en DETALLE, y es por donde entra al abrirse.
+          Contactos = TODAS las órdenes asignadas al mensajero, sin filtrar (el chat es una capa
+          aparte del buscador/filtro de la lista). ⭑ FICHA 430: hasta el 2026-09-15 eran sólo las
+          EN REPARTO, y las de "Por recoger" quedaban fuera «porque no tienen gestión que
+          conversar»; el humano decidió lo contrario —coordinar antes de recoger es justo cuando
+          hace falta—, así que el mismo botón se monta también en la pantalla de "Por recoger"
+          (`ChatDelMensajero`) con esta MISMA lista. La marcada "en gestión" es la que el módulo
+          tiene en DETALLE, y es por donde entra al abrirse.
           Hasta el 2026-08-07 esta ruta convivía con `ChatWhatsappPanel` dentro del panel del
           detalle, que leía la misma conversación; ese panel se borró por decisión humana tras
           perder su montaje en `6dc18dc2`, así que este botón es hoy la ÚNICA entrada al chat:
@@ -935,7 +955,7 @@ export function RepartoModule({
       ) : null}
 
       <ChatFlotante
-        ordenes={contactosChat}
+        contactos={contactosChat}
         ordenEnDetalleId={detalleOrden?.id ?? null}
         abierto={chatAbierto}
         onAbiertoChange={setChatAbierto}

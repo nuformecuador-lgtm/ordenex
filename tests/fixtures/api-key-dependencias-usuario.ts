@@ -74,6 +74,12 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
     categoria: "bloquea",
     motivo: `Solo hay habilitacion si hubo orden que habilitar: ${VIA_ORDEN}`,
   },
+  // FICHA 454 (2026-09-23): el actor de un hecho de orden. La cuenta de una key solo aparece aqui
+  // como actor de `ayuda_habilitada_api`, que exige una orden propia con ayuda abierta.
+  "OrdenEvento.actor": {
+    categoria: "bloquea",
+    motivo: `Solo hay hecho si hubo orden sobre la que actuar (habilitacion por API): ${VIA_ORDEN}`,
+  },
   "OrdenHistorialEstado.actor": {
     categoria: "bloquea",
     motivo:
@@ -162,6 +168,7 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   },
   "OrdenTraspasoMensajero.mensajeroNuevo": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "OrdenTraspasoMensajero.actor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "OrdenEvento.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO }, // ficha 454
   "GestionOrden.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "GestionOrden.anuladaPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GestionOrden.pagosEditadosPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
@@ -177,6 +184,12 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
     motivo: `Lo solicita un mensajero o un adminSatelite: ${SOLO_OPERADOR}`,
   },
   "CierreBodega.resueltoPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 431 — quien MARCO la consolidacion como recibida. Misma categoria y mismo motivo que su
+  // hermana `resueltoPorUsuario`, y por la misma razon: marcar exige `esAccesoTotal` (maestro o
+  // admin), y una cuenta de API key nunca tiene ese rol, asi que su `usuario` NO puede aparecer en
+  // esta columna. La FK es `Restrict` a proposito —quien afirmo que el dinero llego no se borra
+  // dejando la afirmacion huerfana—, pero esa restriccion no alcanza al borrado de una API key.
+  "CierreBodega.conciliadoPorUsuario": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "WalletMovimiento.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "WalletTiendaMovimiento.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "PagoMensajeroMovimiento.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
@@ -186,6 +199,39 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
   "LiquidacionAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "LiquidacionReparto.mensajero": { categoria: "no_alcanzable", motivo: SOLO_MENSAJERO },
   "LiquidacionReparto.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 459 — el pago por cuenta de una tienda y el saldo inicial o aporte. La tienda de un
+  // pago por cuenta la valida `PagoPorCuentaTiendaService` (R36): rol `adminTienda` y activa, asi
+  // que la cuenta dedicada de una key (rol `apiKey`) no puede serlo. Las FK son `Restrict`.
+  "PagoPorCuentaTienda.tienda": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R36 de la 459: el servicio exige que la tienda sea `adminTienda` y este activa; una cuenta " +
+      "dedicada de API key tiene rol `apiKey` y nunca pasa esa validacion.",
+  },
+  "PagoPorCuentaTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "PagoPorCuentaTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // Ficha 461 (R10): quien anulo un cobro de Ordenex a una tienda. Solo el acceso total anula; la
+  // cuenta dedicada de una API key no llega a esa accion.
+  "CobroTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // Ficha 461 (R69): quien anulo una correccion de caja. Solo el acceso total anula.
+  "AjusteCajaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AporteCapital.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AporteCapitalAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 457 — el pago de una tienda a Ordenex. La tienda la valida `AbonoTiendaService` (R10):
+  // rol `adminTienda` (activa o no, D2), asi que la cuenta dedicada de una key (rol `apiKey`) no
+  // puede serlo. Registrar y anular son solo de acceso total. Las tres FK son `Restrict`.
+  "AbonoTienda.tienda": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R10 de la 457: el servicio exige que la cuenta sea `adminTienda`; una cuenta dedicada de API " +
+      "key tiene rol `apiKey` y nunca pasa esa validacion.",
+  },
+  "AbonoTienda.registrador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "AbonoTiendaAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  // ⭑ FICHA 458-B — quien anulo un cobro por rechazo y quien subio un comprobante de la wallet. Las
+  // dos acciones son solo de acceso total (R82); las dos FK son `Restrict`.
+  "RechazoTiendaCobroAnulacion.anulador": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
+  "WalletComprobante.subidor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "GastoFijoCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "RechazoTiendaCobro.decisor": { categoria: "no_alcanzable", motivo: SOLO_OPERADOR },
   "ApiKey.createdBy": {
@@ -242,6 +288,20 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
       "`olvidarPreferenciaDeAvisos`, las dos detras del interruptor de avisos. El backfill de su " +
       "migracion copia de `push_suscripcion`, que es inalcanzable por lo mismo, asi que tampoco " +
       `puede crearla. ${SOLO_OPERADOR}`,
+  },
+  // ── FICHA 436 (2026-09-17): el contador del asistente de ayuda ────────────────────────────────
+  // CASCADE, mismo criterio que sus tres vecinas de arriba: un CONTADOR no es evidencia. Y es
+  // INALCANZABLE, pero por un motivo MAS FUERTE que el de aquellas: aqui no es que el camino sea
+  // improbable, es que hay un rechazo EXPLICITO por rol, medido y con test propio.
+  "AsistenteUsoDiario.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R13 de la ficha 436: `AsistenteService.responder` rechaza con `rol_no_admitido` TODO rol " +
+      "que no este en `ROLES_AYUDA` —y `apiKey` no esta— ANTES de tocar el contador, asi que una " +
+      "cuenta dedicada no puede abrir ni una fila de esta tabla. El test " +
+      "`tests/unit/asistente/tope-diario.test.ts` lo afirma midiendo las DOS mitades: el desenlace " +
+      "y que el repositorio del contador no se llamo ni una vez. Ademas el asistente vive detras " +
+      `del guard de SESION: sin cookie, /api/asistente responde 401 con JSON. ${SOLO_OPERADOR}`,
   },
   // ── FICHA 453 (2026-09-21): las vistas de filtros guardadas ───────────────────────────────────
   // CASCADE, mismo criterio que sus cuatro vecinas de arriba: una vista es un ATAJO DE TRABAJO de

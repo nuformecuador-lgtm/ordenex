@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -37,9 +38,10 @@ function formatMonto(monto: number | null): string {
 
 export interface SateliteOrderCardProps {
   orden: RecepcionSateliteDTO;
-  /** Estado legible de la orden ("en bodega satélite de <zona>", …), R9. */
-  estadoLegible: string;
 }
+// FICHA 456 (T3.5, R9): se retira la prop `estadoLegible` (el texto ya resuelto del estado). La card
+// pinta el estado desde `orden.estatusValue` con `EstadoConInfo`, que calcula el nombre y le pone
+// su botón de información: nadie le pasa el texto.
 
 // Feature 279 (T3.5, R5): la card TENÍA una prop `acciones?: ReactNode` documentada como
 // «Acción propia del grupo ("Aceptar", "Recuperar"…)» que pintaba un pie al final. Se
@@ -50,7 +52,6 @@ export interface SateliteOrderCardProps {
 
 export function SateliteOrderCard({
   orden,
-  estadoLegible,
 }: Readonly<SateliteOrderCardProps>) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
@@ -67,9 +68,11 @@ export function SateliteOrderCard({
             {orden.numGuia === null ? "Sin guía" : `Guía ${orden.numGuia}`}
           </p>
         </div>
-        <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-          {estadoLegible}
-        </span>
+        <EstadoConInfo
+          codigo={orden.estatusValue}
+          className="shrink-0"
+          chipClassName="rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"
+        />
       </header>
 
       <div className="flex items-center gap-2">
@@ -125,7 +128,7 @@ export function SateliteOrderCard({
         </CollapsibleTrigger>
         <CollapsibleContent keepMounted className="collapsible-panel">
           <div className="mt-2 border-t border-border pt-2">
-            <RecepcionDetalle orden={orden} estadoLegible={estadoLegible} />
+            <RecepcionDetalle orden={orden} />
           </div>
         </CollapsibleContent>
       </Collapsible>

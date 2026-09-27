@@ -11,7 +11,14 @@ import type {
 import type {
   DevolucionesRepresadasContexto,
   NovedadesSinGestionarContexto,
+  ReprogramadasEsperanCierreContexto,
 } from "@/lib/notificaciones/emitir";
+import type {
+  AmbitoRetenidas,
+  CierreQueRetiene,
+  MensajeroSinCierre,
+  ResumenRetenidas,
+} from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 
 // FICHA 409 (T4.2) — EL PROCESO DIARIO, con repositorio y notificadores dobles. Cubre R43 (tienda
 // sin novedades no recibe), R48 (la zona lleva SU numero), R49 (la administracion central lleva el
@@ -64,6 +71,52 @@ function repoDoble(opts: RepoOpts = {}): IAvisoAgregadoRepository & { llamadas: 
 /** Historial doble: sin intentos, para que la homogeneidad la decidan las causas. */
 const historialSinIntentos = { contarIntentosEnLote: async () => new Map<string, number>() };
 
+/**
+ * FICHA 462 (T2.7): el conteo de retenidas es una dependencia REQUERIDA del servicio. Este doble
+ * devuelve un resumen VACIO (nada retenido) para que los casos de la 409 sigan midiendo lo que
+ * median sin emitir el tercer agregado.
+ */
+const sinRetenidas = {
+  resumen: async (): Promise<ResumenRetenidas> => ({
+    diaCR: DIA_CR,
+    total: 0,
+    porForma: { reprogramado: 0, enReparto: 0 },
+    cierres: [],
+    sinCierre: [],
+  }),
+};
+
+/** Un resumen de retenidas con lo que el caso pida (cierres y grupos «sin cierre»). */
+function retenidasDe(partes: {
+  cierres?: Array<{ ambito: AmbitoRetenidas; cuantas: number }>;
+  sinCierre?: Array<{ ambito: AmbitoRetenidas; cuantas: number }>;
+}) {
+  const cierres: CierreQueRetiene[] = (partes.cierres ?? []).map((c, i) => ({
+    cierreId: `c-${i}`,
+    mensajeroId: `m-${i}`,
+    mensajeroNombre: `Mensajero ${i}`,
+    estado: "solicitado",
+    jornadaCR: "2026-09-10",
+    ambito: c.ambito,
+    cuantas: c.cuantas,
+  }));
+  const sinCierre: MensajeroSinCierre[] = (partes.sinCierre ?? []).map((m, i) => ({
+    mensajeroId: `ms-${i}`,
+    mensajeroNombre: `Sin cierre ${i}`,
+    ambito: m.ambito,
+    cuantas: m.cuantas,
+  }));
+  const total = [...cierres, ...sinCierre].reduce((acc, x) => acc + x.cuantas, 0);
+  const llamadas: Date[] = [];
+  return {
+    llamadas,
+    resumen: async (hoyCR: Date): Promise<ResumenRetenidas> => {
+      llamadas.push(hoyCR);
+      return { diaCR: DIA_CR, total, porForma: { reprogramado: total, enReparto: 0 }, cierres, sinCierre };
+    },
+  };
+}
+
 const loggerDoble = () => ({ logError: vi.fn() });
 
 function novedadesDe(tiendaId: string, dias: number, causas: Array<string | null>) {
@@ -81,7 +134,7 @@ function novedadesDe(tiendaId: string, dias: number, causas: Array<string | null
 describe("R43 — la tienda sin novedades NO recibe aviso", () => {
   it("no se llama al notificador cuando el resumen viene vacio", async () => {
     const notificar = vi.fn();
-    const service = new AvisosDiariosService(repoDoble(), historialSinIntentos, 3, notificar);
+    const service = new AvisosDiariosService(repoDoble(), historialSinIntentos, sinRetenidas, 3, notificar);
 
     const r = await service.ejecutar(AHORA);
 
@@ -100,6 +153,7 @@ describe("R43 — la tienda sin novedades NO recibe aviso", () => {
         ],
       }),
       historialSinIntentos,
+      sinRetenidas,
       3,
       notificar,
     );
@@ -128,9 +182,11 @@ describe("R60 — una emision que falla no se lleva por delante a las demas", ()
         ],
       }),
       historialSinIntentos,
+      sinRetenidas,
       3,
       notificar,
       undefined,
+      undefined, // FICHA 462: el notificador de retenidas va antes del logger
       logger,
     );
 
@@ -159,6 +215,7 @@ describe("R48/R49/R52 — cada ambito con SU numero y SU antiguedad", () => {
         ],
       }),
       historialSinIntentos,
+      sinRetenidas,
       3,
       undefined,
       notificar,
@@ -194,6 +251,7 @@ describe("R48/R49/R52 — cada ambito con SU numero y SU antiguedad", () => {
         ],
       }),
       historialSinIntentos,
+      sinRetenidas,
       3,
       undefined,
       notificar,
@@ -213,6 +271,7 @@ describe("R48/R49/R52 — cada ambito con SU numero y SU antiguedad", () => {
     const service = new AvisosDiariosService(
       repoDoble(),
       historialSinIntentos,
+      sinRetenidas,
       3,
       undefined,
       notificar,
@@ -228,7 +287,7 @@ describe("R48/R49/R52 — cada ambito con SU numero y SU antiguedad", () => {
 describe("R53 — el umbral entra INYECTADO y no vive dentro del servicio", () => {
   it("con umbral 3, la cota que se pide al repositorio son 3 dias antes de ahora", async () => {
     const repo = repoDoble();
-    await new AvisosDiariosService(repo, historialSinIntentos, 3).ejecutar(AHORA);
+    await new AvisosDiariosService(repo, historialSinIntentos, sinRetenidas, 3).ejecutar(AHORA);
 
     expect(repo.llamadas.length).toBeGreaterThan(0); // autocomprobacion
     for (const cota of repo.llamadas) {
@@ -238,7 +297,7 @@ describe("R53 — el umbral entra INYECTADO y no vive dentro del servicio", () =
 
   it("con umbral 7 la cota se mueve: el numero NO esta escrito en el servicio", async () => {
     const repo = repoDoble();
-    await new AvisosDiariosService(repo, historialSinIntentos, 7).ejecutar(AHORA);
+    await new AvisosDiariosService(repo, historialSinIntentos, sinRetenidas, 7).ejecutar(AHORA);
 
     for (const cota of repo.llamadas) {
       expect(cota.toISOString()).toBe(hace(7).toISOString());
@@ -268,6 +327,7 @@ describe("R39/R40 — la homogeneidad del plazo la decide el servicio", () => {
     const service = new AvisosDiariosService(
       repoDoble({ novedades: [novedadesDe("t-1", 3, causas)] }),
       historial,
+      sinRetenidas,
       3,
       notificar,
     );
@@ -315,6 +375,7 @@ describe("R39/R40 — la homogeneidad del plazo la decide el servicio", () => {
         ],
       }),
       { contarIntentosEnLote },
+      sinRetenidas,
       3,
     );
 
@@ -322,6 +383,167 @@ describe("R39/R40 — la homogeneidad del plazo la decide el servicio", () => {
 
     expect(contarIntentosEnLote).toHaveBeenCalledTimes(1);
     expect(contarIntentosEnLote.mock.calls[0][0]).toEqual(["t-1-orden-0", "t-2-orden-0"]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// FICHA 462 (T2.7) — EL TERCER AGREGADO: reprogramadas de hoy que esperan la aprobacion de un cierre.
+// ---------------------------------------------------------------------------------------------
+
+const ZONA_C = "cccccccc-3333-4333-8333-cccccccccccc";
+const CENTRAL: AmbitoRetenidas = { tipo: "central" };
+const zona = (zonaId: string): AmbitoRetenidas => ({ tipo: "zona", zonaId });
+
+describe("462/R9/R12 — UN aviso por AMBITO con retenidas, con el ambito y el dia, y nada mas", () => {
+  it("⭑ el central y dos zonas: TRES avisos, cada uno con SU ambito; cierres y «sin cierre» del mismo ambito se SUMAN", async () => {
+    const notificar = vi.fn();
+    const retenidas = retenidasDe({
+      cierres: [
+        { ambito: CENTRAL, cuantas: 2 },
+        { ambito: CENTRAL, cuantas: 1 },
+        { ambito: zona(ZONA_A), cuantas: 1 },
+      ],
+      sinCierre: [
+        { ambito: CENTRAL, cuantas: 1 },
+        { ambito: zona(ZONA_B), cuantas: 2 },
+      ],
+    });
+    const service = new AvisosDiariosService(
+      repoDoble(),
+      historialSinIntentos,
+      retenidas,
+      3,
+      undefined,
+      undefined,
+      notificar,
+    );
+
+    const r = await service.ejecutar(AHORA);
+
+    const ctxs = notificar.mock.calls.map((c) => c[0] as ReprogramadasEsperanCierreContexto);
+    expect(ctxs.map((c) => c.ambito)).toEqual([CENTRAL, zona(ZONA_A), zona(ZONA_B)]);
+    // El contexto es SOLO ambito y dia: el numero lo compone el catalogo con la cifra viva (R13).
+    for (const c of ctxs) {
+      expect(Object.keys(c).sort()).toEqual(["ambito", "diaCR"]);
+      expect(c.diaCR).toBe(DIA_CR);
+    }
+    expect(r.reprogramadasRetenidas).toBe(7);
+    expect(r.ambitosConRetenidas).toBe(3);
+    expect(r.avisosRetenidasEmitidos).toBe(3);
+    expect(r.fallos).toBe(0);
+  });
+
+  it("R10: sin retenidas en ningun ambito NO se emite nada, y los tres conteos son 0", async () => {
+    const notificar = vi.fn();
+    const service = new AvisosDiariosService(
+      repoDoble(),
+      historialSinIntentos,
+      sinRetenidas,
+      3,
+      undefined,
+      undefined,
+      notificar,
+    );
+
+    const r = await service.ejecutar(AHORA);
+
+    expect(notificar).not.toHaveBeenCalled();
+    expect(r.reprogramadasRetenidas).toBe(0);
+    expect(r.ambitosConRetenidas).toBe(0);
+    expect(r.avisosRetenidasEmitidos).toBe(0);
+  });
+
+  it("R10: un ambito con retenidas y OTRO sin ellas: solo el primero recibe", async () => {
+    const notificar = vi.fn();
+    const service = new AvisosDiariosService(
+      repoDoble(),
+      historialSinIntentos,
+      retenidasDe({ cierres: [{ ambito: zona(ZONA_C), cuantas: 1 }] }),
+      3,
+      undefined,
+      undefined,
+      notificar,
+    );
+
+    const r = await service.ejecutar(AHORA);
+
+    expect(notificar).toHaveBeenCalledTimes(1);
+    expect((notificar.mock.calls[0][0] as ReprogramadasEsperanCierreContexto).ambito).toEqual(zona(ZONA_C));
+    expect(r.ambitosConRetenidas).toBe(1);
+  });
+
+  it("⭑ el conteo se pide con `startOfDayCR(now)` (convencion @db.Date), UNA sola vez por corrida", async () => {
+    const retenidas = retenidasDe({ cierres: [{ ambito: CENTRAL, cuantas: 1 }] });
+    const service = new AvisosDiariosService(repoDoble(), historialSinIntentos, retenidas, 3);
+
+    await service.ejecutar(AHORA); // 07:00 CR del 11 = 13:00Z
+
+    expect(retenidas.llamadas).toHaveLength(1);
+    // Medianoche UTC de la fecha CR: NO 06:00Z (eso seria `inicioDelDiaCREnUtc`, seis horas de mas).
+    expect(retenidas.llamadas[0].toISOString()).toBe("2026-09-11T00:00:00.000Z");
+  });
+});
+
+describe("462/R18 — best-effort por ambito: una zona que falla no deja sin aviso a las demas ni tumba la corrida", () => {
+  it("tres ambitos, el segundo lanza: 2 emisiones, 1 fallo registrado, los otros dos agregados intactos", async () => {
+    const logger = loggerDoble();
+    const notificarRetenidas = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("la base no responde"))
+      .mockResolvedValueOnce(undefined);
+    const notificarRepresadas = vi.fn(async () => undefined);
+    const service = new AvisosDiariosService(
+      repoDoble({ global: { total: 2, masAntiguaAt: hace(5) } }),
+      historialSinIntentos,
+      retenidasDe({
+        cierres: [
+          { ambito: CENTRAL, cuantas: 1 },
+          { ambito: zona(ZONA_A), cuantas: 1 },
+          { ambito: zona(ZONA_B), cuantas: 1 },
+        ],
+      }),
+      3,
+      undefined,
+      notificarRepresadas,
+      notificarRetenidas,
+      logger,
+    );
+
+    const r = await service.ejecutar(AHORA);
+
+    expect(notificarRetenidas).toHaveBeenCalledTimes(3);
+    expect(r.ambitosConRetenidas).toBe(3);
+    expect(r.avisosRetenidasEmitidos).toBe(2);
+    expect(r.fallos).toBe(1);
+    expect(logger.logError).toHaveBeenCalledTimes(1);
+    expect((logger.logError.mock.calls[0][0] as Error).message).toContain("reprogramadas_esperan_cierre");
+    // R50: el agregado de represadas se emitio igual, con su cifra de siempre.
+    expect(notificarRepresadas).toHaveBeenCalledTimes(1);
+    expect(r.ordenesRepresadas).toBe(2);
+    expect(r.avisosRepresadasEmitidos).toBe(1);
+  });
+
+  it("si el propio conteo de retenidas revienta, la corrida NO termina en error: los otros dos agregados salen", async () => {
+    // El conteo va dentro de la misma envoltura best-effort que las emisiones? NO: `resumen` corre
+    // ANTES del bucle. Por eso aqui se afirma la propiedad que de verdad importa —los otros dos
+    // agregados ya se emitieron— y que el fallo se propaga con su causa, en vez de esconderse como
+    // «cero retenidas» (que apagaria el aviso en silencio).
+    const notificarNovedades = vi.fn();
+    const service = new AvisosDiariosService(
+      repoDoble({ novedades: [novedadesDe("t-1", 2, ["wrong_address"])] }),
+      historialSinIntentos,
+      {
+        resumen: async () => {
+          throw new Error("conteo caido");
+        },
+      },
+      3,
+      notificarNovedades,
+    );
+
+    await expect(service.ejecutar(AHORA)).rejects.toThrow(/conteo caido/);
+    expect(notificarNovedades).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -333,6 +555,7 @@ describe("el dia CR sale de la hora de pared de Costa Rica, no de UTC", () => {
     const service = new AvisosDiariosService(
       repoDoble({ novedades: [novedadesDe("t-1", 2, ["wrong_address"])] }),
       historialSinIntentos,
+      sinRetenidas,
       3,
       notificar,
     );

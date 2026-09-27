@@ -129,7 +129,7 @@ function makeGestion(
 }
 
 function emptyGrupos(): CierreGrupos {
-  return { entregada: [], reprogramada: [], devuelta: [], rechazada: [], incidente: [] };
+  return { entregado: [], reprogramado: [], novedad: [], devolucion_a_origen_por_rechazo: [], incidente: [] };
 }
 
 const ZERO_TOTALES: CierreTotales = {
@@ -188,34 +188,34 @@ afterEach(() => {
 describe("CierreDiaModule", () => {
   it("R3: agrupa las gestiones en las 4 secciones por resultado", () => {
     const grupos: CierreGrupos = {
-      entregada: [makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-ENT" })],
-      reprogramada: [makeGestion({ gestionId: "g2", resultado: "reprogramada", numRemision: "REM-REP" })],
-      devuelta: [makeGestion({ gestionId: "g3", resultado: "devuelta", numRemision: "REM-DEV" })],
-      rechazada: [makeGestion({ gestionId: "g4", resultado: "rechazada", numRemision: "REM-REC" })],
+      entregado: [makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-ENT" })],
+      reprogramado: [makeGestion({ gestionId: "g2", resultado: "reprogramado", numRemision: "REM-REP" })],
+      novedad: [makeGestion({ gestionId: "g3", resultado: "novedad", numRemision: "REM-DEV" })],
+      devolucion_a_origen_por_rechazo: [makeGestion({ gestionId: "g4", resultado: "devolucion_a_origen_por_rechazo", numRemision: "REM-REC" })],
       incidente: [], // feature 158/R18: la 5.a seccion la puebla la fase 2 (T2.2)
     };
     renderModule({ grupos });
 
     expect(
-      within(screen.getByRole("region", { name: "Entregadas" })).getByText("REM-ENT"),
+      within(screen.getByRole("region", { name: "Entregado" })).getByText("REM-ENT"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Reprogramadas" })).getByText("REM-REP"),
+      within(screen.getByRole("region", { name: "Reprogramado" })).getByText("REM-REP"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Devueltas" })).getByText("REM-DEV"),
+      within(screen.getByRole("region", { name: "Novedad" })).getByText("REM-DEV"),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("region", { name: "Rechazadas" })).getByText("REM-REC"),
+      within(screen.getByRole("region", { name: "Devolución a origen por rechazo" })).getByText("REM-REC"),
     ).toBeInTheDocument();
   });
 
   it("R4: muestra el detalle completo de la orden gestionada", () => {
     const grupos = emptyGrupos();
-    grupos.devuelta = [
+    grupos.novedad = [
       makeGestion({
         gestionId: "g1",
-        resultado: "devuelta",
+        resultado: "novedad",
         numGuia: 2002,
         numRemision: "REM-DETALLE",
         destinatario: "Beto Ruiz",
@@ -231,7 +231,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: "Novedad" });
     expect(within(region).getByText("2002")).toBeInTheDocument();
     expect(within(region).getByText("Beto Ruiz")).toBeInTheDocument();
     expect(within(region).getByText("Av. Central 100")).toBeInTheDocument();
@@ -245,10 +245,10 @@ describe("CierreDiaModule", () => {
 
   it("R6: una entrega expone su monto (string, money-safe) y su método de pago", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "SINPE",
@@ -259,7 +259,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(within(region).getByText("₡1.250,50")).toBeInTheDocument();
     expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
@@ -267,10 +267,10 @@ describe("CierreDiaModule", () => {
   it("R5: la evidencia se muestra vía URL firmada en el visor (nunca el path crudo)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         motivo: "Dirección inexistente",
         evidenciaUrl: "https://signed.example/evidencia.jpg?token=abc",
@@ -317,10 +317,10 @@ describe("CierreDiaModule", () => {
 
   it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "1250.50",
         metodoPago: "efectivo",
@@ -330,7 +330,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(within(region).getByText("₡1.500")).toBeInTheDocument();
   });
 
@@ -343,10 +343,10 @@ describe("CierreDiaModule", () => {
 
   it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g1",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numRemision: "REM-REC",
         motivo: "Cliente rechazó",
         ingresoBodegaRechazo: "3500.00",
@@ -354,7 +354,7 @@ describe("CierreDiaModule", () => {
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Rechazadas" });
+    const region = screen.getByRole("region", { name: "Devolución a origen por rechazo" });
     expect(within(region).queryByText("Ingreso bodega")).not.toBeInTheDocument();
     expect(within(region).queryByText("₡3.500")).not.toBeInTheDocument();
   });
@@ -370,21 +370,21 @@ describe("CierreDiaModule", () => {
   it("R10/R11: sin poder solicitar, el botón está deshabilitado y se muestra el motivo", () => {
     renderModule({
       puedesSolicitar: false,
-      motivoBloqueo: "Tenés órdenes sin gestionar; gestionalas antes de cerrar.",
+      motivoBloqueo: "Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar.",
     });
 
     expect(
       screen.getByRole("button", { name: "Solicitar cierre" }),
     ).toBeDisabled();
     expect(
-      screen.getByText("Tenés órdenes sin gestionar; gestionalas antes de cerrar."),
+      screen.getByText("Tenés paquetes en reparto que todavía no gestionaste; gestionalos antes de cerrar."),
     ).toBeInTheDocument();
   });
 
   it("solicitar cierre OK: confirma, muestra toast de éxito y refresca", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [makeGestion({ gestionId: "g1", resultado: "entregada" })];
+    grupos.entregado = [makeGestion({ gestionId: "g1", resultado: "entregado" })];
     renderModule({ grupos, puedesSolicitar: true });
 
     await user.click(screen.getByRole("button", { name: "Solicitar cierre" }));
@@ -407,7 +407,7 @@ describe("CierreDiaModule", () => {
       motivo: "Ya tienes un cierre solicitado.",
     });
     const grupos = emptyGrupos();
-    grupos.entregada = [makeGestion({ gestionId: "g1", resultado: "entregada" })];
+    grupos.entregado = [makeGestion({ gestionId: "g1", resultado: "entregado" })];
     renderModule({ grupos, puedesSolicitar: true });
 
     await user.click(screen.getByRole("button", { name: "Solicitar cierre" }));
@@ -510,10 +510,10 @@ describe("CierreDiaModule", () => {
       cierre: CIERRE_PASADO,
       grupos: {
         ...emptyGrupos(),
-        entregada: [
+        entregado: [
           makeGestion({
             gestionId: "g1",
-            resultado: "entregada",
+            resultado: "entregado",
             destinatario: "Ana Pérez",
             montoRecibido: "300.00",
             metodoPago: "efectivo",
@@ -1059,10 +1059,10 @@ describe("CierreDiaModule", () => {
 // `conflict` + motivo accionable, que la vista muestra tal cual (R38).
 
 const REGIONES: Array<{ resultado: CierreResultado; region: string }> = [
-  { resultado: "entregada", region: "Entregadas" },
-  { resultado: "reprogramada", region: "Reprogramadas" },
-  { resultado: "devuelta", region: "Devueltas" },
-  { resultado: "rechazada", region: "Rechazadas" },
+  { resultado: "entregado", region: "Entregado" },
+  { resultado: "reprogramado", region: "Reprogramado" },
+  { resultado: "novedad", region: "Novedad" },
+  { resultado: "devolucion_a_origen_por_rechazo", region: "Devolución a origen por rechazo" },
 ];
 
 /** Abre el modal de confirmación desde la fila indicada y devuelve el diálogo. */
@@ -1099,13 +1099,13 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
 
   it("R35: hay UN botón por fila y su nombre accesible identifica SU orden", () => {
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     expect(
       within(region).getAllByRole("button", { name: /^Devolver a gestión la orden/ }),
     ).toHaveLength(2);
@@ -1128,12 +1128,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: pulsar la acción NO ejecuta el deshacer: pide confirmación explícita", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.devuelta = [
-      makeGestion({ gestionId: "g1", resultado: "devuelta", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.novedad = [
+      makeGestion({ gestionId: "g1", resultado: "novedad", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Novedad", "Devolver a gestión la orden REM-A · Ana Pérez");
 
     expect(dialog).toBeInTheDocument();
     expect(deshacerMock).not.toHaveBeenCalled();
@@ -1142,12 +1142,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: cancelar la confirmación NO invoca la action ni refresca", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
     expect(deshacerMock).not.toHaveBeenCalled();
@@ -1157,12 +1157,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R36: la confirmación nombra la orden y advierte que la gestión queda anulada con rastro", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
 
     expect(dialog).toHaveTextContent(/Orden REM-A · Ana Pérez/);
     expect(dialog).toHaveTextContent(/quedará anulada/i);
@@ -1172,15 +1172,15 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R37: al confirmar invoca la action con el gestionId de ESA fila (objeto, no string)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.reprogramada = [
-      makeGestion({ gestionId: "g-abc", resultado: "reprogramada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g-xyz", resultado: "reprogramada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.reprogramado = [
+      makeGestion({ gestionId: "g-abc", resultado: "reprogramado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g-xyz", resultado: "reprogramado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
     const dialog = await abrirDeshacer(
       user,
-      "Reprogramadas",
+      "Reprogramado",
       "Devolver a gestión la orden REM-2 · Beto Ruiz",
     );
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
@@ -1192,12 +1192,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
   it("R37: éxito → toast de éxito y refresh (la vista relee el estado del servidor)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() => expect(successMock).toHaveBeenCalled());
@@ -1214,10 +1214,10 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       motivo: "Esta orden ya fue procesada por la bodega; ya no se puede deshacer.",
     });
     const grupos = emptyGrupos();
-    grupos.devuelta = [
+    grupos.novedad = [
       makeGestion({
         gestionId: "g1",
-        resultado: "devuelta",
+        resultado: "novedad",
         numRemision: "REM-A",
         destinatario: "Ana Pérez",
         pagoMensajero: "1500.00",
@@ -1231,7 +1231,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     };
     renderModule({ grupos, totales, totalPagoMensajero: "1500.00" });
 
-    const dialog = await abrirDeshacer(user, "Devueltas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Novedad", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() =>
@@ -1242,7 +1242,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     expect(successMock).not.toHaveBeenCalled();
     expect(refreshMock).not.toHaveBeenCalled();
     // La fila sigue en su tabla y los totales no se movieron (R38).
-    const region = screen.getByRole("region", { name: "Devueltas" });
+    const region = screen.getByRole("region", { name: "Novedad" });
     expect(within(region).getByText("REM-A")).toBeInTheDocument();
     expect(
       within(region).getByRole("button", { name: "Devolver a gestión la orden REM-A · Ana Pérez" }),
@@ -1258,12 +1258,12 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     const user = userEvent.setup();
     deshacerMock.mockResolvedValue({ status: "forbidden" });
     const grupos = emptyGrupos();
-    grupos.rechazada = [
-      makeGestion({ gestionId: "g1", resultado: "rechazada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.devolucion_a_origen_por_rechazo = [
+      makeGestion({ gestionId: "g1", resultado: "devolucion_a_origen_por_rechazo", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Rechazadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Devolución a origen por rechazo", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
 
     await vi.waitFor(() =>
@@ -1271,15 +1271,15 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     );
     expect(refreshMock).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("region", { name: "Rechazadas" })).getByText("REM-A"),
+      within(screen.getByRole("region", { name: "Devolución a origen por rechazo" })).getByText("REM-A"),
     ).toBeInTheDocument();
   });
 
   it("R38: validation_error → muestra el primer fieldError; unauthenticated → mensaje genérico", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-A", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-A", destinatario: "Ana Pérez" }),
     ];
 
     deshacerMock.mockResolvedValue({
@@ -1287,7 +1287,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
     });
     renderModule({ grupos });
-    let dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    let dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith("catalogo de estados incompleto (seed pendiente)"),
@@ -1297,7 +1297,7 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     vi.clearAllMocks();
     deshacerMock.mockResolvedValue({ status: "unauthenticated" });
     renderModule({ grupos });
-    dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-A · Ana Pérez");
+    dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-A · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() =>
       expect(errorMock).toHaveBeenCalledWith("No se pudo deshacer la gestión. Intentá de nuevo."),
@@ -1313,18 +1313,18 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     // gestión ya fue deshecha" (R3): el estado `deshaciendo` lo cierra.
     const user = userEvent.setup();
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
-      makeGestion({ gestionId: "g2", resultado: "entregada", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+      makeGestion({ gestionId: "g2", resultado: "entregado", numRemision: "REM-2", destinatario: "Beto Ruiz" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-1 · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
     // El refresh aún no repuso las props (el test las mantiene): la fila sigue visible.
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     await vi.waitFor(() =>
       expect(
         within(region).getByRole("button", { name: "Devolver a gestión la orden REM-1 · Ana Pérez" }),
@@ -1340,18 +1340,18 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
     const user = userEvent.setup();
     deshacerMock.mockResolvedValue({ status: "conflict", motivo: "Esta gestión ya fue deshecha." });
     const grupos = emptyGrupos();
-    grupos.entregada = [
-      makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-1", destinatario: "Ana Pérez" }),
+    grupos.entregado = [
+      makeGestion({ gestionId: "g1", resultado: "entregado", numRemision: "REM-1", destinatario: "Ana Pérez" }),
     ];
     renderModule({ grupos });
 
-    const dialog = await abrirDeshacer(user, "Entregadas", "Devolver a gestión la orden REM-1 · Ana Pérez");
+    const dialog = await abrirDeshacer(user, "Entregado", "Devolver a gestión la orden REM-1 · Ana Pérez");
     await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
 
     await vi.waitFor(() =>
       expect(
-        within(screen.getByRole("region", { name: "Entregadas" })).getByRole("button", {
+        within(screen.getByRole("region", { name: "Entregado" })).getByRole("button", {
           name: "Devolver a gestión la orden REM-1 · Ana Pérez",
         }),
       ).toBeEnabled(),
@@ -1372,7 +1372,7 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
    * otra celda de la misma fila.
    */
   function celdaMetodo(): string {
-    const region = screen.getByRole("region", { name: "Entregadas" });
+    const region = screen.getByRole("region", { name: "Entregado" });
     const tabla = within(region).getByRole("table");
     const encabezados = within(tabla)
       .getAllByRole("columnheader")
@@ -1385,10 +1385,10 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
 
   function renderEntrega(over: Partial<CierreDetalleGestion>) {
     const grupos = emptyGrupos();
-    grupos.entregada = [
+    grupos.entregado = [
       makeGestion({
         gestionId: "g1",
-        resultado: "entregada",
+        resultado: "entregado",
         numRemision: "REM-ENT",
         montoRecibido: "8000.00",
         ...over,
@@ -1476,17 +1476,17 @@ describe("Cierre del día — 237/R41: la gestión que registró la tienda va ma
   /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
   function renderConLasDos() {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g-tienda",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 5555,
         numRemision: "REM-TIENDA",
         desdeAyudaTienda: true,
       }),
       makeGestion({
         gestionId: "g-mensajero",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 7777,
         numRemision: "REM-MENSAJERO",
         desdeAyudaTienda: false,
@@ -1547,19 +1547,19 @@ describe("Cierre del día — 237/R41: la gestión que registró la tienda va ma
     // La 237 declaró dos aristas desde `ayuda_tienda`: `reprogramada` y `rechazada`. Marcar sólo
     // una dejaría la mitad de las gestiones de la tienda indistinguibles de las del mensajero.
     const grupos = emptyGrupos();
-    grupos.reprogramada = [
+    grupos.reprogramado = [
       makeGestion({
         gestionId: "g-repro-tienda",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         numGuia: 4444,
         desdeAyudaTienda: true,
       }),
     ];
-    grupos.entregada = [
+    grupos.entregado = [
       // El contraste: una entrega NUNCA puede venir de la tienda (no hay arista), y aquí se ve.
       makeGestion({
         gestionId: "g-entrega",
-        resultado: "entregada",
+        resultado: "entregado",
         numGuia: 3333,
         desdeAyudaTienda: false,
       }),
@@ -1605,17 +1605,17 @@ describe("Cierre del día — 237/D3: la gestión de la tienda no se puede devol
   /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
   function renderConLasDos() {
     const grupos = emptyGrupos();
-    grupos.rechazada = [
+    grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
         gestionId: "g-tienda",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 5555,
         numRemision: "REM-TIENDA",
         desdeAyudaTienda: true,
       }),
       makeGestion({
         gestionId: "g-mensajero",
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         numGuia: 7777,
         numRemision: "REM-MENSAJERO",
         desdeAyudaTienda: false,

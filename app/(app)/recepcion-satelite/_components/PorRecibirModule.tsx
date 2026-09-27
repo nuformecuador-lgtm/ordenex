@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { AvisoSinZonaSatelite } from "./AvisoSinZonaSatelite";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { SateliteOrderCard } from "./SateliteOrderCard";
@@ -40,26 +39,20 @@ import { SateliteOrderCard } from "./SateliteOrderCard";
 export interface PorRecibirModuleProps {
   /** Órdenes en `en_ruta_bodega_satelite` de la zona del `adminSatelite`. */
   porRecibir: RecepcionSateliteDTO[];
-  /** Nombre de la zona del actor (para el estado legible de la tarjeta); `null` si no tiene. */
+  /**
+   * Nombre de la zona del actor; `null` si no tiene. FICHA 455 (R2): ya no se interpola en el estado
+   * de la tarjeta; se conserva en el contrato de la página.
+   */
   zonaNombre: string | null;
   /** `true` si el `adminSatelite` no tiene zona asignada (R25/R26). */
   sinZona: boolean;
 }
 
-/**
- * Estado legible "en ruta a bodega satélite de <zona>" (R9): deriva del `estatusValue`
- * (etiqueta de `estatusLabel`) y del nombre de zona de la orden, con el de la zona del
- * actor como respaldo.
- */
-function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): string {
-  const base = estatusLabel(orden.estatusValue);
-  const zona = orden.zonaNombre || zonaNombre;
-  return zona ? `${base} de ${zona}` : base;
-}
+// FICHA 456 (T3.5): aquí vivía `estadoLegible` (el nombre del estado ya resuelto para la tarjeta).
+// La tarjeta lo pinta ahora desde `orden.estatusValue` con su botón de información.
 
 export function PorRecibirModule({
   porRecibir,
-  zonaNombre,
   sinZona,
 }: Readonly<PorRecibirModuleProps>) {
   const router = useRouter();
@@ -91,10 +84,7 @@ export function PorRecibirModule({
         vacio="No hay órdenes por recibir."
         listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
         renderItem={(orden) => (
-          <SateliteOrderCard
-            orden={orden}
-            estadoLegible={estadoLegible(orden, zonaNombre)}
-          />
+          <SateliteOrderCard orden={orden} />
         )}
       />
     </div>

@@ -64,7 +64,7 @@ describe("398/T3.3 — la Server Action de la correccion del resultado", () => {
     // destino llegara desde el cliente, quedarian abiertas las demas por accidente.
     const service = fakeService();
     const r = await corregirResultadoGestion(
-      { gestionId: GESTION, motivo: MOTIVO, nuevoResultado: "devuelta" },
+      { gestionId: GESTION, motivo: MOTIVO, nuevoResultado: "novedad" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");

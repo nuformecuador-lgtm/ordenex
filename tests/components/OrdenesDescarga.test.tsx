@@ -66,7 +66,7 @@ import { OrdenesModule } from "@/app/(app)/ordenes/_components/OrdenesModule";
 import { OrdenesListado } from "@/app/(app)/ordenes/_components/OrdenesListado";
 
 const CATALOGO_ESTADOS = [
-  { id: "est-entregada", value: "entregada" },
+  { id: "est-entregada", value: "entregado" },
   { id: "est-en-bodega", value: "en_bodega_central" },
 ];
 
@@ -85,7 +85,7 @@ function makeOrden(i: number): OrdenListItemDTO {
     numGuia: 1000 + i,
     numRemision: `REM-${String(i).padStart(3, "0")}`,
     estatusId: "est-entregada",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: `Destinatario ${i}`,
     telefonoDest: "0999999999",
     tiendaId: "t1",

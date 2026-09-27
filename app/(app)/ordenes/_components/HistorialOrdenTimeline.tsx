@@ -1,11 +1,17 @@
+import { EstadoConInfo, InfoEstado, NotaAyudaConInfo } from "@/components/shared/EstadoInfo";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
-import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import type { OrdenEventoTipo } from "@/lib/types/orden-evento";
+import type {
+  OrdenHistorialEntradaDTO,
+  OrdenHistorialEventoDTO,
+} from "@/lib/types/orden-historial";
 import {
   ETIQUETA_CORRECCION_DIA,
   textoCorreccionDiaReparto,
 } from "@/lib/utils/dia-reparto-textos";
 
-import { estatusLabel } from "./estatus-label";
+import { resultadoLabel } from "./estatus-label";
+import { motivoVisible } from "./motivo-historial";
 
 // Feature 49 (T6.1, R29/R30) — linea de tiempo de PRESENTACION pura del historial de una
 // orden. Recibe las entradas ya resueltas por PROPS (R28: no fetchea por si mismo) y las
@@ -83,6 +89,39 @@ function textoTraspasoMensajero(anterior: string, nuevo: string): string {
   return `De ${anterior} a ${nuevo}`;
 }
 
+/**
+ * FICHA 454 (T2.3, R30) — la primera línea de cada HECHO sin transición (`orden_evento`): dice QUÉ
+ * pasó, en lenguaje claro y sin siglas. Indexado por el tipo con `Record` exhaustivo: un tipo nuevo
+ * del enum no compila hasta que alguien decida cómo se lee.
+ *
+ * La de la ayuda es la MISMA nota que acompaña a la orden en las pantallas (decisión del humano,
+ * `NOTA_AYUDA_SOLICITADA`), no un sinónimo. Ninguna nombra un estado: un evento NO lo cambia.
+ */
+//
+// FICHA 456 (T3.3, R12): la de la ayuda es `null` porque se pinta con `NotaAyudaConInfo` (el texto
+// «Ayuda solicitada a la tienda» y su botón de información), no con un rótulo suelto.
+const ETIQUETA_EVENTO: Record<OrdenEventoTipo, string | null> = {
+  gestion_registrada: "Gestión registrada",
+  gestion_anulada: "Gestión anulada",
+  gestion_corregida: "Gestión corregida",
+  ayuda_solicitada: null,
+  ayuda_rescatada: "Ayuda cerrada: la orden vuelve a gestionarse",
+  ayuda_habilitada_api: "Ayuda cerrada por la integración de la tienda",
+};
+
+/**
+ * FICHA 454 (R30) — la segunda línea: el RESULTADO de la gestión, con su nombre canónico
+ * (`resultadoLabel`, el mismo mapa que el chip de estado). En la corrección, «de A a B». Los hechos
+ * de la ayuda no llevan segunda línea (`null`).
+ */
+function textoResultadoEvento(entrada: OrdenHistorialEventoDTO): string | null {
+  if (entrada.resultado === null) return null;
+  if (entrada.tipo === "gestion_corregida" && entrada.resultadoAnterior !== null) {
+    return `De ${resultadoLabel(entrada.resultadoAnterior)} a ${resultadoLabel(entrada.resultado)}`;
+  }
+  return `Resultado: ${resultadoLabel(entrada.resultado)}`;
+}
+
 function formatFechaHora(fecha: Date): string {
   const ms = fecha.getTime();
   return Number.isNaN(ms) ? "—" : FECHA_HORA.format(fecha);
@@ -125,7 +164,6 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
         switch (entrada.clase) {
           case "transicion": {
             const esCreacion = entrada.estatusOrigenValue === null; // R20: origen vacio = creacion
-            const destinoLabel = estatusLabel(entrada.estatusDestinoValue);
             const actor = entrada.actorNombre ?? ACTOR_SISTEMA;
 
             return (
@@ -138,14 +176,22 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                   className="absolute top-1.5 -left-[5px] size-2 rounded-full bg-primary"
                 />
                 {/* R30: origen -> destino con etiquetas legibles; en la creacion, "Creación · destino". */}
+                {/* FICHA 456 (T3.3, R9/R15): origen y destino con su botón de información;
+                    «Creación» no es un estado y un retirado sale sin botón. */}
                 <p className="flex flex-wrap items-center gap-1 text-sm font-medium">
-                  <span>{esCreacion ? "Creación" : estatusLabel(entrada.estatusOrigenValue)}</span>
+                  {entrada.estatusOrigenValue === null ? (
+                    <span>Creación</span>
+                  ) : (
+                    <EstadoConInfo codigo={entrada.estatusOrigenValue} />
+                  )}
                   <span aria-hidden="true">{esCreacion ? "·" : "→"}</span>
-                  <span>{destinoLabel}</span>
+                  <EstadoConInfo codigo={entrada.estatusDestinoValue} />
                 </p>
                 {sello}
                 <p className="text-xs text-muted-foreground">Por {actor}</p>
-                {entrada.motivo ? <p className="text-sm">Motivo: {entrada.motivo}</p> : null}
+                {/* FICHA 455 (F10): el motivo de las migraciones de retiro llega con el código
+                    crudo; `motivoVisible` lo nombra con el formato de R11. */}
+                {entrada.motivo ? <p className="text-sm">Motivo: {motivoVisible(entrada.motivo)}</p> : null}
               </li>
             );
           }
@@ -236,6 +282,46 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                   Por {entrada.actorNombre} ({rolLabel})
                 </p>
                 <p className="text-sm">Motivo: {entrada.motivo}</p>
+              </li>
+            );
+          }
+          case "evento_orden": {
+            // FICHA 454 (T2.3, R30) — LA CUARTA CLASE: un hecho SIN transición. Igual que la
+            // corrección del día y el traspaso: NO se llama a `estatusLabel` sobre un origen ni se
+            // pinta la flecha, porque la orden no cambió de estado (sigue `en_reparto` hasta que
+            // se apruebe el cierre). Se distingue por TEXTO (la primera línea dice qué pasó) y por
+            // la misma marca de FORMA que sus dos hermanas (anillo hueco + filo discontinuo), sin
+            // tono nuevo. El rol que se pinta es el CONGELADO de la fila (427/R26).
+            const rolLabel = ROL_LABELS[entrada.actorRol] ?? entrada.actorRol;
+            const resultado = textoResultadoEvento(entrada);
+
+            return (
+              <li
+                key={key}
+                className="relative flex flex-col gap-1 border-l-2 border-dashed border-border pl-4"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
+                />
+                <p className="text-sm font-medium">
+                  {entrada.tipo === "ayuda_solicitada" ? <NotaAyudaConInfo /> : ETIQUETA_EVENTO[entrada.tipo]}
+                </p>
+                {/* FICHA 456 (T3.3, R10): el resultado nombra un estado; su botón va al final de
+                    la línea (en la corrección, uno por cada resultado, en el orden del texto). */}
+                {resultado !== null ? (
+                  <p className="flex flex-wrap items-center gap-1 text-sm">
+                    <span>{resultado}</span>
+                    {entrada.tipo === "gestion_corregida" && entrada.resultadoAnterior !== null ? (
+                      <InfoEstado codigo={entrada.resultadoAnterior} />
+                    ) : null}
+                    {entrada.resultado !== null ? <InfoEstado codigo={entrada.resultado} /> : null}
+                  </p>
+                ) : null}
+                {sello}
+                <p className="text-xs text-muted-foreground">
+                  Por {entrada.actorNombre} ({rolLabel})
+                </p>
               </li>
             );
           }

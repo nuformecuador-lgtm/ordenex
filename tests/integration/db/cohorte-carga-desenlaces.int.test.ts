@@ -72,10 +72,10 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
         });
 
       // Los tres desenlaces TERMINALES.
-      const entregada = await cargar("entregada");
+      const entregada = await cargar("entregado");
       await agregarTransicion(tx, base, entregada, {
         at: instanteCR(D, "18:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       const devueltaATienda = await cargar("devuelta-a-tienda");
@@ -93,16 +93,16 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
       // Las tres que siguen VIVAS: sin ninguna transicion, en `rechazada` y en `devuelta`.
       await cargar("sin-transiciones");
 
-      const rechazada = await cargar("rechazada");
+      const rechazada = await cargar("devolucion_a_origen_por_rechazo");
       await agregarTransicion(tx, base, rechazada, {
         at: instanteCR(D, "18:00"),
-        destino: "rechazada",
+        destino: "devolucion_a_origen_por_rechazo",
       });
 
-      const devuelta = await cargar("devuelta");
+      const devuelta = await cargar("novedad");
       await agregarTransicion(tx, base, devuelta, {
         at: instanteCR(D, "18:00"),
-        destino: "devuelta",
+        destino: "novedad",
       });
 
       // R4 — una orden BORRADA no cuenta en ninguna cohorte. Se le pone hasta su transicion
@@ -116,7 +116,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
       });
       await agregarTransicion(tx, base, borrada, {
         at: instanteCR(D, "18:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       // R13 — la ultima GESTION VIGENTE dice otra cosa que la transicion. El desenlace lo decide
@@ -130,7 +130,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
       await crearGestion(tx, {
         ordenId: gestionMiente,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(D, "19:00"),
       });
 
@@ -149,7 +149,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
 
     const cubos = [...new Set(filas.map((f) => f.desenlace))].sort();
     // LITERAL ESCRITO A MANO: es el contrato, no una copia de `ESTADOS_TERMINALES`.
-    expect(cubos).toEqual(["devuelta_a_tienda", "entregada", "incidente", "viva"]);
+    expect(cubos).toEqual(["devuelta_a_tienda", "entregado", "incidente", "viva"]);
   });
 
   it("`rechazada` y `devuelta` cuentan como VIVAS, no como devueltas", async () => {
@@ -171,7 +171,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
     expect(filas.length).toBeGreaterThan(0);
 
     const cubos = cubosDelDia(filas, D);
-    expect(cubos.get("entregada")?.n).toBe(1);
+    expect(cubos.get("entregado")?.n).toBe(1);
     expect(cubos.get("devuelta_a_tienda")?.n).toBe(2);
     expect(cubos.get("incidente")?.n).toBe(1);
     expect(cubos.get("viva")?.n).toBe(3);
@@ -185,7 +185,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
     expect(filas.length).toBeGreaterThan(0);
 
     // La borrada tiene transicion a `entregada`: sin el soft delete, `entregada` valdria 2.
-    expect(cubosDelDia(filas, D).get("entregada")?.n).toBe(1);
+    expect(cubosDelDia(filas, D).get("entregado")?.n).toBe(1);
     expect(cargadasDe(filas, D)).toBe(7);
   });
 
@@ -198,7 +198,7 @@ describeSiHayBase("411/T4.2 — cada orden de la cohorte cae en un cubo y en uno
     // ultima transicion es `devuelta_a_tienda`. Si el desenlace saliera de la gestion —como hace
     // el anillo de la seccion de al lado—, `entregada` valdria 2 y `devuelta_a_tienda` 1.
     const cubos = cubosDelDia(filas, D);
-    expect(cubos.get("entregada")?.n).toBe(1);
+    expect(cubos.get("entregado")?.n).toBe(1);
     expect(cubos.get("devuelta_a_tienda")?.n).toBe(2);
   });
 });

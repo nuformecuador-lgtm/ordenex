@@ -1,32 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DataTable,
   type Column,
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
-import { Modal } from "@/components/shared/Modal";
-import { useToast } from "@/hooks/useToast";
-import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
+import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
+import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
+import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
 import { DetalleMovimientoCierre } from "./DetalleMovimientoCierre";
 import { DETALLE_MOVIMIENTO_NOMBRE } from "./detalle-movimiento-labels";
+import {
+  AUTORIA_CELDA,
+  LIBRO_CAJA_COLUMNA,
+  ENLACE_ESTADO_CUENTA,
+  hrefEstadoCuenta,
+  textoAQuien,
+} from "./libro-caja-labels";
+import { VerMovimientoCaja, type AutoriaDeLaFilaEnElLibro } from "./VerMovimientoCaja";
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
   DUENO_LABEL,
   ORIGEN_LABEL,
   TIPO_LABEL,
-  esEgresoAdministrativo,
   money,
 } from "./wallet-labels";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
 // Feature 42 (T12, R18/R21) — libro de movimientos (tabla, más reciente primero: el
 // backend ya lo devuelve ordenado). Datos por props desde el módulo. Money-safe: la
@@ -37,6 +44,23 @@ import {
 // el cron). La reversa se confirma con un `Modal` y dispara la Server Action
 // `reversarEgresoAdministrativoAction`; el backend crea el `ingreso_ajuste` compensatorio
 // (append-only, idempotente) — la UI solo dispara y refresca. No hay editar/borrar (R14).
+//
+// FICHA 458-C (T C.5, design §5.2, D11; R58, R63, R65, R71) — la columna de acciones pasa a «Ver»:
+// cada fila abre el panel compartido (`VerMovimientoCaja` → `DetalleMovimientoPanel`), que es donde
+// viven «Anular…» (uniforme, con motivo, por `anularMovimientoAction`), el comprobante y «Cómo quedó».
+// «Reversar» y su `Modal` se RETIRAN (D11: dos palabras para lo mismo era la falencia), igual que
+// `DocumentoCajaAcciones`. Y con ellos se va la deducción que la 461 hacía EN EL CLIENTE de «ya
+// reversado» mirando las filas de la página: desde la 458-B el estado viaja en la fila (`documento`,
+// decidido en el servidor, R71), y este libro no mira ninguna otra fila para decidirlo (guardia R98).
+// Este archivo vuelve a no importar ninguna Server Action.
+//
+// FICHA 458-E (T E.1, design §5.2; R55–R57) — las columnas pasan a las de la maqueta (pantalla 3):
+// Fecha · Movimiento y motivo · A quién · Monto (dirección + dueño) · Registró · Ver. «Tipo»,
+// «Categoría», «Origen» y «Dueño» no desaparecen como dato: el concepto y el origen con su entidad
+// van juntos en «Movimiento y motivo», y la dirección (Entra / Sale) y el dueño viajan dentro de
+// «Monto». «A quién» y «Registró» los resuelve el SERVIDOR en lote (`autoriaDelLibroCajaAction`, que
+// llama el MÓDULO con los ids de la página) y bajan aquí por props: el libro sigue sin importar
+// Server Actions ni hooks de datos (guardia de `WalletDescarga.test.tsx`).
 
 /**
  * Badge de color por tipo: ingreso (entra) vs egreso (sale).
@@ -55,16 +79,11 @@ function TipoBadge({ tipo }: { tipo: WalletMovimientoDTO["tipo"] }) {
   );
 }
 
-/** Origen legible: tipo de origen + descripción si la hay. */
-function origenTexto(m: WalletMovimientoDTO): string {
-  const base = ORIGEN_LABEL[m.origenTipo];
-  return m.descripcion ? `${base} · ${m.descripcion}` : base;
-}
 
 /**
  * Importe de una fila. El STRING se pinta TAL CUAL con `money(...)`: money-safe (R21/R25),
  * sin `Number`/`parseFloat`/`toFixed`, y SIN anteponerle signo — el `+`/`-` sería un dato
- * inventado por la pantalla, y quien dice la dirección del movimiento es la columna «Tipo».
+ * inventado por la pantalla, y quien dice la dirección del movimiento es la insignia Entra / Sale.
  * Lo único que añade el color es LEGIBILIDAD: verde entra, rojo sale, en el tono `-strong`
  * que es el que `DESIGN.md` exige para texto (contraste ≥ 4.5:1 sobre la tarjeta).
  * `tabular-nums` mantiene las cifras en rejilla de una fila a otra.
@@ -96,16 +115,83 @@ const DUENO_PUNTO: Record<NaturalezaMovimiento, string> = {
   // de composicion de la tarjeta reparte la caja: es el mismo reparto, fila a fila.
   propio: "bg-muted-foreground",
   terceros: "bg-warning",
+  // Ficha 459 (design §5): capital de Ordenex (saldo inicial y aportes), token semantico existente.
+  capital: "bg-info",
 };
 
 function DuenoCelda({ dueno }: { dueno: NaturalezaMovimiento }) {
   return (
-    <span className="inline-flex items-center gap-2">
+    <span data-dueno={dueno} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
       <span
         className={cn("size-2 shrink-0 rounded-full", DUENO_PUNTO[dueno])}
         aria-hidden="true"
       />
       {DUENO_LABEL[dueno]}
+    </span>
+  );
+}
+
+/**
+ * FICHA 458-E (R56/R57) — «A quién» y «Registró» de la página, leídos por el MÓDULO. `cargando`
+ * mientras llega la lectura; `error` si falló (la celda lo dice, no inventa un «—» que significaría
+ * «no hay dato»); `ok` con la autoría por id de movimiento.
+ */
+export type AutoriaDelLibro =
+  | { estado: "cargando" }
+  | { estado: "error" }
+  | { estado: "ok"; porMovimiento: ReadonlyMap<string, AutoriaDeFilaDTO> };
+
+const AUTORIA_CARGANDO: AutoriaDelLibro = { estado: "cargando" };
+
+/** La autoría de UNA fila, o el texto de la celda cuando no la hay. */
+function autoriaDeFila(
+  autoria: AutoriaDelLibro,
+  movimientoId: string,
+): AutoriaDeFilaDTO | string {
+  if (autoria.estado === "cargando") return AUTORIA_CELDA.cargando;
+  if (autoria.estado === "error") return AUTORIA_CELDA.error;
+  return autoria.porMovimiento.get(movimientoId) ?? AUTORIA_CELDA.sinDato;
+}
+
+/**
+ * R56 — a quién: el nombre (nunca un id) y, si es una tienda o un mensajero, el enlace a su estado de
+ * cuenta. El texto visible ABRE el nombre accesible del enlace («Label in Name»), que además dice
+ * adónde lleva.
+ */
+function AQuienCelda({ autoria }: { autoria: AutoriaDeFilaDTO | string }) {
+  if (typeof autoria === "string") return <span className="text-muted-foreground">{autoria}</span>;
+  const texto = textoAQuien(autoria.aQuien);
+  const cuenta = autoria.aQuien.cuenta;
+  if (cuenta === null) return <>{texto}</>;
+  return (
+    <Link
+      href={hrefEstadoCuenta(cuenta)}
+      aria-label={ENLACE_ESTADO_CUENTA[cuenta.tipo](texto)}
+      className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {texto}
+    </Link>
+  );
+}
+
+/** R57 — quién lo registró, o «Automático · <acción> por <quién>». */
+function RegistroCelda({ autoria }: { autoria: AutoriaDeFilaDTO | string }) {
+  if (typeof autoria === "string") return <span className="text-muted-foreground">{autoria}</span>;
+  return <>{textoRegistro(autoria.registro)}</>;
+}
+
+/**
+ * R55 — «Movimiento y motivo»: el nombre del concepto (desde Ordenex) y, debajo, el origen con su
+ * entidad y la descripción/motivo (la MISMA composición que la descarga, `textoDeOrigen`).
+ */
+function MovimientoCelda({ movimiento }: { movimiento: WalletMovimientoDTO }) {
+  // La fila anulada DICE «Anulado» en la celda de «Ver» (`CeldaVer`, revisión B2 de la 458-C).
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="font-medium">{CATEGORIA_LABEL[movimiento.categoria]}</span>
+      <span className="text-xs text-muted-foreground">
+        <OrigenMovimiento fila={movimiento} rotulos={ORIGEN_LABEL} />
+      </span>
     </span>
   );
 }
@@ -129,11 +215,61 @@ function naceDeUnCierre(m: WalletMovimientoDTO): boolean {
   return m.origenTipo === "cierre_dia";
 }
 
+/** La fila, con el estado de anulación que decidió el SERVIDOR (R71): anulada = tachada y apagada. */
+function claseDeFila(m: WalletMovimientoDTO): string | undefined {
+  return m.documento?.anulado ? "text-muted-foreground line-through" : undefined;
+}
+
+/** FICHA 458-E (cierre) — lo que el libro tiene de UNA fila, para que su panel no lo lea otra vez. */
+function autoriaParaElPanel(
+  autoria: AutoriaDelLibro | undefined,
+  movimientoId: string,
+): AutoriaDeLaFilaEnElLibro | undefined {
+  // Sin la prop, el libro no lee nada: el panel lee la suya al abrir (como en la 458-C).
+  if (autoria === undefined) return undefined;
+  if (autoria.estado !== "ok") return autoria;
+  return { estado: "ok", fila: autoria.porMovimiento.get(movimientoId) };
+}
+
+/**
+ * B2 (revisión 458-C; 457 R41, 459 R66, 461 R20/R71) — la fila anulada DICE «Anulado», con la palabra y
+ * no solo con el tachado (que un lector de pantalla no anuncia). Sale del `documento` del servidor, como
+ * el tachado. Va en la celda de «Ver», donde vivían las acciones: el orden de las columnas no se toca.
+ * Es una insignia (caja en línea atómica), así que el tachado de la fila no la cruza.
+ */
+function CeldaVer({
+  m,
+  onCambio,
+  autoria,
+}: {
+  m: WalletMovimientoDTO;
+  onCambio?: () => void;
+  autoria: AutoriaDeLaFilaEnElLibro | undefined;
+}) {
+  return (
+    // 458-E (recorrido): `inline-flex` y no `flex`. Un bloque (y sus hijos «blockificados») HEREDA el
+    // tachado de la fila; una caja en línea atómica no. Medido en el navegador: con `flex` la insignia
+    // «Anulado» salía tachada.
+    <span className="inline-flex items-center gap-2">
+      {m.documento?.anulado ? <Badge variant="secondary">{PANEL_TEXTO.anulado}</Badge> : null}
+      <VerMovimientoCaja movimiento={m} onCambio={onCambio} autoriaDelLibro={autoria} />
+    </span>
+  );
+}
+
 export interface WalletLedgerProps {
   movimientos: WalletMovimientoDTO[];
   isLoading?: boolean;
-  /** Callback tras reversar con éxito (para que el módulo recargue libro + cifras + desglose). */
-  onReversado?: () => void;
+  /**
+   * Ficha 459 (R65) / 458-C (R60) — tras anular o adjuntar un comprobante desde el panel «Ver»: el
+   * módulo relee libro, tarjetas, composición y desglose sin recargar la página.
+   */
+  onCambio?: () => void;
+  /**
+   * FICHA 458-E (R56/R57) — «A quién» y «Registró» de las filas de la página, leídos por el módulo.
+   * Ausente ⇒ «Cargando…» (el libro no lee nada por su cuenta).
+   */
+  autoria?: AutoriaDelLibro;
   /**
    * Feature 170 (T C.4, design §5) — obtiene las filas del libro COMPLETO para la descarga.
    *
@@ -151,141 +287,74 @@ export interface WalletLedgerProps {
 export function WalletLedger({
   movimientos,
   isLoading = false,
-  onReversado,
+  onCambio,
+  autoria: autoriaProp,
   obtenerFilasDescarga,
 }: WalletLedgerProps) {
-  const router = useRouter();
-  const toast = useToast();
-
-  // Egreso administrativo elegido para reversar (abre el modal de confirmación).
-  const [objetivo, setObjetivo] = useState<WalletMovimientoDTO | null>(null);
-
-  async function confirmarReversa() {
-    if (!objetivo) return;
-    const result = await reversarEgresoAdministrativoAction({ movimientoId: objetivo.id });
-
-    if (result.status === "ok") {
-      toast.success("Egreso reversado. Se registró el ajuste compensatorio.");
-      setObjetivo(null);
-      onReversado?.();
-      router.refresh();
-      return;
-    }
-    if (result.status === "already_reversed") {
-      toast.info("Este egreso ya tenía su reversa.");
-      setObjetivo(null);
-      onReversado?.();
-      return;
-    }
-    if (result.status === "not_found") {
-      toast.error("El egreso ya no existe o no es reversable.");
-      setObjetivo(null);
-      return;
-    }
-    if (result.status === "validation_error") {
-      toast.error("No se pudo reversar el egreso.");
-      return;
-    }
-    if (result.status === "forbidden") {
-      toast.error("No tenés permiso para reversar egresos.");
-      return;
-    }
-    // unauthenticated
-    toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
-  }
-
-  // Feature 200 (tanda 3) — LOS `minWidth` Y LA ALINEACIÓN DEL DINERO.
+  const autoria = autoriaProp ?? AUTORIA_CARGANDO;
+  // Feature 200 (tanda 3): cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé,
+  // aparezca el scroll horizontal de la tabla ANTES de que las celdas se estrujen; el dinero a la
+  // DERECHA, en `tabular-nums` y con su color semántico.
   //
-  // Cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé, aparezca el
-  // scroll horizontal de la tabla ANTES de que las celdas se estrujen (la descripción libre
-  // del origen es la que primero se partía en cuatro líneas).
-  //
-  // EL ORDEN NO SE PERMUTÓ, Y NO ES UN OLVIDO. El rediseño pedía llevar el origen junto a la
-  // fecha y el dinero al final (fecha · origen · categoría · tipo · monto · acciones), que es
-  // como se lee cualquier extracto. Está BLOQUEADO por una aserción que fija la secuencia
-  // exacta de los encabezados visibles:
-  //
-  //     tests/components/descarga/WalletDescarga.test.tsx:590
-  //     («R62: el listado los pinta como a los demás, sin cambiar las columnas»)
-  //
-  // (La referencia decía «:566» y estaba desactualizada; la aserción vive en la 590. Corregido
-  // por la feature 231/T5.2, que es la que volvió a tropezar con ella.)
-  //
-  // Esa aserción es de la feature 173 y lo que quiere afirmar es otra cosa —que las dos
-  // categorías nuevas no AÑADEN ni QUITAN columnas—; el orden se le coló dentro por usar
-  // `toEqual` sobre el array.
-  //
-  // ── Feature 231 (D1, firmada por el humano el 2026-08-18) ──
-  // La aserción pasó a afirmar lo que su propio caso dice —que las categorías de la 173 no
-  // añaden ni quitan columnas, comparado contra la lista que declara ESTE componente— y la 231
-  // añadió su caso propio para «Dueño». La 173 queda igual de protegida y deja de gobernar el
-  // número de columnas del libro. El REORDENADO que la 200 quería sigue sin hacerse: es otra
-  // decisión y no entra por la puerta de atrás de esta.
-  //
-  // Lo que sí llega sin tocar el orden: el dinero alineado a la DERECHA, en `tabular-nums` y
-  // con su color semántico, que es de donde venía la mayor parte de la ganancia de lectura.
+  // FICHA 458-E (T E.1, design §5.2) — EL ORDEN SE PERMUTA AHORA, Y A PROPÓSITO: es el de la maqueta
+  // aprobada (Fecha · Movimiento y motivo · A quién · Monto · Registró · Ver), el reordenado que la
+  // 200 quería y que la 231 dejó pendiente «para otra decisión». La aserción de
+  // `WalletDescarga.test.tsx` se reescribe en el MISMO commit afirmando esta lista como contrato
+  // (design §5.2: aquí el literal ES el contrato).
   const columns = useMemo<Column<WalletMovimientoDTO>[]>(
     () => [
       {
         id: "fecha",
-        value: "Fecha",
+        value: LIBRO_CAJA_COLUMNA.fecha,
         minWidth: "7rem",
-        render: (m) => m.fechaMovimiento.slice(0, 10),
+        render: (m) => fechaDiaMovimientoCR(m.fechaMovimiento),
       },
       {
-        id: "tipo",
-        value: "Tipo",
-        minWidth: "6rem",
-        render: (m) => <TipoBadge tipo={m.tipo} />,
+        id: "movimiento",
+        value: LIBRO_CAJA_COLUMNA.movimiento,
+        // La más ancha: el concepto, el origen con su entidad y el motivo.
+        minWidth: "18rem",
+        render: (m) => <MovimientoCelda movimiento={m} />,
       },
       {
-        id: "categoria",
-        value: "Categoría",
-        minWidth: "11rem",
-        render: (m) => CATEGORIA_LABEL[m.categoria],
+        id: "aQuien",
+        value: LIBRO_CAJA_COLUMNA.aQuien,
+        minWidth: "10rem",
+        render: (m) => <AQuienCelda autoria={autoriaDeFila(autoria, m.id)} />,
       },
       {
         id: "monto",
-        value: "Monto",
-        minWidth: "9rem",
-        // Money-safe (R21/R25): STRING tal cual, sin parseFloat/Number.
+        value: LIBRO_CAJA_COLUMNA.monto,
+        minWidth: "10rem",
+        // Money-safe (R21/R25): STRING tal cual, sin parseFloat/Number. La dirección (Entra / Sale)
+        // y el dueño (feature 231, `dueno` del SERVIDOR) viajan en la misma celda (R55).
         align: "right",
-        render: (m) => <MontoCelda movimiento={m} />,
+        render: (m) => (
+          <span className="flex flex-col items-end gap-1">
+            <span className="inline-flex items-center gap-2">
+              <TipoBadge tipo={m.tipo} />
+              <MontoCelda movimiento={m} />
+            </span>
+            <DuenoCelda dueno={m.dueno} />
+          </span>
+        ),
       },
       {
-        id: "origen",
-        value: "Origen",
-        // La más ancha: lleva el origen Y la descripción libre del movimiento.
-        minWidth: "18rem",
-        render: (m) => origenTexto(m),
+        id: "registro",
+        value: LIBRO_CAJA_COLUMNA.registro,
+        minWidth: "10rem",
+        render: (m) => <RegistroCelda autoria={autoriaDeFila(autoria, m.id)} />,
       },
       {
-        // Feature 231 (T5.2, R35): la ULTIMA de las columnas de datos, justo antes de
-        // «Acciones». Se anade; ninguna de las anteriores se mueve ni se quita.
-        id: "dueno",
-        value: "Dueño",
-        minWidth: "8rem",
-        render: (m) => <DuenoCelda dueno={m.dueno} />,
-      },
-      {
-        id: "acciones",
-        value: "Acciones",
-        minWidth: "7rem",
-        // R22c/R32: la reversa se ofrece SOLO en egresos administrativos (incluye los del cron).
-        render: (m) =>
-          esEgresoAdministrativo(m) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setObjetivo(m)}
-            >
-              Reversar
-            </Button>
-          ) : null,
+        // FICHA 458-C (T C.5): TODA fila se puede ver (R58); lo que se puede hacer con ella lo decide
+        // el panel con lo que trae la fila del servidor.
+        id: "ver",
+        value: LIBRO_CAJA_COLUMNA.ver,
+        minWidth: "5rem",
+        render: (m) => <CeldaVer m={m} onCambio={onCambio} autoria={autoriaParaElPanel(autoriaProp, m.id)} />,
       },
     ],
-    [],
+    [onCambio, autoria, autoriaProp],
   );
 
   return (
@@ -297,6 +366,8 @@ export function WalletLedger({
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        // R71/R72 (458-C): anulado = tachado y apagado, decidido por el servidor.
+        rowClassName={claseDeFila}
         // Ficha 344 (T6.4, R1–R6): cada fila de CIERRE despliega las órdenes que componen su
         // importe. `renderExpanded` se INVOCA en cada render, pero el `DataTable` solo MONTA el
         // elemento cuando la fila está abierta; como la LECTURA del detalle vive dentro de
@@ -307,15 +378,13 @@ export function WalletLedger({
         // `tests/components/descarga/WalletDescarga.test.tsx` — que la lee CRUDA, comentarios
         // incluidos, así que aquí ni siquiera se nombra el hook.)
         //
-        // LAS COLUMNAS VISIBLES DEL LIBRO NO SE TOCAN: hay una aserción ajena que fija su
-        // secuencia (`tests/components/descarga/WalletDescarga.test.tsx`) y esta ficha no la
-        // mueve. La columna del control la antepone la primitiva, fuera de esa lista.
+        // La columna del control («Desglose») la antepone la primitiva, fuera de la lista de arriba.
         renderExpanded={(m) =>
           naceDeUnCierre(m) ? (
             <DetalleMovimientoCierre
               movimientoId={m.id}
               concepto={CATEGORIA_LABEL[m.categoria]}
-              fecha={m.fechaMovimiento.slice(0, 10)}
+              fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
             />
           ) : null
         }
@@ -325,7 +394,7 @@ export function WalletLedger({
         expandAriaLabel={(m) =>
           DETALLE_MOVIMIENTO_NOMBRE.abrir(
             CATEGORIA_LABEL[m.categoria],
-            m.fechaMovimiento.slice(0, 10),
+            fechaDiaMovimientoCR(m.fechaMovimiento),
           )
         }
         // Feature 170 (T C.4, R1/R9/R13): el control aparece solo si el módulo bajó el
@@ -343,22 +412,6 @@ export function WalletLedger({
         }
       />
 
-      <Modal
-        open={objetivo !== null}
-        onOpenChange={(next) => {
-          if (!next) setObjetivo(null);
-        }}
-        title="Reversar egreso"
-        description={
-          objetivo
-            ? `Se creará un ajuste compensatorio por ${money(objetivo.monto)}. El egreso original queda intacto.`
-            : undefined
-        }
-        confirmLabel="Reversar"
-        confirmVariant="destructive"
-        onConfirm={confirmarReversa}
-        closeOnConfirm={false}
-      />
     </div>
   );
 }

@@ -76,7 +76,7 @@ const ACCION = "Recuperar";
 
 const CATALOGO_ESTADOS = [
   { id: "est-en_bodega_central", value: "en_bodega_central" },
-  { id: "est-entregada", value: "entregada" },
+  { id: "est-entregada", value: "entregado" },
 ];
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
@@ -93,7 +93,7 @@ function makeOrden(over: Partial<OrdenListItemDTO> & { id: string }): OrdenListI
     numGuia: 1001,
     numRemision: `REM-${over.id}`,
     estatusId: "est-entregada",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "t1",

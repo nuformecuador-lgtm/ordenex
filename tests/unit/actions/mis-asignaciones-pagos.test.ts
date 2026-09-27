@@ -16,7 +16,7 @@ function buildService(): IMisAsignacionesService {
     listarMisAsignaciones: vi.fn(),
     recogerAsignaciones: vi.fn(),
     escogerParaGestion: vi.fn(),
-    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregada" })),
+    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "entregado" })),
     liberarGestion: vi.fn(),
   } as unknown as IMisAsignacionesService;
 }
@@ -31,7 +31,7 @@ function fdEntrega(montoRecibido: string): FormData {
   fd.set("ordenId", "o1");
   fd.set("ubicacionLat", "9.9281");
   fd.set("ubicacionLng", "-84.0907");
-  fd.set("resultado", "entregada");
+  fd.set("resultado", "entregado");
   fd.set("montoRecibido", montoRecibido);
   fd.append("evidencia", imagen());
   return fd;
@@ -149,7 +149,7 @@ describe("la clave `pagos` no se inventa cuando el FormData no la trae", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281");
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.append("evidencia", imagen());
     fd.append("pagoMetodo", "efectivo");

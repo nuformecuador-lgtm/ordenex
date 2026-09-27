@@ -20,8 +20,8 @@ const EN_CURSO = "en_reparto";
 describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
   it("reparte entregadas, rechazadas y en proceso sobre el mismo universo", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ]);
 
@@ -33,8 +33,8 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
 
   it("el caso MEDIDO `Spray Protector`: 6 rechazos de 16 órdenes son 0,375", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ]);
 
@@ -45,8 +45,8 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
 
   it("el caso MEDIDO `Bálsamo Tensor`: 0 rechazos de 29 órdenes son 0, y NO null", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 20 },
-      { status: "devuelta", conteo: 5 },
+      { status: "entregado", conteo: 20 },
+      { status: "novedad", conteo: 5 },
       { status: EN_CURSO, conteo: 4 },
     ]);
 
@@ -62,13 +62,13 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
     // Si el denominador fueran «las cerradas», las dos tasas serían iguales (0,5) y este caso
     // pasaría por vacío. Con el universo entero, la primera es 0,25.
     const conEnProceso = calcularEfectividad([
-      { status: "entregada", conteo: 5 },
-      { status: "rechazada", conteo: 5 },
+      { status: "entregado", conteo: 5 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 5 },
       { status: EN_CURSO, conteo: 10 },
     ]);
     const soloCerradas = calcularEfectividad([
-      { status: "entregada", conteo: 5 },
-      { status: "rechazada", conteo: 5 },
+      { status: "entregado", conteo: 5 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 5 },
     ]);
 
     expect(conEnProceso.total).toBe(20);
@@ -100,10 +100,10 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
     // sigue aquí, palabra por palabra); lo que cambió es que ahora existe `otrosDesenlaces` y
     // con él el reparto se cierra.
     const porStatus = [
-      { status: "entregada", conteo: 4 },
-      { status: "rechazada", conteo: 3 },
-      { status: "devuelta", conteo: 2 },
-      { status: "reprogramada", conteo: 1 },
+      { status: "entregado", conteo: 4 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 3 },
+      { status: "novedad", conteo: 2 },
+      { status: "reprogramado", conteo: 1 },
       { status: "incidente", conteo: 1 },
       { status: EN_CURSO, conteo: 9 },
     ];
@@ -122,8 +122,8 @@ describe("FICHA 345 · calcularEfectividad expone el rechazo (R30)", () => {
 
   it("la efectividad de GESTIÓN sigue siendo entregadas + rechazadas, sin tocarse", () => {
     const r = calcularEfectividad([
-      { status: "entregada", conteo: 8 },
-      { status: "rechazada", conteo: 6 },
+      { status: "entregado", conteo: 8 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 6 },
       { status: EN_CURSO, conteo: 2 },
     ]);
 

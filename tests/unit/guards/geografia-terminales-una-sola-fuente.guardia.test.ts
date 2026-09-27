@@ -102,11 +102,11 @@ describe("374/G5 — el detector se prueba a si mismo", () => {
   it("CONTRAPRUEBA: una lista propia inyectada SE DETECTA", () => {
     const mutado = SANO.replace(
       "[...ESTADOS_TERMINALES]",
-      '["entregada", "devuelta_a_tienda", "incidente"]',
+      '["entregado", "devuelta_a_tienda", "incidente"]',
     );
     const fallos = fallosDeFuenteUnica(mutado);
     expect(fallos).toContain("no usa `ESTADOS_TERMINALES`");
-    expect(fallos).toContain("declara el estado `entregada` como literal");
+    expect(fallos).toContain("declara el estado `entregado` como literal");
   });
 
   it("CONTRAPRUEBA: quitar la referencia a la fuente tambien se detecta", () => {
@@ -151,6 +151,6 @@ describe("374/R61 — el conteo IMPORTA la lista de terminales y no declara la s
   it("la fuente unica sigue teniendo exactamente los tres estados que declara", () => {
     // Literal, y el literal ES el contrato: si alguien añadiera un cuarto terminal, este caso
     // obliga a pasar por aqui y a mirar si el conteo de la pantalla sigue diciendo la verdad.
-    expect([...ESTADOS_TERMINALES]).toEqual(["entregada", "devuelta_a_tienda", "incidente"]);
+    expect([...ESTADOS_TERMINALES]).toEqual(["entregado", "devuelta_a_tienda", "incidente"]);
   });
 });

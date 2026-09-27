@@ -14,6 +14,24 @@ const validCrear = {
   cobroVehiculo: false,
   distritoIds: ["d1", "d2"],
   tarifas: [],
+  // ⭑ FICHA 429 (R11): crear una bodega EXIGE el numero y el titular. Valores FICTICIOS:
+  // el repositorio es publico y aqui no se escribe ningun SINPE real.
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
+};
+
+/**
+ * ⭑ FICHA 429 — EL PAYLOAD DE ACTUALIZAR YA NO ES EL DE CREAR.
+ *
+ * Los dos esquemas se separaron en la 376 por `esCentral`; la 429 añade la segunda diferencia: el
+ * SINPE va SOLO al crear, porque se edita por su propia accion y con otro modelo de permisos. Como
+ * los dos son `.strict()`, mandarlo a `actualizarZonaSchema` es un rechazo explicito.
+ */
+const validActualizar = {
+  nombre: "Zona Sur",
+  cobroVehiculo: false,
+  distritoIds: ["d1", "d2"],
+  tarifas: [],
 };
 
 describe("crearZonaSchema (R19)", () => {
@@ -66,11 +84,31 @@ describe("crearZonaSchema (R19)", () => {
 
 describe("actualizarZonaSchema (R19/R22)", () => {
   it("acepta el mismo payload que crear (reemplazo completo, id viaja aparte)", () => {
-    expect(actualizarZonaSchema.safeParse(validCrear).success).toBe(true);
+    expect(actualizarZonaSchema.safeParse(validActualizar).success).toBe(true);
   });
 
   it("rechaza campos desconocidos (strict)", () => {
-    expect(actualizarZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
+    expect(actualizarZonaSchema.safeParse({ ...validActualizar, hack: 1 }).success).toBe(false);
+  });
+
+  it("⭑ FICHA 429 (R11): el SINPE NO se acepta al actualizar — se edita por su propia accion", () => {
+    // Si viajara en el reemplazo completo de `actualizarZona` —que es `maestro`-only— un guardado
+    // de distritos pisaria EN SILENCIO la correccion que un `adminSatelite` acaba de hacer sobre su
+    // bodega. Con `.strict()` es un rechazo explicito, no un descarte mudo.
+    expect(
+      actualizarZonaSchema.safeParse({ ...validActualizar, sinpeNumero: "70000001" }).success,
+    ).toBe(false);
+    expect(
+      actualizarZonaSchema.safeParse({ ...validActualizar, sinpeNombre: "Titular" }).success,
+    ).toBe(false);
+    // Y la otra mitad: al CREAR son obligatorios, asi que quitarlos lo rechaza.
+    for (const campo of ["sinpeNumero", "sinpeNombre"] as const) {
+      const payload: Record<string, unknown> = { ...validCrear };
+      delete payload[campo];
+      const r = crearZonaSchema.safeParse(payload);
+      expect(r.success, campo).toBe(false);
+      if (!r.success) expect(r.error.issues.some((i) => i.path[0] === campo), campo).toBe(true);
+    }
   });
 });
 
@@ -87,7 +125,7 @@ describe("376/R1-R3 — la marca de zona central: crear pone default, actualizar
   it("⭑ R1: al ACTUALIZAR, el campo ausente sale como `undefined` (no como `false`)", () => {
     // ESTA es la aserción que se pone roja si alguien devuelve
     // `export const actualizarZonaSchema = crearZonaSchema`. Probado a mano el 2026-09-07.
-    const salida = actualizarZonaSchema.parse(validCrear);
+    const salida = actualizarZonaSchema.parse(validActualizar);
     expect(salida.esCentral).toBeUndefined();
     expect(salida).not.toHaveProperty("esCentral", false);
   });
@@ -101,31 +139,31 @@ describe("376/R1-R3 — la marca de zona central: crear pone default, actualizar
   it("R3: un `false` EXPLICITO parsea a `false` en los DOS esquemas", () => {
     // «No lo mandé» y «lo mandé apagado» tienen que llegar distintos al servidor: uno se ignora,
     // el otro se rechaza con motivo (R5/R6).
-    expect(actualizarZonaSchema.parse({ ...validCrear, esCentral: false }).esCentral).toBe(false);
+    expect(actualizarZonaSchema.parse({ ...validActualizar, esCentral: false }).esCentral).toBe(false);
     expect(crearZonaSchema.parse({ ...validCrear, esCentral: false }).esCentral).toBe(false);
   });
 
   it("R3: `esCentral: true` explicito parsea a `true` en los DOS esquemas", () => {
-    expect(actualizarZonaSchema.parse({ ...validCrear, esCentral: true }).esCentral).toBe(true);
+    expect(actualizarZonaSchema.parse({ ...validActualizar, esCentral: true }).esCentral).toBe(true);
     expect(crearZonaSchema.parse({ ...validCrear, esCentral: true }).esCentral).toBe(true);
   });
 
   it("`esCentral: null` se RECHAZA en los dos (seria un NULL en una columna NOT NULL)", () => {
     // `optional()` admite ausente, no admite nulo. Sin este caso, cambiar `optional()` por
     // `nullish()` pasaria desapercibido y Prisma intentaria escribir NULL.
-    expect(actualizarZonaSchema.safeParse({ ...validCrear, esCentral: null }).success).toBe(false);
+    expect(actualizarZonaSchema.safeParse({ ...validActualizar, esCentral: null }).success).toBe(false);
     expect(crearZonaSchema.safeParse({ ...validCrear, esCentral: null }).success).toBe(false);
   });
 
   it("los dos esquemas siguen siendo `.strict()` y siguen aplicando la regla de tarifas", () => {
     // La separacion no puede haber perdido nada por el camino.
-    expect(actualizarZonaSchema.safeParse({ ...validCrear, hack: 1 }).success).toBe(false);
+    expect(actualizarZonaSchema.safeParse({ ...validActualizar, hack: 1 }).success).toBe(false);
     expect(
-      actualizarZonaSchema.safeParse({ ...validCrear, cobroVehiculo: true, tarifas: [] }).success,
+      actualizarZonaSchema.safeParse({ ...validActualizar, cobroVehiculo: true, tarifas: [] }).success,
     ).toBe(false);
     expect(
       actualizarZonaSchema.safeParse({
-        ...validCrear,
+        ...validActualizar,
         cobroVehiculo: false,
         tarifas: [{ cobroEntregado: 10, cobroRechazado: 5, vehiculoId: "v1" }],
       }).success,

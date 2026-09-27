@@ -132,13 +132,13 @@ describeSiHayBase("351 — catálogos de filtro sin cuentas dadas de baja (Postg
 
       const zonaConAdminActivo = (
         await tx.zona.create({
-          data: { nombre: `Zona con admin en pie ${SUFIJO}` },
+          data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona con admin en pie ${SUFIJO}` },
           select: { id: true },
         })
       ).id;
       const zonaConAdminDeBaja = (
         await tx.zona.create({
-          data: { nombre: `Zona con admin de baja ${SUFIJO}` },
+          data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona con admin de baja ${SUFIJO}` },
           select: { id: true },
         })
       ).id;

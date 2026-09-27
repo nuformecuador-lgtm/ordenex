@@ -127,25 +127,25 @@ const ALMACEN: FilaAlmacen[] = [
   fila("a-01", "z-a", "en_bodega_satelite", "Escazú", "San Rafael", 1),
   fila("a-02", "z-a", "en_bodega_satelite", "Escazú", "San Antonio", 2, true),
   fila("a-03", "z-a", "en_bodega_satelite", "Barva", "San Rafael", 3),
-  fila("a-04", "z-a", "por_recoger", "Escazú", "San Rafael", 4),
-  fila("a-05", "z-a", "por_recoger", "San José", null, 5),
-  fila("a-06", "z-a", "por_devolver", "Barva", "San Pedro", 6),
-  fila("a-07", "z-a", "por_devolver", "Escazú", "San Antonio", 7),
+  fila("a-04", "z-a", "mensajero_recogiendo_en_bodega", "Escazú", "San Rafael", 4),
+  fila("a-05", "z-a", "mensajero_recogiendo_en_bodega", "San José", null, 5),
+  fila("a-06", "z-a", "por_devolver_a_bodega_central", "Barva", "San Pedro", 6),
+  fila("a-07", "z-a", "por_devolver_a_bodega_central", "Escazú", "San Antonio", 7),
   fila("a-08", "z-a", "devolviendo_a_bodega_central", "Barva", "San Rafael", 8),
-  fila("a-09", "z-a", "devuelta", "Escazú", "San Rafael", 9, true),
-  fila("a-10", "z-a", "devuelta", "San José", null, 10),
-  fila("a-11", "z-a", "devuelta", "Barva", "San Pedro", 11),
+  fila("a-09", "z-a", "novedad", "Escazú", "San Rafael", 9, true),
+  fila("a-10", "z-a", "novedad", "San José", null, 10),
+  fila("a-11", "z-a", "novedad", "Barva", "San Pedro", 11),
   fila("a-12", "z-a", "en_bodega_satelite", "San José", null, 12),
   // Fuera del listado por el ESTADO: «Por recibir» tiene su propia seccion.
   fila("a-13", "z-a", "en_ruta_bodega_satelite", "Escazú", "San Rafael", 13),
   // Fuera del listado por el ALCANCE (ficha 357): `entregada` de la zona que NUNCA paso por una
   // bodega satelite. Es la cara (B) medida en produccion.
-  fila("a-14", "z-a", "entregada", "Escazú", "San Rafael", 14, false, false),
+  fila("a-14", "z-a", "entregado", "Escazú", "San Rafael", 14, false, false),
   // Dentro (ficha 357, cara A): `entregada` que SI paso por la bodega. Hasta hoy era invisible.
-  fila("a-15", "z-a", "entregada", "Escazú", "San Rafael", 15),
+  fila("a-15", "z-a", "entregado", "Escazú", "San Rafael", 15),
   fila("b-01", "z-b", "en_bodega_satelite", "Escazú", "San Rafael", 20),
-  fila("b-02", "z-b", "devuelta", "Cartago", "Occidental", 21),
-  fila("b-03", "z-b", "por_recoger", "Cartago", "Occidental", 22),
+  fila("b-02", "z-b", "novedad", "Cartago", "Occidental", 21),
+  fila("b-03", "z-b", "mensajero_recogiendo_en_bodega", "Cartago", "Occidental", 22),
 ];
 
 /** El orden del listado SIN paginar: prioridad primero, luego recencia (feature 33/R7). */
@@ -341,11 +341,11 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     const seleccionesEstado = [
       [],
       ["en_bodega_satelite"],
-      ["devuelta"],
+      ["novedad"],
       // FICHA 357: un DESENLACE entre las selecciones. Sin el, las 64 combinaciones seguirian
       // recorriendo solo los estados del listado viejo y el filtro nuevo quedaria sin ejercer.
-      ["entregada"],
-      ["en_bodega_satelite", "por_recoger", "devuelta"],
+      ["entregado"],
+      ["en_bodega_satelite", "mensajero_recogiendo_en_bodega", "novedad"],
     ];
     const seleccionesCanton = [[], ["Escazú"], ["Barva"], ["Escazú", "San José"]];
     const seleccionesDistrito = [[], ["San Rafael"], ["San Antonio"], ["San Rafael", "San Pedro"]];
@@ -443,7 +443,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
 
     // Mezclado con uno valido, se queda solo con el valido.
     const mezcla = await svc.listarOrdenesBodegaPaginado(
-      { page: 1, pageSize: 50, estados: ["en_bodega_central", "devuelta"] },
+      { page: 1, pageSize: 50, estados: ["en_bodega_central", "novedad"] },
       SAT_A,
     );
     if (mezcla.status !== "ok") throw new Error("no ok");
@@ -498,7 +498,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
   it("el total responde a los filtros, no al conjunto entero (R41)", async () => {
     const svc = servicio(repoEnMemoria().repo);
     const r = await svc.listarOrdenesBodegaPaginado(
-      input({ page: 1, pageSize: 2, estados: ["devuelta"] }),
+      input({ page: 1, pageSize: 2, estados: ["novedad"] }),
       SAT_A,
     );
     if (r.status !== "ok") throw new Error("no ok");

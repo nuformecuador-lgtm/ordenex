@@ -27,7 +27,7 @@ function consultaDe(raw: object = {}, rol = "maestro", usuarioId = "u1"): Consul
 
 function fila(
   producto: string,
-  status = "entregada",
+  status = "entregado",
   n = 1,
   tiendaId = "t1",
   tiendaNombre = "Tienda Uno",
@@ -48,8 +48,8 @@ function repoFalso(filas: FilaProductoCruda[]): IConteoProductosRepository & { l
 describe("R24 / R25 · unidades y ordenes", () => {
   it("las unidades son la suma de las cantidades; las ordenes, cuantas ordenes lo llevan", () => {
     const { filas } = fundir([
-      fila("2 * Creatina Monohidratada", "entregada", 3),
-      fila("1 * Creatina Monohidratada", "rechazada", 2),
+      fila("2 * Creatina Monohidratada", "entregado", 3),
+      fila("1 * Creatina Monohidratada", "devolucion_a_origen_por_rechazo", 2),
     ]);
 
     expect(filas).toHaveLength(1);
@@ -62,7 +62,7 @@ describe("R24 / R25 · unidades y ordenes", () => {
   it("la cantidad multiplica por el numero de ordenes de la fila cruda, no lo sustituye", () => {
     // La mutacion que este caso mata: `unidades += cantidad` (olvidar el `x n`). Con `n = 1` en
     // todas las filas pasaria inadvertida, por eso aqui `n` es 7.
-    const { filas } = fundir([fila("3 * Base C", "entregada", 7)]);
+    const { filas } = fundir([fila("3 * Base C", "entregado", 7)]);
     expect(filas[0].unidades).toBe(21);
     expect(filas[0].ordenes).toBe(7);
   });
@@ -70,7 +70,7 @@ describe("R24 / R25 · unidades y ordenes", () => {
 
 describe("R26 · el mismo producto dos veces en la MISMA orden", () => {
   it("suma las cantidades y cuenta la orden UNA vez", () => {
-    const { filas } = fundir([fila("2 * Base C. 1 * base c.", "entregada", 1)]);
+    const { filas } = fundir([fila("2 * Base C. 1 * base c.", "entregado", 1)]);
 
     expect(filas).toHaveLength(1);
     expect(filas[0].unidades).toBe(3);
@@ -80,13 +80,13 @@ describe("R26 · el mismo producto dos veces en la MISMA orden", () => {
   });
 
   it("y lo hace tambien con `n > 1`", () => {
-    const { filas } = fundir([fila("1 * BASE C. 1 * Base C.", "entregada", 5)]);
+    const { filas } = fundir([fila("1 * BASE C. 1 * Base C.", "entregado", 5)]);
     expect(filas[0].unidades).toBe(10);
     expect(filas[0].ordenes).toBe(5);
   });
 
   it("dos productos DISTINTOS de la misma orden cuentan en los dos (R36)", () => {
-    const { filas, ordenes } = fundir([fila("1 * Base Dr. 1 * BASE C.", "entregada", 4)]);
+    const { filas, ordenes } = fundir([fila("1 * Base Dr. 1 * BASE C.", "entregado", 4)]);
 
     expect(filas).toHaveLength(2);
     expect(filas.map((f) => f.ordenes)).toEqual([4, 4]);
@@ -100,9 +100,9 @@ describe("R26 · el mismo producto dos veces en la MISMA orden", () => {
 describe("R35 · el universo y las ordenes sin producto interpretable", () => {
   it("`ordenes` cuenta TODAS las filas crudas, den producto o no", () => {
     const { ordenes, ordenesSinProducto } = fundir([
-      fila("1 * Base C", "entregada", 10),
-      fila("   ", "entregada", 3),
-      fila("...", "rechazada", 2),
+      fila("1 * Base C", "entregado", 10),
+      fila("   ", "entregado", 3),
+      fila("...", "devolucion_a_origen_por_rechazo", 2),
     ]);
 
     expect(ordenes).toBe(15);
@@ -110,14 +110,14 @@ describe("R35 · el universo y las ordenes sin producto interpretable", () => {
   });
 
   it("una orden sin producto interpretable NO produce fila fantasma", () => {
-    const { filas } = fundir([fila("", "entregada", 4)]);
+    const { filas } = fundir([fila("", "entregado", 4)]);
     expect(filas).toEqual([]);
   });
 
   it("las cadenas de PRUEBA si producen fila: no son «sin producto»", () => {
     const { filas, ordenesSinProducto } = fundir([
-      fila("PRUEBA", "entregada", 4),
-      fila("Camiseta talla M", "entregada", 1),
+      fila("PRUEBA", "entregado", 4),
+      fila("Camiseta talla M", "entregado", 1),
     ]);
     expect(filas.map((f) => f.producto).sort()).toEqual(["Camiseta talla M", "PRUEBA"]);
     expect(ordenesSinProducto).toBe(0);
@@ -127,8 +127,8 @@ describe("R35 · el universo y las ordenes sin producto interpretable", () => {
 describe("R37 / R38 / R39 · separados POR TIENDA", () => {
   it("dos tiendas con el MISMO texto son DOS filas", () => {
     const { filas } = fundir([
-      fila("1 * Crema Especial MLX", "entregada", 3, "t1", "Tienda Uno"),
-      fila("1 * Crema Especial MLX", "entregada", 5, "t2", "Tienda Dos"),
+      fila("1 * Crema Especial MLX", "entregado", 3, "t1", "Tienda Uno"),
+      fila("1 * Crema Especial MLX", "entregado", 5, "t2", "Tienda Dos"),
     ]);
 
     expect(filas).toHaveLength(2);
@@ -140,22 +140,22 @@ describe("R37 / R38 / R39 · separados POR TIENDA", () => {
   });
 
   it("la fila lleva el NOMBRE de la tienda y su id como clave", () => {
-    const { filas } = fundir([fila("1 * Base C", "entregada", 1, "t-uuid", "Tienda Uno")]);
+    const { filas } = fundir([fila("1 * Base C", "entregado", 1, "t-uuid", "Tienda Uno")]);
     expect(filas[0].tienda).toBe("Tienda Uno");
     expect(filas[0].tiendaId).toBe("t-uuid");
   });
 
   it("el mismo texto de la misma tienda en dos desenlaces es UNA fila", () => {
     const { filas } = fundir([
-      fila("1 * Base C", "entregada", 3),
-      fila("1 * Base C", "rechazada", 1),
+      fila("1 * Base C", "entregado", 3),
+      fila("1 * Base C", "devolucion_a_origen_por_rechazo", 1),
     ]);
 
     expect(filas).toHaveLength(1);
     expect(filas[0].ordenes).toBe(4);
     expect(filas[0].porStatus).toEqual([
-      { status: "entregada", conteo: 3 },
-      { status: "rechazada", conteo: 1 },
+      { status: "entregado", conteo: 3 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 1 },
     ]);
   });
 });
@@ -163,8 +163,8 @@ describe("R37 / R38 / R39 · separados POR TIENDA", () => {
 describe("R18 · la forma visible es DETERMINISTA", () => {
   it("gana la variante con MAS ordenes", () => {
     const { filas } = fundir([
-      fila("1 * base c", "entregada", 2),
-      fila("1 * BASE C", "entregada", 9),
+      fila("1 * base c", "entregado", 2),
+      fila("1 * BASE C", "entregado", 9),
     ]);
 
     expect(filas).toHaveLength(1);
@@ -173,12 +173,12 @@ describe("R18 · la forma visible es DETERMINISTA", () => {
 
   it("en empate gana la menor por comparacion de cadena, no el orden de llegada", () => {
     const orden1 = fundir([
-      fila("1 * base c", "entregada", 3),
-      fila("1 * BASE C", "entregada", 3),
+      fila("1 * base c", "entregado", 3),
+      fila("1 * BASE C", "entregado", 3),
     ]);
     const orden2 = fundir([
-      fila("1 * BASE C", "entregada", 3),
-      fila("1 * base c", "entregada", 3),
+      fila("1 * BASE C", "entregado", 3),
+      fila("1 * base c", "entregado", 3),
     ]);
 
     // `BASE C` < `base c` por unidades de codigo (mayusculas primero). Lo importante no es CUAL
@@ -189,8 +189,8 @@ describe("R18 · la forma visible es DETERMINISTA", () => {
 
   it("la misma entrada produce siempre la misma salida", () => {
     const crudas = [
-      fila("2 * Base Dr. 1 * BASE C.", "entregada", 3),
-      fila("1 * base dr", "rechazada", 1, "t2", "Tienda Dos"),
+      fila("2 * Base Dr. 1 * BASE C.", "entregado", 3),
+      fila("1 * base dr", "devolucion_a_origen_por_rechazo", 1, "t2", "Tienda Dos"),
       fila("1 * Base C.", "en_reparto", 2),
     ];
     expect(fundir(crudas)).toEqual(fundir(crudas));
@@ -202,14 +202,14 @@ describe("R33 · el orden de las filas es determinista, con cuatro criterios", (
   it("unidades desc, ordenes desc, producto asc, tienda asc", () => {
     const { filas } = fundir([
       // mismas unidades (4) y mismas ordenes (4): desempata el nombre
-      fila("1 * Zeta", "entregada", 4, "t1", "Tienda Uno"),
-      fila("1 * Alfa", "entregada", 4, "t1", "Tienda Uno"),
+      fila("1 * Zeta", "entregado", 4, "t1", "Tienda Uno"),
+      fila("1 * Alfa", "entregado", 4, "t1", "Tienda Uno"),
       // mismas unidades (4) y mismas ordenes (4) y MISMO nombre: desempata la tienda
-      fila("1 * Alfa", "entregada", 4, "t2", "Aurora"),
+      fila("1 * Alfa", "entregado", 4, "t2", "Aurora"),
       // mas unidades: va primero
-      fila("5 * Beta", "entregada", 2, "t1", "Tienda Uno"),
+      fila("5 * Beta", "entregado", 2, "t1", "Tienda Uno"),
       // mismas unidades que Alfa/Zeta pero menos ordenes
-      fila("2 * Gamma", "entregada", 2, "t1", "Tienda Uno"),
+      fila("2 * Gamma", "entregado", 2, "t1", "Tienda Uno"),
     ]);
 
     expect(filas.map((f) => [f.producto, f.tienda, f.unidades, f.ordenes])).toEqual([
@@ -223,9 +223,9 @@ describe("R33 · el orden de las filas es determinista, con cuatro criterios", (
 
   it("el orden NO depende del orden en que la base devolvio las filas", () => {
     const crudas = [
-      fila("1 * Zeta", "entregada", 4),
-      fila("1 * Alfa", "entregada", 4),
-      fila("5 * Beta", "entregada", 2),
+      fila("1 * Zeta", "entregado", 4),
+      fila("1 * Alfa", "entregado", 4),
+      fila("5 * Beta", "entregado", 2),
     ];
     const directo = fundir(crudas).filas.map((f) => f.producto);
     const invertido = fundir([...crudas].reverse()).filas.map((f) => f.producto);
@@ -234,15 +234,15 @@ describe("R33 · el orden de las filas es determinista, con cuatro criterios", (
 
   it("`porStatus` tambien sale ordenado y estable", () => {
     const { filas } = fundir([
-      fila("1 * Base C", "rechazada", 2),
-      fila("1 * Base C", "entregada", 9),
+      fila("1 * Base C", "devolucion_a_origen_por_rechazo", 2),
+      fila("1 * Base C", "entregado", 9),
       fila("1 * Base C", "en_reparto", 2),
     ]);
     // conteo desc, y el nombre como desempate entre los dos que valen 2.
     expect(filas[0].porStatus).toEqual([
-      { status: "entregada", conteo: 9 },
+      { status: "entregado", conteo: 9 },
+      { status: "devolucion_a_origen_por_rechazo", conteo: 2 },
       { status: "en_reparto", conteo: 2 },
-      { status: "rechazada", conteo: 2 },
     ]);
   });
 });
@@ -250,23 +250,23 @@ describe("R33 · el orden de las filas es determinista, con cuatro criterios", (
 describe("R31 / R34 · lo que NO se emite", () => {
   it("ninguna fila con cero ordenes", () => {
     const { filas } = fundir([
-      fila("1 * Base C", "entregada", 1),
-      fila("", "entregada", 3),
-      fila("1 * Otro", "rechazada", 2),
+      fila("1 * Base C", "entregado", 1),
+      fila("", "entregado", 3),
+      fila("1 * Otro", "devolucion_a_origen_por_rechazo", 2),
     ]);
     for (const f of filas) expect(f.ordenes).toBeGreaterThan(0);
     expect(filas).toHaveLength(2);
   });
 
   it("un producto que no aparece en el recorte no genera fila en cero", () => {
-    const { filas } = fundir([fila("1 * Base C", "entregada", 1)]);
+    const { filas } = fundir([fila("1 * Base C", "entregado", 1)]);
     expect(filas.map((f) => f.producto)).toEqual(["Base C"]);
   });
 
   it("unidades y ordenes son ENTEROS", () => {
     const { filas, ordenes, ordenesSinProducto } = fundir([
-      fila("3 * Base C", "entregada", 7),
-      fila("1 * Base Dr. 2 * Otro.", "rechazada", 5),
+      fila("3 * Base C", "entregado", 7),
+      fila("1 * Base Dr. 2 * Otro.", "devolucion_a_origen_por_rechazo", 5),
     ]);
     for (const f of filas) {
       expect(Number.isSafeInteger(f.unidades), f.producto).toBe(true);
@@ -294,7 +294,7 @@ describe("R31 / R34 · lo que NO se emite", () => {
     // Los DOS campos nuevos, y ninguno mas:
     //   `ordenesAcompanadas` — entero, aditivo, es la advertencia de la atribucion (R13);
     //   `dinero`             — `DineroProductoDTO | null`, todo importe STRING escala 2 (R22).
-    const { filas } = fundir([fila("1 * Base C", "entregada", 2)]);
+    const { filas } = fundir([fila("1 * Base C", "entregado", 2)]);
     expect(Object.keys(filas[0]).sort()).toEqual([
       "dinero",
       "ordenes",
@@ -308,7 +308,7 @@ describe("R31 / R34 · lo que NO se emite", () => {
   });
 
   it("sin dinero fundido, la fila lo dice con `null` — NUNCA con cifras en cero (R5/R30)", () => {
-    const { filas, dinero } = fundir([fila("1 * Base C", "entregada", 2)]);
+    const { filas, dinero } = fundir([fila("1 * Base C", "entregado", 2)]);
     // `fundir` sin segundo argumento es la lectura con el dinero DENEGADO: ni una cifra.
     expect(dinero).toEqual({ estado: "denegado" });
     expect(filas[0].dinero).toBeNull();
@@ -321,10 +321,10 @@ describe("R31 / R34 · lo que NO se emite", () => {
 describe("El corpus REAL, fundido", () => {
   it("las cadenas de produccion producen las filas contadas a mano", () => {
     const { filas, ordenes, ordenesSinProducto } = fundir([
-      fila("1 * Dr Melaxin. 1 * BASE C.", "entregada", 2),
-      fila("1 * Base Dr. 1 * BASE C.", "rechazada", 1),
-      fila("2 * Creatina Monohidratada. 1 * BASE C.", "entregada", 1),
-      fila("PRUEBA", "entregada", 1),
+      fila("1 * Dr Melaxin. 1 * BASE C.", "entregado", 2),
+      fila("1 * Base Dr. 1 * BASE C.", "devolucion_a_origen_por_rechazo", 1),
+      fila("2 * Creatina Monohidratada. 1 * BASE C.", "entregado", 1),
+      fila("PRUEBA", "entregado", 1),
     ]);
 
     expect(ordenes).toBe(5);
@@ -344,7 +344,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const cache = cacheFalsa();
     const consulta = consultaDe();
     const service = new ConteoProductosService(
-      repoFalso([fila("1 * Base C", "entregada", 1)]),
+      repoFalso([fila("1 * Base C", "entregado", 1)]),
       cache,
       dineroFalso(),
       { now: () => AHORA },
@@ -358,7 +358,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
 
   it("el segundo `consultar` sale de la cache y NO vuelve a tocar el repositorio", async () => {
     const cache = cacheFalsa();
-    const repo = repoFalso([fila("1 * Base C", "entregada", 1)]);
+    const repo = repoFalso([fila("1 * Base C", "entregado", 1)]);
     const service = new ConteoProductosService(repo, cache, dineroFalso(), { now: () => AHORA });
     const consulta = consultaDe();
 
@@ -370,7 +370,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
 
   it("invalidar el tag de productos vacia la entrada y la siguiente lectura vuelve a la base", async () => {
     const cache = cacheFalsa();
-    const repo = repoFalso([fila("1 * Base C", "entregada", 1)]);
+    const repo = repoFalso([fila("1 * Base C", "entregado", 1)]);
     const service = new ConteoProductosService(repo, cache, dineroFalso(), { now: () => AHORA });
 
     await service.consultar(consultaDe());
@@ -384,7 +384,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
     const cache = cacheFalsa();
     let ahora = new Date("2026-09-01T12:00:00.000Z");
     const service = new ConteoProductosService(
-      repoFalso([fila("1 * Base C", "entregada", 1)]),
+      repoFalso([fila("1 * Base C", "entregado", 1)]),
       cache,
       dineroFalso(),
       { now: () => ahora },
@@ -403,7 +403,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
   it("dos actores con alcance distinto NO comparten entrada de cache", async () => {
     const cache = cacheFalsa();
     const service = new ConteoProductosService(
-      repoFalso([fila("1 * Base C", "entregada", 1)]),
+      repoFalso([fila("1 * Base C", "entregado", 1)]),
       cache,
       dineroFalso(),
       { now: () => AHORA },
@@ -419,7 +419,7 @@ describe("R58 · cache: clave con prefijo propio, tag propio y `lastSync` DENTRO
   it("el DTO cruza la cache SERIALIZADO sin perder forma (como `unstable_cache`)", async () => {
     const cache = cacheFalsa();
     const service = new ConteoProductosService(
-      repoFalso([fila("2 * Base C", "entregada", 3)]),
+      repoFalso([fila("2 * Base C", "entregado", 3)]),
       cache,
       dineroFalso(),
       { now: () => AHORA },

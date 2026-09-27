@@ -1,8 +1,10 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
 import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 import type {
   CierreDeTiendaAgregadoRow,
+  CobroTiendaRegistro,
   CrearMovimientoTiendaInput,
   DesgloseTiendaAgregadoRow,
   IWalletTiendaMovimientoRepository,
@@ -50,7 +52,8 @@ function buildFiltrosWhere(f: SaldoTiendaFiltros): Prisma.WalletTiendaMovimiento
   if (f.desde !== undefined || f.hasta !== undefined) {
     where.fechaMovimiento = {
       ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      // Ficha 461 (R72, auditoria T1): cota EXCLUSIVA; el borde manda el inicio del dia CR siguiente.
+      ...(f.hasta !== undefined ? { lt: f.hasta } : {}),
     };
   }
   return where;
@@ -90,6 +93,9 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       // clave— asi que el feed del cierre sigue cayendo en el `DEFAULT CURRENT_TIMESTAMP`
       // de la columna exactamente como antes.
       ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
+      // Ficha 461 (R66/R67): la clave de idempotencia del cliente, SOLO si el llamador la trae. Con
+      // `skipDuplicates`, un choque en su indice UNIQUE deja la fila fuera y `count` en 0.
+      ...(m.claveIdempotencia !== undefined ? { claveIdempotencia: m.claveIdempotencia } : {}),
     }));
     const res = await tx.walletTiendaMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -106,7 +112,11 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
     const [rows, total] = await Promise.all([
       this.prisma.walletTiendaMovimiento.findMany({
         where,
-        orderBy: { fechaMovimiento: "desc" },
+        // Ficha 458-B (R23, m4 de la auditoria): orden TOTAL, como la caja (`WalletMovimientoRepository
+        // .listar`, ficha 334). Solo por fecha, las filas del MISMO instante (todo lo que escribe un
+        // cierre, un pago y su debito) quedaban en orden indefinido y la paginacion podia repetir u
+        // omitir filas. `createdAt` desempata por creacion real; `id` cierra el orden.
+        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         skip,
         take: filtros.pageSize,
       }),
@@ -119,12 +129,14 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
   async agregarSaldoPorTienda(
     tiendaId: string,
     filtros: SaldoTiendaFiltros,
+    cliente?: WalletTiendaTxClient,
   ): Promise<SaldoTiendaAgregado> {
     const where: Prisma.WalletTiendaMovimientoWhereInput = {
       tiendaId, // R19: acotado por tienda en el WHERE
       ...buildFiltrosWhere(filtros),
     };
-    const grupos = await this.prisma.walletTiendaMovimiento.groupBy({
+    // Ficha 457 (m3): con `cliente` (el `tx` del candado) la lectura va por ESA conexion.
+    const grupos = await (cliente ?? this.prisma).walletTiendaMovimiento.groupBy({
       by: ["tipo"],
       where,
       _sum: { monto: true },
@@ -253,9 +265,10 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
     const tiendaIds = [...porTienda.keys()];
     const usuarios = await this.prisma.usuario.findMany({
       where: { id: { in: tiendaIds } },
-      select: { id: true, nombre: true },
+      select: { id: true, ...CUENTA_USUARIO_SELECT },
     });
-    const nombrePorId = new Map(usuarios.map((u) => [u.id, u.nombre]));
+    // Ficha 458-A (R33): el nombre de la cuenta con LA funcion de la wallet, no `nombre` a secas.
+    const nombrePorId = new Map(usuarios.map((u) => [u.id, etiquetaDeCuenta(u)]));
 
     return tiendaIds.map((tiendaId) => {
       const acc = porTienda.get(tiendaId)!;
@@ -350,7 +363,7 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
   ): Promise<void> {
     const tienda = await tx.usuario.findUnique({
       where: { id: input.tiendaId },
-      select: { nombre: true },
+      select: CUENTA_USUARIO_SELECT,
     });
     const actor = await resolverActorCongelado(tx, input.actorUsuarioId);
     await appendAccion(tx, [
@@ -359,12 +372,59 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
         entidadTipo: "wallet_tienda_movimiento",
         entidadId: input.cobroId,
         entidadEtiqueta: etiquetaDeEntidad("wallet_tienda_movimiento", {
-          tiendaNombre: tienda?.nombre ?? null,
+          tiendaNombre: tienda === null ? null : etiquetaDeCuenta(tienda),
         }),
         // STRING money-safe -> `Decimal`, sin pasar por `number` (R18).
         monto: new Prisma.Decimal(input.monto),
         ...actor,
       },
     ]);
+  }
+
+  /**
+   * FICHA 461 (R7) — el nombre de la tienda para la linea de caja del cobro, compuesto como lo compone
+   * el resto de la wallet: `etiquetaDeCuenta` (ficha 458-A, R33; antes nombre + primer apellido).
+   * Se lee DENTRO de la transaccion del cobro, con el `tx` que recibe.
+   */
+  async nombreDeTienda(tx: WalletTiendaHistorialTxClient, tiendaId: string): Promise<string> {
+    const tienda = await tx.usuario.findUnique({
+      where: { id: tiendaId },
+      select: CUENTA_USUARIO_SELECT,
+    });
+    return etiquetaDeCuenta(tienda);
+  }
+
+  /**
+   * FICHA 461 (design §5.3, R13/R16) — un cobro de Ordenex a una tienda por su id. El `WHERE` lleva
+   * las TRES claves: el id, el tipo `debito` y la categoria `cobro_manual`. Un flete, un pago o una
+   * anulacion con ese id no salen de la base: para quien llama, no existe un cobro con ese id.
+   */
+  /** Ficha 461 (R68): el cobro que lleva ESA clave de idempotencia (columna UNIQUE), como DTO, o null. */
+  async obtenerCobroPorClave(claveIdempotencia: string): Promise<WalletTiendaMovimientoDTO | null> {
+    const fila = await this.prisma.walletTiendaMovimiento.findUnique({ where: { claveIdempotencia } });
+    return fila === null ? null : toDTO(fila);
+  }
+
+  async obtenerCobroPorId(id: string): Promise<CobroTiendaRegistro | null> {
+    const fila = await this.prisma.walletTiendaMovimiento.findFirst({
+      where: { id, tipo: "debito", categoria: "cobro_manual" },
+      select: {
+        id: true,
+        tiendaId: true,
+        monto: true,
+        descripcion: true,
+        fechaMovimiento: true,
+        tienda: { select: CUENTA_USUARIO_SELECT },
+      },
+    });
+    if (fila === null) return null;
+    return {
+      id: fila.id,
+      tiendaId: fila.tiendaId,
+      tiendaNombre: etiquetaDeCuenta(fila.tienda),
+      monto: fila.monto.toFixed(2), // Decimal -> STRING escala 2 (money-safe)
+      descripcion: fila.descripcion,
+      fechaMovimiento: fila.fechaMovimiento.toISOString(),
+    };
   }
 }

@@ -24,37 +24,31 @@ import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-stat
 
 const TABLA_APROBADA: Record<OrderStatusValue, BucketSinResultado> = {
   // --- los tres enumerados en R43 ---
-  por_recoger: "sinRecoger", // tiene guia y mensajero, espera que el mensajero la acepte
+  mensajero_recogiendo_en_bodega: "sinRecoger", // tiene guia y mensajero, espera que el mensajero la acepte
   recolectando: "sinRecoger", // feature 157: alguien va en camino a la tienda
   en_reparto: "enReparto", // feature 36: FUE recogida y esta en la calle
   // --- todo lo demas: `otros` (R45) ---
-  entregada: "otros",
-  devuelta: "otros",
+  entregado: "otros",
+  novedad: "otros",
   devolviendo_a_tienda: "otros",
-  reprogramada: "otros",
+  reprogramado: "otros",
   en_ruta_bodega_central: "otros",
   en_bodega_central: "otros",
   en_preparacion: "otros",
   en_ruta_bodega_satelite: "otros",
-  rechazada: "otros",
+  devolucion_a_origen_por_rechazo: "otros",
   en_bodega_satelite: "otros",
   devuelta_a_tienda: "otros",
-  sin_gestionar: "otros",
-  por_devolver: "otros",
+  novedad_interna: "otros",
+  por_devolver_a_bodega_central: "otros",
   devolviendo_a_bodega_central: "otros",
   por_devolver_a_tienda: "otros",
   por_recolectar_en_tienda: "otros", // R44: nadie va todavia
   incidente: "otros",
-  // Feature 239/R26 (2026-08-19, T1.7): `otros` POR DEFECTO, y es la clasificacion correcta, no
-  // un olvido. Estos buckets solo particionan ordenes SIN gestion vigente hoy; una orden en el
-  // pre-estado tiene gestion del dia (la devolucion que el mensajero acaba de registrar), asi
-  // que cuenta en `devueltas` y no puede caer en `sinRecoger` ni en `enReparto`.
-  devolucion_por_confirmar: "otros",
-  // Feature 235 (2026-08-19): `ayuda_tienda` cae en `otros` y NO en `enReparto`. Es una decision
-  // afirmada aqui porque `BUCKET_POR_ESTATUS` es PARCIAL y absorbe un value nuevo sin quejarse:
-  // los buckets `sinRecoger`/`enReparto` describen el avance normal del dia, y una orden detenida
-  // esperando a que la tienda conteste no es ninguno de los dos.
-  ayuda_tienda: "otros",
+  // ⏳ 2026-09-23 (FICHA 454, R37): aqui estaban `devolucion_por_confirmar: "otros"` (239) y
+  // `ayuda_tienda: "otros"` (235). Los dos salen del catalogo. Sus filas historicas se siguen
+  // clasificando `otros` por el defecto del mapa: lo afirman los dos casos 239/235 de abajo, que se
+  // conservan porque `bucketDeEstatus` recibe el value crudo de la base.
 };
 
 describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () => {
@@ -94,14 +88,14 @@ describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () 
 
   it("los tres casos nombrados en R43 son los unicos con bucket EXPLICITO", () => {
     expect(BUCKET_POR_ESTATUS).toEqual({
-      por_recoger: "sinRecoger",
+      mensajero_recogiendo_en_bodega: "sinRecoger",
       recolectando: "sinRecoger",
       en_reparto: "enReparto",
     });
   });
 
-  it("`por_recoger` y `recolectando` van a `sinRecoger`; `en_reparto` va a `enReparto`", () => {
-    expect(estatusDelBucket("sinRecoger")).toEqual(["por_recoger", "recolectando"]);
+  it("`mensajero_recogiendo_en_bodega` y `recolectando` van a `sinRecoger`; `en_reparto` va a `enReparto`", () => {
+    expect(estatusDelBucket("sinRecoger")).toEqual(["mensajero_recogiendo_en_bodega", "recolectando"]);
     expect(estatusDelBucket("enReparto")).toEqual(["en_reparto"]);
   });
 
@@ -132,7 +126,7 @@ describe("R45 — nada no enumerado se absorbe en `sinRecoger` ni en `enReparto`
     const otros = estatusDelBucket("otros");
 
     expect(otros).toHaveLength(ORDER_STATUS_SEED.length - 3);
-    expect(otros).not.toContain("por_recoger");
+    expect(otros).not.toContain("mensajero_recogiendo_en_bodega");
     expect(otros).not.toContain("recolectando");
     expect(otros).not.toContain("en_reparto");
   });

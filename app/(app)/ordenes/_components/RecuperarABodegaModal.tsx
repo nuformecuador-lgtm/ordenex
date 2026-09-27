@@ -8,6 +8,7 @@ import {
   type RecuperarABodegaActionResult,
 } from "@/lib/actions/resolver-novedad";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 import { recuperarBodegaErrorMessage } from "./recuperar-bodega-error-messages";
 
@@ -69,7 +70,8 @@ export function RecuperarABodegaModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Recuperar a bodega"
-      description={`Se recuperarán ${ordenes.length} orden(es) en devolución a la bodega central para un nuevo intento.`}
+      // FICHA 455 (m8): el estado de estas órdenes por su nombre exacto, leído de la fuente.
+      description={`Se recuperarán a la bodega central ${ordenes.length} orden(es) en ${nombreDeEstado("novedad")} para un nuevo intento.`}
       confirmLabel="Recuperar a bodega"
       confirmDisabled={sinOrdenes}
       onConfirm={handleConfirm}

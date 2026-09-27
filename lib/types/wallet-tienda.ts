@@ -7,7 +7,10 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 // FICHA 381: las dos piezas del borde del dinero manual, reutilizadas TAL CUAL desde el libro de la
 // caja. Ver `registrarCobroTiendaSchema` al final del archivo.
-import { fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import { claveIdempotenciaSchema, fechaMovimientoSchema, montoPositivoSchema } from "@/lib/types/wallet";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 
 // Feature 43 (design §1.1/§3) — fuente unica de verdad de tipos/categorias del ledger POR
 // TIENDA, respaldada por los enums Postgres nativos (patron lib/types/wallet.ts). El
@@ -52,6 +55,23 @@ export const WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED = [
   // DISTINGUIR un cobro de una correccion compensatoria, y esa distincion no puede apoyarse en la
   // `descripcion`, que es texto libre tecleado por una persona.
   "cobro_manual",
+  // FICHA 459 (design §4.1/§5): el pago que Ordenex hace POR CUENTA de la tienda (debito) y su
+  // anulacion (credito). Contrapartida en la caja: `egreso_pago_por_cuenta_tienda` / su reverso.
+  "pago_por_cuenta",
+  "pago_por_cuenta_anulado",
+  // FICHA 461 (design §2.1, HD1): la ANULACION de un cobro de Ordenex a la tienda (credito). Le
+  // devuelve el monto del cobro; su contrapartida en la caja es `egreso_reverso_cobro_tienda`.
+  "cobro_tienda_anulado",
+  // FICHA 457 (design §0/§4, DH1): el PAGO DE UNA TIENDA A ORDENEX (credito: la tienda con saldo en
+  // contra le entrega dinero a Ordenex y su saldo sube) y su ANULACION (debito). Contrapartida en la
+  // caja: `ingreso_abono_tienda` / `egreso_reverso_abono_tienda` (terceros, efectivo).
+  "abono_tienda",
+  "abono_tienda_anulado",
+  // FICHA 458-B (design §2.1/§2.3, D7): los CREDITOS ESPEJO de la anulacion de un cobro por rechazo
+  // aprobado: le devuelven a la tienda el flete y el IVA. Contrapartida en la caja:
+  // `egreso_reverso_flete_devolucion` / `egreso_reverso_iva_flete_devolucion`.
+  "flete_devolucion_anulado",
+  "iva_flete_devolucion_anulado",
 ] as const satisfies readonly PrismaWalletTiendaMovimientoCategoria[];
 
 export type WalletTiendaMovimientoCategoria =
@@ -89,7 +109,8 @@ export type WalletTiendaMovimientoDTO = {
   tipo: WalletTiendaMovimientoTipo;
   categoria: WalletTiendaMovimientoCategoria;
   monto: string; // Decimal -> STRING 2 dec (R4/R27)
-  origenTipo: string; // cierre_dia | pago_tienda | manual (WalletOrigenTipo)
+  // Ficha 458-A (TA.2, R9): el catalogo, no `string`: un diccionario parcial ya no compila.
+  origenTipo: WalletOrigenTipo;
   origenId: string | null;
   descripcion: string | null;
   fechaMovimiento: string; // ISO
@@ -167,14 +188,22 @@ export type ListarSaldosTiendasCompletoResult = ListarCompletoResult<SaldoTienda
 // Listado del ledger de la tienda: paginado + filtros opcionales por cierre, concepto y
 // rango de fechas. El acotado por tienda NO viaja aqui (lo pone el service desde el actor,
 // R19); estos filtros son solo del desglose.
+// Ficha 458-A (TA.6, R36, m1 de la auditoria): `.strict()`. El paginado de `/mi-wallet` NO era
+// estricto: una clave que nombrara una tienda (`tiendaId`) se descartaba en silencio en vez de
+// rechazarse. El servicio acota igual por el actor, pero una peticion con una clave ajena es un
+// intento de ampliar el alcance y se responde `validation_error` sin leer nada. Las derivadas
+// (`.extend` del desglose, `.omit` del completo) heredan la misma politica.
 export const listarMovimientosTiendaSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  cierreId: z.string().min(1).optional(),
+  // Ficha 458-A (TA.4, R12): el cierre se elige en un selector y viaja su id; el borde rechaza todo
+  // valor que no tenga forma de identificador (antes `min(1)`: cualquier texto pegado).
+  cierreId: z.string().uuid().optional(),
   categoria: z.enum(WALLET_TIENDA_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
-});
+  // Ficha 461 (R72, auditoria T1): dias de Costa Rica; `hasta` exclusivo en el repositorio.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
+}).strict();
 
 export type ListarMovimientosTiendaInput = z.infer<typeof listarMovimientosTiendaSchema>;
 
@@ -197,8 +226,9 @@ export type ListarMovimientosTiendaCompletoInput = z.infer<
 
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO
 // conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18).
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
 export type ListarMovimientosTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── Feature 171 — DESGLOSE del dinero de UNA tienda elegida (vista de ACCESO TOTAL) ──
 //
@@ -210,18 +240,20 @@ export type ListarMovimientosTiendaCompletoResult =
  * Feature 171 (design §2.1, R7/R8/R10) — cabecera del desglose: TRES cubetas exhaustivas
  * sobre el ledger + el saldo que se deriva de ellas.
  *
- * `pagado` esta separado de `cargos` a proposito, y hoy vale siempre "0.00" porque ningun
- * flujo emite `pago_tienda` (lo emitira la 172). No es un cero fijo: se lee de la categoria
- * REAL del ledger, de modo que el dia que la 172 inserte el primer pago esta cabecera lo
- * refleje sin tocar una linea (R43). Si «pagado» se plegara dentro de «cargos», nadie podria
- * distinguir *lo que te cobre* de *lo que ya te pague* mirando la pantalla.
+ * `pagado` esta separado de `cargos` a proposito: es lo que Ordenex le pago a la tienda o pago
+ * por ella (`pago_tienda` de la 172, `pago_por_cuenta` de la 459), leido de las categorias REALES
+ * del ledger. Si «pagado» se plegara dentro de «cargos», nadie podria distinguir *lo que te
+ * cobre* de *lo que ya te pague* mirando la pantalla. (Ficha 458-A, T2: el comentario de la 171
+ * decia que valia siempre 0,00 hasta la 172; la 172 ya emite pagos.) La cubeta de CADA categoria
+ * la fija `CUBETA_POR_CATEGORIA` (`lib/utils/desglose-tienda.ts`), un `Record` total: esa tabla es
+ * la fuente; los comentarios de abajo, un resumen (458-B, T2).
  *
  * Money-safe (R23): los cuatro importes cruzan la frontera como STRING escala 2.
  */
 export type DesgloseTiendaDTO = {
-  aFavor: string; // Σ creditos (cod_recaudado, ajuste_credito)
-  cargos: string; // Σ debitos != pago_tienda (fletes, comision, los tres IVA, ajuste_debito)
-  pagado: string; // Σ debitos == pago_tienda (hoy siempre "0.00", ver R43)
+  aFavor: string; // Σ creditos en cubeta `aFavor` (CUBETA_POR_CATEGORIA: cod_recaudado, ajuste_credito, abono_tienda y los creditos espejo de las anulaciones)
+  cargos: string; // Σ debitos en cubeta `cargos` (CUBETA_POR_CATEGORIA: fletes, comision, los tres IVA, ajuste_debito, cobro_manual, abono_tienda_anulado)
+  pagado: string; // Σ debitos en cubeta `pagado` (CUBETA_POR_CATEGORIA: pago_tienda de la 172, pago_por_cuenta de la 459)
   saldo: string; // aFavor - cargos - pagado (puede venir "-123.45")
   signo: SaldoTiendaSigno;
 };
@@ -275,7 +307,7 @@ export type ListarMovimientosDeTiendaCompletoInput = z.infer<
 // Resultado del modo completo en el BORDE. `limite_excedido` lleva SOLO conteos y ninguna
 // rama de error viaja con filas (R39/R40).
 export type ListarMovimientosDeTiendaCompletoResult =
-  ListarCompletoResult<WalletTiendaMovimientoDTO>;
+  ListarCompletoResult<ConOrigen<WalletTiendaMovimientoDTO>>;
 
 // ── FICHA 335 — las opciones del selector de cierre de `/mi-wallet` ──
 
@@ -331,7 +363,43 @@ export const registrarCobroTiendaSchema = z
     monto: montoPositivoSchema, // STRING, > 0, <= 2 decimales (R14/R18)
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."), // R15
     fecha: fechaMovimientoSchema.optional(), // R16/R21
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66): un doble envio es UN cobro
   })
   .strict();
 
 export type RegistrarCobroTiendaInput = z.infer<typeof registrarCobroTiendaSchema>;
+
+// ── FICHA 461 — ANULAR UN COBRO de Ordenex a una tienda (R10–R19) ──
+
+/**
+ * FICHA 461 (R13/R14) — el BORDE de la anulacion: el cobro y un motivo. SIN monto, y `.strict()`
+ * lo hace cumplir (R13): el monto de los dos contra-asientos se lee DEL COBRO en el servidor, y una
+ * peticion que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error`
+ * sin escribir nada. El motivo se recorta y no puede quedar vacio (R14). Molde:
+ * `anularPagoPorCuentaTiendaSchema`.
+ */
+export const anularCobroTiendaSchema = z
+  .object({
+    cobroId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularCobroTiendaInput = z.infer<typeof anularCobroTiendaSchema>;
+
+/** R17 — por que un cobro no se puede anular por esta via. */
+export type MotivoNoAnulable = "reclasificado" | "sin_linea_de_caja";
+
+/**
+ * FICHA 461 (design §6) — el contrato COMPLETO que ve la pantalla. `unauthenticated` y
+ * `validation_error` los decide el borde; el resto, el dominio. `ok` devuelve el saldo de la tienda
+ * DESPUES de la anulacion, con su signo (STRING, R52). Ninguna rama de error viaja con importes.
+ */
+export type AnularCobroTiendaResult =
+  | { status: "ok"; saldo: SaldoTiendaDTO }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "no_anulable"; motivo: MotivoNoAnulable }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

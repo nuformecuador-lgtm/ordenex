@@ -117,7 +117,7 @@ describeSiHayBase("tablero del dia — aislamiento multi-tenant (Postgres real)"
       const base = await sembrarBase(tx);
       await crearOrden(tx, base, {
         clave: "ajena",
-        estatus: "entregada",
+        estatus: "entregado",
         zonaId: base.zonaB,
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
@@ -140,7 +140,7 @@ describeSiHayBase("tablero del dia — aislamiento multi-tenant (Postgres real)"
       const base = await sembrarBase(tx);
       await crearOrden(tx, base, {
         clave: "reservada-zona-b",
-        estatus: "por_recoger",
+        estatus: "mensajero_recogiendo_en_bodega",
         zonaId: base.zonaB,
         mensajeroId: base.mensajero1,
         // ASIGNADA AYER: sin la rama (a) esta orden no estaria en el tablero de hoy por

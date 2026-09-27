@@ -49,9 +49,9 @@ describe("El aviso de período abierto", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 424 },
-        { status: "rechazada", conteo: 60 },
-        { status: "devuelta", conteo: 41 },
+        { status: "entregado", conteo: 424 },
+        { status: "devolucion_a_origen_por_rechazo", conteo: 60 },
+        { status: "novedad", conteo: 41 },
         { status: "en_reparto", conteo: 265 },
       ]),
     });
@@ -70,8 +70,8 @@ describe("El aviso de período abierto", () => {
     consultarMock.mockResolvedValue({
       status: "ok",
       datos: datos([
-        { status: "entregada", conteo: 80 },
-        { status: "devuelta", conteo: 20 },
+        { status: "entregado", conteo: 80 },
+        { status: "novedad", conteo: 20 },
       ]),
     });
     const { container } = renderAviso();

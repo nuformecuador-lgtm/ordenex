@@ -61,7 +61,7 @@ export function separarPorDia(ordenes: MiAsignacionDTO[]): GruposPorRecoger {
 // en singular y plural (R29).
 
 /** R10 — vacío del grupo de hoy SIN búsqueda. Dice «hoy» porque el otro grupo sí tiene órdenes. */
-export const VACIO_GRUPO_HOY = "No hay órdenes por recoger hoy.";
+export const VACIO_GRUPO_HOY = "No hay órdenes para recoger hoy.";
 
 /** R10 — vacío del grupo de otro día SIN búsqueda. */
 export const VACIO_GRUPO_OTRO_DIA = "No hay órdenes para otro día.";
@@ -71,7 +71,7 @@ export const VACIO_GRUPO_OTRO_DIA = "No hay órdenes para otro día.";
  * tal cual: el mensajero ya lo conoce y sigue significando lo mismo.
  */
 export const SIN_RESULTADOS_RECOGER =
-  "Ninguna guía por recoger coincide con la búsqueda.";
+  "Ninguna guía para recoger coincide con la búsqueda.";
 
 /**
  * R15/R29 — el contador de la cabecera, que ahora cuenta SÓLO el grupo de hoy y vive DENTRO del
@@ -85,8 +85,8 @@ export const SIN_RESULTADOS_RECOGER =
  */
 export function contadorNuevasAsignadas(cuantas: number): string {
   return cuantas === 1
-    ? "1 orden nueva asignada"
-    : `${cuantas} órdenes nuevas asignadas`;
+    ? "1 orden nueva para recoger"
+    : `${cuantas} órdenes nuevas para recoger`;
 }
 
 /**

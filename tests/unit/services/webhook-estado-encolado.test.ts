@@ -22,7 +22,7 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 
 /** Mapa estatusDestinoId -> value del catalogo. */
 const VALUE_POR_ID: Record<string, string> = {
-  "s-entregada": "entregada", // publico
+  "s-entregada": "entregado", // publico
   "s-en-reparto": "en_reparto", // publico
   // ⏳ 2026-08-31 — `s-fulfillment` era el ejemplo de estado NO publico, y ya no sirve como tal:
   // `en_preparacion` pasa a ser publico (evento de NACIMIENTO de la rama de fulfillment). Se anade
@@ -33,7 +33,7 @@ const VALUE_POR_ID: Record<string, string> = {
   // Feature 268: los dos values que la 268 hace publicos, y uno que sigue NO siendolo.
   "s-ayuda-tienda": "ayuda_tienda", // publico desde la 268/R1
   "s-incidente": "incidente", // publico desde la 268/R2
-  "s-sin-gestionar": "sin_gestionar", // NO publico (corte de la noche, 268/R13)
+  "s-sin-gestionar": "novedad_interna", // NO publico (corte de la noche, 268/R13)
 };
 
 function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
@@ -200,7 +200,11 @@ describe("R12 — solo ordenes elegibles (owner con suscripcion activa)", () => 
 // politica, no al cambiar el emisor.
 // =================================================================================================
 describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos legitimos siguen", () => {
-  it("268/R8: la IDA `en_reparto -> ayuda_tienda` via `solicitud_ayuda_tienda` SI encola", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, R34): la IDA deja de ser una transicion (la ayuda es un evento, sin
+  // cambio de estado) y `ayuda_tienda` sale de `EVENTOS_PUBLICOS`. Una fila legada con ese destino
+  // ya NO encola `webhook_estado`: el aviso de la ayuda lo lleva `webhook_evento` (R33). Antes: SI
+  // encolaba, con `estatusDestinoId = s-ayuda-tienda`.
+  it("268/R8 → 454/R34: la IDA legada `en_reparto -> ayuda_tienda` ya NO encola `webhook_estado`", async () => {
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1"])); // la orden SI tiene integrador suscrito
     await emitirWebhooksEstado(
@@ -209,10 +213,7 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
       repo,
       () => new Date("2026-08-22T10:00:00.000Z"),
     );
-    expect(enqueue).toHaveBeenCalledTimes(1);
-    const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
-    expect(tipo).toBe("webhook_estado");
-    expect(payload.estatusDestinoId).toBe("s-ayuda-tienda");
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «`ayuda_tienda -> en_reparto` via
@@ -233,7 +234,7 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
     expect(payload.estatusDestinoId).toBe("s-en-reparto");
   });
 
-  it("268/R13: `ayuda_tienda -> sin_gestionar` via `corte_sin_gestionar` NO encola", async () => {
+  it("268/R13: `ayuda_tienda -> novedad_interna` via `corte_sin_gestionar` NO encola", async () => {
     // El corte de la noche sigue en silencio, y por la razon de siempre: el estado DESTINO no es
     // publico. No hace falta ninguna exencion por familia para eso — que es justo por lo que la
     // exencion pudo quedar vacia sin perder este comportamiento.

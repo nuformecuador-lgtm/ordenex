@@ -1,0 +1,14 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 53521827
+En bodega central
+En preparación
+2026-07-23 · 11:59
+En bodega central
+2026-08-23 · 02:03
+Cerrar

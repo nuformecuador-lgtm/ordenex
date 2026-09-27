@@ -1,0 +1,133 @@
+[
+ {
+  "id": "BASE",
+  "rc": 0,
+  "tests": "203 passed (203)"
+ },
+ {
+  "id": "C-B1a gasto/sueldo: ya_registrado deja de ser exito",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "2 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B1b abono ya_registrado: aviso sin el importe del servidor",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B1c abono sin_deuda bajo el monto y no bajo la tienda",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B1d pago a mensajero: ya_registrado deja de ser exito",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-M3a cambiar de concepto conserva la clave",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-M3b fallo de red mudo",
+  "archivo": "components/shared/wallet/RegistrarMovimientoDialog.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "3 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B2a sin la palabra Anulado en la fila",
+  "archivo": "app/(app)/wallet/_components/WalletLedger.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "3 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B2b la fila anulada sin tachar",
+  "archivo": "app/(app)/wallet/_components/WalletLedger.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "5 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "C-B3 sin documento vuelve a decir Vigente",
+  "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "6 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "D-m1 el resumen vuelve a la lectura inicial",
+  "archivo": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "D-R25 la tienda ve Anulado sin por Ordenex",
+  "archivo": "app/(app)/mi-wallet/_components/mi-estado-cuenta-labels.ts",
+  "cambio": true,
+  "rc": 1,
+  "tests": "2 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "E-B1 el panel no pinta el instante de registro",
+  "archivo": "components/shared/wallet/DetalleMovimientoPanel.tsx",
+  "cambio": true,
+  "rc": 1,
+  "tests": "2 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "E-M1 sum(d.monto) en minusculas con espacio en el repositorio",
+  "archivo": "lib/repositories/WalletMovimientoRepository.ts",
+  "cambio": true,
+  "rc": 1,
+  "tests": "1 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ },
+ {
+  "id": "E-M3 enlace de A quien, tienda y mensajero cruzados",
+  "archivo": "app/(app)/wallet/_components/libro-caja-labels.ts",
+  "cambio": true,
+  "rc": 1,
+  "tests": "3 ⎯⎯⎯⎯⎯⎯⎯",
+  "restaurado": true,
+  "roja": true
+ }
+]

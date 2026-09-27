@@ -159,6 +159,7 @@ describe("404/R9+R10 — la posicion de la clave y el determinismo del cuerpo", 
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
@@ -177,6 +178,7 @@ describe("404/R9+R10 — la posicion de la clave y el determinismo del cuerpo", 
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -254,7 +256,7 @@ describe("404/R7 — es el ASIGNADO, nunca el que gestiono", () => {
     // gestor es `gestion_orden.mensajero_id` y es material de la feature 405.
     const { service, entregar } = buildService({
       ...conMensajero,
-      estado: "devuelta",
+      estado: "novedad",
       causaDevolucion: "not_found",
     });
     await service.ejecutar(job("s-devuelta"));

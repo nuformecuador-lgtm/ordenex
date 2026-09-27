@@ -86,10 +86,10 @@ describeSiHayBase("261/B12 — deshacer y el dia de reparto, contra Postgres rea
       );
     }
     const estados = await prisma.orderStatus.findMany({
-      where: { value: { in: ["entregada", "en_reparto"] } },
+      where: { value: { in: ["entregado", "en_reparto"] } },
       select: { id: true, value: true },
     });
-    const entregadaId = estados.find((e) => e.value === "entregada")?.id;
+    const entregadaId = estados.find((e) => e.value === "entregado")?.id;
     const enRepartoId = estados.find((e) => e.value === "en_reparto")?.id;
     if (!entregadaId || !enRepartoId) {
       throw new Error(
@@ -130,7 +130,7 @@ describeSiHayBase("261/B12 — deshacer y el dia de reparto, contra Postgres rea
           data: {
             ordenId: orden.id,
             mensajeroId,
-            resultado: "entregada",
+            resultado: "entregado",
             cierreId: null, // R2: dentro de la ventana de deshacer
           },
           select: { id: true },

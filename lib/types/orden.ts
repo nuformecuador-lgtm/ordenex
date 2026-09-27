@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GestionResultado } from "@prisma/client";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
@@ -367,6 +368,24 @@ export type ActionError =
   | { status: "not_found" } // R29/R36/R40
   | { status: "conflict" }; // R28
 
+/**
+ * FICHA 454 (R29) — la gestion pendiente de confirmar de una orden, tal como viaja a las pantallas
+ * internas (listado de `/ordenes`, listado de la bodega satelite y detalle/linea de tiempo).
+ * `resultado` es el codigo del enum (`entregada`, `reprogramada`, `devuelta`, `rechazada`,
+ * `incidente`): el nombre visible lo pone la pantalla con su mapa canonico. `registradaAt` es el
+ * instante del registro, ISO-8601 UTC ya serializado (el `DataTable` descarta objetos).
+ */
+export interface GestionPendienteDTO {
+  resultado: GestionResultado;
+  registradaAt: string;
+}
+
+/** FICHA 454 (R29) — las dos señales que acompañan al estado de una orden en las pantallas internas. */
+export interface SenalesGestionDTO {
+  gestionPendiente: GestionPendienteDTO | null;
+  ayudaAbierta: boolean;
+}
+
 // R25/R26: elemento del LISTADO. Extiende OrdenDTO con el nombre legible de la
 // tienda (`Usuario.nombre` del usuario tienda). Solo aplica al listado; crear/
 // obtener/actualizar siguen devolviendo OrdenDTO sin `tiendaNombre`.
@@ -491,6 +510,25 @@ export type OrdenListItemDTO = OrdenDTO & {
    * cerrado), y el servidor revalida de todas formas.
    */
   eliminable?: boolean;
+  /**
+   * FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24) — la gestion PENDIENTE DE CONFIRMAR de la
+   * orden: la mas reciente registrada en la calle cuyo cierre aun no se aprobo, con la orden todavia
+   * `en_reparto`. `null` = no tiene (orden en mano, legada sin evento, gestion anulada, cierre ya
+   * aprobado, o la orden ya no esta en reparto). La pantalla pinta «En reparto» + la nota
+   * «<Resultado> · pendiente de confirmación» y NO ofrece traspasar ni cambiar el dia (R54/R55).
+   *
+   * Lo deriva el servidor con el predicado UNICO (`lib/repositories/gestion-pendiente.ts`); el
+   * navegador no lo recalcula. Opcional (`?`) por el patron aditivo del DTO: no rompe los fixtures
+   * de UI; el repositorio SIEMPRE lo envia, `null` incluido.
+   */
+  gestionPendiente?: GestionPendienteDTO | null;
+  /**
+   * FICHA 454 (R29/R22) — la orden tiene la ayuda a la tienda ABIERTA (derivacion unica de
+   * `lib/repositories/ayuda-abierta.ts`). Sustituye a lo que antes decia el estado `ayuda_tienda`,
+   * retirado: la orden sigue `en_reparto`. Nunca `true` a la vez que `gestionPendiente !== null`.
+   * Opcional (`?`) por el mismo patron aditivo; el repositorio SIEMPRE lo envia.
+   */
+  ayudaAbierta?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La `tarifa` anidada en

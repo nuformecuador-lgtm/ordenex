@@ -21,6 +21,144 @@
 
 ---
 
+## 2026-09-24 — ⚠️ RUPTURA — Los estados cambian de código y ganan su nombre
+
+> **Fecha de despliegue: PENDIENTE — se avisará con antelación y se escribirá aquí.** Este cambio
+> **rompe** a quien compare códigos de estado o de resultado: hasta ese día el canal sigue
+> respondiendo con los códigos anteriores.
+
+**Qué cambia, en una frase:** cada estado de una orden se llama igual en todas partes —en la
+aplicación, en el rastreo público y en este canal—. Siete estados cambian de **código**, los cuatro
+resultados de gestión que compartían nombre con ellos cambian con ellos, y toda respuesta que lleva
+un código lleva ahora, **al lado**, su nombre visible.
+
+**1. Siete códigos de estado cambian** (el resto no cambia):
+
+| Código anterior | Código vigente | Nombre visible |
+|---|---|---|
+| `entregada` | `entregado` | Entregado |
+| `devuelta` | `novedad` | Novedad |
+| `reprogramada` | `reprogramado` | Reprogramado |
+| `por_recoger` | `mensajero_recogiendo_en_bodega` | Mensajero recogiendo en la bodega |
+| `rechazada` | `devolucion_a_origen_por_rechazo` | Devolución a origen por rechazo |
+| `sin_gestionar` | `novedad_interna` | Novedad interna |
+| `por_devolver` | `por_devolver_a_bodega_central` | Por devolver a bodega central |
+
+**2. Los resultados de gestión se llaman como su estado destino** (`gestiones[].resultado`,
+`evidencias[].resultado`, `data.resultado` / `data.resultadoAnterior` de los eventos de gestión):
+
+| Resultado anterior | Resultado vigente | Nombre visible |
+|---|---|---|
+| `entregada` | `entregado` | Entregado |
+| `reprogramada` | `reprogramado` | Reprogramado |
+| `devuelta` | `novedad` | Novedad |
+| `rechazada` | `devolucion_a_origen_por_rechazo` | Devolución a origen por rechazo |
+
+`incidente` no cambia. Los valores que un evento o una fila **ya entregados** llevaban no se
+reescriben: el cambio aplica a lo que se responde y se entrega desde el despliegue.
+
+**3. Campos NUEVOS `…Nombre`, al lado de cada código** (aditivos, siempre presentes; `null` cuando su
+código es `null`). El nombre es la **misma cadena** que ve la aplicación:
+- `GET /api/ordenes/api-key` y `GET /api/ordenes/api-key/orden/{id}`: `estadoNombre`;
+  `gestiones[].resultadoNombre` y `gestiones[].estadoResultanteNombre`; `evidencias[].resultadoNombre`.
+- `PUT /api/ordenes/api-key/{numGuia}/cancelar`: `estadoAnteriorNombre` y `estadoNombre`.
+- `DELETE /api/ordenes/api-key/orden/{id}`: `estadoNombre`.
+- `POST /api/ordenes/api-key/habilitar`: `resultados[].estadoNombre`.
+- `POST /api/ordenes/api-key/carga`: `ordenes[].estadoNombre`.
+- Webhook `orden.estado_actualizado`: `data.estadoNombre`, **inmediatamente detrás de `data.estado`**.
+  La firma cubre el cuerpo entero: el texto firmado cambia (verificá sobre el cuerpo crudo, como
+  siempre).
+- Webhooks `orden.gestion_*`: `data.resultadoNombre` y, en `orden.gestion_corregida`,
+  `data.resultadoAnteriorNombre`, cada uno detrás de su código.
+
+**4. Campo RENOMBRADO en la carga: `filas[].estatus` → `filas[].estado`** (con `filas[].estadoNombre`
+al lado). «Un concepto, un nombre»: el resto del canal ya llamaba `estado` a este dato.
+
+**5. Filtrar por un código anterior responde `422`**, no una página vacía. El mensaje nombra el
+código que lo sustituye:
+
+```json
+{
+  "status": "error",
+  "code": "VALIDATION_ERROR",
+  "message": "Los datos enviados no son validos.",
+  "details": { "fieldErrors": { "estado": [
+    "'devuelta' ya no existe: ahora se llama 'novedad' («Novedad»). Ver docs/api/CHANGELOG.md."
+  ] } }
+}
+```
+
+**6. El `enum` de estados del contrato enumera ahora los 20 códigos vigentes** (antes documentaba 15:
+faltaban `novedad_interna`, `por_devolver_a_bodega_central`, `devolviendo_a_bodega_central`,
+`por_devolver_a_tienda` y `recolectando`, que una orden ya podía alcanzar).
+
+**7. Lo que NO cambia:** los paths, la autenticación, la firma y su verificación, y el **`eventoId`**
+de `orden.estado_actualizado` (se calcula con identificadores, no con el código): un evento
+encolado antes del despliegue y entregado después llega con el código vigente y el MISMO `eventoId`.
+
+**Qué hacer, antes del despliegue:**
+1. Buscá en tu código los once literales anteriores (los siete estados y los cuatro resultados de
+   las tablas de arriba) y cambialos por los vigentes; ojo con `por_devolver`, que es prefijo de
+   `por_devolver_a_tienda` y de `por_devolver_a_bodega_central`.
+2. Si en tu pantalla mostrabas el estado con una traducción propia, usá el campo `…Nombre`.
+3. Si leías `filas[].estatus` de la respuesta de la carga, leé `filas[].estado`.
+4. Si validás el esquema en estricto, **regenerá tu modelo** contra el contrato actualizado.
+
+---
+
+## 2026-09-23 — El estado de una gestión se aplica al APROBAR el cierre; la ayuda deja de ser un estado; eventos NUEVOS
+
+**Qué cambia en la operación, en una frase:** cuando el mensajero registra una gestión (entregada,
+reprogramada, devuelta, rechazada o incidente), la orden **ya no cambia de estado en ese instante**:
+sigue `en_reparto` con la gestión **pendiente de confirmar**, y el estado real se aplica cuando se
+**aprueba su cierre del día**. Y pedir ayuda a la tienda **ya no mueve la orden a `ayuda_tienda`**:
+la orden sigue `en_reparto` y la ayuda viaja como un evento propio.
+
+**1. `orden.estado_actualizado` llega al APROBAR, no al gestionar.** Para una gestión nueva, el
+evento con `estado: "entregada"` (o `devuelta`, `rechazada`…) llega cuando se aprueba el cierre del
+mensajero —horas después de la visita—. Si necesitás enterarte en el instante del registro, suscribí
+el evento nuevo `orden.gestion_registrada` (punto 3).
+
+**2. Baja en el vocabulario de estados: `ayuda_tienda`.** Es la **única** baja y es deliberada:
+- Ya **no se emite** `orden.estado_actualizado` con `estado: "ayuda_tienda"` (ni con
+  `devolucion_por_confirmar`, que nunca fue público).
+- `ayuda_tienda` **sale de los cuatro `enum` de estado** del contrato (`OrdenListItem.estado` y sus
+  herederos) y del `enum` de `data.estado` del webhook (que pasa de 13 a 12 values).
+- Ninguna orden vuelve a estar en ese estado: las que estuvieran en él al desplegar pasan a
+  `en_reparto` con su ayuda abierta.
+
+**3. Eventos NUEVOS, en un cuerpo NUEVO (`WebhookOrdenEvento`).** Llegan al **mismo callback**, con
+la **misma firma** y el mismo circuito de reintento que `orden.estado_actualizado`. Ramificá por
+`evento`:
+- `orden.gestion_registrada` — se registró una gestión; `data.pendienteConfirmacion: true`.
+- `orden.gestion_anulada` — el mensajero deshizo esa gestión antes de entrar en un cierre.
+- `orden.gestion_corregida` — se corrigió su resultado dentro de un cierre abierto
+  (`data.resultadoAnterior` → `data.resultado`).
+- `orden.ayuda_solicitada` — el mensajero pidió ayuda a la tienda.
+- `orden.ayuda_resuelta` — la ayuda se cerró; `data.via` = `mensajero` | `tienda` | `api`.
+
+`data` lleva siempre `numGuia`, `numRemision`, `motivo` (la causa **TIPIFICADA**, jamás el texto
+libre del mensajero) y `mensajero`; el resto de claves se omite cuando el evento no las lleva.
+Deduplicá por `eventoId` (`webhook_evento:<id>`). Si tu receptor rechaza eventos desconocidos,
+**actualizalo antes del despliegue**: tratá un `evento` que no conocés como «ignorar».
+
+**4. Campo NUEVO en el detalle: `gestiones[].pendienteConfirmacion`** (aditivo, al final de cada
+elemento). `true` mientras la gestión espera la aprobación de su cierre; entonces
+`estadoResultante` es `null`. `false` en las ya aplicadas y en las anteriores a hoy.
+
+**5. `POST /api/ordenes/api-key/habilitar`: campo NUEVO `ayudaCerrada`** en cada fila (aditivo).
+`resultado: "habilitada"` y `estado: "en_reparto"` **se conservan** para la orden con ayuda abierta
+—que ya estaba `en_reparto` y sigue ahí, sin cambio de estado—, y `ayudaCerrada: true` dice que la
+ayuda quedó cerrada y el mensajero puede volver a gestionarla. `habilitadas` del resumen cuenta esas
+filas. `estado_no_habilitable` significa ahora «la orden no tiene una ayuda abierta ni está
+`devuelta`».
+
+⚠️ **Si validás el esquema en estricto** (`additionalProperties: false` o un DTO generado),
+**regenerá tu modelo** contra el contrato actualizado antes del despliegue: `pendienteConfirmacion`,
+`ayudaCerrada` y el schema `WebhookOrdenEvento` son nuevos.
+
+---
+
 ## 2026-09-10 — Tres campos NUEVOS: `zona`, `costoEstimado` y `costoReal`, en el listado y en el detalle
 
 **Es aditivo: nada de lo que hoy funciona deja de funcionar.** Ninguna clave se retira ni se
@@ -433,6 +571,48 @@ Los dos artefactos del contrato quedan actualizados (`lib/api/openapi-spec.ts` y
 `docs/api/api-key-openapi.yaml`): las descripciones de `provincia`, `canton` y `distrito` de
 `CargaRow` y `CotizacionRow` enumeran ahora este motivo, y el ejemplo de respuesta de
 `/cotizacion` lo muestra.
+
+---
+
+## 2026-09-04 — `GET /ordenes/api-key/analitica`: la serie trae el día en curso (marcado `parcial`) y vuelve `cobertura`
+
+> Entrada escrita el 2026-09-25, a posteriori: el cambio salió en `6c35439a` («el canal por API key
+> sirve lo mismo que la pantalla») sin su aviso aquí. Lo que sigue es lo que el contrato
+> (`lib/api/openapi-spec.ts`, `AnaliticaSerie`) publica desde ese día.
+
+**Qué cambia, en una frase:** cada serie de la analítica devuelve **cuatro** campos —`metrica`,
+`unidad`, `data`, `cobertura`— y `data` **incluye el día en curso**, marcado como parcial. Es
+exactamente lo que ve la pantalla de analítica.
+
+**1. `data` incluye el día de hoy.** Antes del 2026-09-04 el día en curso se omitía. Ahora viene como
+un punto más, con dos claves que **solo** trae ese punto:
+
+| Clave | Tipo | Qué dice |
+|---|---|---|
+| `parcial` | `true` | El día no está cerrado: su cifra se lee más baja que la de un día completo y **no es comparable**. Ausente en cualquier otro día (nunca llega como `false`). |
+| `corteAt` | `string` (ISO-8601) | El instante usado como cota superior del día parcial. Solo acompaña a `parcial: true`. |
+
+⚠️ **Si sumás `data` para sacar un total del periodo, descartá primero los puntos con
+`parcial: true`** y los días de `cobertura.fechasNoComparables`. Un `valor: null` sigue
+significando «no se sabe» y sigue sin sustituirse por 0.
+
+**2. `cobertura` vuelve, y siempre viene.** Dice qué días de la serie no son comparables, y por qué:
+
+| Clave | Tipo | Qué dice |
+|---|---|---|
+| `fechasNoComparables` | `string[]` (fechas) | Días del rango por debajo del horizonte del histórico: ahí un cero es falta de **datos**, no falta de operación. Normalmente vacío. |
+| `penumbra` | `string` (constante) | Limitación permanente del histórico, nunca estimada: las órdenes que ya estaban vivas cuando nació el historial y nunca volvieron a cambiar de estado no entran en ningún día. |
+
+**Quién lo nota:** quien lea `data` como una lista de días cerrados (hoy el último punto puede ser
+parcial) o quien valide la respuesta con un esquema cerrado (aparece `cobertura`, y los puntos
+pueden traer `parcial` y `corteAt`). Los tres parámetros del endpoint siguen siendo opcionales
+(entrada del 2026-08-31).
+
+**Ejemplo** de un punto parcial dentro de `data`:
+
+```json
+{ "fecha": "2026-09-04", "valor": 12, "parcial": true, "corteAt": "2026-09-04T18:40:00.000Z" }
+```
 
 ---
 

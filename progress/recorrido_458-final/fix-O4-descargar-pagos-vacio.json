@@ -1,0 +1,9 @@
+{
+  "tablaVacia": 1,
+  "boton": "Descargar Pagos registrados de Tania Tienda",
+  "descarga": null,
+  "avisos": [
+    "No hay datos que descargar con los filtros aplicados. Ajusta los filtros y vuelve a intentarlo.\n×",
+    "No hay datos que descargar con los filtros aplicados. Ajusta los filtros y vuelve a intentarlo."
+  ]
+}

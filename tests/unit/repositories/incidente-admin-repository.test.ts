@@ -151,6 +151,8 @@ function buildRepo(cliente: ReturnType<typeof buildPrisma>["cliente"]) {
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn(),
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura por clave; este camino no la usa
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const repo = new IncidenteAdminRepository(
@@ -200,7 +202,7 @@ describe("R41/R44 — el reporte transiciona la orden y deja rastro, en UNA tran
   );
 
   it("R44: appendea con familia `incidente`, actor y el par (origen -> incidente) real", async () => {
-    const { cliente, calls } = buildPrisma({ estatusOrden: idEstado("por_recoger") });
+    const { cliente, calls } = buildPrisma({ estatusOrden: idEstado("mensajero_recogiendo_en_bodega") });
     const { repo } = buildRepo(cliente);
 
     await repo.reportar(reporteBase);
@@ -209,7 +211,7 @@ describe("R41/R44 — el reporte transiciona la orden y deja rastro, en UNA tran
       .data[0];
     expect(fila.origenTipo).toBe("incidente");
     expect(fila.actorUsuarioId).toBe(ACTOR);
-    expect(fila.estatusOrigenId).toBe(idEstado("por_recoger"));
+    expect(fila.estatusOrigenId).toBe(idEstado("mensajero_recogiendo_en_bodega"));
     expect(fila.estatusDestinoId).toBe(ID_INCIDENTE_ESTADO);
     expect(fila.motivo).toBe("caja aplastada");
     // Design §9.7: esto NO es una gestion, asi que la fila NO enlaza ninguna.
@@ -260,7 +262,7 @@ describe("R41/R44 — el reporte transiciona la orden y deja rastro, en UNA tran
   it("R60 (Q-K): el reporte NO toca `mensajero_asignado_id` ni `asignado_at`", async () => {
     // Es la mitad que hace trivialmente correcta la reversion: no hay nada que reponer porque
     // nunca se quito. Si alguien anadiera la limpieza aqui, R60 dejaria de cumplirse solo.
-    const { cliente, calls } = buildPrisma({ estatusOrden: idEstado("por_recoger") });
+    const { cliente, calls } = buildPrisma({ estatusOrden: idEstado("mensajero_recogiendo_en_bodega") });
     const { repo } = buildRepo(cliente);
 
     await repo.reportar(reporteBase);
@@ -563,7 +565,7 @@ describe("R54/R57 — rechazar devuelve la orden a su ORIGEN, sin monto y sin mo
     const { cliente, calls } = buildPrisma();
     const { repo } = buildRepo(cliente);
 
-    await repo.resolver({ ...reversionA("por_recoger"), motivoRechazo: null, resueltoPor: ACTOR });
+    await repo.resolver({ ...reversionA("mensajero_recogiendo_en_bodega"), motivoRechazo: null, resueltoPor: ACTOR });
 
     const data = (calls.incidenteUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> })
       .data;

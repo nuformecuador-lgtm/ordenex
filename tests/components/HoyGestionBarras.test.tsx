@@ -75,7 +75,7 @@ describe("Cargadas hoy — las dos barras", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(12, 30) });
     renderBarras();
 
-    expect(await screen.findByText(/Sin gestionar: 12/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sin gestión en el día: 12/)).toBeInTheDocument();
     expect(screen.getByText(/Gestionadas: 30/)).toBeInTheDocument();
   });
 
@@ -85,7 +85,7 @@ describe("Cargadas hoy — las dos barras", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(0, 30) });
     renderBarras();
 
-    expect(await screen.findByText(/Sin gestionar: 0/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sin gestión en el día: 0/)).toBeInTheDocument();
     expect(screen.getByText(/Gestionadas: 30/)).toBeInTheDocument();
   });
 
@@ -96,7 +96,7 @@ describe("Cargadas hoy — las dos barras", () => {
     renderBarras();
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalled());
-    expect(screen.queryByText(/Sin gestionar: 0/)).toBeNull();
+    expect(screen.queryByText(/Sin gestión en el día: 0/)).toBeNull();
   });
 });
 
@@ -158,7 +158,7 @@ describe("Cargadas hoy — la nota de qué filtros obedece", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(12, 30) });
     renderBarras();
 
-    expect(await screen.findByText(/Sin gestionar: 12/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sin gestión en el día: 12/)).toBeInTheDocument();
     expect(screen.getByText(NOTA_NO_SIGUE_LA_FECHA)).toBeInTheDocument();
   });
 
@@ -213,7 +213,7 @@ describe("Cargadas hoy — los estados que NO son «sin datos»", () => {
 
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent ?? "").toContain(texto);
-    expect(screen.queryByText(/Sin gestionar: \d/)).toBeNull();
+    expect(screen.queryByText(/Sin gestión en el día: \d/)).toBeNull();
   });
 
   it("un fallo de red se presenta como aviso, no como vacío", async () => {

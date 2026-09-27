@@ -15,7 +15,7 @@ import { consultaDe, cubo, rollupFalso, servicioCon } from "./_fake-operativa";
 // distintos y nada en el nombre de la metrica impide la lectura acumulada.
 
 const ETIQUETAS = new Map([
-  ["e-sin-gestionar", { value: "sin_gestionar", label: "sin_gestionar" }],
+  ["e-sin-gestionar", { value: "novedad_interna", label: "novedad_interna" }],
   ["e-reparto", { value: "en_reparto", label: "en_reparto" }],
 ]);
 
@@ -32,10 +32,10 @@ const RANGO_TRES_DIAS = {
   hasta: "2026-08-03",
 };
 
-describe("R35 · sin_gestionar se deriva del embudo", () => {
-  it("sin_gestionar se deriva del embudo y no se suma entre fechas", async () => {
+describe("R35 · novedad_interna se deriva del embudo", () => {
+  it("novedad_interna se deriva del embudo y no se suma entre fechas", async () => {
     const serie = await servicioCon(rollupFalso(TRES_DIAS, ETIQUETAS)).consultar(
-      consultaDe("sin_gestionar", undefined, RANGO_TRES_DIAS),
+      consultaDe("novedad_interna", undefined, RANGO_TRES_DIAS),
     );
     // Tres dias => TRES puntos de 6, jamas un unico punto de 18: es un stock (R12).
     expect(serie.puntos).toHaveLength(3);
@@ -43,9 +43,9 @@ describe("R35 · sin_gestionar se deriva del embudo", () => {
     expect(serie.puntos.map((p) => p.valor)).not.toContain(18);
   });
 
-  it("y proyecta SOLO el estatus sin_gestionar: el resto del embudo no entra", async () => {
+  it("y proyecta SOLO el estatus novedad_interna: el resto del embudo no entra", async () => {
     const serie = await servicioCon(rollupFalso(TRES_DIAS, ETIQUETAS)).consultar(
-      consultaDe("sin_gestionar", undefined, RANGO_TRES_DIAS),
+      consultaDe("novedad_interna", undefined, RANGO_TRES_DIAS),
     );
     // Si el filtro por estatus no existiera, el punto del 01 valdria 26 (6 + 20 de en_reparto).
     expect(serie.puntos[0].valor).toBe(6);
@@ -56,7 +56,7 @@ describe("R35 · sin_gestionar se deriva del embudo", () => {
 describe("R35 · la semantica se declara en el contrato, no en un comentario", () => {
   it("la serie declara la semantica HOY (universo B2)", async () => {
     const serie = await servicioCon(rollupFalso(TRES_DIAS, ETIQUETAS)).consultar(
-      consultaDe("sin_gestionar", undefined, RANGO_TRES_DIAS),
+      consultaDe("novedad_interna", undefined, RANGO_TRES_DIAS),
     );
     expect(serie.nota).toBe(NOTA_SIN_GESTIONAR);
     // Y VIAJA en la respuesta serializada: si viviera solo en un comentario del codigo, el

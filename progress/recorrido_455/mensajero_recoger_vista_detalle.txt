@@ -1,0 +1,61 @@
+Toggle Sidebar
+Recoger en bodega
+
+Órdenes asignadas pendientes de recoger
+
+Tema claro activado.
+1 por hacer
+Salir
+Recoger paquete
+Buscar guías
+Mosaico
+Detalle
+Para recoger hoy (4)
+Para otro día (0)
+
+4 órdenes nuevas asignadas
+
+111112
+Mensajero recogiendo en la bodega
+
+Magaly Aguilar
+
+Montes de Oca · Mercedes — Universidad de Costa Rica, Edificio Administrativo A. San Pedro -
+
+Intentos: 0
+
+COBRAR
+₡10.900
+111138
+Mensajero recogiendo en la bodega
+
+Yendri
+
+Curridabat · Curridabat — Sanjose Tirrases -
+
+Intentos: 0
+
+COBRAR
+₡27.040
+111111
+Mensajero recogiendo en la bodega
+
+Jose Ruiz
+
+Desamparados · Desamparados — Supermercado la Maravilla Gravilias -
+
+Intentos: 0
+
+COBRAR
+₡16.618
+QA-R-0017
+Mensajero recogiendo en la bodega
+
+Alejandra Mena
+
+Mora · Colón — Colón, Mora
+
+Intentos: 0
+
+COBRAR
+₡11.200

@@ -62,6 +62,8 @@ import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 // Para esas tres `derivarBalance` DEJA DE LLAMARSE, y no es una perdida de reuso: era una resta
 // contra cero. Donde hay resta que hacer —`egresos`, las dos cuentas por pagar, la vista B de
 // recaudo y las dos de tesoreria— R20 sigue cumpliendose entera.
+// FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` ganan el reverso de la anulacion de un
+// cobro por rechazo y vuelven a publicar neto; la unica `solo_bruto` que queda es `ingreso_comision_cod`.
 //
 // R5 / R10 — `dominio_invalido` es un estado de PRIMERA CLASE y se decide ANTES de tocar ningun
 // repositorio. Una rama por defecto que sirviera `entregas` con ceros seria peor que un fallo:
@@ -215,10 +217,14 @@ export class AnaliticaFinancieraService implements IAnaliticaFinancieraService {
     const cajaSoloBruto: Manejador = (c) => this.deCaja(c, "solo_bruto");
     const cajaConNeto: Manejador = (c) => this.deCaja(c, "bruto_y_neto");
     this.despacho = {
-      // Listas homogeneas de prefijo `ingreso_*`: con el CHECK de la 173, `neto = +bruto` siempre.
-      ingreso_flete: cajaSoloBruto,
+      // Lista homogenea de prefijo `ingreso_*`: con el CHECK de la 173, `neto = +bruto` siempre.
       ingreso_comision_cod: cajaSoloBruto,
-      ingreso_iva: cajaSoloBruto,
+      // FICHA 458-B (revision B2, decision del leader 2026-09-26) — `ingreso_flete` e `ingreso_iva`
+      // ganan el reverso que emite la anulacion de un cobro por rechazo (mismo patron que
+      // `ingreso_ajuste` en `egresos`): sus listas dejan de ser homogeneas y el NETO pasa a ser el
+      // flete / IVA que de verdad quedo cobrado. Por eso publican las dos cifras.
+      ingreso_flete: cajaConNeto,
+      ingreso_iva: cajaConNeto,
       // ⟨D8(b)⟩ / R18 — `egresos` la produce ESTA feature, con el mismo repositorio y las NUEVE
       // categorias que el catalogo declara. No hay estado `no_producida`.
       // ⟨D12⟩ — y CONSERVA el neto: desde la 183 su definicion incluye `ingreso_ajuste`, el

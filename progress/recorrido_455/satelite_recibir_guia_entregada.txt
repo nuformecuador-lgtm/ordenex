@@ -1,0 +1,113 @@
+Ordenex
+Analítica
+Monitoreo
+Órdenes
+Por recibir
+En bodega
+Cierres del día
+Incidentes
+Mi bodega
+Ayuda
+SS
+Sara Satelite
+Admin satélite
+En bodega
+
+Órdenes que ya están en tu bodega satélite: asignar a un mensajero, enviar a central o recuperar.
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Recibir paquete
+Tienes 1 cierre abierto de tus mensajeros.
+Puedes seguir asignando órdenes a los mensajeros que no tienen un cierre activo.
+Órdenes de la bodega
+
+8 órdenes
+
+Filtros
+
+Descargar
+	Nº Guía	Nº Remisión	Estado	Intentos	Destinatario	Producto	Dirección	Tienda	Zona	Provincia	Cantón	Distrito	Monto a cobrar	Mensajero	Fecha de creación	Tiempo	Acciones
+
+	
+Pendiente
+	111137	
+En bodega satélite
+	0	Miguel -	1 * Crema anti verrugas.	Calle las brisas Granadilla -	Tania	Quepos	San José	Curridabat	Granadilla	₡14.990	—	24/7/26, 5:40 p. m.	61d 16h	
+
+
+	
+Pendiente
+	63413	
+En bodega satélite
+	0	Juan jose suarez trejos	1 * AND.	Contigo acondomlnlo real guayabos Granadilla -	Tania	Quepos	San José	Curridabat	Curridabat	₡12.900	—	23/7/26, 8:24 p. m.	62d 13h	
+
+
+	
+Pendiente
+	63101	
+En bodega satélite
+	0	Gina Montero	1 * Polvo Destapador de Cañerias Mágico.	De taco bell san pedro 400 oeste 25 norte condominio antea #9 San Pedro -	Tania	Quepos	San José	Montes de Oca	Mercedes	₡10.900	—	23/7/26, 8:24 p. m.	62d 13h	
+
+
+	
+Pendiente
+	QA-R-0019	
+En bodega satélite
+	0	Melissa Arce	Kit de maquillaje	San Rafael, Oreamuno	Tania	Quepos	Cartago	Oreamuno	San Rafael	₡19.900	—	23/7/26, 12:59 p. m.	62d 20h	
+
+
+	
+53521827
+	QA-R-0018	
+En bodega satélite
+	0	Roberto Villalobos	Parlante portatil	San Vicente, Moravia	Tania	Quepos	San José	Moravia	San Vicente	₡26.500	—	23/7/26, 12:59 p. m.	62d 20h	
+
+
+	
+990002
+	QA-R-0002	
+En bodega satélite
+	2	Diego Mora	Cafetera	Tambor, Alajuela	Tania	Quepos	Alajuela	Alajuela	Tambor	₡0	—	22/7/26, 1:59 p. m.	63d 19h	
+
+
+	
+990017
+	QA-R-0021	
+En reparto
+Devolución a origen por rechazo · pendiente de confirmación
+	0	Daniela Porras	Tabla de surf (cera)	Quepos, Quepos	Tania	Quepos	Puntarenas	Quepos	Quepos	₡4.200	Marco Mensajero	23/7/26, 2:59 p. m.	62d 18h	
+
+
+	
+990016
+	QA-R-0020	
+En reparto
+Devolución a origen por rechazo · pendiente de confirmación
+	0	Kevin Zuniga	Traje de bano	Quepos, Quepos	Tania	Quepos	Puntarenas	Quepos	Quepos	₡17.500	Marco Mensajero	23/7/26, 1:59 p. m.	62d 19h	
+1-8 de 8
+«
+‹
+1
+›
+»
+10
+25
+50
+Esta orden pertenece a otra zona.
+×
+Esta orden pertenece a otra zona.
+Recibir paquete
+Recibir paquete
+
+Escanea o ingresa el número de guía
+
+Escanear con cámara
+Apunta al código de la guía
+O INGRESA MANUALMENTE
+Número de guía
+Recibir
+Cerrar

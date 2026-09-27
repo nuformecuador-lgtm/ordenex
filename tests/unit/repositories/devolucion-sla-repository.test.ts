@@ -57,10 +57,10 @@ describe("findDevueltasSla (R5 - 239 R12/R13/R14/R15)", () => {
     const rows = await repoWith(prisma).findDevueltasSla();
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ deletedAt: null, estatus: { value: "devuelta" } });
+    expect(arg.where).toMatchObject({ deletedAt: null, estatus: { value: "novedad" } });
     // La gestion vigente = la mas reciente NO anulada.
     expect(arg.select.gestiones).toMatchObject({
-      where: { resultado: "devuelta", anuladaAt: null },
+      where: { resultado: "novedad", anuladaAt: null },
       orderBy: { createdAt: "desc" },
       take: 1,
     });
@@ -159,7 +159,7 @@ describe("findDevueltasSla (R5 - 239 R12/R13/R14/R15)", () => {
     // IGUALDAD, no `in` ni `notIn`: el pre-estado no puede colarse ni por omision ni por lista
     // negra. Es la MISMA igualdad que usa `novedadWhere`, y esa coincidencia es el punto de toda
     // la feature: lo que la tienda ve y lo que el reloj mira son el mismo hecho.
-    expect(where.estatus).toEqual({ value: "devuelta" });
+    expect(where.estatus).toEqual({ value: "novedad" });
     expect(JSON.stringify(where)).not.toContain("devolucion_por_confirmar");
   });
 
@@ -197,19 +197,19 @@ describe("findDevueltasSla (R5 - 239 R12/R13/R14/R15)", () => {
 });
 
 describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
-  it("R15/R18/R19: UPDATE guardado por estatus=devuelta -> destino, limpia mensajero + asignadoAt, append actor NULL", async () => {
+  it("R15/R18/R19: UPDATE guardado por estatus=novedad -> destino, limpia mensajero + asignadoAt, append actor NULL", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 1 });
 
     const ok = await repoWith(prisma).liberarDevueltaSla({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_satelite"),
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
     });
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("novedad"), deletedAt: null });
     // Feature 101/R2 (gate F1.4-Q5): la liberacion por SLA enciende `prioridad: true` en el
     // MISMO `data` guardado (junto al destino y el handoff limpio del mensajero).
     // 2026-08-19 (feature 239/T3.1): el `data` ya NO apaga `gestion_aprobada`. Esa columna se
@@ -234,7 +234,7 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("devuelta"),
+        estatusOrigenId: idEstado("novedad"),
         estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: null,
         origenTipo: "liberacion_devuelta_sla",
@@ -246,14 +246,14 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     expect(prisma.gestionOrden.create).not.toHaveBeenCalled();
   });
 
-  it("R24/R25: 2.ª corrida -> la orden ya salio de devuelta -> count 0 -> false, sin append", async () => {
+  it("R24/R25: 2.ª corrida -> la orden ya salio de novedad -> count 0 -> false, sin append", async () => {
     const prisma = buildPrisma();
     prisma.orden.updateMany.mockResolvedValue({ count: 0 });
 
     const ok = await repoWith(prisma).liberarDevueltaSla({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"),
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
     });
 
     expect(ok).toBe(false);
@@ -268,8 +268,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
 
     const ok = await repoWith(prisma).escalarDevueltaSla({
       ordenId: "o1",
-      estatusDevueltaId: idEstado("devuelta"),
-      estatusRechazadaId: idEstado("rechazada"),
+      estatusDevueltaId: idEstado("novedad"),
+      estatusRechazadaId: idEstado("devolucion_a_origen_por_rechazo"),
       mensajeroId: "m1",
       motivo: "escalado SLA not_found",
     });
@@ -277,8 +277,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(ok).toBe(true);
     // R16/R17: transiciona a rechazada, guardado por estado; NO toca el mensajero (paridad rechazo).
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
-    expect(upd.data).toEqual({ estatusId: idEstado("rechazada") });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("novedad"), deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId");
     // Feature 101/R3: el ESCALADO a `rechazada` NO enciende `prioridad` (solo la liberacion SLA).
     expect(upd.data).not.toHaveProperty("prioridad");
@@ -291,7 +291,7 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(gArg.data).toMatchObject({
       ordenId: "o1",
       mensajeroId: "m1",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "escalado SLA not_found",
       cierreId: null,
     });
@@ -305,8 +305,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("devuelta"),
-        estatusDestinoId: idEstado("rechazada"),
+        estatusOrigenId: idEstado("novedad"),
+        estatusDestinoId: idEstado("devolucion_a_origen_por_rechazo"),
         actorUsuarioId: null,
         origenTipo: "escalado_devuelta_sla",
         motivo: null,
@@ -321,8 +321,8 @@ describe("escalarDevueltaSla — Option A del dinero (R16/R17/R18/R19/R20-R25)",
 
     const ok = await repoWith(prisma).escalarDevueltaSla({
       ordenId: "o1",
-      estatusDevueltaId: idEstado("devuelta"),
-      estatusRechazadaId: idEstado("rechazada"),
+      estatusDevueltaId: idEstado("novedad"),
+      estatusRechazadaId: idEstado("devolucion_a_origen_por_rechazo"),
       mensajeroId: "m1",
       motivo: "escalado SLA wrong_number",
     });

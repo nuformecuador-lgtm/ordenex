@@ -80,6 +80,8 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     marcarLuego: false,
     ...over,
   };
@@ -102,6 +104,7 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
     <RepartoModule
       porGestionar={porGestionar}
       conAyuda={[]}
+      porRecoger={[]}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
       bloqueo={SIN_BLOQUEO}

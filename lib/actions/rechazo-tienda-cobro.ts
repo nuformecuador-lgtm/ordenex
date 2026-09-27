@@ -5,6 +5,8 @@ import { RechazoTiendaCobroRepository } from "@/lib/repositories/RechazoTiendaCo
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { RechazoTiendaCobroService } from "@/lib/services/RechazoTiendaCobroService";
+import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
+import { CajaRechazoTiendaCobroFeedService } from "@/lib/services/CajaRechazoTiendaCobroFeedService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IRechazoTiendaCobroService } from "@/lib/interfaces/services/IRechazoTiendaCobroService";
@@ -15,6 +17,10 @@ import {
   type ListarCobrosRechazoTiendaResult,
   type RechazarCobroRechazoTiendaResult,
 } from "@/lib/types/rechazo-tienda-cobro";
+import {
+  anularCobroRechazoTiendaSchema,
+  type AnularCobroRechazoTiendaResult,
+} from "@/lib/types/wallet-anulacion";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -72,12 +78,18 @@ function toRechazoCobroActionError(
  */
 function buildService(): IRechazoTiendaCobroService {
   const prisma = getPrismaClient();
+  const caja = new WalletMovimientoRepository(prisma);
   return new RechazoTiendaCobroService(
     new RechazoTiendaCobroRepository(prisma),
-    new WalletMovimientoRepository(prisma),
+    caja,
     new WalletTiendaMovimientoRepository(prisma),
     prisma,
     (fn) => prisma.$transaction((tx) => fn(tx)),
+    // Ficha 458-B (D7): la anulacion, con su constancia y el puerto estrecho de la caja.
+    {
+      repo: new RechazoTiendaCobroAnulacionRepository(prisma),
+      caja: new CajaRechazoTiendaCobroFeedService(caja),
+    },
   );
 }
 
@@ -150,6 +162,30 @@ export async function rechazarCobroRechazoTiendaAction(
     const data = decidirCobroRechazoTiendaSchema.parse(input);
     const service = deps.service ?? buildService();
     return service.rechazar(data, actor, (deps.now ?? (() => new Date()))());
+  });
+  return isAppErrorShape(r) ? toRechazoCobroActionError(r) : r;
+}
+
+/**
+ * ⚠️ FICHA 458-B (D7, R63–R68, R73) — ANULA un cobro por rechazo YA APROBADO: constancia con
+ * motivo, dos reversos de cargo en la caja y, si la tienda fue debitada, sus dos creditos espejo.
+ * El cobro sigue `aprobado` (R73). Mismo molde que las otras dos: sesion primero, forma despues
+ * (`.strict()`: ni un `monto`, que lo leen el servidor de las lineas originales), el resto lo
+ * decide el SERVICIO (rol antes de leer, R82).
+ *
+ * Superficie: la alcanza `anularMovimientoAction` (la accion unica), que hoy usa el libro de la caja
+ * para anular un cobro por rechazo y la 458-C lleva al panel «Ver».
+ */
+export async function anularCobroRechazoTiendaAction(
+  input: unknown,
+  deps: RechazoTiendaCobroDeps = {},
+): Promise<AnularCobroRechazoTiendaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = anularCobroRechazoTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.anular(data, actor, (deps.now ?? (() => new Date()))());
   });
   return isAppErrorShape(r) ? toRechazoCobroActionError(r) : r;
 }

@@ -58,10 +58,17 @@ describe("RechazosSlaModule", () => {
     render(<RechazosSlaModule items={[]} total={0} page={1} pageSize={10} />);
 
     expect(
-      screen.getByText(/No tenés órdenes rechazadas por plazo vencido/i),
+      screen.getByText(/No tenés órdenes con devolución a origen por plazo vencido/i),
+    ).toBeInTheDocument();
+    // FICHA 455 (recorrido F4): el detalle decía «órdenes en devolución … llegue a rechazo», dos
+    // nombres retirados; ahora nombra los dos estados con su nombre vigente.
+    expect(
+      screen.getByText(
+        "Cuando una de tus órdenes en Novedad pase a Devolución a origen por rechazo por vencerse el plazo, aparecerá acá.",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("list", { name: "Órdenes rechazadas por plazo vencido" }),
+      screen.queryByRole("list", { name: "Órdenes con devolución a origen por plazo vencido" }),
     ).toBeNull();
   });
 
@@ -82,7 +89,7 @@ describe("RechazosSlaModule", () => {
       />,
     );
 
-    const lista = screen.getByRole("list", { name: "Órdenes rechazadas por plazo vencido" });
+    const lista = screen.getByRole("list", { name: "Órdenes con devolución a origen por plazo vencido" });
     expect(within(lista).getByText(/12345/)).toBeInTheDocument();
     expect(within(lista).getByText(/REM-777/)).toBeInTheDocument();
     expect(within(lista).getByText("Ana Cliente")).toBeInTheDocument();
@@ -362,7 +369,7 @@ describe("RechazosSlaModule — el monto de la bodega no se le muestra a la tien
     expect(container.textContent ?? "").not.toMatch(/\bSLA\b/);
     // Y las etiquetas accesibles tampoco (las lee un lector de pantalla).
     expect(
-      screen.getByRole("list", { name: "Órdenes rechazadas por plazo vencido" }),
+      screen.getByRole("list", { name: "Órdenes con devolución a origen por plazo vencido" }),
     ).toBeInTheDocument();
   });
 });

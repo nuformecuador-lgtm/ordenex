@@ -1,5 +1,6 @@
 import { appendAccion, resolverActorCongelado } from "@/lib/repositories/registrar-accion";
-import { etiquetaDeEntidad, etiquetaDePersona } from "@/lib/types/historial-accion-etiquetas";
+import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
+import { CUENTA_USUARIO_SELECT, etiquetaDeCuenta } from "@/lib/utils/etiqueta-cuenta";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CrearLiquidacionRepartoInput,
@@ -84,7 +85,7 @@ export class LiquidacionRepartoRepository implements ILiquidacionRepartoReposito
           montoTotal: new Prisma.Decimal(input.montoTotal), // STRING -> Decimal (money-safe)
           registradoPor: input.registradoPor,
         },
-        include: { mensajero: { select: { nombre: true, primerApellido: true } } },
+        include: { mensajero: { select: CUENTA_USUARIO_SELECT } },
       });
 
       // FICHA 362 (R6/R9) — `reparto_mensajero_registrado`. UNA fila por ACTO, en la MISMA tx.
@@ -98,7 +99,8 @@ export class LiquidacionRepartoRepository implements ILiquidacionRepartoReposito
           entidadTipo: "liquidacion_reparto",
           entidadId: row.id,
           entidadEtiqueta: etiquetaDeEntidad("liquidacion_reparto", {
-            beneficiarioNombre: etiquetaDePersona(row.mensajero),
+            // 458-A (R33): el mensajero con `etiquetaDeCuenta`, como en la wallet.
+            beneficiarioNombre: etiquetaDeCuenta(row.mensajero),
           }),
           monto: row.montoTotal,
           ...actor,
@@ -134,7 +136,7 @@ export class LiquidacionRepartoRepository implements ILiquidacionRepartoReposito
   ): Promise<void> {
     const reparto = await tx.liquidacionReparto.findUnique({
       where: { id: input.repartoId },
-      select: { mensajero: { select: { nombre: true, primerApellido: true } } },
+      select: { mensajero: { select: CUENTA_USUARIO_SELECT } },
     });
     const actor = await resolverActorCongelado(tx, input.anuladoPor);
     await appendAccion(tx, [
@@ -144,7 +146,7 @@ export class LiquidacionRepartoRepository implements ILiquidacionRepartoReposito
         entidadId: input.repartoId,
         entidadEtiqueta: etiquetaDeEntidad("liquidacion_reparto", {
           beneficiarioNombre:
-            reparto === null ? null : etiquetaDePersona(reparto.mensajero),
+            reparto === null ? null : etiquetaDeCuenta(reparto.mensajero),
         }),
         // Lo EFECTIVAMENTE anulado, que puede ser menos que el total del reparto si alguna
         // imputacion ya estaba anulada. Se registra lo alcanzado, no lo pedido (R12).

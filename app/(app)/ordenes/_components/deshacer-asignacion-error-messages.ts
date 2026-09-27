@@ -59,7 +59,7 @@ type DeshacerErrorStatus =
  */
 const DESHACER_ERROR_MESSAGES: Record<DeshacerErrorStatus, string> = {
   forbidden:
-    "No tienes permiso para deshacer esta asignación. Revisa que todas las órdenes sean de tu zona y que estén asignadas desde tu bodega.",
+    "No tienes permiso para deshacer esta asignación. Revisa que todas las órdenes sean de tu zona y que se hayan asignado desde tu bodega.",
   sin_zona:
     "No tienes una zona asignada. Pide a un administrador que te asigne una zona.",
   conflict:

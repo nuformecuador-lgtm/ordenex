@@ -4,11 +4,16 @@ import { CierreBodegaRepository } from "@/lib/repositories/CierreBodegaRepositor
 // Feature 393 (R38): el maestro entra por OTRO repositorio pero por el MISMO mapper, y este
 // archivo lo comprueba con la misma fila cruda para los dos.
 import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAdminRepository";
+// ⭑ FICHA 431 (R7): lo que el todo-o-nada lanza cuando vincularia menos cierres de los pedidos.
+import { ConsolidacionParcialError } from "@/lib/utils/consolidacion-parcial";
 
 // Feature 40 — tests unit del CierreBodegaRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R5 (WHERE consolidables), R9
 // (crearCierreBodega: $transaction INSERT + updateMany con guardia; atomico), R10
-// (totales -> Prisma.Decimal), R8 (P2002 se propaga como senal de conflict).
+// (totales -> Prisma.Decimal).
+//
+// ⭑ FICHA 431 — R8 de la feature 40 (el indice unico parcial y su `P2002`) SE RETIRO. En su lugar
+// se afirma el TODO-O-NADA: si el `updateMany` vincula menos cierres de los pedidos, se lanza.
 
 function consolidableDbRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -89,21 +94,15 @@ describe("CierreBodegaRepository.contarCierresDiaSolicitados (R6)", () => {
   });
 });
 
-describe("CierreBodegaRepository.existeCierreBodegaSolicitado (R8)", () => {
-  it("true si hay un cierre de bodega solicitado de la zona", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreBodega.count.mockResolvedValue(1);
-    const repo = new CierreBodegaRepository(prisma as unknown as PrismaClient);
+// ⭑ FICHA 431 — AQUI VIVIA `CierreBodegaRepository.existeCierreBodegaSolicitado (R8)`, que afirmaba
+// el `where { zonaId, estado: 'solicitado' }` del gate «a lo sumo una consolidacion pendiente por
+// zona». El metodo SE RETIRO junto con el indice unico parcial que lo respaldaba, asi que el caso
+// se va con el: no cubria ninguna otra cosa. Lo que ese gate protegia de verdad —que dos
+// consolidaciones no se repartan la misma cola— se prueba ahora en el todo-o-nada de
+// `crearCierreBodega`, aqui debajo, y contra Postgres real en
+// `tests/integration/db/consolidacion-concurrente.int.test.ts`.
 
-    expect(await repo.existeCierreBodegaSolicitado("z-cartago")).toBe(true);
-    expect(prisma.cierreBodega.count.mock.calls[0][0].where).toEqual({
-      zonaId: "z-cartago",
-      estado: "solicitado",
-    });
-  });
-});
-
-describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
+describe("CierreBodegaRepository.crearCierreBodega (R9/R10; ficha 431/R7)", () => {
   it("R9/R10: $transaction INSERT (Decimal snapshot) + updateMany con guardia; devuelve id", async () => {
     const tx = {
       cierreBodega: { create: vi.fn(async () => ({ id: "cb1" })) },
@@ -152,15 +151,16 @@ describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
     expect(updArg.data).toEqual({ cierreBodegaId: "cb1" });
   });
 
-  it("R8: una violacion del indice unico parcial (P2002) se propaga (senal de conflict)", async () => {
-    const p2002 = new Prisma.PrismaClientKnownRequestError("unique violation", {
-      code: "P2002",
-      clientVersion: "test",
-    });
+  it("un error de la INSERT se propaga y no llega a vincular", async () => {
+    // Antes este caso nombraba el `P2002` del indice unico parcial. El indice ya no existe (ficha
+    // 431), pero la propiedad que media —si la cabecera falla, no se toca ni un `cierre_dia`— sigue
+    // siendo cierta y vale para cualquier fallo de la INSERT, asi que el caso se CONSERVA con un
+    // error generico en vez de borrarse.
+    const falla = new Error("la INSERT fallo");
     const tx = {
       cierreBodega: {
         create: vi.fn(async () => {
-          throw p2002;
+          throw falla;
         }),
       },
       cierreDia: { updateMany: vi.fn() },
@@ -179,9 +179,63 @@ describe("CierreBodegaRepository.crearCierreBodega (R9/R10/R8)", () => {
         totalPagoMensajero: "0.00",
         totalIngresoBodegaRechazos: "0.00",
       }),
-    ).rejects.toBe(p2002);
+    ).rejects.toBe(falla);
     // no llega a vincular si la INSERT fallo.
     expect(tx.cierreDia.updateMany).not.toHaveBeenCalled();
+  });
+
+  // ⭑ FICHA 431 / R7 — EL TODO-O-NADA QUE SUSTITUYE AL INDICE UNICO PARCIAL.
+  //
+  // ⚠️ ESTE CASO ES LA MITAD UNITARIA. La otra —dos consolidaciones concurrentes de verdad sobre la
+  // misma cola— vive en `tests/integration/db/consolidacion-concurrente.int.test.ts`, contra
+  // Postgres, porque la carrera no se puede montar con un doble. Aqui se afirma la DECISION: si el
+  // `updateMany` vincula menos filas de las pedidas, se lanza.
+  it("⭑ 431/R7: si vincula MENOS cierres de los pedidos, lanza `ConsolidacionParcialError`", async () => {
+    const tx = {
+      cierreBodega: { create: vi.fn(async () => ({ id: "cb1" })) },
+      // tres pedidos, uno vinculado: otra consolidacion se llevo los otros dos.
+      cierreDia: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreBodegaRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.crearCierreBodega({
+        zonaId: "z-cartago",
+        solicitadoPor: "adm-sat",
+        cierreDiaIds: ["cd1", "cd2", "cd3"],
+        // Los totales se calcularon sobre los TRES: por eso una consolidacion con uno solo
+        // declararia mas dinero del que lleva.
+        totales: { efectivo: "300.00", simpe: "0.00", transferencia: "0.00", general: "300.00" },
+        totalPagoMensajero: "0.00",
+        totalIngresoBodegaRechazos: "0.00",
+      }),
+    ).rejects.toThrow(ConsolidacionParcialError);
+  });
+
+  it("⭑ 431/R7: con TODOS vinculados no lanza (control positivo del umbral)", async () => {
+    // Sin este, un `if (count !== ids.length)` cambiado a `if (true)` pasaria el caso de arriba.
+    const tx = {
+      cierreBodega: { create: vi.fn(async () => ({ id: "cb1" })) },
+      cierreDia: { updateMany: vi.fn(async () => ({ count: 3 })) },
+    };
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreBodegaRepository(prisma as unknown as PrismaClient);
+
+    await expect(
+      repo.crearCierreBodega({
+        zonaId: "z-cartago",
+        solicitadoPor: "adm-sat",
+        cierreDiaIds: ["cd1", "cd2", "cd3"],
+        totales: { efectivo: "300.00", simpe: "0.00", transferencia: "0.00", general: "300.00" },
+        totalPagoMensajero: "0.00",
+        totalIngresoBodegaRechazos: "0.00",
+      }),
+    ).resolves.toBe("cb1");
   });
 });
 
@@ -203,8 +257,14 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
         solicitadoAt: new Date("2026-07-12T10:00:00.000Z"),
         resueltoAt: new Date("2026-07-12T12:00:00.000Z"),
         motivoRechazo: null,
+        // FICHA 431: la fila cruda de un `aprobado` trae SIEMPRE su marca — el `CHECK`
+        // `cierre_bodega_conciliacion_coherente` hace imposible lo contrario en la base.
+        montoRecibido: new Prisma.Decimal("10"),
+        conciliadoAt: new Date("2026-07-12T12:00:00.000Z"),
+        conciliadoNota: null,
         zona: { nombre: "Cartago" },
         solicitadoPorUsuario: { nombre: "Sara Satelite" },
+        conciliadoPorUsuario: { nombre: "Ana", primerApellido: "Rojas", segundoApellido: null },
         _count: { cierresDia: 3 },
       },
     ]);
@@ -232,6 +292,16 @@ describe("CierreBodegaRepository.findCierresBodegaByZona (F1.4-h)", () => {
       // el efectivo (10.00) NO cubre los dos descuentos (14.00), asi que el aviso se enciende.
       paraLaCentral: "1.50",
       efectivoCubreDescuentos: false,
+      // ⭑ FICHA 431 (R26/R28): el MISMO mapper deriva tambien la marca. La fila cruda esta
+      // marcada por 10.00 sobre un efectivo de 10.00, asi que NO falta nada: "0.00". Los
+      // valores van ESCRITOS A MANO y no derivados de la fila: comparar `faltaPorRecibir`
+      // contra la resta que lo produce seria una asercion contra su propia fuente.
+      conciliado: true,
+      montoRecibido: "10.00",
+      faltaPorRecibir: "0.00",
+      conciliadoAt: "2026-07-12T12:00:00.000Z",
+      conciliadoPorNombre: "Ana Rojas",
+      conciliadoNota: null,
     });
   });
 });
@@ -267,8 +337,14 @@ describe("feature 393 — el mapper deriva «Para la central» para TODAS las le
       solicitadoAt: new Date("2026-09-01T10:00:00.000Z"),
       resueltoAt: null,
       motivoRechazo: null,
+      // FICHA 431: sin marcar por defecto. Asi `faltaPorRecibir` vale el EFECTIVO entero
+      // (100000.55) y no un cero, que es lo que hace que el caso mida la formula.
+      montoRecibido: null,
+      conciliadoAt: null,
+      conciliadoNota: null,
       zona: { nombre: "Cartago" },
       solicitadoPorUsuario: { nombre: "Sara Satelite" },
+      conciliadoPorUsuario: null,
       _count: { cierresDia: 2 },
       ...overrides,
     };

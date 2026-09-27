@@ -31,10 +31,10 @@ const HORA = 60 * 60 * 1000;
 const DIA = 24 * HORA;
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
+  novedad: "os-devuelta",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 function row(overrides: Partial<DevueltaSlaRow> = {}): DevueltaSlaRow {
@@ -249,9 +249,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   // umbral (3) y la orden ESCALA a `rechazada` -> se cobrara el rechazo.
   it("R15/R3: 3 cierres APROBADOS con resultado contable, umbral 3 -> ESCALA", async () => {
     const { repo, svc } = correr([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2"),
-      gestion("rechazada", "c3"),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2"),
+      gestion("devolucion_a_origen_por_rechazo", "c3"),
     ]);
     const res = await svc.ejecutar(NOW);
 
@@ -270,9 +270,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     "R3 (⛔Q5): los mismos 3 resultados con los cierres en `%s` -> conteo 0 -> LIBERA",
     async (estado) => {
       const { repo, svc, service } = correr([
-        gestion("devuelta", "c1", estado),
-        gestion("reprogramada", "c2", estado),
-        gestion("rechazada", "c3", estado),
+        gestion("novedad", "c1", estado),
+        gestion("reprogramado", "c2", estado),
+        gestion("devolucion_a_origen_por_rechazo", "c3", estado),
       ]);
       expect(await service.contarIntentos(ORDEN)).toBe(0);
 
@@ -285,7 +285,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   // R10: la devolucion del mensajero YA NO suma por si sola. Antes sumaba en el instante de la
   // gestion (la transicion #14 contaba); ahora, con el cierre sin aprobar, no aporta nada.
   it("R10: una `devuelta` del mensajero cuyo cierre AUN no esta aprobado no suma por si sola", async () => {
-    const { svc, service, repo } = correr([gestion("devuelta", "c1", "solicitado")]);
+    const { svc, service, repo } = correr([gestion("novedad", "c1", "solicitado")]);
     expect(await service.contarIntentos(ORDEN)).toBe(0);
     const res = await svc.ejecutar(NOW);
     expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
@@ -294,7 +294,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
 
   // R11: idem con la reprogramacion del mensajero (la transicion #13 contaba con la 160).
   it("R11: una `reprogramada` del mensajero cuyo cierre aun no esta aprobado no suma por si sola", async () => {
-    const { service } = correr([gestion("reprogramada", "c1", "solicitado")]);
+    const { service } = correr([gestion("reprogramado", "c1", "solicitado")]);
     expect(await service.contarIntentos(ORDEN)).toBe(0);
   });
 
@@ -303,8 +303,8 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   // cierre: `resolverCierre` es idempotente) da EL MISMO numero.
   it("R29/R4: 2 gestiones vigentes en el MISMO cierre aprobado -> conteo 1 -> LIBERA, y releer da lo mismo", async () => {
     const { repo, svc, service } = correr([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c1"),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c1"),
     ]);
     const primera = await service.contarIntentos(ORDEN);
     const segunda = await service.contarIntentos(ORDEN);
@@ -321,9 +321,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   it("R5: gestiones anuladas antes de que su cierre se apruebe -> no llegan a contar", async () => {
     const anulada = new Date("2026-07-19T10:00:00.000Z");
     const { repo, svc, service } = correr([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2", "aprobado", anulada),
-      gestion("rechazada", "c3", "aprobado", anulada),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2", "aprobado", anulada),
+      gestion("devolucion_a_origen_por_rechazo", "c3", "aprobado", anulada),
     ]);
     expect(await service.contarIntentos(ORDEN)).toBe(1); // solo `c1`
 
@@ -341,9 +341,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   // LIBERA para un reintento real.
   it("R12: 2 visitas reales + la reprogramacion de la TIENDA (cierre aprobado) -> 2, LIBERA y NO cobra", async () => {
     const { repo, svc, service } = correr([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2"),
-      gestion("reprogramada", "c3", "aprobado", null, ["reprogramacion_tienda"]),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2"),
+      gestion("reprogramado", "c3", "aprobado", null, ["reprogramacion_tienda"]),
     ]);
     expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
 
@@ -357,9 +357,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
   // el umbral ya cruzado por su propio efecto.
   it("R18-b: 2 visitas reales + la sintetica del ESCALADO SLA (cierre aprobado) -> 2, LIBERA", async () => {
     const { repo, svc, service } = correr([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2"),
-      gestion("rechazada", "c3", "aprobado", null, ["escalado_devuelta_sla"]),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2"),
+      gestion("devolucion_a_origen_por_rechazo", "c3", "aprobado", null, ["escalado_devuelta_sla"]),
     ]);
     expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
 
@@ -464,7 +464,7 @@ describe("ejecutar — resiliencia, idempotencia y datos incompletos (R24/R25/R2
     const service = new DevolucionSlaService(
       repo,
       fakeZonaRepo() as unknown as IZonaRepository,
-      fakeOrdenRepo({ devuelta: "os-devuelta" }) as unknown as IOrdenRepository, // faltan bodega/rechazada
+      fakeOrdenRepo({ novedad: "os-devuelta" }) as unknown as IOrdenRepository, // faltan bodega/rechazada
       fakeHistorial() as unknown as IOrdenHistorialService,
       { warn },
     );

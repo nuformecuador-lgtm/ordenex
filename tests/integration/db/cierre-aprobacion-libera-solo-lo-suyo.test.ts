@@ -72,12 +72,12 @@ describeSiHayBase("271/T5.3 · M7 — aprobar libera SOLO las ordenes de su cier
       // FEATURE 276 (T9): `rechazada` entra en el catalogo que esta suite resuelve, porque la
       // config de la liberacion ahora lleva el destino del rechazo por tope.
       where: {
-        value: { in: ["sin_gestionar", "en_bodega_central", "en_bodega_satelite", "rechazada"] },
+        value: { in: ["novedad_interna", "en_bodega_central", "en_bodega_satelite", "devolucion_a_origen_por_rechazo"] },
       },
       select: { id: true, value: true },
     });
     estatus = new Map(catalogo.map((c) => [c.value, c.id]));
-    for (const v of ["sin_gestionar", "en_bodega_central", "en_bodega_satelite"]) {
+    for (const v of ["novedad_interna", "en_bodega_central", "en_bodega_satelite"]) {
       if (!estatus.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en \`order_status\`. Corre \`pnpm run db:seed\`: sin el, este ` +
@@ -104,7 +104,7 @@ describeSiHayBase("271/T5.3 · M7 — aprobar libera SOLO las ordenes de su cier
     return enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
       const [mensajero, admin] = usuarios;
-      const sinGestionar = estatus.get("sin_gestionar") as string;
+      const sinGestionar = estatus.get("novedad_interna") as string;
 
       const nuevoCierre = () =>
         tx.cierreDia.create({
@@ -198,7 +198,7 @@ describeSiHayBase("271/T5.3 · M7 — aprobar libera SOLO las ordenes de su cier
           // typecheck de este objeto, asi que olvidarlos NO rompe la compilacion — lo que rompe es
           // el comportamiento, en silencio. Sin `umbralIntentos`, el reparto en dos destinos
           // compara contra `undefined`, los DOS conjuntos salen vacios y no se libera nada.
-          rechazadaEstatusId: estatus.get("rechazada") as string,
+          rechazadaEstatusId: estatus.get("devolucion_a_origen_por_rechazo") as string,
           umbralIntentos: 3,
         },
       } as never);

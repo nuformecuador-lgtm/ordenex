@@ -18,10 +18,11 @@ import {
 import { AsignacionDetalle } from "../AsignacionDetalle";
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto, formatPeso } from "./pos-format";
-import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { CLASE_NOTA_AYUDA, claseChipEstado, marcasDeTarjeta, textoParada } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
+import { EstadoConInfo, NotaAyudaConInfo } from "@/components/shared/EstadoInfo";
 import type { PosOrderCardProps } from "./PosOrderCard";
 
 // POS card · vista MOSAICO (rama ux, pedido humano): tarjeta COMPACTA para ver muchas
@@ -44,7 +45,8 @@ export function PosOrderCardMosaico({
   esDetalle = false,
   bloqueado = false,
   onGestionar,
-  estado: estadoProp,
+  nota,
+  notaAyuda = false,
   mostrarRuta = true,
   secciones,
   acciones,
@@ -52,7 +54,8 @@ export function PosOrderCardMosaico({
 }: PosOrderCardProps) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
-  const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
+  const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
   // Feature 196: las mismas cuatro compuertas que la card completa, con el mismo default.
   const {
     navegacion: verNavegacion,
@@ -120,11 +123,23 @@ export function PosOrderCardMosaico({
             </p>
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${estadoBadgeClass(estado)}`}
-        >
-          {estado}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {/* FICHA 456 (T3.6, R9): el chip con su botón de información (nombre calculado dentro). */}
+          <EstadoConInfo
+            codigo={orden.estatusValue}
+            chipClassName={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${claseChipEstado(orden.estatusValue)}`}
+          />
+          {marcas.map((m) => (
+            <span key={m.texto} className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${m.clase}`}>
+              {m.texto}
+            </span>
+          ))}
+          {notaAyuda ? (
+            <NotaAyudaConInfo
+              chipClassName={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${CLASE_NOTA_AYUDA}`}
+            />
+          ) : null}
+        </div>
       </header>
 
       <div className="min-w-0">

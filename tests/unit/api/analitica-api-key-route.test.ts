@@ -41,7 +41,7 @@ const AHORA = new Date("2026-08-03T15:00:00.000Z");
 /** Una metrica de la lista blanca (`lib/analytics/publicacion-api-key.ts`). */
 const PUBLICABLE = "entregas";
 /** Existe en el catalogo y NO esta en la lista blanca (su exclusion esta motivada por escrito). */
-const NO_PUBLICABLE = "sin_gestionar";
+const NO_PUBLICABLE = "novedad_interna";
 /** No existe en el catalogo, y punto. */
 const INEXISTENTE = "metrica_que_no_existe_en_ningun_sitio";
 
@@ -677,7 +677,7 @@ describe("267/R46 · `all` trae TODA la lista blanca, y no se mezcla con ids", (
 });
 
 describe("267/R16 + R45 · un lote con UNA metrica no publicable no sirve NADA", () => {
-  it("`entregas,sin_gestionar` es 403 mudo y CERO consultas, tambien para la publicable", async () => {
+  it("`entregas,novedad_interna` es 403 mudo y CERO consultas, tambien para la publicable", async () => {
     // El exito parcial seria el peor de los mundos: la respuesta diria por omision cuales ids
     // estan en la lista blanca, y bastaria UNA peticion para reconstruirla entera. Por eso el
     // lote es todo o nada.

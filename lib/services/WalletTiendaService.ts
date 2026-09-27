@@ -310,14 +310,14 @@ export class WalletTiendaService implements IWalletTiendaService {
    * independientes contra una clave extra que pretenda ampliar el alcance; las otras dos son
    * el schema del borde y `construirFiltros`, que lee claves EXPLICITAS.
    *
-   * Precision sobre el borde de ESTE camino: `listarMovimientosDeTiendaSchema` NO es
-   * `.strict()`. Zod DESCARTA las claves desconocidas en vez de rechazarlas, asi que una
-   * clave colada no llega hasta aqui, pero tampoco devuelve `validation_error`. El
-   * `.strict()` que si responde error es el del modo completo
-   * (`listarMovimientosDeTiendaCompletoSchema`, R37). La contencion es equivalente —la clave
-   * no llega al repositorio— y esta probada en `tests/unit/services/wallet-tienda-desglose.
-   * test.ts` («R24: el repositorio recibe EXACTAMENTE el tiendaId de la entrada, tambien con
-   * claves extra coladas»).
+   * El borde de ESTE camino es estricto desde la 458-A (TA.6, R36): `listarMovimientosDeTiendaSchema`
+   * extiende `listarMovimientosTiendaSchema`, que es `.strict()`, y `.extend` conserva esa
+   * politica; una clave colada responde `validation_error` sin llegar aqui (lo fija
+   * `tests/unit/types/wallet-tienda-schemas.test.ts`, «el desglose del acceso total sigue
+   * aceptando SU `tiendaId` y rechaza cualquier otra clave»). Este servicio no se fia de eso: si
+   * alguien lo llamara sin pasar por el borde, `construirFiltros` sigue leyendo claves EXPLICITAS
+   * (`tests/unit/services/wallet-tienda-desglose.test.ts`, «R24: el repositorio recibe EXACTAMENTE
+   * el tiendaId de la entrada, tambien con claves extra coladas»).
    *
    * DOS llamadas al repositorio, en paralelo y constantes (R34): la pagina y la cabecera. Y
    * NINGUNA para el nombre de la tienda (R35), que ya baja por props desde la fila.

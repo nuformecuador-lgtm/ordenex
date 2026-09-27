@@ -39,6 +39,7 @@ import useSWR from "swr";
 
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { InfosEstado } from "@/components/shared/EstadoInfo";
 import { Pagination } from "@/components/shared/Pagination";
 import { money } from "@/lib/config/moneda";
 import { PARAM_TERMINO_DEFAULT } from "@/lib/utils/filtros-url";
@@ -97,7 +98,8 @@ export const DETALLE_DINERO_TEXTOS = {
      * en él antes de corregirlo.
      */
     retorno: "Flete por rechazo",
-    retornoPista: "Flete por rechazo + IVA de las rechazadas. Fuera del reparto",
+    // FICHA 455 (2026-09-24): el grupo por su nombre vigente (antes «las rechazadas»).
+    retornoPista: `Flete por rechazo + IVA de las órdenes en ${etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")}. Fuera del reparto`,
     /**
      * FICHA 449 — EL SERVICIO DE BODEGA, y se llama «Fulfillment» PORQUE YA SE LLAMA ASÍ.
      *
@@ -232,8 +234,17 @@ function EnlaceOrden({ guia }: { readonly guia: string }) {
  * «Otros resultados»: aqui no hay ninguna tabla de etiquetas escrita a mano, asi que un
  * renombre del catalogo no deja este panel diciendo el nombre viejo.
  */
+//
+// FICHA 456 (T3.13, R10): la línea no se parte (su texto no cambia) y los botones de información de
+// cada resultado van a su lado.
 function Resultados({ valores }: { readonly valores: readonly string[] }) {
-  return <span>{valores.map(etiquetaDeDesenlace).join(", ")}</span>;
+  const texto = valores.map(etiquetaDeDesenlace).join(", ");
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span>{texto}</span>
+      <InfosEstado codigos={valores} />
+    </span>
+  );
 }
 
 /** Las OCHO columnas del detalle, en el orden del diseño. */

@@ -86,10 +86,10 @@ describeSiHayBase("374 — el catalogo geografico proyecta la disponibilidad (Po
       await serializarEscriturasReales(tx);
 
       const zonaANombre = `Zona A ${SUFIJO}`;
-      const zonaA = (await tx.zona.create({ data: { nombre: zonaANombre }, select: { id: true } }))
+      const zonaA = (await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: zonaANombre }, select: { id: true } }))
         .id;
       const zonaB = (
-        await tx.zona.create({ data: { nombre: `Zona B ${SUFIJO}` }, select: { id: true } })
+        await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: `Zona B ${SUFIJO}` }, select: { id: true } })
       ).id;
 
       const provinciaOk = (

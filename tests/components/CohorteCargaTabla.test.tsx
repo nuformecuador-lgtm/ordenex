@@ -199,7 +199,7 @@ describe("Cohorte de carga (R39) — sin rango es una invitacion, no un error ni
     expect(cuerpo).not.toMatch(/\d/);
     // Y ninguna de las tres lineas de resumen, que solo tienen sentido con datos detras.
     expect(screen.queryByText(/Cargadas en el periodo/)).toBeNull();
-    expect(screen.queryByText(/Entregadas/)).toBeNull();
+    expect(screen.queryByText(/Entregado/)).toBeNull();
     expect(screen.queryByText(/Actualizado/)).toBeNull();
   });
 
@@ -240,7 +240,7 @@ describe("Cohorte de carga (R32) — las siete columnas, con `Vivas` entre ellas
       fecha: "2026-09-08",
       cargadas: 10,
       cubos: [
-        cubo("entregada", 4, 691_200),
+        cubo("entregado", 4, 691_200),
         cubo("devuelta_a_tienda", 2, 259_200),
         cubo("incidente", 1, 86_400),
         cubo("viva", 3),
@@ -257,9 +257,11 @@ describe("Cohorte de carga (R32) — las siete columnas, con `Vivas` entre ellas
     expect(await cabeceras()).toEqual([
       "Fecha de carga",
       "Cargadas",
-      "Entregadas",
-      "Devueltas",
-      "Incidentes",
+      // ⏳ 2026-09-24 (FICHA 455, R5): el nombre EXACTO de cada estado (antes «Entregadas»,
+      // «Devueltas» —que rotulaba `devuelta_a_tienda`— e «Incidentes»).
+      "Entregado",
+      "Devuelta a tienda",
+      "Incidente",
       "Vivas",
       "Días hasta entregar",
     ]);
@@ -292,7 +294,7 @@ describe("Cohorte de carga (R32) — las siete columnas, con `Vivas` entre ellas
           fecha: "2026-09-08",
           cargadas: 4,
           // `viva` NO viene: todas cerraron. La columna tiene que decir 0, no quedarse vacia.
-          cubos: [cubo("entregada", 4, 345_600)],
+          cubos: [cubo("entregado", 4, 345_600)],
         },
       ]),
     });
@@ -399,7 +401,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
           fecha: "2026-09-08",
           cargadas: 10,
           // 4 entregadas que acumulan 8 dias: dos dias de media.
-          cubos: [cubo("entregada", 4, 691_200), cubo("viva", 6)],
+          cubos: [cubo("entregado", 4, 691_200), cubo("viva", 6)],
         },
       ]),
     });
@@ -419,7 +421,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
         {
           fecha: "2026-09-08",
           cargadas: 2,
-          cubos: [cubo("entregada", 1, 86_400), cubo("viva", 1)],
+          cubos: [cubo("entregado", 1, 86_400), cubo("viva", 1)],
         },
       ]),
     });
@@ -461,7 +463,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
           fecha: "2026-09-08",
           cargadas: 10,
           cubos: [
-            cubo("entregada", 4, 691_200),
+            cubo("entregado", 4, 691_200),
             cubo("devuelta_a_tienda", 2, 259_200),
             cubo("viva", 4),
           ],
@@ -472,7 +474,7 @@ describe("Cohorte de carga (R33) — la cifra va con su denominador", () => {
 
     // 4 de 10 cargadas = 40%. Sobre las 6 CERRADAS saldria 66,7%, que es la cifra que este caso
     // impide. Los dos literales van escritos a mano.
-    const resumen = await screen.findByText(/Entregadas 40%/);
+    const resumen = await screen.findByText(/Entregado 40%/);
     expect(resumen.textContent).toContain("(10 órdenes)");
     expect(document.body.textContent ?? "").not.toContain("66,7%");
   });
@@ -573,7 +575,7 @@ describe("Cohorte de carga (R34) — permisos y fallos no se degradan al vacio",
 
     await screen.findByRole("alert");
     expect(screen.queryByText(/Cargadas en el periodo/)).toBeNull();
-    expect(screen.queryByText(/Entregadas \d/)).toBeNull();
+    expect(screen.queryByText(/Entregado \d/)).toBeNull();
   });
 
   // El vacio SIGUE existiendo y habla de LO QUE NO PASO en el rango, que es otra cosa que un

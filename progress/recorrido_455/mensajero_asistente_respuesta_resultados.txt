@@ -1,0 +1,25 @@
+Asistente
+
+Responde sobre cómo usar Ordenex
+
+Leer la ayuda de esta pantalla
+Reparto
+
+¿Qué resultados puedo registrar al gestionar una orden y qué pasa con las que no gestiono al cerrar el día?
+
+Al tocar Gestionar en una orden dentro de Reparto, podés elegir uno de estos resultados:
+
+| Qué pasó | Qué elegís |
+| --- | --- |
+| La entregaste | Entregar |
+| El cliente no estaba o pidió otro día | Reprogramar |
+| No se pudo y vuelve a la tienda | Devolver |
+
+Si no querés decidir todavía, tenés Gestionar más tarde: la orden se queda donde está y seguís con la siguiente.
+
+En cuanto a las órdenes que te quedan sin gestionar al momento de pedir el cierre: aparecen en el cierre como una lista aparte, para que quede constancia de qué tenías en la mano ese día. Ojo: esto es distinto de los paquetes reservados para otro día, esos no entran en esa lista — se quedan con vos, esperando su fecha.
+Reparto
+Cierre del día
+Adjuntar una captura
+
+Lo que escribís y las imágenes que adjuntás se envían a un proveedor externo de inteligencia artificial para poder responderte. Evitá enviar datos de clientes si no hace falta.

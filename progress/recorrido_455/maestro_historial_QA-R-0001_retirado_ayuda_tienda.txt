@@ -1,0 +1,107 @@
+Historial de la orden QA-R-0001
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Intento 2 de 3
+
+Creación
+·
+En preparación
+
+22 jul 2026, 11:59 a. m.
+
+Por Tania Tienda
+
+En preparación
+→
+Mensajero recogiendo en la bodega
+
+22 jul 2026, 1:29 p. m.
+
+Por Tania Tienda
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+22 jul 2026, 2:59 p. m.
+
+Por Marco Mensajero
+
+En reparto
+→
+Reprogramado
+
+24 jul 2026, 5:14 p. m.
+
+Por Marco Mensajero
+
+Motivo: No está
+
+Reprogramado
+→
+En bodega central
+
+13 ago 2026, 2:18 p. m.
+
+Por Sistema
+
+En bodega central
+→
+Mensajero recogiendo en la bodega
+
+13 ago 2026, 2:20 p. m.
+
+Por Ana Admin
+
+Mensajero recogiendo en la bodega
+→
+En reparto
+
+13 ago 2026, 2:20 p. m.
+
+Por Marco Mensajero
+
+En reparto
+→
+Entregado
+
+13 ago 2026, 2:22 p. m.
+
+Por Marco Mensajero
+
+En reparto
+→
+Ayuda solicitada a la tienda (estado retirado)
+
+19 ago 2026, 2:38 p. m.
+
+Por Marco Mensajero
+
+Ayuda solicitada a la tienda (estado retirado)
+→
+En reparto
+
+19 ago 2026, 2:39 p. m.
+
+Por Tania Tienda
+
+Ayuda solicitada a la tienda (estado retirado)
+→
+Devolución a origen por rechazo
+
+20 ago 2026, 4:07 a. m.
+
+Por Tania Tienda
+
+Motivo: Hablé con Karla por teléfono: se muda y ya no quiere el pedido. Que vuelva a bodega.
+
+Devolución a origen por rechazo
+→
+Por devolver a tienda
+
+20 ago 2026, 4:48 a. m.
+
+Por Ana Admin
+
+Close

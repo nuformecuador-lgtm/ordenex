@@ -85,6 +85,13 @@ function buildZonaRepo(exists: boolean): IZonaRepository {
     findCentralZonaId: vi.fn().mockResolvedValue(null),
     // FICHA 376 (Q4): lectura de solo lectura; este archivo no la ejercita.
     contarOrdenesVivasPorZona: vi.fn().mockResolvedValue([]),
+    // FICHA 429: los metodos de la superficie del SINPE por bodega. El doble los declara
+    // para seguir cumpliendo `IZonaRepository`; esta suite no los ejercita.
+    listarSinpe: vi.fn().mockResolvedValue([]),
+    findSinpeByZona: vi.fn().mockResolvedValue(null),
+    zonaIdDeUsuario: vi.fn().mockResolvedValue(null),
+    guardarSinpe: vi.fn().mockResolvedValue(null),
+    confirmarSinpe: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -121,6 +128,26 @@ describe("crear — zona por rol (R27/R28)", () => {
     const svc = new UsuarioService(repo, buildZonaRepo(true));
     await svc.crear({ ...baseCrear, rolId: "rol-sat", zonaId: "z1" }, MAESTRO);
     expect((repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0].zonaId).toBe("z1");
+  });
+
+  it("⭑ FICHA 429 (R3): dar de alta un SEGUNDO acceso a una bodega NO pide el SINPE ni lo pisa", async () => {
+    // El SINPE es de la BODEGA, no de la persona (D2). Dos accesos administrativos de la misma
+    // bodega ven y editan el MISMO par, asi que el alta del segundo no vuelve a pedirlo — y, sobre
+    // todo, NO escribe nada en la zona. Se afirma sobre el argumento que recibe el repositorio de
+    // usuarios: si alguien colara el par en el alta, aparecerian aqui.
+    const svc = new UsuarioService(repo, buildZonaRepo(true));
+    const r = await svc.crear(
+      { ...baseCrear, email: "segundo@example.com", cedula: "1710034066", rolId: "rol-sat", zonaId: "z1" },
+      MAESTRO,
+    );
+    expect(r.status).toBe("ok");
+    const arg = (repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>;
+    expect(arg.zonaId).toBe("z1");
+    expect(Object.keys(arg)).not.toContain("sinpeNumero");
+    expect(Object.keys(arg)).not.toContain("sinpeNombre");
+    // Y el alta de un usuario no es un camino de escritura sobre `zona`: el doble de zona solo
+    // sirve para comprobar que la zona EXISTE.
+    expect(JSON.stringify(arg)).not.toContain("sinpe");
   });
 
   it("rol no aplicable (admin) fuerza zonaId=null aunque se envie (R27)", async () => {

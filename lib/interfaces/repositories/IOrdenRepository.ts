@@ -148,6 +148,11 @@ export interface OrdenParaCorreccionRow {
   esZonaEspecial: boolean;
   /** 327/R16: la orden ya tiene al menos una fila congelada en un cierre. */
   yaEnUnCierre: boolean;
+  /**
+   * FICHA 454 (R64): la orden tiene ayuda a la tienda ABIERTA (derivacion de `ayuda-abierta.ts`). Es
+   * lo que abre al `adminTienda` la correccion en el grupo de ayuda, que ya no es un estado.
+   */
+  ayudaAbierta: boolean;
 }
 
 /**
@@ -581,44 +586,9 @@ export class CorreccionDiaConflictoError extends Error {
   }
 }
 
-/**
- * Feature 235 (T2.2, R8/R10) — los datos de UNA transicion del ciclo de ayuda, para el punto
- * unico de escritura. Los dos sentidos comparten forma; lo que los distingue son los ids y la
- * FAMILIA, que es lo que queda escrito en el historial.
- *
- * Todos los ids los resuelve el SERVICE (`findEstatusIdByValue`), no el repo: si el catalogo no
- * resuelve, la operacion se rechaza entera antes de tocar nada (fallo cerrado, design §3.3).
- */
-export interface TransicionAyudaInput {
-  ordenId: string;
-  /** LA GUARDA: la escritura solo ocurre si la orden sigue EXACTAMENTE en este estado (R9). */
-  estatusOrigenId: string;
-  estatusDestinoId: string;
-  /**
-   * El usuario que la provoco (R10): el mensajero que pide o recupera, o la tienda que habilita.
-   * NUNCA `null` en los dos sentidos de esta feature — el corte de la noche es otra transicion, en
-   * otro repo, y esa si es del sistema.
-   */
-  actorUsuarioId: string;
-  /**
-   * `solicitud_ayuda_tienda` (ida), `rescate_ayuda_tienda` (vuelta) o `habilitacion_api` (la
-   * vuelta pedida por el INTEGRADOR, feature 266). Ninguna de las tres es visita real
-   * (235/R11, 266/R26).
-   *
-   * Feature 266 (T2.2, design §2.3) — el tercer miembro es **ADITIVO y no cambia el comportamiento
-   * de ningun llamador existente**: los dos services actuales (`SolicitudAyudaService.solicitar` y
-   * `rescatarOrdenAyuda`) siguen pasando su literal de siempre, y ninguna firma se toca.
-   *
-   * Y NO es «anadir props» en el sentido que la decision (1) de la ficha 266 prohibe: no se toca
-   * la firma de `rescatarOrdenAyuda`, ni la de `HabilitarNovedadService.habilitar`, ni ningun
-   * parametro de COMPORTAMIENTO. Lo que se amplia es el CENSO de familias que el punto unico sabe
-   * registrar, que es literalmente para lo que este campo existe.
-   */
-  origenTipo: Extract<
-    OrdenHistorialOrigenTipo,
-    "solicitud_ayuda_tienda" | "rescate_ayuda_tienda" | "habilitacion_api"
-  >;
-}
+// ⏳ 2026-09-23 (FICHA 454, T1.15): aqui vivia `TransicionAyudaInput`, el input de
+// `OrdenRepository.transicionarAyuda` (235/266). La ayuda deja de ser una transicion: la sustituyen
+// `registrarAyudaSolicitada` y `registrarAyudaResuelta` (eventos `orden_evento`, sin cambio de estado).
 
 /**
  * Feature 266 (T3.1, design §4.2) — la lectura MINIMA que el service de habilitacion por API key
@@ -644,6 +614,8 @@ export interface OrdenParaHabilitacionApi {
    * mensajero). De ahi salen las dos ramas.
    */
   mensajeroAsignadoId: string | null;
+  /** FICHA 454 (R24): la orden tiene ayuda ABIERTA (derivacion unica): rama A. */
+  ayudaAbierta: boolean;
 }
 
 /**
@@ -923,9 +895,27 @@ export interface RecepcionSateliteFiltro {
   salioAReparto?: SalioAReparto;
 }
 
-// Feature 41 (R17/R18) -> 241 — resultado del bloqueo derivado de una bodega satelite.
-// `bloqueada = porCierreBodega`, y NADA MAS. `porCierreBodega` = existe su propio
-// CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
+// Feature 41 (R17/R18) -> 241 -> ⭑ FICHA 431 — resultado del bloqueo derivado de una bodega
+// satelite.
+//
+// ⭑ FICHA 431 (D4/R1/R4): `bloqueada` ES `false` SIEMPRE. HOY NINGUNA CAUSA BLOQUEA A LA BODEGA.
+// Hasta esta ficha era `bloqueada = porCierreBodega`: con su consolidacion hacia la central sin
+// aprobar, la satelite no podia asignar ni una orden mas. Esa era la unica consecuencia real de la
+// aprobacion de nivel 2 y es justo la que la ficha retira: la aprobacion pasa a ser una MARCA DE
+// CONCILIACION —«el efectivo llego»—, y una marca que ocurre cuando el bulto viaja no puede ser
+// ademas la puerta que deja trabajar.
+//
+// El CAMPO se conserva, y con el la rama `bodega_bloqueada` de `AsignacionSateliteService.asignar`:
+// es la lectura literal de D4 («se quita en UN solo sitio») y deja el punto de entrada por si
+// vuelve una causa. Lo ancla un test que afirma que ninguna combinacion produce hoy `true`, para
+// que un campo constante no se convierta en un mentiroso mudo. Destino final: Q4 de la ficha.
+//
+// ⚠️ NO SE CONFUNDA CON EL GATE DE NIVEL 1, que SIGUE VIVO: una satelite no puede CONSOLIDAR
+// mientras tenga cierres del dia de sus mensajeros sin resolver (R5,
+// `CierreBodegaService.solicitarCierreBodega`). Ese si es un cuadre, y sigue siendo puerta.
+//
+// `porCierreBodega` = tiene al menos una consolidacion hacia la central PENDIENTE DE CONCILIAR
+// (`solicitado`). Desde la 431 es AVISO, no veto, y viaja acompanado de su NUMERO.
 //
 // Causa (i), mensajeros: `porMensajeros` es `true` si AL MENOS 1 mensajero de la zona tiene
 // un cierre ABIERTO (los tres estados que no son `aprobado`). Desde la feature 241 NO ES UN
@@ -942,6 +932,21 @@ export interface BodegaBloqueoResult {
   bloqueada: boolean;
   porMensajeros: boolean;
   porCierreBodega: boolean;
+  /**
+   * ⭑ FICHA 431 (R2/R3) — CUANTAS consolidaciones de la zona siguen pendientes de conciliar.
+   *
+   * `porCierreBodega` dice «hay»; esto dice «cuantas», que es lo que el aviso necesita para
+   * escribir «tenes N consolidaciones que la central todavia no marco como recibidas». Hasta esta
+   * ficha el numero no hacia falta porque el indice unico parcial de la feature 40 garantizaba que
+   * era 1; ese indice se borro y ahora puede ser cualquiera.
+   *
+   * NO VIAJA DINERO POR ESTE CONTRATO, a proposito: el importe pendiente vive en la pantalla propia
+   * de la satelite. Meter un importe en un DTO de bloqueo abriria una superficie de dinero donde no
+   * hace falta.
+   *
+   * Opcional (aditivo), como sus hermanos informativos.
+   */
+  consolidacionesSinConciliar?: number;
   cierresAbiertos?: number;
   totalMensajeros?: number;
   mensajerosConCierreIds?: string[];
@@ -998,6 +1003,16 @@ export interface NovedadOrdenRow {
   cantonNombre: string;
   /** `distrito_id` es el UNICO FK geografico nullable -> `null` cuando la orden no lo tiene. */
   distritoNombre: string | null;
+  /**
+   * ⭑ FICHA 429 (R13/R15) — el SINPE de la bodega que cobra esta orden, YA RESUELTO por el
+   * repositorio con `resolverSinpeBodega` (la del mensajero asignado; si no tiene, la de la orden).
+   *
+   * REQUERIDOS, sin `?`: `/novedades` pinta las mismas cards POS que el portal del mensajero y
+   * compone el mensaje en modo `wa.me`, donde el texto que arma el navegador ES el que recibe el
+   * cliente. Un `undefined` en silencio aqui es un mensaje sin numero de cobro.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
   // Feature 235 (T6.1, R40): aqui viajaba `ayuda: boolean`, la bandera. Se retira con la columna.
   // La pantalla sigue pudiendo decir POR QUE esta la fila —hay dos razones y siguen siendo dos—
   // pero ahora lo lee de `estatusValue`, que ya viajaba: `devuelta` = devolucion anclada,
@@ -1157,7 +1172,7 @@ export interface ApiOrdenListResult {
 // este mismo tipo. No hay campo que diga de cual viene: es deliberado (el integrador pregunta por
 // las fotos del incidente, no por quien las subio) y anadirlo seria exponer estructura interna.
 export interface ApiOrdenEvidenciaRow {
-  resultado: "entregada" | "rechazada" | "incidente";
+  resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "incidente";
   storagePath: string;
   contentType: string | null;
 }
@@ -1188,6 +1203,11 @@ export interface ApiOrdenGestionRow {
    * contrato publica esta incompleto por deuda declarada desde la 109 (405/Q8).
    */
   estadoResultante: string | null;
+  /**
+   * FICHA 454 (R32): `true` = gestion de calle registrada con el modelo nuevo y TODAVIA pendiente de
+   * confirmar (su `estadoResultante` es `null` porque aun no transiciono). `false` en el resto.
+   */
+  pendienteConfirmacion: boolean;
   /**
    * R8 — la causa TIPIFICADA, y JAMAS el texto libre. `causa_devolucion` cuando el resultado es
    * `devuelta`, `causa_incidente` cuando es `incidente`, `null` en el resto y tambien cuando la
@@ -1745,6 +1765,13 @@ export interface IOrdenRepository {
    * Ordenadas por `createdAt asc`, que es el criterio de recorte de R38.
    */
   findParadasEnReparto(mensajeroId: string): Promise<ParadaRutaRow[]>;
+
+  /**
+   * FICHA 454 (R54/R55): de `ids`, las ordenes `en_reparto` con una gestion PENDIENTE de confirmar
+   * (predicado unico). Lectura optimista para el motivo del traspaso y del cambio de dia; la barrera
+   * que gana las carreras es la re-lectura bajo el `FOR UPDATE` de sus escrituras.
+   */
+  findIdsConGestionPendiente(ids: string[]): Promise<Set<string>>;
   /**
    * Feature 33 (QR por guia): fila de transicion resuelta por `num_guia` (UNIQUE en
    * `orden`). Como `findByIdsForTransicion`, INCLUYE borradas (`deletedAt !== null`)
@@ -2373,7 +2400,27 @@ export interface IOrdenRepository {
    * MONEY-SAFE (R13): el `data` toca UNICAMENTE `estatusId` — ni montos, ni prioridad, ni el
    * mensajero asignado (R6).
    */
-  transicionarAyuda(input: TransicionAyudaInput): Promise<boolean>;
+  //
+  // ⏳ 2026-09-23 (FICHA 454, T1.15): `transicionarAyuda` SE RETIRA. La ayuda deja de ser estado; sus
+  // dos mitades son HECHOS (`orden_evento`) escritos por los dos metodos de abajo, sin transicion.
+
+  /** FICHA 454 (R21): la IDA — evento `ayuda_solicitada` bajo candado. `false` = no admitia. */
+  registrarAyudaSolicitada(input: {
+    ordenId: string;
+    mensajeroId: string;
+    actorRol: RolValue;
+  }): Promise<boolean>;
+
+  /**
+   * FICHA 454 (R23/R24): la VUELTA — `ayuda_rescatada` (Recuperar / Habilitar) o
+   * `ayuda_habilitada_api`, guardada por «ayuda abierta» bajo candado. `false` = ya no lo estaba.
+   */
+  registrarAyudaResuelta(input: {
+    ordenId: string;
+    tipo: "ayuda_rescatada" | "ayuda_habilitada_api";
+    actorUsuarioId: string;
+    actorRol: RolValue;
+  }): Promise<boolean>;
 
   /**
    * Feature 266 (T3.1, design §4.2, R3/R4) — LECTURA, y solo lectura, de la orden `numGuia` del

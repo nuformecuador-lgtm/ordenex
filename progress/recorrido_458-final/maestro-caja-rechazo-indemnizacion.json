@@ -1,0 +1,176 @@
+[
+  {
+    "id": "7 aprobar el cobro por rechazo sembrado («Cobrar»)",
+    "estado": "INFO",
+    "guia": "57202592",
+    "confirmacion": null,
+    "aviso": "Cobro aprobado: ya está en la caja y en el libro de la tienda. ×",
+    "antes": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.581.733,22",
+      "salio": "₡97.800,50",
+      "movimientos": "48",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.581.733,22",
+      "salio": "₡97.800,50",
+      "movimientos": "50",
+      "deTiendas": "₡145.636,10",
+      "ganancia": "₡13.338.296,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "R7/R8 tras aprobar el cobro por rechazo",
+    "estado": "OK",
+    "entro": "13581733.22",
+    "salio": "97800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13338296.62",
+    "de_tiendas": "145636.10",
+    "capital": "0",
+    "suma_saldos": "145636.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "7 anular el cobro por rechazo",
+    "estado": "OK",
+    "nombreAccesible": "Ver Flete por rechazo cobrado a la tienda del 2026-09-26 por ₡1.800",
+    "panel": "Flete por rechazo cobrado a la tienda 2026-09-26 · Entra ₡1.800 Es un cobro a la tienda por el flete de un rechazo: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja. A quién Tania Tienda Por qué — De dónde sale Gestión de orden · cobro por rechazo · guía 57202592 Ver Cómo — Comprobante Sin comprobante. Registró Maestro QA · el 2026-09-26 a las 20:00 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.483.932,72 Ganancia de Ordenex ₡13.338.296,62 Lo que Ordenex les debe a las tiendas ₡145.636,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡147.436,10 Anular… Cerrar",
+    "dialogo": "Anular el cobro por rechazo a una tienda Se registrará hoy un movimiento contrario por ₡1.800. El registro original, su comprobante y su historial quedan intactos: no se borra nada. Flete por rechazo cobrado a la tienda · 2026-09-26 · ₡1.800 Motivo de la anulación* Obligatorio. Queda guardado junto a la anulación. Cancelar Anular",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "antesDeAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.581.733,22",
+      "salio": "₡97.800,50",
+      "movimientos": "50",
+      "deTiendas": "₡145.636,10",
+      "ganancia": "₡13.338.296,62",
+      "capital": "₡0"
+    },
+    "trasAnular": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.581.733,22",
+      "salio": "₡97.800,50",
+      "movimientos": "52",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "reversosEnElLibro": [
+      "2026-09-26 Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Sale ₡1.800 Ordenex Maestro QA Ver",
+      "2026-09-26 IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Sale ₡234 Ordenex Maestro QA Ver",
+      "2026-09-26 Flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Entra ₡1.800 Ordenex Maestro QA Anulado Ver",
+      "2026-09-26 IVA del flete por rechazo cobrado a la tienda Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Entra ₡234 Ordenex Maestro QA Anulado Ver",
+      "2026-09-26 Gasto de Ordenex Gasto de Ordenex · Gasto R458F-maestro papelería Librería R458F-maestro Sale ₡3.000 Ordenex Maestro QA Anulado Ver"
+    ],
+    "colaVuelveAOfrecerlo": 0,
+    "sql": [
+      {
+        "tipo": "credito",
+        "categoria": "flete_devolucion_anulado",
+        "monto": "1800.00"
+      },
+      {
+        "tipo": "credito",
+        "categoria": "iva_flete_devolucion_anulado",
+        "monto": "234.00"
+      }
+    ]
+  },
+  {
+    "id": "R7/R8 tras anular el cobro por rechazo",
+    "estado": "OK",
+    "entro": "13581733.22",
+    "salio": "97800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "indemnización: aprobar el incidente sembrado (/incidentes)",
+    "estado": "FALLO",
+    "guia": "75067153",
+    "monto": "4000",
+    "aviso": "Procesando…"
+  },
+  {
+    "id": "R7/R8 tras aprobar la indemnización",
+    "estado": "OK",
+    "entro": "13581733.22",
+    "salio": "101800.50",
+    "cifra": "13479932.72",
+    "ganancia": "13332262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "anular una indemnización",
+    "estado": "OK",
+    "nombreAccesible": "Ver Indemnización que Ordenex paga por un incidente del 2026-09-26 por ₡4.000",
+    "panel": "Indemnización que Ordenex paga por un incidente 2026-09-26 · Sale ₡4.000 A quién Tania Tienda Por qué — De dónde sale Incidente de orden · guía 75067153 Ver Cómo — Comprobante Sin comprobante. Adjuntar comprobante Registró Automático · Incidente resuelto por Maestro QA · el 2026-09-26 a las 20:00 Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.479.932,72 Ganancia de Ordenex ₡13.332.262,62 Lo que Ordenex les debe a las tiendas ₡147.670,10 Saldo inicial y aportes ₡0 Anular… Cerrar",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "error": null,
+    "antes": {
+      "cifra": "₡13.479.932,72",
+      "entro": "₡13.581.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "53",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.332.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "filas": [
+      {
+        "texto": "2026-09-26 Corrección de caja (suma) Incidente de orden · guía 75067153 · Anulación de: Indemnización que Ordenex paga por un incidente Ver Tania Tienda Entra ₡4.000 Ordenex Maestro QA Ver",
+        "tachada": false
+      },
+      {
+        "texto": "2026-09-26 Indemnización que Ordenex paga por un incidente Incidente de orden · guía 75067153 Ver Tania Tienda Sale ₡4.000 Ordenex Automático · Incidente resuelto por Maestro QA Anulado Ver",
+        "tachada": true
+      },
+      {
+        "texto": "2026-09-26 Flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Sale ₡1.800 Ordenex Maestro QA Ver",
+        "tachada": false
+      },
+      {
+        "texto": "2026-09-26 IVA del flete por rechazo cobrado a la tienda anulado Gestión de orden · cobro por rechazo · guía 57202592 Ver Tania Tienda Sale ₡234 Ordenex Maestro QA Ver",
+        "tachada": false
+      }
+    ]
+  },
+  {
+    "id": "R7/R8 tras anular la indemnización",
+    "estado": "OK",
+    "entro": "13585733.22",
+    "salio": "101800.50",
+    "cifra": "13483932.72",
+    "ganancia": "13336262.62",
+    "de_tiendas": "147670.10",
+    "capital": "0",
+    "suma_saldos": "147670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  }
+]

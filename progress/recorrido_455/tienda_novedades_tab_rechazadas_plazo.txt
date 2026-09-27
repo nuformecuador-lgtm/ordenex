@@ -1,0 +1,16 @@
+Novedades
+
+Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en Novedad y las que pasaron a Devolución a origen por rechazo por vencerse el plazo
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Ayuda solicitada
+Novedad
+Rechazadas por plazo vencido
+
+No tenés órdenes rechazadas por plazo vencido
+
+Cuando una de tus órdenes en devolución llegue a rechazo por vencerse el plazo, aparecerá acá.

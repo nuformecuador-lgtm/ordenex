@@ -54,6 +54,7 @@ function orden(): OrdenParaCorreccionRow {
     esCentral: false,
     esZonaEspecial: false,
     yaEnUnCierre: false,
+    ayudaAbierta: false, // FICHA 454 (R64): la ayuda abierta se deriva; aqui, ninguna
   };
 }
 

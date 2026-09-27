@@ -1,0 +1,200 @@
+{
+  "pasos": [
+    {
+      "id": "login_tienda",
+      "email": "tienda.qa@ordenex.test",
+      "via": "directo"
+    },
+    {
+      "id": "tienda_mi_wallet",
+      "http": 200,
+      "saldo": "Saldo a favor | A favor | ₡107.357,10",
+      "pistas": [
+        "Lo cobrado a tus clientes, las correcciones a tu favor y lo que Ordenex te devolvió al anular",
+        "Fletes, comisión, IVA y lo que Ordenex te cobró",
+        "Lo que Ordenex te pagó o pagó por ti"
+      ],
+      "filas": [
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡107\tRegistrado a mano · dc_cobro R461-admin-muhjzbh4",
+        "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡103\tPago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-admin-muhjzbh4 · Efectivo",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-admin-muhjzbh4",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡42.000\tRegistrado a mano · Cobro recorrido R461-admin-muhjzbh4",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡107\tCobro de Ordenex a una tienda · Anulación · dc_cobro R461-maestro-muhjpu17",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡107\tRegistrado a mano · dc_cobro R461-maestro-muhjpu17",
+        "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡103\tPago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjpu17",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjpu17",
+        "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjm8fg · Efectivo",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjm8fg",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjm8fg",
+        "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjjipq · Efectivo",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjjipq",
+        "\t2026-09-25\tDébito\tOrdenex te cobró\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjjipq",
+        "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjh71a"
+      ],
+      "opcionesFiltro": [
+        "Todos los conceptos",
+        "Cobrado a tus clientes en contra-entrega",
+        "Ordenex te cobró el flete",
+        "Ordenex te cobró el flete por rechazo",
+        "Ordenex te cobró la comisión de contra-entrega",
+        "Ordenex te cobró el IVA del flete",
+        "Ordenex te cobró el IVA del flete por rechazo",
+        "Ordenex te cobró el IVA de la comisión",
+        "Ordenex te pagó",
+        "Corrección a tu favor",
+        "Corrección en tu contra",
+        "Ordenex te cobró",
+        "Ordenex pagó un gasto por ti",
+        "Ordenex anuló un pago hecho por ti",
+        "Ordenex anuló un cobro y te lo devolvió"
+      ],
+      "botonesEnTabla": [],
+      "barridoPantalla": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "descarga": {
+        "archivo": "desglose-de-movimientos-2026-09-25.xlsx",
+        "cabecera": [
+          "Fecha",
+          "Tipo",
+          "Concepto",
+          "Monto",
+          "Origen"
+        ],
+        "n": 54,
+        "muestra": [
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex te cobró",
+            "107.00",
+            "Registrado a mano · dc_cobro R461-admin-muhjzbh4"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex pagó un gasto por ti",
+            "103.00",
+            "Pago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-admin-muhjzbh4 · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Ordenex anuló un cobro y te lo devolvió",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-admin-muhjzbh4"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex te cobró",
+            "42000.00",
+            "Registrado a mano · Cobro recorrido R461-admin-muhjzbh4"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Ordenex anuló un cobro y te lo devolvió",
+            "107.00",
+            "Cobro de Ordenex a una tienda · Anulación · dc_cobro R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex te cobró",
+            "107.00",
+            "Registrado a mano · dc_cobro R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex pagó un gasto por ti",
+            "103.00",
+            "Pago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Ordenex anuló un cobro y te lo devolvió",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex te cobró",
+            "42000.00",
+            "Registrado a mano · Cobro recorrido R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex pagó un gasto por ti",
+            "10000.00",
+            "Pago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjm8fg · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Ordenex anuló un cobro y te lo devolvió",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjm8fg"
+          ]
+        ]
+      },
+      "barridoDescarga": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "lecturas": {
+        "cobro": [],
+        "anulacion": [
+          "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-admin-muhjzbh4",
+          "\t2026-09-25\tCrédito\tOrdenex anuló un cobro y te lo devolvió\t₡107\tCobro de Ordenex a una tienda · Anulación · dc_cobro R461-maestro-muhjpu17"
+        ],
+        "pagoGasto": [
+          "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡103\tPago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-admin-muhjzbh4 · Efectivo",
+          "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡103\tPago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo",
+          "\t2026-09-25\tDébito\tOrdenex pagó un gasto por ti\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjm8fg · Efectivo"
+        ]
+      }
+    },
+    {
+      "id": "caso6_filtro_fecha_mi_wallet",
+      "marcaPago": "A Facebook · Pauta R461-admin-muhjzbh4 · Efectivo",
+      "enAyer": [
+        "\t2026-09-24\tDébito\tOrdenex pagó un gasto por ti\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-admin-muhjzbh4 · Efectivo"
+      ],
+      "enHoy": []
+    },
+    {
+      "id": "tienda__wallet",
+      "http": 404,
+      "titulo": "No encontramos esta página",
+      "url": "http://localhost:3461/wallet"
+    },
+    {
+      "id": "tienda__wallet_tiendas",
+      "http": 404,
+      "titulo": "No encontramos esta página",
+      "url": "http://localhost:3461/wallet/tiendas"
+    },
+    {
+      "id": "tienda_actions",
+      "anular": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      },
+      "registrar": {
+        "http": 200,
+        "status": "forbidden",
+        "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"forbidden\"}\n"
+      }
+    }
+  ]
+}

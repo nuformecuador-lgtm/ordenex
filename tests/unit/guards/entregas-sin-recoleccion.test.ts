@@ -88,7 +88,11 @@ describe("Feature 167 — Entregas no monta ninguna superficie de recoleccion (R
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    expect(estados).toEqual(["ORIGEN_RECOGER", "ESTADO_EN_REPARTO", "ESTADO_AYUDA"]);
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R37): VUELVE A DOS. La ayuda deja de ser un estatus (`ESTADO_AYUDA`
+    // desaparece): la orden con ayuda abierta sigue `en_reparto` y el servicio la separa por la
+    // derivacion `ayuda-abierta.ts`.
+    expect(estados).toEqual(["ORIGEN_RECOGER", "ESTADO_EN_REPARTO"]);
     expect(estados).not.toContain("ESTADO_RECOLECTANDO");
     expect(src).not.toMatch(/=\s*"recolectando"/);
   });

@@ -384,7 +384,25 @@ describe("OrdenRepository.findZonasConMensajeroBloqueado", () => {
   });
 });
 
-describe("OrdenRepository.existeBodegaSateliteBloqueada (feature 241 -> 271/R34)", () => {
+describe("OrdenRepository.existeBodegaSateliteBloqueada (feature 241 -> 271/R34 -> ficha 431)", () => {
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⭑ FICHA 431 (D4/R1/R4) — LA CAUSA (ii) DEJA DE BLOQUEAR. `bloqueada` ES `false` SIEMPRE.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // Hasta esta ficha, `bloqueada = porCierreBodega`: con su consolidacion hacia la central sin
+  // aprobar, la bodega satelite NO PODIA ASIGNAR NI UNA ORDEN MAS. Medido en produccion el
+  // 2026-09-15, esa espera tenia mediana de 34 minutos, maximo de 14,15 h, y 3 de 32 por encima de
+  // 12 h: tres mananas en que una satelite amanecio sin poder trabajar porque nadie habia mirado
+  // una pantalla. La aprobacion pasa a ser una MARCA DE CONCILIACION —«el efectivo llego»— y una
+  // marca que ocurre cuando el bulto viaja no puede ser ademas la puerta que deja trabajar.
+  //
+  // `porCierreBodega` SIGUE VIAJANDO como AVISO, con el mismo trato que `porMensajeros` desde la
+  // 241, y ahora ademas con su NUMERO.
+  //
+  // ⚠️ NO CONFUNDIR CON EL GATE DE NIVEL 1, que SIGUE VIVO y tiene su propio ancla en
+  // `tests/unit/services/cierre-bodega-service.test.ts`: una satelite sigue sin poder CONSOLIDAR
+  // mientras tenga cierres del dia de sus mensajeros sin resolver. Eso es un cuadre y sigue siendo
+  // puerta. Lo que se retira es el freno de NIVEL 2, que no cuadraba nada.
   /**
    * `mensajeros` = ids de la zona; `cierres` = sus cierre_dia; `countBodega` = CierreBodega
    * pendiente (causa ii).
@@ -474,24 +492,99 @@ describe("OrdenRepository.existeBodegaSateliteBloqueada (feature 241 -> 271/R34)
     });
   });
 
-  // La causa (ii), que NO se toco en NINGUNA de las tres fichas: es el cierre de la PROPIA bodega
-  // hacia la central, no el de un mensajero.
-  it("causa (ii): CierreBodega pendiente -> bloqueo duro aunque nadie tenga cierre", async () => {
+  // ⭑ FICHA 431 — ESTE CASO CAMBIA DE SIGNO, Y ES EL CAMBIO DE LA FICHA. Antes decia «causa (ii):
+  // CierreBodega pendiente -> bloqueo duro aunque nadie tenga cierre». Ahora afirma lo contrario:
+  // la consolidacion pendiente VIAJA COMO AVISO y no frena nada.
+  it("⭑ 431/R1: consolidacion pendiente de conciliar -> AVISO, NO bloqueo", async () => {
     const { res } = await run(["m1", "m2"], [], 1);
 
     expect(res).toMatchObject({
-      bloqueada: true,
+      bloqueada: false, // <- lo que la ficha cambia
       porMensajeros: false,
-      porCierreBodega: true,
+      porCierreBodega: true, // <- el aviso SIGUE VIAJANDO (D4): se conserva, no se borra
+      consolidacionesSinConciliar: 1, // <- y ahora con su NUMERO (R2/R3)
       cierresAbiertos: 0,
       totalMensajeros: 2,
     });
   });
 
-  it("con mensajeros en cierre Y CierreBodega pendiente, bloquea SOLO por la causa (ii)", async () => {
+  // ⭑ FICHA 431 (R2/R3) — EL NUMERO ES EL NUMERO, no un booleano disfrazado. Sin este caso, un
+  // `consolidacionesSinConciliar: porCierreBodega ? 1 : 0` pasaria el de arriba en verde, y el
+  // aviso diria «tenes 1 consolidacion» con cuatro encima de la mesa. Este numero solo puede pasar
+  // de 1 porque la ficha borro el indice unico parcial que lo fijaba en 1.
+  it("⭑ 431/R2: con CUATRO consolidaciones sin conciliar, el aviso cuenta CUATRO", async () => {
+    const { res } = await run(["m1"], [], 4);
+
+    expect(res).toMatchObject({
+      bloqueada: false,
+      porCierreBodega: true,
+      consolidacionesSinConciliar: 4,
+    });
+  });
+
+  it("⭑ 431/R4: con cierres de mensajeros Y consolidacion pendiente, TAMPOCO bloquea", async () => {
     const { res } = await run(["m1"], [{ mensajeroId: "m1", estado: "vencido" }], 1);
 
-    expect(res).toMatchObject({ bloqueada: true, porMensajeros: true, porCierreBodega: true });
+    expect(res).toMatchObject({
+      bloqueada: false,
+      porMensajeros: true,
+      porCierreBodega: true,
+      consolidacionesSinConciliar: 1,
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  // ⭑ FICHA 431 (R4) — EL ANCLA QUE IMPIDE QUE `bloqueada` SE VUELVA UN MENTIROSO MUDO.
+  // ═══════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // El campo `bloqueada` se CONSERVA en el contrato aunque hoy sea constante, y con el la rama
+  // `bodega_bloqueada` de `AsignacionSateliteService.asignar`: es la lectura literal de D4 («se
+  // quita en UN solo sitio») y deja el punto de entrada por si vuelve una causa. Un campo constante
+  // sin test es exactamente la clase de cosa que un dia vuelve a `true` sin que nadie se entere, y
+  // R4 es un requisito NEGATIVO: «el sistema NO DEBE impedir la asignacion por NINGUNA causa
+  // derivada de un cierre». Los negativos no se prueban con un caso: se prueban barriendo el
+  // espacio.
+  //
+  // Se barren las DOCE combinaciones de (cierres de mensajero) × (consolidaciones pendientes), con
+  // el doble que AGRUPA de verdad, y se exige `bloqueada === false` en TODAS.
+  it.each([
+    ["sin cierres", [] as CierreFila[]],
+    ["un solicitado (N=1,V=0)", [{ mensajeroId: "m1", estado: "solicitado" }]],
+    ["dos solicitados (N=2,V=0)", [
+      { mensajeroId: "m1", estado: "solicitado" },
+      { mensajeroId: "m1", estado: "solicitado" },
+    ]],
+    ["un vencido (V=1)", [{ mensajeroId: "m1", estado: "vencido" }]],
+    ["un rechazado (V=1)", [{ mensajeroId: "m1", estado: "rechazado" }]],
+    ["vencido + rechazado", [
+      { mensajeroId: "m1", estado: "vencido" },
+      { mensajeroId: "m2", estado: "rechazado" },
+    ]],
+  ])(
+    "⭑ 431/R4: NINGUNA combinacion bloquea — %s, con 0 y con 3 consolidaciones pendientes",
+    async (_nombre, cierres) => {
+      for (const countBodega of [0, 3]) {
+        const { res } = await run(["m1", "m2"], cierres as CierreFila[], countBodega);
+        expect(
+          res.bloqueada,
+          `la combinacion [${_nombre} / ${countBodega} consolidaciones] bloqueo la bodega: ` +
+            "R4 dice que HOY ninguna causa derivada de un cierre puede impedir la asignacion",
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("⭑ 431: anti-vacuidad del barrido — el instrumento SI distingue las causas", async () => {
+    // Sin esto, un `run` roto que devolviera siempre lo mismo dejaria el barrido de arriba verde
+    // sin haber medido nada. Aqui se comprueba que las banderas SI cambian con la entrada; lo unico
+    // que no cambia es `bloqueada`.
+    const sinNada = (await run(["m1"], [], 0)).res;
+    const conTodo = (await run(["m1"], [{ mensajeroId: "m1", estado: "vencido" }], 2)).res;
+
+    expect(sinNada).toMatchObject({ porMensajeros: false, porCierreBodega: false, consolidacionesSinConciliar: 0 });
+    expect(conTodo).toMatchObject({ porMensajeros: true, porCierreBodega: true, consolidacionesSinConciliar: 2 });
+    expect(sinNada.bloqueada).toBe(false);
+    expect(conTodo.bloqueada).toBe(false);
   });
 
   it("ningun mensajero con cierre y sin CierreBodega -> no bloqueada, cierresAbiertos 0", async () => {

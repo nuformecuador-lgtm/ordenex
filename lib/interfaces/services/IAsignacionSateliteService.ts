@@ -72,7 +72,7 @@ export interface BodegaBloqueadaCausa {
 export type AsignarSateliteServiceResult =
   | {
       status: "ok";
-      resultados: { ordenId: string; estado: "por_recoger" }[];
+      resultados: { ordenId: string; estado: "mensajero_recogiendo_en_bodega" }[];
       sinUbicacion?: number;
       sinUbicacionAutorizada?: number;
     } // R7
@@ -81,7 +81,7 @@ export type AsignarSateliteServiceResult =
   // sin tocar el significado de `conflict` (R16).
   | {
       status: "partial";
-      resultados: { ordenId: string; estado: "por_recoger" }[];
+      resultados: { ordenId: string; estado: "mensajero_recogiendo_en_bodega" }[];
       bloqueadas: { ordenId: string; motivo: string }[];
       sinUbicacion?: number;
       sinUbicacionAutorizada?: number;

@@ -6,7 +6,7 @@ import {
   type AccionNovedad,
 } from "@/app/(app)/novedades/_components/novedad-acciones-catalogo";
 import {
-  ESTATUS_POR_GRUPO,
+  PREDICADO_POR_GRUPO,
   GRUPOS_NOVEDAD,
   type GrupoNovedad,
 } from "@/lib/types/novedad-grupo";
@@ -208,8 +208,10 @@ describe("236/R6 — la tabla se indexa por el MISMO grupo que usa el servidor",
     // `satisfies` de la tabla rompería el TYPECHECK; y si alguien lo silenciara, esto cae. Lo que
     // no puede pasar es que el servidor liste una población para la que la pantalla no sepa qué
     // botones ofrecer.
+    // FICHA 454 (2026-09-23): el mapa del servidor es ahora `PREDICADO_POR_GRUPO` (la ayuda deja
+    // de ser una igualdad de estado); antes se comparaba con `ESTATUS_POR_GRUPO`.
     expect(Object.keys(ACCIONES_POR_GRUPO).sort()).toEqual(
-      Object.keys(ESTATUS_POR_GRUPO).sort(),
+      Object.keys(PREDICADO_POR_GRUPO).sort(),
     );
     expect(Object.keys(ACCIONES_POR_GRUPO).sort()).toEqual([...GRUPOS_NOVEDAD].sort());
   });

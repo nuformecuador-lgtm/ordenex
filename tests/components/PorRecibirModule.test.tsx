@@ -54,7 +54,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
 const ZONA = "Limón";
-const ESTADO_EN_RUTA = `${ORDER_STATUS_LABELS.en_ruta_bodega_satelite} de ${ZONA}`;
+// ⏳ 2026-09-24 (FICHA 455, R2): el estado de la tarjeta es el nombre EXACTO, sin la zona
+// interpolada (antes «En ruta a bodega satélite de Limón»). La zona sigue a la vista en la franja
+// de ubicación de la tarjeta.
+const ESTADO_EN_RUTA = ORDER_STATUS_LABELS.en_ruta_bodega_satelite;
 const REGION = "Por recibir";
 const ABRIR_ESCANER = "Recibir paquete";
 
@@ -152,10 +155,15 @@ describe("PorRecibirModule — las tarjetas", () => {
     renderModule({ porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })] });
     const region = screen.getByRole("region", { name: REGION });
 
-    // POSITIVO: hay exactamente UN control en la tarjeta, y es el del detalle.
-    const botones = within(region).getAllByRole("button");
+    // POSITIVO: hay exactamente UN control de ACCIÓN en la tarjeta, y es el del detalle.
+    // ⏳ 2026-09-24 (FICHA 456, T3.5/R9): el chip de estado lleva su botón de información («Qué
+    // significa «…»»), que solo abre la explicación; se cuenta aparte y tiene que estar.
+    const todos = within(region).getAllByRole("button");
+    const esInfo = (b: HTMLElement) => (b.getAttribute("aria-label") ?? "").startsWith("Qué significa «");
+    const botones = todos.filter((b) => !esInfo(b));
     expect(botones).toHaveLength(1);
     expect(botones[0]).toHaveAccessibleName(/Ver detalle completo/i);
+    expect(todos.filter(esInfo)).toHaveLength(1);
   });
 
   it("R2: el banner cuenta las órdenes por recibir", () => {

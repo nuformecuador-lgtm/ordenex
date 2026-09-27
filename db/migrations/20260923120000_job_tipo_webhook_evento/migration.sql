@@ -1,0 +1,14 @@
+-- FICHA 454 (design §1.3, T1.2 · M1) -- anade el 11.º valor al enum `job_tipo`: `webhook_evento`,
+-- el job PUNTUAL que entrega UN hecho de orden (`orden_evento`: gestion registrada/anulada/
+-- corregida, ayuda solicitada/resuelta) a la suscripcion de webhook del dueño de la orden.
+--
+-- Payload MINIMO `{ ordenEventoId }` (sin datos personales, R33) y `dedupe_key =
+-- 'webhook_evento:<ordenEventoId>'`: un hecho, un job. Lo encola la MISMA transaccion que escribe
+-- el hecho (outbox), igual que `webhook_estado` desde el choke point de estado.
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma transaccion
+-- que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una transaccion. Mismo
+-- criterio que `20260912120100_job_tipo_push_web` y las nueve hermanas anteriores.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'webhook_evento';

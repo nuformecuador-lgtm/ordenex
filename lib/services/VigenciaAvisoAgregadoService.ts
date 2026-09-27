@@ -3,6 +3,7 @@ import type { RolValue } from "@prisma/client";
 import type { IAvisoAgregadoRepository } from "@/lib/interfaces/repositories/IAvisoAgregadoRepository";
 import type { IRepartoMananaRepository } from "@/lib/interfaces/repositories/IRepartoMananaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IReprogramadasRetenidasService } from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 import type { IVigenciaAvisoAgregado } from "@/lib/interfaces/services/IVigenciaAvisoAgregado";
 import type { NotificacionEvento } from "@/lib/types/notificacion";
 import { startOfDayCR } from "@/lib/utils/fecha-cr";
@@ -57,6 +58,23 @@ const AMBITO_REPRESADAS_POR_ROL: Partial<Record<RolValue, "global" | "zona">> = 
 };
 
 /**
+ * FICHA 462 (design §3.5, R6/R14) — LOS ROLES CON AMBITO PROPIO EN `reprogramadas_esperan_cierre`,
+ * Y CUAL ES. Misma forma que el mapa de arriba (418) y por las mismas razones: lista BLANCA, escrita
+ * a mano y local a este servicio; lo que no esta aqui no tiene ambito y LANZA.
+ *
+ * ⚠️ ES `"central"` Y NO `"global"`: maestro y admin NO cuentan el total del sistema sino el ambito
+ * CENTRAL —las retenidas cuyo cierre tiene destino `bodega_central`—, porque es exactamente lo que
+ * ven en `/cierres-admin` (`CierresAdminService.resolveAlcance`). Un aviso que dijera 5 y una
+ * pantalla con 3 marcas quedaria desacreditado el primer dia (462, decision 3). MUTACION OBLIGATORIA
+ * (design §8.2-6): darle al maestro el total (incluir el satelite) => R6/R44 ROJOS.
+ */
+const AMBITO_RETENIDAS_POR_ROL: Partial<Record<RolValue, "central" | "zona">> = {
+  maestro: "central",
+  admin: "central",
+  adminSatelite: "zona",
+};
+
+/**
  * Un id util es una cadena no vacia. `null`, `undefined`, `""` y cualquier otra cosa NO lo son.
  * Mismo criterio —y a proposito la misma forma— que `lib/analytics/alcance.ts:218`, que es el
  * precedente del repo para «adminSatelite sin zona».
@@ -83,6 +101,14 @@ export class VigenciaAvisoAgregadoService implements IVigenciaAvisoAgregado {
      * causa escrita, que es la direccion segura — un `0` de cortesia apagaria un aviso vivo.
      */
     private readonly repartoRepo?: IRepartoMananaRepository,
+    /**
+     * FICHA 462 (T2.8) — el CONTEO UNICO de las reprogramadas retenidas, para la cifra viva del
+     * cuarto agregado. Mismo patron y misma justificacion que `repartoRepo`: OPCIONAL EN EL TIPO
+     * (los consumidores vigentes siguen compilando) y que LANZA con su causa si falta (un `0` de
+     * cortesia apagaria un aviso vivo sin que nadie lo lea). Es el MISMO servicio que usa el cron
+     * para emitir, la marca de `/cierres-admin` y la franja de `/ordenes` (R7).
+     */
+    private readonly retenidas?: Pick<IReprogramadasRetenidasService, "contar">,
   ) {}
 
   async cifra(evento: NotificacionEvento, actor: Actor): Promise<number> {
@@ -190,6 +216,40 @@ export class VigenciaAvisoAgregadoService implements IVigenciaAvisoAgregado {
       // medianoche. Un aviso de mas es la direccion segura, y el de bloqueo es accionable.
       // MUTACION OBLIGATORIA (design §13.11): meter la comprobacion aqui ⇒ R43 y R41 ROJOS.
       return this.repartoRepo.contarReservadasParaOtroDia(actor.usuarioId, startOfDayCR(this.now()));
+    }
+    if (evento === "reprogramadas_esperan_cierre") {
+      // ⚠️ FICHA 462 (R6/R14) — EL AMBITO ES EL ACTOR, por INCLUSION: maestro y admin cuentan el
+      // ambito CENTRAL (no el total del sistema); el adminSatelite, SU zona. Cualquier otro rol —y
+      // cualquier valor nuevo del enum— no tiene ambito y LANZA: un `0` de cortesia apagaria la
+      // fila sin que nadie la lea (409/R55 al reves), que es el peor de los dos modos de fallo.
+      // `NotificacionService.cifrasVivas` lo registra con su causa y muestra el aviso SIN numero
+      // (R14/R58): lanzar aqui no rompe ninguna pantalla.
+      // MUTACION OBLIGATORIA (design §8.2-9): devolver `0` en vez de lanzar sin zona => R14 ROJO.
+      const ambito = AMBITO_RETENIDAS_POR_ROL[actor.rol];
+      if (ambito === undefined) {
+        throw new Error(
+          `vigencia: el evento "${evento}" no define ambito para el rol "${actor.rol}"`,
+        );
+      }
+      if (this.retenidas === undefined) {
+        // La familia «el composition root que no inyecta»: sin esto, un `buildService` que se
+        // olvidara del servicio dejaria el aviso sin numero para todos, en silencio.
+        throw new Error(
+          `vigencia: el evento "${evento}" necesita el servicio de retenidas y nadie lo inyecto`,
+        );
+      }
+      // ⚠️ `startOfDayCR` Y NO `inicioDelDiaCREnUtc`: `fecha_reprogramacion` es `@db.Date` y el
+      // conteo compara en la convencion del reloj de liberacion (design §1.2).
+      const hoyCR = startOfDayCR(this.now());
+      if (ambito === "central") return this.retenidas.contar(hoyCR, { tipo: "central" });
+      if (!idUtil(actor.zonaId)) {
+        // `{ rol: "adminSatelite", zonaId: null }` es un valor LEGAL del tipo y ese `null` no
+        // significa «su zona». No se degrada a central ni a `0`: se lanza (417/R1-R2).
+        throw new Error(
+          `vigencia: el evento "${evento}" se acota por zona y el adminSatelite no tiene zona asignada`,
+        );
+      }
+      return this.retenidas.contar(hoyCR, { tipo: "zona", zonaId: actor.zonaId });
     }
     // Un evento sin cifra viva no tiene nada que resolver. LANZA en vez de devolver `0`: un cero
     // de cortesia OCULTARIA un aviso vivo (R55 al reves), que es el peor desenlace posible aqui.

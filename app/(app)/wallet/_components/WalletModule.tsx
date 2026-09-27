@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import useSWR from "swr";
 
 import {
   Card,
@@ -18,6 +19,9 @@ import {
   verResumenCajaAction,
 } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
+import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
+import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type {
   CajaResumenDTO,
   ComposicionGananciaDTO,
@@ -34,7 +38,7 @@ import {
   CobrosRechazoTiendaPendientesPanel,
   type CobrosRechazoTiendaPendientes,
 } from "./CobrosRechazoTiendaPendientesPanel";
-import { WalletLedger } from "./WalletLedger";
+import { WalletLedger, type AutoriaDelLibro } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import {
   WalletFiltros,
@@ -42,7 +46,7 @@ import {
   inputDeFiltros,
   type WalletFiltrosValue,
 } from "./WalletFiltros";
-import { RegistrarMovimientoCajaDialog } from "./RegistrarMovimientoCajaDialog";
+import { RegistrarMovimientoDialog } from "@/components/shared/wallet/RegistrarMovimientoDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
   GastosFijosPlantillasPanel,
@@ -154,6 +158,55 @@ function buildInput(
   return { ...inputDeFiltros(filtros), page, pageSize };
 }
 
+/** El tope de ids por lectura de autoría: el del borde (`autoriaLibroCajaSchema`, = página máxima). */
+const TOPE_IDS_AUTORIA = 100;
+
+/**
+ * FICHA 458-E (R56/R57) — «A quién» y «Registró» de unas filas del libro, leídos EN LOTE por el
+ * servidor (`autoriaDelLibroCajaAction`) en tramos del tope del borde. Cualquier respuesta que no sea
+ * `ok` es un error: la celda dirá que no se pudo leer, nunca un «—» que significaría «no hay dato».
+ */
+async function leerAutoria(ids: readonly string[]): Promise<Map<string, AutoriaDeFilaDTO>> {
+  const porMovimiento = new Map<string, AutoriaDeFilaDTO>();
+  for (let i = 0; i < ids.length; i += TOPE_IDS_AUTORIA) {
+    const r = await autoriaDelLibroCajaAction({ movimientoIds: ids.slice(i, i + TOPE_IDS_AUTORIA) });
+    if (r.status !== "ok") throw new Error(`autoria del libro de la caja: ${r.status}`);
+    for (const fila of r.filas) porMovimiento.set(fila.movimientoId, fila);
+  }
+  return porMovimiento;
+}
+
+/** Una fila del libro con su autoría, tal como la proyecta la descarga. */
+interface MovimientoConAutoria {
+  movimiento: WalletMovimientoDTO;
+  autoria: AutoriaDeFilaDTO | undefined;
+}
+
+/**
+ * FICHA 458-E (T E.1, R3/R55–R57) — el libro ENTERO con los filtros vigentes y, para CADA fila, «A
+ * quién» y «Registró» (la misma lectura que la tabla), en la forma de un listado completo para que
+ * el adaptador común (`filasDesdeResultado`) siga siendo quien aplica el tope y redacta los errores.
+ * Si la autoría no se puede leer, su error ES el resultado: sin archivo, porque una hoja con esas dos
+ * columnas vacías diría «nadie» donde el dato existe.
+ */
+async function listarConAutoria(
+  input: Record<string, unknown>,
+): Promise<ListarCompletoResult<MovimientoConAutoria>> {
+  const res = await listarMovimientosCompletoAction(input);
+  if (res.status !== "ok") return res;
+  const porMovimiento = new Map<string, AutoriaDeFilaDTO>();
+  for (let i = 0; i < res.items.length; i += TOPE_IDS_AUTORIA) {
+    const tramo = res.items.slice(i, i + TOPE_IDS_AUTORIA).map((m) => m.id);
+    const r = await autoriaDelLibroCajaAction({ movimientoIds: tramo });
+    if (r.status !== "ok") return r;
+    for (const fila of r.filas) porMovimiento.set(fila.movimientoId, fila);
+  }
+  return {
+    ...res,
+    items: res.items.map((m) => ({ movimiento: m, autoria: porMovimiento.get(m.id) })),
+  };
+}
+
 export function WalletModule({
   movimientos: initialMovimientos,
   total: initialTotal,
@@ -179,6 +232,28 @@ export function WalletModule({
   const [composicion, setComposicion] = useState(initialComposicion);
   const [filtros, setFiltros] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
   const [loading, setLoading] = useState(false);
+
+  // FICHA 458-E (R56/R57) — la autoría de la página que se está viendo. La clave son los ids de la
+  // página: cambiar de filtro, de página o releer tras registrar/anular trae filas nuevas y la
+  // lectura se repite sola; volver a una página ya vista la sirve la caché de SWR.
+  //
+  // FICHA 458-E (cierre) — el panel «Ver» ya no relee la autoría de su fila: usa ESTA. Por eso, tras
+  // registrar, anular o adjuntar (`recargarTrasCambio`), la clave lleva además una VERSIÓN: la misma
+  // página con los mismos ids tiene que volver a leerse, porque quién anuló, cuándo y cómo acaban de
+  // cambiar y la caché diría lo de antes.
+  const [versionAutoria, setVersionAutoria] = useState(0);
+  const ids = movimientos.map((m) => m.id);
+  const { data: autoriaData, error: autoriaError } = useSWR(
+    ids.length === 0 ? null : (["wallet:autoria-libro", versionAutoria, ...ids] as const),
+    ([, , ...clave]) => leerAutoria(clave),
+    { revalidateOnFocus: false, shouldRetryOnError: false },
+  );
+  const autoria = useMemo<AutoriaDelLibro>(() => {
+    if (ids.length === 0) return { estado: "ok", porMovimiento: new Map() };
+    if (autoriaError !== undefined) return { estado: "error" };
+    if (autoriaData === undefined) return { estado: "cargando" };
+    return { estado: "ok", porMovimiento: autoriaData };
+  }, [ids.length, autoriaData, autoriaError]);
 
   /** Traduce un status de error de dominio a un toast accionable. */
   function manejarError(status: "forbidden" | "unauthenticated" | "validation_error") {
@@ -244,6 +319,12 @@ export function WalletModule({
     void recargar(filtros, nextPage);
   }
 
+  /** R60 — tras registrar, anular o adjuntar: relee todo con los filtros vigentes Y la autoría. */
+  async function recargarTrasCambio() {
+    await recargar(filtros, page);
+    setVersionAutoria((v) => v + 1);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* R59: el nombre accesible de la sección también cambia — la palabra que mentía no se
@@ -261,8 +342,8 @@ export function WalletModule({
               botones casi iguales —«Registrar movimiento» y «Registrar egreso»— con dos
               vocabularios que no se explicaban entre si, y habia que adivinar cual abrir. El
               enrutado por concepto vive dentro del dialogo, no aqui. */}
-          <RegistrarMovimientoCajaDialog
-            onRegistrado={() => void recargar(filtros, page)}
+          <RegistrarMovimientoDialog
+            onRegistrado={() => void recargarTrasCambio()}
           />
         </div>
 
@@ -285,7 +366,7 @@ export function WalletModule({
         <CobrosGastoFijoPendientesPanel
           initialData={cobrosPendientes}
           puedeDecidir={puedeDecidirCobros}
-          onCambio={() => void recargar(filtros, page)}
+          onCambio={() => void recargarTrasCambio()}
         />
       ) : null}
 
@@ -307,7 +388,7 @@ export function WalletModule({
         <CobrosRechazoTiendaPendientesPanel
           initialData={cobrosRechazoTienda}
           puedeDecidir={puedeDecidirCobrosRechazo}
-          onCambio={() => void recargar(filtros, page)}
+          onCambio={() => void recargarTrasCambio()}
         />
       ) : null}
 
@@ -333,7 +414,7 @@ export function WalletModule({
         filtros={filtros}
       />
 
-      <section aria-label="Gastos fijos">
+      <section id="gastos-fijos" aria-label="Gastos fijos" className="scroll-mt-4">
         {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
             tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
         <GastosFijosPlantillasPanel initialData={plantillas} ahoraIso={ahoraIso} />
@@ -375,11 +456,12 @@ export function WalletModule({
             <WalletLedger
               movimientos={movimientos}
               isLoading={loading}
-              onReversado={() => void recargar(filtros, page)}
+              // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
+              onCambio={() => void recargarTrasCambio()}
+              autoria={autoria}
               obtenerFilasDescarga={() =>
-                filasDesdeResultado(
-                  listarMovimientosCompletoAction(inputDeFiltros(filtros)),
-                  filaDescargaMovimientoCaja,
+                filasDesdeResultado(listarConAutoria(inputDeFiltros(filtros)), (f) =>
+                  filaDescargaMovimientoCaja(f.movimiento, f.autoria),
                 )
               }
             />

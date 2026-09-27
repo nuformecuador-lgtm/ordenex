@@ -26,7 +26,7 @@ import type { AppErrorShape } from "@/lib/errors";
 // en el service bajo `withErrorHandler`. `unauthenticated` (sin sesion) y `validation_error`
 // (ZodError) se resuelven en el borde; `forbidden`/`ok` los devuelve el service. Se usa como
 // pre-fetch server-side (pagina 1) desde la page Y como re-fetch de pagina desde el modulo
-// cliente (patron `listarMisMovimientosAction`).
+// cliente (patron de las lecturas paginadas de `/mi-wallet`; hoy `verMiEstadoCuentaAction`).
 
 // R22: tamano de pagina FIJO. El cliente NO lo elige (no viaja en el input).
 const PAGE_SIZE = 10;

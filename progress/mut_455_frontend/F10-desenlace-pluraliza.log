@@ -1,0 +1,3646 @@
+MUTACION F10-desenlace-pluraliza
+archivo: app/(app)/analitica/_components/entregas/etiqueta-desenlace.ts
+cambio (numstat): 1	1	app/(app)/analitica/_components/entregas/etiqueta-desenlace.ts
+-   return valor === BUCKET_OTROS ? ETIQUETA_BUCKET_OTROS : nombreDeEstado(valor);
++   return valor === BUCKET_OTROS ? ETIQUETA_BUCKET_OTROS : `${valor.charAt(0).toUpperCase()}${valor.slice(1)}s`;
+tests: ['tests/unit/analytics/conteo-entregas-pliegue.test.ts', 'tests/unit/analytics/desenlaces-de-fila.test.ts', 'tests/components/ConteoEntregasAnillo.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/analytics/desenlaces-de-fila.test.ts (13 tests | 4 failed) 13ms
+     × la captura de la 346, con los nombres exactos de la 455 6ms
+     × FICHA 442 → 455 — el nombre no cambia con la cantidad: ni plural ni singular 1ms
+     × y el archivo descargable dice lo MISMO: una sola redacción para los dos 1ms
+     × un cubo en CERO no se nombra: «0 rechazadas» es ruido, no información 0ms
+ ❯ tests/unit/analytics/conteo-entregas-pliegue.test.ts (13 tests | 1 failed) 15ms
+     × nombra los cinco desenlaces con su nombre visible exacto, sin plural 4ms
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx (16 tests | 9 failed) 9276ms
+     × pinta los SEIS segmentos con las cifras que llegaron 1024ms
+     × escribe el porcentaje de cada desenlace junto a su cifra 1015ms
+     × los desenlaces vacíos pesan 0 % 1008ms
+     × los tres tercios dicen su razón exacta, y la BARRA sigue midiendo 100 % 1018ms
+     × ya no existe el segmento «No entregadas» 1008ms
+     × pinta los desenlaces en cero en vez de omitirlos 1018ms
+     × no arrastra los calificadores de la versión que mezclaba flujo y stock 1008ms
+     × no pinta la hora de la ultima actualizacion 1012ms
+     × un lastSync ilegible no pinta nada ni rompe la grafica 1009ms
+
+ Test Files  3 failed (3)
+      Tests  14 failed | 28 passed (42)
+   Start at  08:10:28
+   Duration  13.80s (transform 1.84s, setup 261ms, import 5.89s, tests 9.30s, environment 1.22s)
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > pinta los SEIS segmentos con las cifras que llegaron
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 5%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 3%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 7.000000000000001%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 1%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 64%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              5 (5%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              7 (7%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (1%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              64 (64%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 5 (5%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 3 (3%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 7 (7%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 1 (1%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 64 (64%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 5%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 3%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 7.000000000000001%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 1%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 64%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              5 (5%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              7 (7%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (1%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              64 (64%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 5 (5%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 3 (3%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 7 (7%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 1 (1%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 64 (64%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:96:25
+     94|     renderAnillo();
+     95|
+     96|     expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument…
+       |                         ^
+     97|     expect(screen.getByText(/Novedad: 5/)).toBeInTheDocument();
+     98|     expect(screen.getByText(/Devolución a origen por rechazo: 3/)).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > escribe el porcentaje de cada desenlace junto a su cifra
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 3\s\(30\s?%\)/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 10"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 10
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 30%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 50%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 20%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (30%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              5 (50%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (20%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 10"
+          >
+            <li>
+              Detalle gestión, Entregados: 3 (30%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 5 (50%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 2 (20%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 10"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 10
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 30%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 50%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 20%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              3 (30%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              5 (50%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              2 (20%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 10"
+          >
+            <li>
+              Detalle gestión, Entregados: 3 (30%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 5 (50%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 2 (20%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:116:25
+    114|     renderAnillo();
+    115|
+    116|     expect(await screen.findByText(/Entregado: 3\s\(30\s?%\)/)).toBeIn…
+       |                         ^
+    117|     expect(screen.getByText(/Novedad: 5\s\(50\s?%\)/)).toBeInTheDocume…
+    118|     expect(screen.getByText(/Otros: 2\s\(20\s?%\)/)).toBeInTheDocument…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > los desenlaces vacíos pesan 0 %
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 10\s\(100\s?%\)/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 10"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 10
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 100%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              10 (100%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 10"
+          >
+            <li>
+              Detalle gestión, Entregados: 10 (100%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 10"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 10
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 100%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              10 (100%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 10"
+          >
+            <li>
+              Detalle gestión, Entregados: 10 (100%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:127:25
+    125|     renderAnillo();
+    126|
+    127|     expect(await screen.findByText(/Entregado: 10\s\(100\s?%\)/)).toBe…
+       |                         ^
+    128|     expect(screen.getByText(/Incidente: 0\s\(0\s?%\)/)).toBeInTheDocum…
+    129|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > los tres tercios dicen su razón exacta, y la BARRA sigue midiendo 100 %
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 1\s\(/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 3"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 3
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 33.4%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 33.300000000000004%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 33.300000000000004%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 3"
+          >
+            <li>
+              Detalle gestión, Entregados: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 3"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 3
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 33.4%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 33.300000000000004%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 33.300000000000004%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              1 (33,3%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 3"
+          >
+            <li>
+              Detalle gestión, Entregados: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 1 (33,3%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:151:18
+    149|     const { container } = renderAnillo();
+    150|
+    151|     await screen.findAllByText(/Entregado: 1\s\(/);
+       |                  ^
+    152|
+    153|     // 1. Los tres pesos escritos: la razón exacta, la misma para los …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > ya no existe el segmento «No entregadas»
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:180:18
+    178|     renderAnillo();
+    179|
+    180|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+    181|     expect(screen.queryByText(/No entregadas/)).toBeNull();
+    182|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > pinta los desenlaces en cero en vez de omitirlos
+TestingLibraryElementError: Unable to find an element with the text: /Novedad: 0/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 20
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 100%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 20"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (100%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 20"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 20
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 100%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (100%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 20"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (100%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 0 (0%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:190:25
+    188|     renderAnillo();
+    189|
+    190|     expect(await screen.findByText(/Novedad: 0/)).toBeInTheDocument();
+       |                         ^
+    191|     expect(screen.getByText(/Incidente: 0/)).toBeInTheDocument();
+    192|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — las dos cifras y su suma > no arrastra los calificadores de la versión que mezclaba flujo y stock
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:203:18
+    201|     renderAnillo();
+    202|
+    203|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+    204|     expect(screen.queryByText(/\(periodo\)/)).toBeNull();
+    205|     expect(screen.queryByText(/abiertas al corte/i)).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — sin sello de frescura > no pinta la hora de la ultima actualizacion
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:234:18
+    232|     renderAnillo();
+    233|
+    234|     await screen.findByText(/Entregado: 20/);
+       |                  ^
+    235|     expect(screen.queryByText(/Actualizado/)).toBeNull();
+    236|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  tests/components/ConteoEntregasAnillo.test.tsx > Anillo de entregas — sin sello de frescura > un lastSync ilegible no pinta nada ni rompe la grafica
+TestingLibraryElementError: Unable to find an element with the text: /Entregado: 20/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <div
+      class="flex w-full flex-col gap-2"
+    >
+      <section
+        aria-label="Detalle gestión · 100"
+        class="flex w-full flex-col gap-2"
+      >
+        <h3
+          class="text-sm font-medium text-foreground"
+        >
+          Detalle gestión · 100
+        </h3>
+        <div
+          aria-hidden="true"
+          class="grafica-barra-crece flex w-full overflow-hidden rounded-md"
+          style="height: 28px;"
+        >
+          <div
+            style="width: 20%; background-color: var(--chart-1);"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-2, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-3, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-4, var(--chart-1));"
+          />
+          <div
+            style="width: 0%; background-color: var(--chart-5, var(--chart-1));"
+          />
+          <div
+            style="width: 80%; background-color: var(--chart-6, var(--chart-1));"
+          />
+        </div>
+        <ul
+          aria-hidden="true"
+          class="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+        >
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-1);"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Entregados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              20 (20%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-2, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Novedads
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-3, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Devolucion_a_origen_por_rechazos
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-4, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Reprogramados
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-5, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Incidentes
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              0 (0%)
+            </span>
+          </li>
+          <li
+            class="flex items-center gap-2"
+          >
+            <span
+              aria-hidden="true"
+              class="size-2.5 shrink-0 rounded-xs"
+              style="background-color: var(--chart-6, var(--chart-1));"
+            />
+            <span
+              class="text-muted-foreground"
+            >
+              Otros
+            </span>
+            <span
+              class="tabular-nums text-foreground"
+            >
+              80 (80%)
+            </span>
+          </li>
+        </ul>
+        <div
+          class="sr-only"
+        >
+          <ul
+            aria-label="Detalle gestión · 100"
+          >
+            <li>
+              Detalle gestión, Entregados: 20 (20%)
+            </li>
+            <li>
+              Detalle gestión, Novedads: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Devolucion_a_origen_por_rechazos: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Reprogramados: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Incidentes: 0 (0%)
+            </li>
+            <li>
+              Detalle gestión, Otros: 80 (80%)
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+ ❯ waitForWrapper ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ tests/components/ConteoEntregasAnillo.test.tsx:247:25
+    245|     renderAnillo();
+    246|
+    247|     expect(await screen.findByText(/Entregado: 20/)).toBeInTheDocument…
+       |                         ^
+    248|     expect(screen.queryByText(/Invalid Date/)).toBeNull();
+    249|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  tests/unit/analytics/conteo-entregas-pliegue.test.ts > La etiqueta de un desenlace > nombra los cinco desenlaces con su nombre visible exacto, sin plural
+AssertionError: expected 'Entregados' to be 'Entregado' // Object.is equality
+
+Expected: "Entregado"
+Received: "Entregados"
+
+ ❯ tests/unit/analytics/conteo-entregas-pliegue.test.ts:160:46
+    158| describe("La etiqueta de un desenlace", () => {
+    159|   it("nombra los cinco desenlaces con su nombre visible exacto, sin pl…
+    160|     expect(etiquetaDeDesenlace("entregado")).toBe("Entregado");
+       |                                              ^
+    161|     expect(etiquetaDeDesenlace("novedad")).toBe("Novedad");
+    162|     expect(etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  tests/unit/analytics/desenlaces-de-fila.test.ts > FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órdenes» > la captura de la 346, con los nombres exactos de la 455
+AssertionError: expected 'Entregados: 3 · Devolucion_a_origen_p…' to be 'Entregado: 3 · Devolución a origen po…' // Object.is equality
+
+Expected: "Entregado: 3 · Devolución a origen por rechazo: 2 · Novedad: 4 · Reprogramado: 2 · Sin desenlace todavía: 13"
+Received: "Entregados: 3 · Devolucion_a_origen_por_rechazos: 2 · Novedads: 4 · Reprogramados: 2 · Sin desenlace todavía: 13"
+
+ ❯ tests/unit/analytics/desenlaces-de-fila.test.ts:93:42
+     91| describe("FICHA 442 · la frase enumera TODOS los cubos y suma la colum…
+     92|   it("la captura de la 346, con los nombres exactos de la 455", () => {
+     93|     expect(textoDesenlacesDeFila(CREMA)).toBe(
+       |                                          ^
+     94|       "Entregado: 3 · Devolución a origen por rechazo: 2 · Novedad: 4 …
+     95|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  tests/unit/analytics/desenlaces-de-fila.test.ts > FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órdenes» > FICHA 442 → 455 — el nombre no cambia con la cantidad: ni plural ni singular
+AssertionError: expected 'Entregados: 4 · Devolucion_a_origen_p…' to be 'Entregado: 4 · Devolución a origen po…' // Object.is equality
+
+Expected: "Entregado: 4 · Devolución a origen por rechazo: 1 · Novedad: 1 · Sin desenlace todavía: 1"
+Received: "Entregados: 4 · Devolucion_a_origen_por_rechazos: 1 · Novedads: 1 · Sin desenlace todavía: 1"
+
+ ❯ tests/unit/analytics/desenlaces-de-fila.test.ts:118:40
+    116|       [EN_CURSO, 1],
+    117|     ]);
+    118|     expect(textoDesenlacesDeFila(una)).toBe(
+       |                                        ^
+    119|       "Entregado: 4 · Devolución a origen por rechazo: 1 · Novedad: 1 …
+    120|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  tests/unit/analytics/desenlaces-de-fila.test.ts > FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órdenes» > y el archivo descargable dice lo MISMO: una sola redacción para los dos
+AssertionError: expected 'Novedads: 1' to be 'Novedad: 1' // Object.is equality
+
+Expected: "Novedad: 1"
+Received: "Novedads: 1"
+
+ ❯ tests/unit/analytics/desenlaces-de-fila.test.ts:135:50
+    133|       ["novedad", 1],
+    134|     ]);
+    135|     expect(textoComposicionOtrosResultados(una)).toBe("Novedad: 1");
+       |                                                  ^
+    136|     expect(textoDesenlacesDeFila(una)).toContain("Novedad: 1");
+    137|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  tests/unit/analytics/desenlaces-de-fila.test.ts > FICHA 442 · la frase enumera TODOS los cubos y suma la columna «Órdenes» > un cubo en CERO no se nombra: «0 rechazadas» es ruido, no información
+AssertionError: expected 'Entregados: 4 · Sin desenlace todavía…' to be 'Entregado: 4 · Sin desenlace todavía:…' // Object.is equality
+
+Expected: "Entregado: 4 · Sin desenlace todavía: 2"
+Received: "Entregados: 4 · Sin desenlace todavía: 2"
+
+ ❯ tests/unit/analytics/desenlaces-de-fila.test.ts:144:48
+    142|       [EN_CURSO, 2],
+    143|     ]);
+    144|     expect(textoDesenlacesDeFila(sinRechazos)).toBe("Entregado: 4 · Si…
+       |                                                ^
+    145|     expect(textoDesenlacesDeFila(sinRechazos)).not.toContain(": 0");
+    146|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+RESTAURADO_LIMPIO=True

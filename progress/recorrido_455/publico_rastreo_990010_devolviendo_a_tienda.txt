@@ -1,0 +1,20 @@
+Rastrear envío
+
+Ingresa el número de guía y los últimos 4 dígitos del teléfono del destinatario.
+
+Número de guía
+Últimos 4 dígitos del teléfono
+Consultar
+Guía 990010
+Devolviendo a tienda
+En preparación
+2026-07-21 · 19:59
+Mensajero recogiendo en la bodega
+2026-07-21 · 21:29
+En reparto
+2026-07-21 · 22:59
+Devolución a origen por rechazo
+2026-07-22 · 00:29
+Devolviendo a tienda
+2026-07-24 · 17:34
+Cerrar

@@ -37,7 +37,7 @@ vi.mock("@/lib/services/GestionDesdeAyudaService", async (importOriginal) => {
         depsCapturadas.push(deps);
       }
       async gestionar() {
-        return { status: "ok" as const, ordenId: "o1", resultado: "rechazada" as const };
+        return { status: "ok" as const, ordenId: "o1", resultado: "devolucion_a_origen_por_rechazo" as const };
       }
     },
   };
@@ -48,7 +48,7 @@ const TIENDA: Actor = { usuarioId: "tienda-1", rol: "adminTienda" };
 function formData(): FormData {
   const fd = new FormData();
   fd.set("ordenId", "22222222-2222-4222-8222-222222222222");
-  fd.set("resultado", "rechazada");
+  fd.set("resultado", "devolucion_a_origen_por_rechazo");
   fd.set("motivo", "el cliente no la quiere");
   fd.append("evidencia", new File([new Uint8Array([1])], "f0.jpg", { type: "image/jpeg" }));
   return fd;

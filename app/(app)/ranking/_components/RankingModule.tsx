@@ -96,7 +96,7 @@ export function RankingModule({ ranking, premios, esEditable }: RankingModulePro
           <CardTitle>{TITULO_DESCARGA}</CardTitle>
           <CardDescription>
             Ordenado por porcentaje de entregas exitosas del día. El conteo crudo
-            (entregadas / asignadas) hace el porcentaje auditable.
+            (entregados / asignados) hace el porcentaje auditable.
           </CardDescription>
         </CardHeader>
         <CardContent>

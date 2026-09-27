@@ -1,0 +1,53 @@
+# MUTACION R3-label-analitica
+archivo: lib/repositories/AnaliticaOperativaRollupRepository.ts
+linea: 134
+- "label: nombreDeEstado(f.value) }"
++ "label: f.value }"
+tests: tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R3) > la etiqueta de estatus del rollup operativo es el nombre visible
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts (5 tests | 1 failed) 365ms
+       × la etiqueta de estatus del rollup operativo es el nombre visible 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  06:23:04
+   Duration  2.15s (transform 586ms, setup 53ms, import 1.53s, tests 365ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R3) > la etiqueta de estatus del rollup operativo es el nombre visible
+AssertionError: expected [ 'entregado', 'novedad', …(1) ] to deeply equal [ 'Entregado', 'Novedad', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "Entregado",
+-   "Novedad",
+-   "Novedad interna",
++   "entregado",
++   "novedad",
++   "novedad_interna",
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts:268:33
+    266|     // operativo era su CODIGO; ahora es su NOMBRE VISIBLE (literal a …
+    267|     it("la etiqueta de estatus del rollup operativo es el nombre visib…
+    268|       expect(r.etiquetasLeidas).toEqual(["Entregado", "Novedad", "Nove…
+       |                                 ^
+    269|     });
+    270|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

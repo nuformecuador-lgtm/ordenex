@@ -10,8 +10,6 @@
  * Que el archivo descargado y la pantalla digan lo mismo (R8/R24) es cierto porque leen del
  * MISMO sitio, no porque hoy coincidan dos literales escritos en dos archivos.
  */
-import type { MetodoPagoValue } from "@prisma/client";
-
 import type { CierreResultado } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 // FICHA 408 — los dos módulos del vocabulario de la causa de devolución. Los DOS son PUROS
@@ -20,41 +18,60 @@ import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 // (`CAUSA_INCIDENTE_LABEL`), y el vocabulario es el aprobado el 2026-07-15 (feature 73).
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
 
 // --- Etiquetas i18n-ready (texto separado de la lógica) ---
-export const RESULTADO_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregadas",
-  reprogramada: "Reprogramadas",
-  devuelta: "Devueltas",
-  rechazada: "Rechazadas",
-  incidente: "Incidentes", // feature 158/R18
+
+/**
+ * FICHA 455 (2026-09-24, design §2.1; R4/R5): el resultado de una gestión se rotula con el nombre
+ * EXACTO de su estado homónimo (`nombreDeResultado`, la fuente única) en TODOS los sitios: la
+ * pestaña/sección de la pantalla, la celda de la descarga, la confirmación física y el wallet.
+ *
+ * Hasta la 455 había DOS mapas escritos a mano: `RESULTADO_LABEL` en plural para las secciones
+ * («Entregadas», «Devueltas», «Rechazadas») y `RESULTADO_FILA_LABEL` en singular para las celdas
+ * (feature 230). Con un solo nombre por estado (R2: «sin plural») vuelven a ser UNO: la pestaña y
+ * la columna de la descarga dicen exactamente lo mismo. `RESULTADO_FILA_LABEL` se conserva como
+ * alias del mismo objeto para sus consumidores.
+ */
+export const RESULTADO_LABEL: Readonly<Record<CierreResultado, string>> = {
+  entregado: nombreDeResultado("entregado"),
+  reprogramado: nombreDeResultado("reprogramado"),
+  novedad: nombreDeResultado("novedad"),
+  devolucion_a_origen_por_rechazo: nombreDeResultado("devolucion_a_origen_por_rechazo"),
+  incidente: nombreDeResultado("incidente"), // feature 158/R18
 };
 
 /**
- * Feature 230 (T1.3, design §6.1) — el resultado de UNA gestion, en SINGULAR.
- *
- * `RESULTADO_LABEL` esta en plural porque nombra la SECCION de la pantalla («Entregadas»). La
- * hoja fundida emite una celda POR FILA, y una fila es una gestion: «Entregada».
- *
- * Es un segundo mapa y NO una derivacion del primero (nada de quitarle la «s»): las dos formas
- * son textos de interfaz, i18n-ready, y una regla morfologica del castellano incrustada en el
- * codigo se rompe en el primer idioma —o en el primer resultado— que no la cumpla.
- *
- * R45 exige que la celda sea SIEMPRE esta etiqueta y jamas el value del enum.
+ * FICHA 456 (design §5.2): el título de una sección o pestaña que CUENTA gestiones de un resultado
+ * («Entregado (3)»). Es un rótulo de recuento: no lleva botón de información (cada fila sí).
  */
-export const RESULTADO_FILA_LABEL: Record<CierreResultado, string> = {
-  entregada: "Entregada",
-  reprogramada: "Reprogramada",
-  devuelta: "Devuelta",
-  rechazada: "Rechazada",
-  incidente: "Incidente",
+export function tituloResultadoConCifra(resultado: CierreResultado, cuantas: number): string {
+  return `${RESULTADO_LABEL[resultado]} (${cuantas})`;
+}
+
+/** Alias de `RESULTADO_LABEL` (feature 230; R45: la celda es SIEMPRE esta etiqueta, nunca el enum). */
+export const RESULTADO_FILA_LABEL: Readonly<Record<CierreResultado, string>> = RESULTADO_LABEL;
+
+/**
+ * FICHA 455 (2026-09-24, R5): el texto de la sección VACÍA de un resultado, con su nombre exacto.
+ * Antes era un mapa escrito a mano en cada detalle («No hay devoluciones.» para `novedad`, «No hay
+ * rechazos.» para la devolución a origen por rechazo): otro vocabulario para el mismo estado.
+ */
+export function textoResultadoVacio(resultado: CierreResultado): string {
+  return `No hay gestiones con resultado «${RESULTADO_LABEL[resultado]}».`;
+}
+
+/** El texto vacío de cada resultado (feature 158/R18: `incidente` incluido), derivado de arriba. */
+export const RESULTADO_VACIO: Readonly<Record<CierreResultado, string>> = {
+  entregado: textoResultadoVacio("entregado"),
+  reprogramado: textoResultadoVacio("reprogramado"),
+  novedad: textoResultadoVacio("novedad"),
+  devolucion_a_origen_por_rechazo: textoResultadoVacio("devolucion_a_origen_por_rechazo"),
+  incidente: textoResultadoVacio("incidente"),
 };
 
-export const METODO_LABEL: Record<MetodoPagoValue, string> = {
-  efectivo: "Efectivo",
-  SINPE: "SINPE",
-  transferencia: "Transferencia",
-};
+/** Vive en `lib/constants/metodo-pago-label.ts` desde la 458-A (lo lee tambien un servicio). */
+export { METODO_LABEL } from "@/lib/constants/metodo-pago-label";
 
 export const ESTADO_LABEL: Record<CierreEstado, string> = {
   solicitado: "Solicitado",
@@ -552,4 +569,133 @@ export function motivoGestionLegible(
   const etiqueta = ETIQUETA_POR_MOTIVO_AUTOMATICO.get(motivo);
   if (etiqueta === undefined) return motivo;
   return hayMarcadorDeOrigen ? etiqueta : `${etiqueta} · ${MOTIVO_RECHAZO_AUTOMATICO_COLA}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 431 — EL VOCABULARIO DE LA CONCILIACIÓN DE UNA CONSOLIDACIÓN DE BODEGA (R28).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// ── QUÉ CAMBIA, Y QUÉ NO
+// `ESTADO_LABEL` (arriba) NO se toca, y es una restricción dura: lo comparten el cierre del
+// MENSAJERO y el de BODEGA porque comparten el enum `cierre_estado` (D3). Renombrar allí
+// «Aprobado» → «Recibido» se lo renombraría también al cierre de un mensajero, donde «Recibido»
+// no significa nada.
+//
+// Lo que esta ficha cambia es CÓMO SE LEE el mismo estado **en las superficies del cierre de
+// bodega**, y por eso vive en un mapa aparte:
+//
+//     `solicitado`                  → «Pendiente de conciliar»   (antes «Esperando aprobación»)
+//     `aprobado` y nada que falte   → «Recibido»                 (antes «Aprobado»)
+//     `aprobado` y con faltante     → «Recibido incompleto»      (no existía)
+//     `rechazado`                   → se RETIRA de la pantalla, se deja en la base (R16)
+//
+// ── POR QUÉ HAY UN TERCER ESTADO QUE LA BASE NO TIENE
+// Porque la base sí tiene el DATO: `monto_recibido` puede ser menor que el efectivo declarado.
+// Sin este tercer rótulo, una consolidación de la que llegaron ₡485.000 de ₡500.000 se leería
+// «Recibido» a secas y la diferencia sólo existiría en una columna que hay que saber mirar. Es
+// exactamente el caso que Q7 obliga a que la satélite VEA en su propia pantalla.
+//
+// ── EL VALOR DE ESTOS RÓTULOS ESTÁ ANCLADO A MANO
+// En `tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts`, bloque «el VALOR de los
+// rótulos», con el literal escrito y NO comparado contra la constante. Cambiar uno es legítimo
+// —el vocabulario lo decide el humano— pero cuesta un cambio visible y a propósito, que es justo
+// lo que se quiere que pase.
+
+/** `solicitado` en una superficie de cierre de bodega. */
+export const PENDIENTE_CONCILIAR_LABEL = "Pendiente de conciliar";
+/** `aprobado` con el efectivo llegado entero. */
+export const RECIBIDO_LABEL = "Recibido";
+/** `aprobado` pero con diferencia: llegó menos de lo declarado. */
+export const RECIBIDO_INCOMPLETO_LABEL = "Recibido incompleto";
+/** Cuánto contó de verdad quien recibió el bulto. */
+export const MONTO_RECIBIDO_LABEL = "Monto recibido";
+/** `total_efectivo` − lo recibido. Puede ser negativo (llegó de más). */
+export const FALTA_POR_RECIBIR_LABEL = "Falta por recibir";
+/** El conjunto de lo que todavía no se ha marcado. */
+export const SIN_CONCILIAR_LABEL = "Sin conciliar";
+
+/** Los tres estados de PRESENTACIÓN de una consolidación (no son estados de la base). */
+export type EstadoConciliacion = "pendiente" | "recibido" | "incompleto";
+
+export const ESTADO_CONCILIACION_LABEL: Record<EstadoConciliacion, string> = {
+  pendiente: PENDIENTE_CONCILIAR_LABEL,
+  recibido: RECIBIDO_LABEL,
+  incompleto: RECIBIDO_INCOMPLETO_LABEL,
+};
+
+/**
+ * El color de cada estado, con los tokens semánticos de `DESIGN.md` (nunca un hex).
+ *
+ * «Recibido incompleto» va en `warning` —el MISMO tono que «Pendiente de conciliar»— y no en
+ * `success`: mientras falte un colón por llegar, esa consolidación sigue teniendo dinero fuera
+ * de la central y sigue sumando al saldo de su bodega. Pintarla como una recibida entera sería
+ * decir en color lo contrario de lo que dice la cifra de al lado.
+ */
+export const ESTADO_CONCILIACION_VARIANT: Record<EstadoConciliacion, "success" | "warning"> = {
+  pendiente: "warning",
+  recibido: "success",
+  incompleto: "warning",
+};
+
+/**
+ * ¿Queda algo por llegar de este importe? Comparación TEXTUAL, money-safe: ni `Number(`, ni
+ * `parseFloat`, ni `Decimal` en el navegador (R20).
+ *
+ * Es una pregunta PROPIA y no una composición de `esMontoCero`/`esMontoNegativo`: aquí el
+ * negativo y el cero significan LO MISMO —no falta nada— mientras que en las cascadas de la 393
+ * un negativo es un caso con nota propia. Escribirla como una sola expresión es lo que impide
+ * que un día alguien conteste «sí falta» a un `-15.00`, que es dinero que llegó de MÁS.
+ */
+const NADA_FALTA = /^\s*-|^\s*0+(\.0+)?\s*$/;
+
+export function hayFaltantePorRecibir(faltaPorRecibir: string): boolean {
+  return !NADA_FALTA.test(faltaPorRecibir);
+}
+
+/**
+ * El estado de PRESENTACIÓN de una consolidación, derivado de los dos datos que el servidor ya
+ * manda cuadrados. La pantalla no compara campos de la base ni resta dinero: sólo lee.
+ *
+ * ⚠️ `conciliado` llega del servidor como `conciliado_at IS NOT NULL`. NO se deduce de
+ * `estado === "aprobado"` aunque el `CHECK` los ate: el día que el camino viejo de aprobar vuelva
+ * a escribir (Q4), esta función seguiría diciendo la verdad sobre si alguien contó el dinero.
+ */
+export function estadoConciliacionDe(marca: {
+  conciliado: boolean;
+  faltaPorRecibir: string;
+}): EstadoConciliacion {
+  if (!marca.conciliado) return "pendiente";
+  return hayFaltantePorRecibir(marca.faltaPorRecibir) ? "incompleto" : "recibido";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 462 (T3.1, S3, R27) — LA MARCA «RETIENE N PAQUETES REPROGRAMADOS PARA HOY».
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// Un cierre sin aprobar RETIENE las órdenes que su mensajero reprogramó para hoy: la regla 276 no
+// las deja volver a bodega —ni asignarse— hasta que se apruebe. La marca dice CUÁNTAS, con singular
+// y plural explícitos, y la nota (`title`/nombre accesible) dice QUÉ pasa mientras tanto.
+//
+// ── EL VOCABULARIO, decidido por el leader el 2026-09-25 (prevalece sobre requirements/R27)
+// Se habla del PAQUETE en masculino («paquetes reprogramados para hoy»), con el nombre vigente del
+// estado de la 455 («Reprogramado») como adjetivo. El plural femenino «reprogramadas» —el nombre
+// RETIRADO del estado viejo— no aparece en ningún texto visible, y la guardia
+// `nombres-estado-retirados` lo vigila sin excepción alguna para esta ficha.
+//
+// La cifra NUNCA se calcula aquí: llega del conteo único (`CierreAdminResumen.reprogramadasRetenidasHoy`,
+// `IReprogramadasRetenidasService.contarPorCierre`), el mismo que alimenta la campana y la franja de
+// `/ordenes` (R7). Los literales se afirman A MANO en su test, nunca contra esta función.
+
+/** El texto visible de la marca. `n >= 1`; con 0 la marca no se pinta (R27). */
+export function retieneReprogramadas(n: number): string {
+  return n === 1
+    ? "Retiene 1 paquete reprogramado para hoy"
+    : `Retiene ${n} paquetes reprogramados para hoy`;
+}
+
+/** La nota de la marca (`title` y parte del nombre accesible): qué pasa mientras el cierre no se apruebe. */
+export function notaRetieneReprogramadas(n: number): string {
+  return n === 1
+    ? "1 paquete reprogramado para hoy no se puede asignar hasta que se apruebe este cierre."
+    : `${n} paquetes reprogramados para hoy no se pueden asignar hasta que se apruebe este cierre.`;
 }

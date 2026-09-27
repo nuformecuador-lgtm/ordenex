@@ -40,7 +40,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),
-    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "devuelta" })),
+    gestionar: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1", estado: "novedad" })),
     liberarGestion: vi.fn(async () => ({ status: "ok" as const })),
     ...overrides,
   };
@@ -58,7 +58,7 @@ function fdDevuelta(campos: Record<string, string> = {}): FormData {
   fd.set("ordenId", "o1");
   fd.set("ubicacionLat", "9.9281"); // feature 193/R17
   fd.set("ubicacionLng", "-84.0907");
-  fd.set("resultado", "devuelta");
+  fd.set("resultado", "novedad");
   fd.set("causaDevolucion", "not_found");
   fd.set("motivo", "nadie contesto");
   fd.set("evidencia", evidenciaFile());
@@ -79,7 +79,7 @@ describe("Feature 73 · la action propaga la causa al service (R6/R9)", () => {
     });
     expect(r.status).toBe("ok");
     const input = inputRecibido(service);
-    expect(input.resultado).toBe("devuelta");
+    expect(input.resultado).toBe("novedad");
     expect(input.causaDevolucion).toBe(causa);
     expect(input.motivo).toBe("nadie contesto");
   });
@@ -91,7 +91,7 @@ describe("Feature 75 · la action lee la foto del FormData y la propaga al servi
     const r = await gestionar(fdDevuelta(), { service, getActor: actorMensajero });
     expect(r.status).toBe("ok");
     const input = inputRecibido(service);
-    expect(input.resultado).toBe("devuelta");
+    expect(input.resultado).toBe("novedad");
     // Feature 119 (R5): la evidencia llega ahora como LISTA (una foto por defecto en el helper).
     expect(input.evidencias[0]).toBeDefined();
     expect(input.evidencias[0].contentType).toBe("image/jpeg");
@@ -144,7 +144,7 @@ describe("Feature 73 · la action rechaza en el borde, sin efectos (R6/R9)", () 
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "devuelta");
+    fd.set("resultado", "novedad");
     const r = await gestionar(fd, { service, getActor: actorMensajero });
     expect(r.status).toBe("validation_error");
     if (r.status === "validation_error") {
@@ -183,7 +183,7 @@ describe("Feature 73 · la causa no se cuela en las otras ramas (R10)", () => {
     fd.set("ordenId", "o1");
     fd.set("ubicacionLat", "9.9281"); // feature 193/R17
     fd.set("ubicacionLng", "-84.0907");
-    fd.set("resultado", "rechazada");
+    fd.set("resultado", "devolucion_a_origen_por_rechazo");
     fd.set("motivo", "cliente rechazo");
     fd.set("causaDevolucion", "wrong_address"); // intento de colarla
     fd.set("evidencia", new File([new Uint8Array([1, 2, 3, 4])], "ev.jpg", { type: "image/jpeg" }));

@@ -1,0 +1,858 @@
+{
+  "pasos": [
+    {
+      "id": "contexto",
+      "rol": "maestro",
+      "marca": "R461-maestro-muhjpu17",
+      "hoyCR": "2026-09-25",
+      "ayerCR": "2026-09-24"
+    },
+    {
+      "id": "caso5_dialogo",
+      "opciones": [
+        "Gasto de Ordenex",
+        "Sueldo",
+        "Ordenex paga un gasto de una tienda",
+        "Corrección de caja (resta)",
+        "Aporte de dinero a la caja",
+        "Corrección de caja (suma)",
+        "Ordenex le cobra a una tienda"
+      ],
+      "listado": "Sale dinero de Ordenex\nGasto de Ordenex\nSueldo\nOrdenex paga un gasto de una tienda\nCorrección de caja (resta)\nLlega dinero a la caja\nAporte de dinero a la caja\nCorrección de caja (suma)\nSe descuenta del saldo de una tienda\nOrdenex le cobra a una tienda",
+      "frases": {
+        "Gasto de Ordenex": {
+          "cabecera": "Registrar movimiento en la caja",
+          "efecto": "Sale dinero de Ordenex y baja su ganancia.",
+          "libro": "Se registra en el libro como «Gasto de Ordenex»."
+        },
+        "Sueldo": {
+          "cabecera": "Registrar movimiento en la caja",
+          "efecto": "Sale dinero de Ordenex para pagar un sueldo y baja su ganancia.",
+          "libro": "Se registra en el libro como «Sueldo»."
+        },
+        "Ordenex paga un gasto de una tienda": {
+          "cabecera": "Ordenex paga un gasto de una tienda",
+          "efecto": "Sale dinero de Ordenex hacia un tercero (Facebook, Jet Cargo…) y se descuenta del saldo de la tienda; la ganancia no cambia.",
+          "libro": "Se registra en la caja como «Ordenex paga un gasto de una tienda» y en el libro de la tienda como «Ordenex paga un gasto de la tienda»."
+        },
+        "Corrección de caja (resta)": {
+          "cabecera": "Registrar movimiento en la caja",
+          "efecto": "Sale dinero de la caja para corregir un descuadre y baja la ganancia de Ordenex.",
+          "libro": "Se registra en el libro como «Corrección de caja (resta)»."
+        },
+        "Aporte de dinero a la caja": {
+          "cabecera": "Registrar movimiento en la caja",
+          "efecto": "Llega dinero de Ordenex a la caja; no es ganancia, la ganancia no cambia.",
+          "libro": "Se registra en el libro como «Aporte de dinero a la caja»."
+        },
+        "Corrección de caja (suma)": {
+          "cabecera": "Registrar movimiento en la caja",
+          "efecto": "Llega dinero a la caja para corregir un descuadre y sube la ganancia de Ordenex.",
+          "libro": "Se registra en el libro como «Corrección de caja (suma)»."
+        },
+        "Ordenex le cobra a una tienda": {
+          "cabecera": "Ordenex le cobra a una tienda",
+          "efecto": "No llega dinero nuevo: se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex; si la tienda no tiene saldo, queda en contra.",
+          "libro": "Se registra en la caja como «Ordenex le cobra a una tienda» y en el libro de la tienda como «Ordenex le cobra a la tienda»."
+        }
+      },
+      "barrido": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      }
+    },
+    {
+      "id": "base",
+      "cifras": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡127.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.505.063,12",
+        "egresosPropios": "₡183.800,50",
+        "capital": "₡40.000"
+      },
+      "composicionCobro": "₡126.000",
+      "saldoTiendaDb": "127670.10",
+      "libro": [
+        "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡1.000\tRegistrado a mano · correccion_resta R461-maestro-muhjm8fg\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡2.000\tRegistrado a mano · correccion_suma R461-maestro-muhjm8fg\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tAporte de dinero a la caja\t₡20.000\tAporte de dinero a la caja · Aporte de capital\t | Ordenex (capital)\t | Anular…",
+        "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjm8fg\t | Ordenex\tReversar",
+        "\t2026-09-25\tEgreso\tSueldo\t₡5.000\tGasto o sueldo registrado a mano · sueldo R461-maestro-muhjm8fg\t | Ordenex\tReversar"
+      ]
+    },
+    {
+      "id": "caso1_cobro",
+      "aviso": "Cobro registrado. El saldo de Tania Tienda queda en ₡85.670,10 · A favor.",
+      "cabecera": "Ordenex le cobra a una tienda",
+      "efecto": "No llega dinero nuevo: se descuenta del saldo a favor de la tienda y pasa a ser ganancia de Ordenex; si la tienda no tiene saldo, queda en contra.",
+      "libro": "Se registra en la caja como «Ordenex le cobra a una tienda» y en el libro de la tienda como «Ordenex le cobra a la tienda».",
+      "antes": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡127.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.505.063,12",
+        "egresosPropios": "₡183.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡85.670,10",
+        "ganancia": "₡13.363.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡183.800,50",
+        "capital": "₡40.000"
+      },
+      "filaLibro": "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t | Anular…",
+      "composicionCobro": "₡168.000",
+      "saldoTiendaDb": "85670.10",
+      "db": [
+        {
+          "id": "7a5d0417-8a54-46ed-b639-d3dabbc788ef",
+          "monto": "42000.00",
+          "fecha_movimiento": "2026-09-25T22:42:07.742Z",
+          "cat_caja": "ingreso_cobro_tienda",
+          "tipo_caja": "ingreso",
+          "origen_caja": "cobro_tienda",
+          "monto_caja": "42000.00",
+          "fecha_caja": "2026-09-25T22:42:07.742Z",
+          "desc_caja": "Tania Tienda · Cobro recorrido R461-maestro-muhjpu17"
+        }
+      ]
+    },
+    {
+      "id": "caso1_anulacion",
+      "nombre": "Anular Ordenex le cobra a una tienda del 2026-09-25 por ₡42.000",
+      "titulo": "Anular el cobro de Ordenex a una tienda",
+      "descripcion": "Anular el cobro de Ordenex a una tienda\n\nSe registrará hoy un movimiento contrario por ₡42.000. El registro original, su comprobante y su historial quedan intactos: no se borra nada.\n\nOrdenex le cobra a una tienda · 2026-09-25 · ₡42.000\n\nMotivo de la anulación*\n\nObligatorio. Queda guardado junto a la anulación.\n\nCancelar\nAnular",
+      "aviso": "Anulado. Se registró el movimiento contrario.",
+      "antes": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡85.670,10",
+        "ganancia": "₡13.363.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡183.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡127.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡225.800,50",
+        "capital": "₡40.000"
+      },
+      "base": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡127.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.505.063,12",
+        "egresosPropios": "₡183.800,50",
+        "capital": "₡40.000"
+      },
+      "filaOriginal": "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t | Anulado",
+      "filaReverso": "\t2026-09-25\tEgreso\tCobro a una tienda anulado\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t",
+      "composicionCobro": "₡168.000",
+      "saldoTiendaDb": "127670.10",
+      "dbCaja": [
+        {
+          "cat": "ingreso_cobro_tienda",
+          "tipo": "ingreso",
+          "monto": "42000.00",
+          "origen": "cobro_tienda",
+          "descripcion": "Tania Tienda · Cobro recorrido R461-maestro-muhjpu17",
+          "fecha_movimiento": "2026-09-25T22:42:07.742Z"
+        },
+        {
+          "cat": "egreso_reverso_cobro_tienda",
+          "tipo": "egreso",
+          "monto": "42000.00",
+          "origen": "cobro_tienda",
+          "descripcion": "Anulación · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17",
+          "fecha_movimiento": "2026-09-25T22:42:08.884Z"
+        }
+      ],
+      "dbTienda": [
+        {
+          "cat": "cobro_manual",
+          "tipo": "debito",
+          "monto": "42000.00",
+          "origen": "manual",
+          "descripcion": "Cobro recorrido R461-maestro-muhjpu17"
+        },
+        {
+          "cat": "cobro_tienda_anulado",
+          "tipo": "credito",
+          "monto": "42000.00",
+          "origen": "cobro_tienda",
+          "descripcion": "Anulación · Cobro recorrido R461-maestro-muhjpu17"
+        }
+      ],
+      "dbAnul": [
+        {
+          "motivo": "Anulación de prueba R461-maestro-muhjpu17",
+          "created_at": "2026-09-25T22:42:08.886Z"
+        }
+      ]
+    },
+    {
+      "id": "caso1_segundo_intento",
+      "http": 200,
+      "status": "ya_anulado",
+      "extracto": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"}\n1:D\"$2\"\n1:{\"status\":\"ya_anulado\"}\n"
+    },
+    {
+      "id": "caso2_pago_gasto",
+      "aviso": "Pago registrado. El saldo de Tania Tienda queda en ₡117.670,10 · A favor.",
+      "efecto": "Sale dinero de Ordenex hacia un tercero (Facebook, Jet Cargo…) y se descuenta del saldo de la tienda; la ganancia no cambia.",
+      "antes": {
+        "principal": "₡13.488.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡77.800,50",
+        "deTiendas": "₡127.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡225.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.478.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡87.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡225.800,50",
+        "capital": "₡40.000"
+      },
+      "fila": "\t2026-09-25\tEgreso\tOrdenex paga un gasto de una tienda\t₡10.000\tPago de un gasto de una tienda · Tania Tienda · A Facebook · Pauta R461-maestro-muhjpu17 · Efectivo\t | Tienda\t | Anular…",
+      "saldoTiendaDb": "117670.10"
+    },
+    {
+      "id": "caso3_sueldo",
+      "aviso": "Movimiento registrado correctamente.",
+      "efecto": "Sale dinero de Ordenex para pagar un sueldo y baja su ganancia.",
+      "antes": {
+        "principal": "₡13.478.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡87.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.321.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡225.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.473.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡92.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.316.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡230.800,50",
+        "capital": "₡40.000"
+      },
+      "fila": "\t2026-09-25\tEgreso\tSueldo\t₡5.000\tGasto o sueldo registrado a mano · sueldo R461-maestro-muhjpu17\t | Ordenex\tReversar"
+    },
+    {
+      "id": "caso3_gasto",
+      "aviso": "Movimiento registrado correctamente.",
+      "efecto": "Sale dinero de Ordenex y baja su ganancia.",
+      "antes": {
+        "principal": "₡13.473.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡92.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.316.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡230.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.470.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.313.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡40.000"
+      },
+      "fila": "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjpu17\t | Ordenex\tReversar"
+    },
+    {
+      "id": "caso3_aporte",
+      "aviso": "Registrado. Aporte de capital de ₡20.000.",
+      "efecto": "Llega dinero de Ordenex a la caja; no es ganancia, la ganancia no cambia.",
+      "antes": {
+        "principal": "₡13.470.932,72",
+        "entro": "₡13.566.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.313.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡40.000"
+      },
+      "despues": {
+        "principal": "₡13.490.932,72",
+        "entro": "₡13.586.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.313.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡60.000"
+      },
+      "fila": "\t2026-09-25\tIngreso\tAporte de dinero a la caja\t₡20.000\tAporte de dinero a la caja · Aporte de capital\t | Ordenex (capital)\t | Anular…"
+    },
+    {
+      "id": "caso3_correccion_suma",
+      "aviso": "Movimiento registrado correctamente.",
+      "efecto": "Llega dinero a la caja para corregir un descuadre y sube la ganancia de Ordenex.",
+      "antes": {
+        "principal": "₡13.490.932,72",
+        "entro": "₡13.586.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.313.262,62",
+        "ingresosPropios": "₡13.547.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡60.000"
+      },
+      "despues": {
+        "principal": "₡13.492.932,72",
+        "entro": "₡13.588.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.315.262,62",
+        "ingresosPropios": "₡13.549.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡60.000"
+      },
+      "fila": "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡2.000\tRegistrado a mano · correccion_suma R461-maestro-muhjpu17\t | Ordenex\t"
+    },
+    {
+      "id": "caso3_correccion_resta",
+      "aviso": "Movimiento registrado correctamente.",
+      "efecto": "Sale dinero de la caja para corregir un descuadre y baja la ganancia de Ordenex.",
+      "antes": {
+        "principal": "₡13.492.932,72",
+        "entro": "₡13.588.733,22",
+        "salio": "₡95.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.315.262,62",
+        "ingresosPropios": "₡13.549.063,12",
+        "egresosPropios": "₡233.800,50",
+        "capital": "₡60.000"
+      },
+      "despues": {
+        "principal": "₡13.491.932,72",
+        "entro": "₡13.588.733,22",
+        "salio": "₡96.800,50",
+        "deTiendas": "₡117.670,10",
+        "ganancia": "₡13.314.262,62",
+        "ingresosPropios": "₡13.549.063,12",
+        "egresosPropios": "₡234.800,50",
+        "capital": "₡60.000"
+      },
+      "fila": "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡1.000\tRegistrado a mano · correccion_resta R461-maestro-muhjpu17\t | Ordenex\t"
+    },
+    {
+      "id": "caso3_anular_correccion_suma",
+      "FALLO": "la fila de la corrección no ofrece «Anular…»",
+      "fila": "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡2.000\tRegistrado a mano · correccion_suma R461-maestro-muhjpu17\t | Ordenex\t",
+      "botonesEnFila": [],
+      "dtoServidor": "{\"id\":\"a04f2cba-bf43-49f1-97d2-4217f6e317f9\",\"tipo\":\"ingreso\",\"categoria\":\"ingreso_ajuste\",\"monto\":\"2000.00\",\"origenTipo\":\"manual\",\"origenId\":null,\"descripcion\":\"correccion_suma R461-maestro-muhjpu17\",\"registradoPor\":\"322a44c2-6ee5-4ee0-a76b-4708fbe2062b\",\"fechaMovimiento\":\"2026-09-25T22:42:22.479Z\",\"dueno\":\"propio\",\"documento\":{\"tipo\":\"ajuste_caja\",\"anulado\":false,\"tieneComprobante\":false}}"
+    },
+    {
+      "id": "caso3_anular_correccion_resta",
+      "FALLO": "la fila de la corrección no ofrece «Anular…»",
+      "fila": "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡1.000\tRegistrado a mano · correccion_resta R461-maestro-muhjpu17\t | Ordenex\t",
+      "botonesEnFila": [],
+      "dtoServidor": "{\"id\":\"607d8f07-1888-40b9-b68b-19031cae2960\",\"tipo\":\"egreso\",\"categoria\":\"egreso_ajuste\",\"monto\":\"1000.00\",\"origenTipo\":\"manual\",\"origenId\":null,\"descripcion\":\"correccion_resta R461-maestro-muhjpu17\",\"registradoPor\":\"322a44c2-6ee5-4ee0-a76b-4708fbe2062b\",\"fechaMovimiento\":\"2026-09-25T22:42:23.532Z\",\"dueno\":\"propio\",\"documento\":{\"tipo\":\"ajuste_caja\",\"anulado\":false,\"tieneComprobante\":false}}"
+    },
+    {
+      "id": "caso4_doble_clic",
+      "dc_gasto": {
+        "aviso": "Movimiento registrado correctamente.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 0
+        }
+      },
+      "dc_sueldo": {
+        "aviso": "Movimiento registrado correctamente.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 0
+        }
+      },
+      "dc_pago_gasto": {
+        "aviso": "Pago registrado. El saldo de Tania Tienda queda en ₡117.567,10 · A favor.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 1
+        }
+      },
+      "dc_correccion_resta": {
+        "aviso": "Movimiento registrado correctamente.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 0
+        }
+      },
+      "dc_aporte": {
+        "aviso": "Registrado. Aporte de capital de ₡105.",
+        "filasUi": 1,
+        "db": {
+          "documentos": 1,
+          "caja": 1
+        }
+      },
+      "dc_correccion_suma": {
+        "aviso": "Movimiento registrado correctamente.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 0
+        }
+      },
+      "dc_cobro": {
+        "aviso": "Cobro registrado. El saldo de Tania Tienda queda en ₡117.460,10 · A favor.",
+        "filasUi": 1,
+        "db": {
+          "caja": 1,
+          "tienda": 1
+        }
+      }
+    },
+    {
+      "id": "continuar",
+      "desde": "/wallet/tiendas",
+      "marca": "R461-maestro-muhjpu17"
+    },
+    {
+      "id": "caso7_p3_reversado",
+      "antes": "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjpu17\t | Ordenex\tReversado",
+      "enSesion": "(ya reversado en la corrida anterior) \t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjpu17\t | Ordenex\tReversado",
+      "trasRecarga": [
+        "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjpu17\t | Ordenex\tReversado"
+      ],
+      "botonReversarEnFilaOriginal": 0
+    },
+    {
+      "id": "caso5_libro",
+      "filas": [
+        "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡3.000\tGasto o sueldo registrado a mano · Reverso de: gasto R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡107\tCobro de Ordenex a una tienda · Tania Tienda · dc_cobro R461-maestro-muhjpu17\t | Ordenex\t | Anular…",
+        "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡106\tRegistrado a mano · dc_correccion_suma R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tAporte de dinero a la caja\t₡105\tAporte de dinero a la caja · Aporte de capital\t | Ordenex (capital)\t | Anular…",
+        "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡104\tRegistrado a mano · dc_correccion_resta R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tEgreso\tOrdenex paga un gasto de una tienda\t₡103\tPago de un gasto de una tienda · Tania Tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo\t | Tienda\t | Anular…",
+        "\t2026-09-25\tEgreso\tSueldo\t₡102\tGasto o sueldo registrado a mano · dc_sueldo R461-maestro-muhjpu17\t | Ordenex\tReversar",
+        "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡101\tGasto o sueldo registrado a mano · dc_gasto R461-maestro-muhjpu17\t | Ordenex\tReversar",
+        "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡1.000\tRegistrado a mano · correccion_resta R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡2.000\tRegistrado a mano · correccion_suma R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tAporte de dinero a la caja\t₡20.000\tAporte de dinero a la caja · Aporte de capital\t | Ordenex (capital)\t | Anular…",
+        "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjpu17\t | Ordenex\tReversado",
+        "\t2026-09-25\tEgreso\tSueldo\t₡5.000\tGasto o sueldo registrado a mano · sueldo R461-maestro-muhjpu17\t | Ordenex\tReversar",
+        "\t2026-09-25\tEgreso\tCobro a una tienda anulado\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t | Anulado",
+        "\t2026-09-25\tEgreso\tCorrección de caja (resta)\t₡1.000\tRegistrado a mano · correccion_resta R461-maestro-muhjm8fg\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tCorrección de caja (suma)\t₡2.000\tRegistrado a mano · correccion_suma R461-maestro-muhjm8fg\t | Ordenex\t",
+        "\t2026-09-25\tIngreso\tAporte de dinero a la caja\t₡20.000\tAporte de dinero a la caja · Aporte de capital\t | Ordenex (capital)\t | Anular…",
+        "\t2026-09-25\tEgreso\tGasto de Ordenex\t₡3.000\tGasto o sueldo registrado a mano · gasto R461-maestro-muhjm8fg\t | Ordenex\tReversar",
+        "\t2026-09-25\tEgreso\tSueldo\t₡5.000\tGasto o sueldo registrado a mano · sueldo R461-maestro-muhjm8fg\t | Ordenex\tReversar"
+      ],
+      "opcionesFiltro": [
+        "Todas las categorías",
+        "Flete cobrado a la tienda",
+        "Flete por rechazo cobrado a la tienda",
+        "Comisión de contra-entrega cobrada a la tienda",
+        "IVA del flete cobrado a la tienda",
+        "IVA del flete por rechazo cobrado a la tienda",
+        "IVA de la comisión cobrado a la tienda",
+        "Corrección de caja (suma)",
+        "Ordenex le paga a una tienda",
+        "Ordenex le paga a un mensajero",
+        "Otro gasto de Ordenex",
+        "Sueldo",
+        "Corrección de caja (resta)",
+        "Gasto fijo de Ordenex",
+        "Gasto de Ordenex",
+        "Indemnización que Ordenex paga por un incidente",
+        "Contra-entrega cobrado a los clientes de la tienda",
+        "Pago a una tienda anulado",
+        "Ordenex paga un gasto de una tienda",
+        "Pago de un gasto de una tienda anulado",
+        "Aporte de dinero a la caja",
+        "Aporte de dinero a la caja anulado",
+        "Ordenex le cobra a una tienda",
+        "Cobro a una tienda anulado"
+      ],
+      "barridoLibro": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "descarga": {
+        "archivo": "libro-de-movimientos-2026-09-25.xlsx",
+        "hoja": "Libro de movimientos",
+        "cabecera": [
+          "Fecha",
+          "Tipo",
+          "Categoría",
+          "Monto",
+          "Origen",
+          "Dueño"
+        ],
+        "n": 69,
+        "muestra": [
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Corrección de caja (suma)",
+            "3000.00",
+            "Gasto o sueldo registrado a mano · Reverso de: gasto R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Ordenex le cobra a una tienda",
+            "107.00",
+            "Cobro de Ordenex a una tienda · Tania Tienda · dc_cobro R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Corrección de caja (suma)",
+            "106.00",
+            "Registrado a mano · dc_correccion_suma R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Aporte de dinero a la caja",
+            "105.00",
+            "Aporte de dinero a la caja · Aporte de capital",
+            "Ordenex (capital)"
+          ],
+          [
+            "2026-09-25",
+            "Egreso",
+            "Corrección de caja (resta)",
+            "104.00",
+            "Registrado a mano · dc_correccion_resta R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Egreso",
+            "Ordenex paga un gasto de una tienda",
+            "103.00",
+            "Pago de un gasto de una tienda · Tania Tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo",
+            "Tienda"
+          ],
+          [
+            "2026-09-25",
+            "Egreso",
+            "Sueldo",
+            "102.00",
+            "Gasto o sueldo registrado a mano · dc_sueldo R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Egreso",
+            "Gasto de Ordenex",
+            "101.00",
+            "Gasto o sueldo registrado a mano · dc_gasto R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Egreso",
+            "Corrección de caja (resta)",
+            "1000.00",
+            "Registrado a mano · correccion_resta R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Corrección de caja (suma)",
+            "2000.00",
+            "Registrado a mano · correccion_suma R461-maestro-muhjpu17",
+            "Ordenex"
+          ],
+          [
+            "2026-09-25",
+            "Ingreso",
+            "Aporte de dinero a la caja",
+            "20000.00",
+            "Aporte de dinero a la caja · Aporte de capital",
+            "Ordenex (capital)"
+          ]
+        ]
+      },
+      "barridoDescarga": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "conceptosDescarga": [
+        "Corrección de caja (suma)",
+        "Ordenex le cobra a una tienda",
+        "Aporte de dinero a la caja",
+        "Corrección de caja (resta)",
+        "Ordenex paga un gasto de una tienda",
+        "Sueldo",
+        "Gasto de Ordenex",
+        "Cobro a una tienda anulado",
+        "Ordenex le paga a una tienda",
+        "Contra-entrega cobrado a los clientes de la tienda",
+        "IVA del flete cobrado a la tienda",
+        "IVA del flete por rechazo cobrado a la tienda",
+        "IVA de la comisión cobrado a la tienda",
+        "Flete por rechazo cobrado a la tienda",
+        "Flete cobrado a la tienda",
+        "Comisión de contra-entrega cobrada a la tienda",
+        "Indemnización que Ordenex paga por un incidente",
+        "Ordenex le paga a un mensajero"
+      ]
+    },
+    {
+      "id": "caso5_filtro_cobro",
+      "filas": [
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡107\tCobro de Ordenex a una tienda · Tania Tienda · dc_cobro R461-maestro-muhjpu17\t | Ordenex\t | Anular…",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjpu17\t | Ordenex\t | Anulado",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjm8fg\t | Ordenex\t | Anulado",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjjipq\t | Ordenex\t | Anulado",
+        "\t2026-09-25\tIngreso\tOrdenex le cobra a una tienda\t₡42.000\tCobro de Ordenex a una tienda · Tania Tienda · Cobro recorrido R461-maestro-muhjh71a\t | Ordenex\t | Anulado"
+      ]
+    },
+    {
+      "id": "caso6_filtro_fecha_caja",
+      "instanteUtc": "2026-09-25T04:00:00.000Z",
+      "filasCaja": 1,
+      "filasTienda": 1,
+      "ayer": "2026-09-24",
+      "hoy": "2026-09-25",
+      "enAyer": [
+        "\t2026-09-24\tEgreso\tOrdenex paga un gasto de una tienda\t₡10.000\tPago de un gasto de una tienda · Tania Tienda · A Facebook · Pauta R461-maestro-muhjpu17 · Efectivo\t | Tienda\t | Anular…"
+      ],
+      "enHoy": []
+    },
+    {
+      "id": "caso5_tiendas",
+      "saldoFila": "\tTania\t₡115.460,10\tA favor",
+      "cabecera": [
+        "A favor de la tienda",
+        "₡359.400",
+        "Contra-entrega cobrado, correcciones a favor y devoluciones por anulaciones",
+        "Cargos de Ordenex",
+        "₡211.836,90",
+        "Fletes, comisión, IVA y los cobros de Ordenex a la tienda",
+        "Pagado a la tienda",
+        "₡32.103",
+        "Lo que Ordenex le pagó a la tienda o pagó por ella",
+        "Saldo a favor",
+        "A favor",
+        "₡115.460,10",
+        "Lo que queda tras los cargos y los pagos",
+        "",
+        "«Pagado a la tienda» sigue contando los pagos que se anularon, y «A favor de la tienda» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+        ""
+      ],
+      "filas": [
+        "2026-09-25\t₡1.000\tEfectivo\t—\t—\tMaestro QA\t2026-09-25\tVigente\tAnular",
+        "2026-09-25\t₡1.000\tEfectivo\t—\t—\tMaestro QA\t2026-09-25\tVigente\tAnular",
+        "2026-09-25\tDébito\tOrdenex le cobra a la tienda\t₡107\tRegistrado a mano · dc_cobro R461-maestro-muhjpu17",
+        "2026-09-25\tDébito\tOrdenex paga un gasto de la tienda\t₡103\tPago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo",
+        "2026-09-25\tCrédito\tCobro de Ordenex a la tienda anulado\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjpu17",
+        "2026-09-25\tDébito\tOrdenex le cobra a la tienda\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjpu17",
+        "2026-09-25\tDébito\tOrdenex paga un gasto de la tienda\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjm8fg · Efectivo",
+        "2026-09-25\tCrédito\tCobro de Ordenex a la tienda anulado\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjm8fg",
+        "2026-09-25\tDébito\tOrdenex le cobra a la tienda\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjm8fg",
+        "2026-09-25\tDébito\tOrdenex paga un gasto de la tienda\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjjipq · Efectivo",
+        "2026-09-25\tCrédito\tCobro de Ordenex a la tienda anulado\t₡42.000\tCobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjjipq",
+        "2026-09-25\tDébito\tOrdenex le cobra a la tienda\t₡42.000\tRegistrado a mano · Cobro recorrido R461-maestro-muhjjipq"
+      ],
+      "opcionesFiltro": [
+        "Todos los conceptos",
+        "Contra-entrega cobrado a los clientes de la tienda",
+        "Flete cobrado a la tienda",
+        "Flete por rechazo cobrado a la tienda",
+        "Comisión de contra-entrega cobrada a la tienda",
+        "IVA del flete cobrado a la tienda",
+        "IVA del flete por rechazo cobrado a la tienda",
+        "IVA de la comisión cobrado a la tienda",
+        "Ordenex le paga a la tienda",
+        "Corrección a favor de la tienda",
+        "Corrección en contra de la tienda",
+        "Ordenex le cobra a la tienda",
+        "Ordenex paga un gasto de la tienda",
+        "Pago de un gasto de la tienda anulado",
+        "Cobro de Ordenex a la tienda anulado"
+      ],
+      "barridoPantalla": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "descarga": {
+        "archivo": "desglose-de-tania-2026-09-25.xlsx",
+        "cabecera": [
+          "Fecha",
+          "Tipo",
+          "Concepto",
+          "Monto",
+          "Origen"
+        ],
+        "n": 42,
+        "muestra": [
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex le cobra a la tienda",
+            "107.00",
+            "Registrado a mano · dc_cobro R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex paga un gasto de la tienda",
+            "103.00",
+            "Pago de un gasto de una tienda · A Jet Cargo · dc_pago_gasto R461-maestro-muhjpu17 · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Cobro de Ordenex a la tienda anulado",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex le cobra a la tienda",
+            "42000.00",
+            "Registrado a mano · Cobro recorrido R461-maestro-muhjpu17"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex paga un gasto de la tienda",
+            "10000.00",
+            "Pago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjm8fg · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Cobro de Ordenex a la tienda anulado",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjm8fg"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex le cobra a la tienda",
+            "42000.00",
+            "Registrado a mano · Cobro recorrido R461-maestro-muhjm8fg"
+          ],
+          [
+            "2026-09-25",
+            "Débito",
+            "Ordenex paga un gasto de la tienda",
+            "10000.00",
+            "Pago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjjipq · Efectivo"
+          ],
+          [
+            "2026-09-25",
+            "Crédito",
+            "Cobro de Ordenex a la tienda anulado",
+            "42000.00",
+            "Cobro de Ordenex a una tienda · Anulación · Cobro recorrido R461-maestro-muhjjipq"
+          ]
+        ]
+      },
+      "barridoDescarga": {
+        "retirados": [],
+        "codigos": null,
+        "uuid": false
+      },
+      "botonRegistrarPago": 1
+    },
+    {
+      "id": "caso6_filtro_fecha_tiendas",
+      "enAyer": [
+        "2026-09-24\tDébito\tOrdenex paga un gasto de la tienda\t₡10.000\tPago de un gasto de una tienda · A Facebook · Pauta R461-maestro-muhjpu17 · Efectivo"
+      ],
+      "enHoy": []
+    },
+    {
+      "id": "caso7_p1_pago_tienda",
+      "saldoTablaAntes": "₡115.460,10",
+      "esperado": "₡114.460,10",
+      "saldoTablaDespues": "₡114.460,10",
+      "saldoDesglose": "₡114.460,10",
+      "sinRecarga": true,
+      "saldoTiendaDb": "114460.10"
+    },
+    {
+      "id": "caso7_p1_anular_pago",
+      "avisoAnulacion": "Pago anulado. El saldo de la tienda quedó en ₡115.460,10.",
+      "saldoTablaFinal": "₡115.460,10",
+      "vuelveAlInicial": true,
+      "sinRecarga": true
+    },
+    {
+      "id": "caso7_p1_limpieza",
+      "pagosAnuladosDeCorridasAnteriores": 2,
+      "saldoTiendaDb": "117460.10"
+    },
+    {
+      "id": "final",
+      "cifras": {
+        "principal": "₡13.494.733,72",
+        "entro": "₡13.594.944,22",
+        "salio": "₡100.210,50",
+        "deTiendas": "₡117.460,10",
+        "ganancia": "₡13.317.168,62",
+        "ingresosPropios": "₡13.552.276,12",
+        "egresosPropios": "₡235.107,50",
+        "capital": "₡60.105"
+      },
+      "sqlR7R8": {
+        "cifra": "13494733.72",
+        "ganancia": "13317168.62",
+        "de_tiendas": "117460.10",
+        "capital": "60105.00",
+        "suma_saldos": "117460.10",
+        "diferencia_r8": "0.00",
+        "diferencia_r7": "0.00"
+      }
+    }
+  ]
+}

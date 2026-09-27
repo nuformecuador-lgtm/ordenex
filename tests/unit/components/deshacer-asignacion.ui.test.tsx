@@ -122,7 +122,7 @@ const ACCION = "Deshacer asignación";
 const MOTIVO_OK = "el mensajero se reportó enfermo y no pasa hoy";
 
 const CATALOGO = [
-  { id: "est-por_recoger", value: "por_recoger" },
+  { id: "est-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
   { id: "est-en_ruta_bodega_satelite", value: "en_ruta_bodega_satelite" },
   { id: "est-en_bodega_central", value: "en_bodega_central" },
 ];
@@ -133,8 +133,8 @@ function makeOrden(
   return {
     numGuia: 1001,
     numRemision: `REM-${over.id}`,
-    estatusId: "est-por_recoger",
-    estatusValue: "por_recoger",
+    estatusId: "est-mensajero_recogiendo_en_bodega",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Destino",
     telefonoDest: "0999999999",
     tiendaId: "tienda-1",
@@ -160,7 +160,7 @@ function makeOrdenSatelite(
   return {
     numGuia: 2001,
     numRemision: `SAT-${over.id}`,
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1",
@@ -249,7 +249,7 @@ afterEach(() => {
 // R34 — listado del maestro: la acción se ofrece en los DOS estados elegibles
 // ---------------------------------------------------------------------------
 describe("R34 — acción por lote en el listado del maestro", () => {
-  it("se ofrece con una selección en `por_recoger`", async () => {
+  it("se ofrece con una selección en `mensajero_recogiendo_en_bodega`", async () => {
     const user = userEvent.setup();
     renderConSwr(<OrdenesListado accionesLote />);
 
@@ -312,7 +312,7 @@ describe("R34 — acción por lote en el listado del maestro", () => {
     expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
-  it("el checkbox de `por_recoger` NO se bloquea (Q1: el cierre del mensajero no impide deshacer)", async () => {
+  it("el checkbox de `mensajero_recogiendo_en_bodega` NO se bloquea (Q1: el cierre del mensajero no impide deshacer)", async () => {
     const user = userEvent.setup();
     renderConSwr(<OrdenesListado accionesLote />);
 
@@ -337,7 +337,7 @@ describe("R35/R36 — módulo de la bodega satélite", () => {
   // cambia; solo cambia dónde se busca.
   const LISTADO_BODEGA = "Órdenes de la bodega";
 
-  it("R35: lista sus `por_recoger` y ofrece la acción por lote sobre ellas", async () => {
+  it("R35: lista sus `mensajero_recogiendo_en_bodega` y ofrece la acción por lote sobre ellas", async () => {
     const user = userEvent.setup();
     renderModulosSatelite([makeOrdenSatelite({ id: "s1" })]);
 

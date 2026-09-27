@@ -1,0 +1,23 @@
+Historial de la orden 111111
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Creación
+·
+En fulfillment (estado retirado)
+
+24 jul 2026, 4:40 p. m.
+
+Por Tania Tienda
+
+En fulfillment (estado retirado)
+→
+En preparación
+
+29 jul 2026, 10:41 a. m.
+
+Por Sistema
+
+Motivo: migracion 155: retiro de en_fulfillment
+
+Close

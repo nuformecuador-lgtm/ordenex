@@ -23,7 +23,7 @@ function buildTx() {
 function recogida(ordenId = "o1"): CambioEstadoEntrada {
   return {
     ordenId,
-    estatusOrigenId: idEstado("por_recoger"),
+    estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
     estatusDestinoId: idEstado("en_reparto"),
     actorUsuarioId: "men-1",
     origenTipo: "recoleccion",
@@ -90,8 +90,8 @@ describe("appendCambioEstado invoca al emisor de bienvenida", () => {
         [
           {
             ordenId: "o1",
-            estatusOrigenId: idEstado("entregada"),
-            estatusDestinoId: idEstado("por_recoger"),
+            estatusOrigenId: idEstado("entregado"),
+            estatusDestinoId: idEstado("mensajero_recogiendo_en_bodega"),
             actorUsuarioId: "men-1",
             origenTipo: "recoleccion",
           },
@@ -131,7 +131,7 @@ describe("el parametro nuevo no rompe a los call-sites historicos", () => {
     // dejar pasar la llamada sin tocar nada.
     const tx = { ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) } };
     const catalogo = async () =>
-      new Map([[idEstado("en_reparto"), "en_reparto" as const], [idEstado("por_recoger"), "por_recoger" as const]]);
+      new Map([[idEstado("en_reparto"), "en_reparto" as const], [idEstado("mensajero_recogiendo_en_bodega"), "mensajero_recogiendo_en_bodega" as const]]);
 
     await expect(
       appendCambioEstado(tx as never, [recogida()], noop, catalogo, noop),

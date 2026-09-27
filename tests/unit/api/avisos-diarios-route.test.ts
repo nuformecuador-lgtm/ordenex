@@ -21,6 +21,10 @@ const RESUMEN: AvisosDiariosResumen = {
   ordenesRepresadas: 7,
   zonasConRepresadas: 2,
   avisosRepresadasEmitidos: 3,
+  // FICHA 462 (T2.7): el tercer agregado de la corrida.
+  reprogramadasRetenidas: 5,
+  ambitosConRetenidas: 2,
+  avisosRetenidasEmitidos: 3,
   fallos: 0,
 };
 
@@ -104,6 +108,10 @@ describe("R61 — el cuerpo 200 lleva SOLO conteos y la fecha", () => {
       [
         "avisosNovedadesEmitidos",
         "avisosRepresadasEmitidos",
+        // FICHA 462 (R52): los tres campos del tercer agregado, enumerados campo a campo.
+        "avisosRetenidasEmitidos",
+        "ambitosConRetenidas",
+        "reprogramadasRetenidas",
         "fallos",
         "fecha",
         "ordenesRepresadas",
@@ -113,6 +121,10 @@ describe("R61 — el cuerpo 200 lleva SOLO conteos y la fecha", () => {
     );
     expect(body.fecha).toBe("2026-09-11");
     expect(body.ordenesRepresadas).toBe(7);
+    // FICHA 462: los tres conteos del tercer agregado cruzan (son conteos, no identificadores).
+    expect(body.reprogramadasRetenidas).toBe(5);
+    expect(body.ambitosConRetenidas).toBe(2);
+    expect(body.avisosRetenidasEmitidos).toBe(3);
   });
 
   it("ninguna clave del cuerpo nombra un identificador", async () => {

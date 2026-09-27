@@ -130,7 +130,7 @@ describe("R26 — el feed suma SOLO los incidentes, no cualquier gestion del cie
     const tx = txMixto([
       { resultado: "incidente", indemnizacion: new Prisma.Decimal("100.00") },
       // Fila corrupta/legada: no deberia tener monto, pero si lo tuviera NO debe sumarse.
-      { resultado: "entregada", indemnizacion: new Prisma.Decimal("999999.00") },
+      { resultado: "entregado", indemnizacion: new Prisma.Decimal("999999.00") },
     ]);
 
     const movs = await feed.construirEgresoIndemnizacion("c1", tx);
@@ -140,8 +140,8 @@ describe("R26 — el feed suma SOLO los incidentes, no cualquier gestion del cie
 
   it("un cierre sin incidentes pero con otras gestiones con monto NO emite nada", async () => {
     const tx = txMixto([
-      { resultado: "entregada", indemnizacion: new Prisma.Decimal("500.00") },
-      { resultado: "rechazada", indemnizacion: new Prisma.Decimal("300.00") },
+      { resultado: "entregado", indemnizacion: new Prisma.Decimal("500.00") },
+      { resultado: "devolucion_a_origen_por_rechazo", indemnizacion: new Prisma.Decimal("300.00") },
     ]);
 
     expect(await feed.construirEgresoIndemnizacion("c1", tx)).toEqual([]);

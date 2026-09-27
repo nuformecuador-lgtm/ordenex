@@ -75,8 +75,8 @@ function items() {
 
 function origenes() {
   return new Map([
-    ["o1", idEstado("por_recoger")],
-    ["o2", idEstado("por_recoger")],
+    ["o1", idEstado("mensajero_recogiendo_en_bodega")],
+    ["o2", idEstado("mensajero_recogiendo_en_bodega")],
   ]);
 }
 
@@ -107,7 +107,7 @@ describe("OrdenRepository.deshacerAsignacionLote — escritura guardada (R8/R9/R
     expect(sql).toMatch(/RETURNING "id"/);
     // Los ids y estatus viajan parametrizados, no concatenados.
     expect(updates[0].values).toContain("o1");
-    expect(updates[0].values).toContain(idEstado("por_recoger"));
+    expect(updates[0].values).toContain(idEstado("mensajero_recogiendo_en_bodega"));
     expect(updates[0].values).toContain(idEstado("en_bodega_central"));
   });
 
@@ -143,7 +143,7 @@ describe("OrdenRepository.deshacerAsignacionLote — escritura guardada (R8/R9/R
 
     await repo.deshacerAsignacionLote(
       [{ ordenId: "o1", destinoEstatusId: idEstado("en_bodega_satelite") }],
-      new Map([["o1", idEstado("por_recoger")]]),
+      new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]),
       HIST,
       "z-satelite",
     );
@@ -203,7 +203,7 @@ describe("R20/R21 — todo-o-nada REAL: una perdedora aborta el lote entero", ()
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     await expect(
-      repo.deshacerAsignacionLote(items(), new Map([["o1", idEstado("por_recoger")]]), HIST, null),
+      repo.deshacerAsignacionLote(items(), new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]), HIST, null),
     ).rejects.toThrow(DeshacerAsignacionConflictoError);
     expect(updates.map((u) => u.values[1])).toEqual(["o1"]); // o2 nunca se intento
     expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
@@ -224,7 +224,7 @@ describe("R23/R31/R32 — historial y webhook en la MISMA transaccion", () => {
     expect(arg.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("por_recoger"),
+        estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
         estatusDestinoId: idEstado("en_bodega_central"),
         actorUsuarioId: "maestro-1",
         origenTipo: "deshacer_asignacion",
@@ -233,7 +233,7 @@ describe("R23/R31/R32 — historial y webhook en la MISMA transaccion", () => {
       },
       {
         ordenId: "o2",
-        estatusOrigenId: idEstado("por_recoger"),
+        estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
         estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "maestro-1",
         origenTipo: "deshacer_asignacion",

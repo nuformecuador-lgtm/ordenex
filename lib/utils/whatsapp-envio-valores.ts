@@ -11,6 +11,7 @@
 // hasta la forma que el catalogo espera.
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { OrdenEnvioData } from "@/lib/types/whatsapp-envio";
+import type { SinpeBodega } from "@/lib/utils/sinpe-bodega";
 import {
   MENSAJERO_PLANTILLA_VACIO,
   resolverValoresPlantilla,
@@ -20,17 +21,23 @@ import {
 } from "@/lib/types/plantilla-datos";
 
 /**
- * SINPE del negocio: datos de CONFIGURACION, no de la orden. Viven en
- * `NEXT_PUBLIC_SINPE_NUMERO` / `NEXT_PUBLIC_SINPE_NOMBRE`, con `NEXT_PUBLIC_` para que se
- * resuelvan igual server-side (envio real) que client-side (flujo wa.me). Ausentes -> "".
+ * ⭑ FICHA 429 (T12) — EL BLOQUE `negocio`, CON EL SINPE DE LA BODEGA QUE COBRA ESTA ORDEN.
+ *
+ * ⚠️ AQUI VIVIA `negocioDesdeEnv()`, y su desaparicion ES la garantia. Aquella leia las dos
+ * variables de entorno y devolvia `""` cuando faltaban: un llamador nuevo que se olvidara de la
+ * configuracion obtenia un mensaje mudo —«…al numero  a nombre de »— y nadie se enteraba, porque
+ * un SINPE ausente no produce ningun error. A partir de ahora el par es un PARAMETRO OBLIGATORIO
+ * y SIN DEFAULT: quien no lo aporte NO COMPILA. Esa es toda la diferencia, y es estructural.
+ *
+ * `urlBase` SIGUE leyendo el entorno, y no es una inconsistencia: es la unica URL que el negocio
+ * publica de si mismo (el mismo origen que usa `app/layout.tsx` para el `metadataBase`) y esta
+ * FUERA del alcance de esta ficha por su limite declarado nº 7. Sin ella `{{url_guia}}` sale
+ * vacia, que es preferible a un enlace relativo que WhatsApp no puede abrir.
  */
-export function negocioDesdeEnv(): DatosPlantilla["negocio"] {
+export function negocioConSinpe(sinpe: SinpeBodega): DatosPlantilla["negocio"] {
   return {
-    sinpeNumero: process.env.NEXT_PUBLIC_SINPE_NUMERO ?? "",
-    sinpeNombre: process.env.NEXT_PUBLIC_SINPE_NOMBRE ?? "",
-    // Mismo origen publico que usa `app/layout.tsx` para el `metadataBase`, y por la misma
-    // razon: es la unica URL que el negocio publica de si mismo. Sin ella `{{url_guia}}` sale
-    // vacia — un enlace relativo no se puede abrir desde WhatsApp.
+    sinpeNumero: sinpe.numero,
+    sinpeNombre: sinpe.nombre,
     urlBase: process.env.NEXT_PUBLIC_SITE_URL ?? "",
   };
 }
@@ -100,15 +107,25 @@ export function datosPlantillaDesdeAsignacion(orden: MiAsignacionDTO): DatosPlan
       distritoNombre: orden.distritoNombre,
     },
     mensajero: MENSAJERO_PLANTILLA_VACIO,
-    negocio: negocioDesdeEnv(),
+    // ⭑ FICHA 429 (R13/R14/R18) — el par sale del DTO, que el SERVIDOR ya resolvio con
+    // `resolverSinpeBodega`. NO se lee del entorno y NO se acepta del dispositivo: los dos campos
+    // son REQUERIDOS en `MiAsignacionDTO`, asi que esta linea no puede quedarse sin dato.
+    negocio: negocioConSinpe({ numero: orden.sinpeNumero, nombre: orden.sinpeNombre }),
   };
 }
 
 /**
- * Adaptador del tipo ESTRECHO heredado (`OrdenEnvioData`, 8 campos) al catalogo. Sigue vivo
- * porque lo usa el boton wa.me, que no tiene mas datos que esos.
+ * Adaptador del tipo ESTRECHO heredado (`OrdenEnvioData`, 8 campos) al catalogo.
+ *
+ * ⚠️ HALLAZGO MEDIDO Y ANOTADO (ficha 429, design §3.1): hoy NO tiene ningun consumidor de
+ * produccion —solo `tests/unit/utils/whatsapp-envio-valores.test.ts`—, aunque el comentario
+ * anterior decia que lo usaba el boton wa.me. NO se borra en esta ficha (arreglar lo evidenciado,
+ * no rediseñar): se le añade el parametro obligatorio y el hallazgo queda escrito aqui.
  */
-export function datosPlantillaDesdeOrdenEnvio(orden: OrdenEnvioData): DatosPlantilla {
+export function datosPlantillaDesdeOrdenEnvio(
+  orden: OrdenEnvioData,
+  sinpe: SinpeBodega,
+): DatosPlantilla {
   const mensajero: MensajeroPlantillaDatos =
     orden.mensajeroNombre.trim() === ""
       ? MENSAJERO_PLANTILLA_VACIO
@@ -125,7 +142,7 @@ export function datosPlantillaDesdeOrdenEnvio(orden: OrdenEnvioData): DatosPlant
       montoCobrar: orden.montoCobrar,
     },
     mensajero,
-    negocio: negocioDesdeEnv(),
+    negocio: negocioConSinpe(sinpe),
   };
 }
 
@@ -139,6 +156,7 @@ export function datosPlantillaDesdeOrdenEnvio(orden: OrdenEnvioData): DatosPlant
 export function resolverValoresOrden(
   variables: string[],
   orden: OrdenEnvioData,
+  sinpe: SinpeBodega,
 ): Record<string, string> {
-  return resolverValoresPlantilla(variables, datosPlantillaDesdeOrdenEnvio(orden));
+  return resolverValoresPlantilla(variables, datosPlantillaDesdeOrdenEnvio(orden, sinpe));
 }

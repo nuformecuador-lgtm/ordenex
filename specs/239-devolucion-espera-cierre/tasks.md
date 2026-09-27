@@ -313,3 +313,11 @@
   se trabajan en paralelo con esta**: el conflicto de archivos es directo y la 239 depende de la 238.
 - **Antes de registrar cualquier id o rama nuevos**, mirar `origin/dev`: ya hubo dos colisiones de id
   entre sesiones.
+
+<!-- @test-desaparecido tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts: la ficha
+     454 (2026-09-23, commit 40566e88) retiró el ANCLAJE de la 239 junto con el pre-estado
+     `devolucion_por_confirmar`: la gestión ya no transiciona al registrarse y la aprobación del
+     cierre APLICA el estado real de las cinco gestiones (incluida la `devuelta`, con la misma familia
+     `anclaje_devolucion` y el aprobador de actor). El archivo se renombró y reescribió como
+     `tests/unit/repositories/cierres-admin-aplicacion-gestiones.test.ts`, heredera caso a caso
+     (tabla en su cabecera: 239/R4→454/R7, R5→R7/R9, R6→R13, R7→R8, R8→R12, R10 money-neutral). -->

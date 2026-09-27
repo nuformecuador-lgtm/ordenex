@@ -108,6 +108,33 @@ describe("366/T1 — el `migration.sql` y el `down.sql`, como texto", () => {
       "cobro_tienda_registrado",
       // ficha 398 (2026-09-08): la correccion en sitio del resultado de una gestion
       "cierre_dia_gestion_corregida",
+      // ficha 429 (2026-09-15): el SINPE de una bodega, que decide a que cuenta transfiere el
+      // cliente. Su archivo: `historial-accion-zona-sinpe-migration.test.ts`.
+      "zona_sinpe_cambiado",
+      // ficha 431 (2026-09-16): la MARCA DE CONCILIACION de una consolidacion de bodega y su
+      // reversion. Son DOS porque la guardia del censo mide por metodo. Su archivo:
+      // `historial-accion-conciliacion-bodega-migration.test.ts`.
+      "cierre_bodega_conciliado",
+      "cierre_bodega_conciliacion_revertida",
+      // ficha 459 (2026-09-25): el pago por cuenta de una tienda y el saldo inicial o aporte de
+      // capital, registrar y anular cada uno (la guardia del censo mide por metodo). Su archivo:
+      // `caja-459-migration.test.ts`.
+      "pago_por_cuenta_tienda_registrado",
+      "pago_por_cuenta_tienda_anulado",
+      "aporte_capital_registrado",
+      "aporte_capital_anulado",
+      // Ficha 461 (2026-09-25): la anulacion del cobro de Ordenex a una tienda (migracion 1 de la
+      // 461) y la anulacion de una correccion de caja (migracion 4, auditoria D3).
+      "cobro_tienda_anulado",
+      "wallet_movimiento_manual_anulado",
+      // Ficha 457 (2026-09-25): el pago de una tienda a Ordenex, registrar y anular (la guardia del censo
+      // mide por metodo). Su archivo: `abono-tienda-457-migration.test.ts`.
+      "abono_tienda_registrado",
+      "abono_tienda_anulado",
+      // Ficha 458-B (2026-09-26): la anulacion del cobro por rechazo aprobado (D7) y la de un egreso de
+      // caja (D13). Su migracion: `20260928120000_wallet_458_enums`.
+      "cobro_rechazo_tienda_anulado",
+      "egreso_caja_anulado",
     ];
     expect([...HISTORIAL_ACCION_TIPOS].sort()).toEqual(
       [...previos, VALOR_NUEVO, ...POSTERIORES].sort(),

@@ -1,0 +1,50 @@
+MUTACION F15-historico-valor-crudo
+archivo: app/(app)/historico/acciones/_components/historial-acciones-columnas.ts
+cambio (numstat): 1	1	app/(app)/historico/acciones/_components/historial-acciones-columnas.ts
+-   return ACCIONES_CON_RESULTADO_EN_VALOR.has(accion) ? nombreDeEstado(valor) : valor;
++   return valor;
+tests: ['tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts (3 tests | 1 failed) 478ms
+       × la columna pinta el nombre visible del resultado, no el codigo 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  08:11:11
+   Duration  3.22s (transform 994ms, setup 54ms, import 2.47s, tests 478ms, environment 0ms)
+
+(node:31884) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R23) > la columna pinta el nombre visible del resultado, no el codigo
+AssertionError: expected [ { anterior: 'entregado', …(1) } ] to deeply equal [ { anterior: 'Entregado', …(1) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "anterior": "Entregado",
+-     "nuevo": "Devolución a origen por rechazo",
++     "anterior": "entregado",
++     "nuevo": "devolucion_a_origen_por_rechazo",
+    },
+  ]
+
+ ❯ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts:92:25
+     90|     // al leer (Fase 1) y la columna lo pinta con su NOMBRE visible (`…
+     91|     it("la columna pinta el nombre visible del resultado, no el codigo…
+     92|       expect(r.pintado).toEqual([{ anterior: "Entregado", nuevo: "Devo…
+       |                         ^
+     93|     });
+     94|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+RESTAURADO_LIMPIO=True

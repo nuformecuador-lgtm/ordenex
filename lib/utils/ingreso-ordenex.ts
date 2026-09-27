@@ -155,7 +155,7 @@ export function derivarIngresoOrden(
 
   const ivaFletePct = new Prisma.Decimal(tarifa.ivaFlete);
 
-  if (input.resultado === "entregada") {
+  if (input.resultado === "entregado") {
     const { flete } = resolverFlete(tarifa, input);
     const ivaFlete = aplicarPorcentaje(flete, ivaFletePct);
     const out: IngresoOrdenDerivado = {
@@ -179,7 +179,7 @@ export function derivarIngresoOrden(
   // fue por decision de negocio, no por un fallo: el retorno se cobra cuando el paquete vuelve
   // de verdad a la tienda, y eso es `rechazada`. Volver a meter `devuelta` en esta condicion
   // re-abre 24.408,00 de cobro sobre los dos cierres que estaban solicitados ese dia.
-  if (input.resultado === "rechazada") {
+  if (input.resultado === "devolucion_a_origen_por_rechazo") {
     const fleteDev = resolverFlete(tarifa, input).fleteDevuelto;
     return {
       ingreso_flete_devolucion: round2(fleteDev),
@@ -263,7 +263,7 @@ export function costosListadoOrden(
   tarifa: TarifaVigente | null,
   orden: CostosListadoOrdenInput,
 ): CostosListadoOrden {
-  const derivado = derivarIngresoOrden({ resultado: "entregada", ...orden }, tarifa);
+  const derivado = derivarIngresoOrden({ resultado: "entregado", ...orden }, tarifa);
   // Un concepto ausente no aporta; los dos ausentes dan "0.00" (no `null`): esta columna
   // nunca dice "no aplica", dice cero.
   const conIva = (base?: Prisma.Decimal, iva?: Prisma.Decimal): string =>

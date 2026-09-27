@@ -1,5 +1,7 @@
+import { EstadoConInfo, NotaAyudaConInfo } from "@/components/shared/EstadoInfo";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
+import { CLASE_NOTA_AYUDA, type MarcaPintable } from "./pos-estado";
 import { formatPeso } from "./pos-format";
 
 // POS card · cabecera (réplica del `Header` de la referencia): a la izquierda el nº
@@ -10,8 +12,14 @@ export interface PosCardHeaderProps {
   orden: MiAsignacionDTO;
   /** Total de órdenes en reparto, para el texto "N de total". */
   total: number;
-  /** Etiqueta de estado (p. ej. "En gestión", "En detalle", "En reparto"). */
-  estado: string;
+  /**
+   * FICHA 456 (T3.6): el chip se pinta desde `orden.estatusValue` con `EstadoConInfo` (nombre +
+   * botón de información). La prop `estado` (el texto ya resuelto) se retira: nadie le pasa texto.
+   */
+  /** Marcas de la interfaz y notas del consumidor, pintadas JUNTO al chip (R8). */
+  marcas?: readonly MarcaPintable[];
+  /** FICHA 456 (R12): la orden tiene una ayuda a la tienda abierta: nota con su botón. */
+  notaAyuda?: boolean;
   /**
    * `false` para las superficies SIN ruta optimizada (p. ej. "Por recoger"): se omiten
    * el cuadro de parada y el "N de total", que ahí no significan nada. Default `true`.
@@ -22,7 +30,8 @@ export interface PosCardHeaderProps {
 export function PosCardHeader({
   orden,
   total,
-  estado,
+  marcas = [],
+  notaAyuda = false,
   mostrarParada = true,
 }: PosCardHeaderProps) {
   // R28: nº de parada en la ruta optimizada; "·" cuando aún no tiene posición.
@@ -64,9 +73,25 @@ export function PosCardHeader({
           </p>
         </div>
       </div>
-      <span className="rounded-lg bg-warning px-3 py-1.5 text-xs font-black uppercase tracking-wide text-navy">
-        {estado}
-      </span>
+      <div className="flex flex-col items-end gap-1">
+        <EstadoConInfo
+          codigo={orden.estatusValue}
+          chipClassName="rounded-lg bg-warning px-3 py-1.5 text-xs font-black uppercase tracking-wide text-navy"
+        />
+        {marcas.map((m) => (
+          <span
+            key={m.texto}
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${m.clase}`}
+          >
+            {m.texto}
+          </span>
+        ))}
+        {notaAyuda ? (
+          <NotaAyudaConInfo
+            chipClassName={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${CLASE_NOTA_AYUDA}`}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

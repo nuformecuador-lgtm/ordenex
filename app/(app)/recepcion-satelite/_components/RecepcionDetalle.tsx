@@ -5,6 +5,7 @@ import {
   IntentosValor,
   valorIntentos,
 } from "@/components/shared/intentos-entrega";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
@@ -67,12 +68,10 @@ function Campo({
 
 export interface RecepcionDetalleProps {
   orden: RecepcionSateliteDTO;
-  /** Estado legible ("en bodega satélite de <zona>" / "en ruta..."), R9. */
-  estadoLegible: string;
 }
 
 /** Detalle de una orden del módulo satélite (R9). */
-export function RecepcionDetalle({ orden, estadoLegible }: RecepcionDetalleProps) {
+export function RecepcionDetalle({ orden }: RecepcionDetalleProps) {
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-3">
       <Campo label="Nº Guía" mono>
@@ -81,7 +80,10 @@ export function RecepcionDetalle({ orden, estadoLegible }: RecepcionDetalleProps
       <Campo label="Nº Remisión" mono>
         {orden.numRemision}
       </Campo>
-      <Campo label="Estado">{estadoLegible}</Campo>
+      {/* FICHA 456 (T3.5, R9): el estado con su botón de información. */}
+      <Campo label="Estado">
+        <EstadoConInfo codigo={orden.estatusValue} />
+      </Campo>
       <Campo label="Tienda">{orden.tiendaNombre}</Campo>
       <Campo label="Destinatario">{orden.destinatario}</Campo>
       <Campo label="Teléfono" mono>

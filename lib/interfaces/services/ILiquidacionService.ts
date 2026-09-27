@@ -8,6 +8,8 @@ import type { LiquidacionRepartoTxClient } from "@/lib/interfaces/repositories/I
 import type { PagoMensajeroTxClient } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { WalletTiendaTxClient } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { CajaPagoTiendaTxClient } from "@/lib/interfaces/services/ICajaPagoTiendaFeedService";
+import type { WalletComprobanteTxClient } from "@/lib/interfaces/repositories/IWalletComprobanteRepository";
+import type { ComprobanteRecibido, FalloDeComprobante } from "@/lib/interfaces/services/IWalletComprobanteService";
 import type {
   AnularPagoInput,
   AnularPagoResult,
@@ -56,7 +58,9 @@ export type LiquidacionTx = LiquidacionPagoTxClient &
   // transaccion y la PRIMERA de todas (design §5.1), asi que el `tx` tiene que llevar tambien su
   // delegado. Es un `Pick` de un solo modelo: quien tiene el `tx` puede insertar el acto y nada
   // mas — no hay por donde editarlo ni borrarlo (R52).
-  LiquidacionRepartoTxClient;
+  LiquidacionRepartoTxClient &
+  // FICHA 458-B (R74): el comprobante del pago se inserta en ESTA transaccion.
+  WalletComprobanteTxClient;
 
 /**
  * Ejecuta `fn` dentro de UNA transaccion y revierte si lanza (R39: o quedan el documento y su
@@ -155,7 +159,9 @@ export interface ILiquidacionService {
   registrarPagoTienda(
     input: RegistrarPagoTiendaInput,
     actor: Actor,
-  ): Promise<RegistrarPagoServiceResult>;
+    /** FICHA 458-B (R74): el comprobante opcional, ya leido por el borde. */
+    comprobante?: ComprobanteRecibido | null,
+  ): Promise<RegistrarPagoServiceResult | FalloDeComprobante>;
   /**
    * T F.2 (R69-R71, R76, R77, R81, R82, R84) — ANULA un pago: añade el contraasiento del signo
    * opuesto por el MISMO monto, jamas borra ni edita.
@@ -232,7 +238,9 @@ export interface ILiquidacionService {
   registrarRepartoMensajero(
     input: RegistrarRepartoMensajeroInput,
     actor: Actor,
-  ): Promise<RegistrarRepartoServiceResult>;
+    /** FICHA 458-B (R74): el comprobante opcional, ya leido por el borde. */
+    comprobante?: ComprobanteRecibido | null,
+  ): Promise<RegistrarRepartoServiceResult | FalloDeComprobante>;
   /**
    * R49/R56/R74 — los comprobantes de UN cierre, anulados incluidos y marcados.
    *

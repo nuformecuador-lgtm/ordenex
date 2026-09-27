@@ -116,7 +116,7 @@ function gestion(): CierreGestionDescargaDTO {
     intentosContactoTienda: 2,
     // FICHA 394 — los del MENSAJERO, distinto del de la tienda para que un cruce se vea.
     intentosEntrega: 5,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "1000.10",
     pagos: [{ metodo: "SINPE", monto: "1000.10" }],
     motivo: null,
@@ -383,7 +383,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     // UNA hoja, y su nombre es el titulo de la descarga detallada (R6/R51).
     expect(hoja).toBe("Gestiones de cierres");
     expect(filas).toHaveLength(1);
-    expect(filas[0].resultado).toBe("Entregada");
+    expect(filas[0].resultado).toBe("Entregado");
   });
 });
 

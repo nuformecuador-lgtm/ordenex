@@ -15,7 +15,7 @@ export function pagoPorResultado(
   tarifa: PagoTarifa | null,
 ): string {
   if (tarifa === null) return "0.00"; // R8: gap seguro, no bloquea
-  if (resultado === "entregada") {
+  if (resultado === "entregado") {
     // R5: unico caso que paga; usa cobroEntregado, NUNCA cobroRechazado.
     return new Prisma.Decimal(tarifa.cobroEntregado).toFixed(2);
   }

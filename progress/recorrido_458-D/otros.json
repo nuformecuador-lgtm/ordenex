@@ -1,0 +1,65 @@
+{
+  "rol": "otros",
+  "pasos": [
+    {
+      "paso": "mensajero /wallet → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "mensajero /wallet/tiendas → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "mensajero /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "mensajero /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "mensajero /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "mensajero /mi-wallet → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /wallet → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /wallet/tiendas → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminSatelite /mi-wallet → 404",
+      "ok": true,
+      "status": 404
+    }
+  ]
+}

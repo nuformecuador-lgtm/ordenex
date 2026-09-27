@@ -314,11 +314,11 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
     ubicacionAusencia: data.ubicacionAusencia,
   };
   switch (data.resultado) {
-    case "entregada":
+    case "entregado":
       return {
         ...geo,
         ordenId: data.ordenId,
-        resultado: "entregada",
+        resultado: "entregado",
         montoRecibido: data.montoRecibido,
         // Feature 212 (R12/R19): se CONSERVA el escalar para la columna deprecada `metodo_pago`
         // (`null` cuando el cliente ya manda desglose), y el desglose normalizado —una linea por
@@ -327,28 +327,28 @@ async function toGestionarInput(data: GestionarActionInput): Promise<GestionarIn
         pagos: normalizarPagos(data),
         evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };
-    case "reprogramada":
+    case "reprogramado":
       return {
         ...geo,
         ordenId: data.ordenId,
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: data.fechaReprogramacion,
         motivo: data.motivo,
       };
-    case "devuelta":
+    case "novedad":
       return {
         ...geo,
         ordenId: data.ordenId,
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: data.causaDevolucion, // feature 73/R6
         motivo: data.motivo,
         evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]), // feature 75/119
       };
-    case "rechazada":
+    case "devolucion_a_origen_por_rechazo":
       return {
         ...geo,
         ordenId: data.ordenId,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         motivo: data.motivo,
         evidencias: await leerEvidencias(data.evidencias as unknown as FileLike[]),
       };

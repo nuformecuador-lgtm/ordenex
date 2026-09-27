@@ -1,7 +1,7 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import type { OrderStatusRetirado, OrderStatusValue } from "@/lib/types/order-status";
 import type {
   CierrePasadoDTO,
   CierreRechazoDeTienda,
@@ -42,8 +42,11 @@ export interface CierreSinGestionRow {
   producto: string;
   tiendaNombre: string;
   zonaNombre: string;
-  /** `en_reparto` | `ayuda_tienda`; `null` SOLO si no consta (R4/R32/R33). */
-  estatusOrigen: OrderStatusValue | null;
+  /**
+   * `en_reparto`; `null` SOLO si no consta (R4/R32/R33). FICHA 454 (R40): o un value RETIRADO
+   * (`ayuda_tienda`) en las barridas historicas, que se siguen leyendo igual.
+   */
+  estatusOrigen: OrderStatusValue | OrderStatusRetirado | null;
 }
 
 export interface CierreGestionPendienteRow {
@@ -183,16 +186,8 @@ export interface CierreGestionPendienteRow {
 // resuelve el service (`findEstatusIdByValue`), no el repo.
 export interface CorteSinGestionarInput {
   enRepartoEstatusId: string;
-  /**
-   * Feature 235 (T4.4, R26) - OBLIGATORIO, no opcional, y la diferencia importa: un olvido de
-   * cableado tiene que romper el TYPECHECK, no dejar ordenes en ayuda sin barrer para siempre.
-   * Mismo criterio y mismo precedente que `anclajeDevolucion` en la 239.
-   *
-   * El corte recorre DOS BLOQUES GUARDADOS -uno por estado de origen- y no un solo `updateMany`
-   * con un `in`: con dos origenes posibles en una sola escritura, el append tendria que INVENTARSE
-   * de cual salia cada fila y escribiria un historial falso (R27).
-   */
-  ayudaEstatusId: string;
+  // FICHA 454 (T1.10): aqui vivia `ayudaEstatusId` (235/R26). La ayuda deja de ser estado: una orden
+  // con ayuda abierta sigue `en_reparto` y la barre el MISMO bloque, con un solo origen real.
   sinGestionarEstatusId: string;
   /**
    * Feature 246 (T2.3, R11/R12/R16) — fecha CR de la JORNADA QUE LA CORRIDA CIERRA (convencion
@@ -274,8 +269,17 @@ export interface GestionDeshacerRow {
    * Se DERIVA del historial (`origen_tipo = gestion_tienda_ayuda` en la fila que enlaza esta
    * gestion), no de una columna nueva: quien la registro ya esta escrito ahi y una segunda verdad
    * habria que mantenerla.
+   *
+   * FICHA 454 (T1.11): en la rama NUEVA (gestion con evento `gestion_registrada`) se lee de la
+   * familia de aplicacion del registro (`gestion_tienda_ayuda`); en la LEGADA, del historial.
    */
   desdeAyudaTienda: boolean;
+  /**
+   * FICHA 454 (T1.11, design DH): `true` si la gestion tiene su evento `gestion_registrada` — es del
+   * modelo nuevo y su deshacer ANULA sin transicionar. `false` = LEGADA (ya transiciono al
+   * registrarse): se deshace por el camino de siempre (#31/#32/#33/#53).
+   */
+  registradaComoPendiente: boolean;
 }
 
 // Feature 67/R11/R18/R19/R20/R22 — input de la UNICA escritura del deshacer. `estatusEsperadoId`
@@ -497,4 +501,17 @@ export interface ICierreDiaRepository {
    * que decide sobre la fila y no sobre una lectura previa.
    */
   anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean>;
+
+  /**
+   * FICHA 454 (T1.11; R15) — deshace una gestion PENDIENTE de confirmar: anula con rastro, evento
+   * `gestion_anulada` y su webhook, SIN transicion. Bajo el candado de la fila de la orden; `false`
+   * = perdio la carrera (la orden ya no esta en reparto, o la gestion ya tiene cierre o esta anulada).
+   */
+  anularGestionPendiente(input: {
+    gestionId: string;
+    ordenId: string;
+    mensajeroId: string;
+    actorUsuarioId: string;
+    estatusEnRepartoId: string;
+  }): Promise<boolean>;
 }

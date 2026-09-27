@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
+import * as accionesDeEgresos from "@/lib/actions/wallet-egresos";
 import {
   registrarEgresoAdministrativoAction,
-  reversarEgresoAdministrativoAction,
   verDesgloseEgresosAction,
 } from "@/lib/actions/wallet-egresos";
+import { codigoSinComentarios } from "../../fixtures/money-safe";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletEgresoService } from "@/lib/interfaces/services/IWalletEgresoService";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
@@ -28,6 +32,7 @@ function mov(): WalletMovimientoDTO {
     registradoPor: "u-maestro",
     fechaMovimiento: "2026-07-13T10:00:00.000Z",
     dueno: "propio", // feature 231 (R31): un gasto variable es dinero de Ordenex
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
@@ -53,7 +58,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R18: sin sesion -> unauthenticated, sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => null },
     );
     expect(r).toEqual({ status: "unauthenticated" });
@@ -63,7 +68,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R17: rol no autorizado -> forbidden (lo decide el service)", async () => {
     const service = fakeService({ registrarEgreso: vi.fn(async () => ({ status: "forbidden" as const })) });
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x", contraparteNombre: "Ana" },
       { service, getActor: async () => OTRO },
     );
     expect(r).toEqual({ status: "forbidden" });
@@ -72,7 +77,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R19: tipoEgreso 'gasto_fijo' (lo emite el cron) -> validation_error, sin tocar el service", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -82,7 +87,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R19: tipoEgreso desconocido -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "otro", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "otro", monto: "100.00", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -91,7 +96,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R4: monto no positivo -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "0", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "0", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -101,7 +106,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R4: monto vacio -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "", descripcion: "x" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -110,7 +115,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("R5: descripcion vacia -> validation_error", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "   " },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "100.00", descripcion: "   " },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -119,7 +124,7 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   it("maestro con egreso valido -> ok, movimiento con monto STRING", async () => {
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria", contraparteNombre: "Librería Central" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
@@ -128,42 +133,29 @@ describe("registrarEgresoAdministrativoAction (R4/R5/R17/R18/R19)", () => {
   });
 });
 
-describe("reversarEgresoAdministrativoAction (R13/R17/R18)", () => {
-  it("R18: sin sesion -> unauthenticated", async () => {
-    const service = fakeService();
-    const r = await reversarEgresoAdministrativoAction(
-      { movimientoId: "11111111-1111-4111-8111-111111111111" },
-      { service, getActor: async () => null },
-    );
-    expect(r).toEqual({ status: "unauthenticated" });
+describe("458-E M4 (deuda m3 de la 458-C) — no queda una puerta para reversar un egreso SIN motivo", () => {
+  // La Server Action `reversarEgresoAdministrativoAction` se retiro: escribia el contra-asiento de un
+  // egreso sin motivo ni constancia y ya no tenia pantalla. Un egreso se anula con motivo por
+  // `anularMovimientoAction` → `anularEgresoCajaAction` (458-B, D13).
+  it("el modulo de acciones de egresos ya no la exporta", () => {
+    expect(Object.keys(accionesDeEgresos)).not.toContain("reversarEgresoAdministrativoAction");
+    // CONTROL DE NO-VACUIDAD: el modulo se leyo y exporta sus otras acciones.
+    expect(Object.keys(accionesDeEgresos)).toContain("verDesgloseEgresosAction");
   });
 
-  it("movimientoId no-uuid -> validation_error", async () => {
-    const service = fakeService();
-    const r = await reversarEgresoAdministrativoAction(
-      { movimientoId: "no-uuid" },
-      { service, getActor: async () => MAESTRO },
-    );
-    expect(r.status).toBe("validation_error");
-    expect(service.reversarEgreso).not.toHaveBeenCalled();
-  });
-
-  it("R17: rol no autorizado -> forbidden", async () => {
-    const service = fakeService({ reversarEgreso: vi.fn(async () => ({ status: "forbidden" as const })) });
-    const r = await reversarEgresoAdministrativoAction(
-      { movimientoId: "11111111-1111-4111-8111-111111111111" },
-      { service, getActor: async () => OTRO },
-    );
-    expect(r).toEqual({ status: "forbidden" });
-  });
-
-  it("already_reversed (idempotencia) se propaga desde el service", async () => {
-    const service = fakeService({ reversarEgreso: vi.fn(async () => ({ status: "already_reversed" as const })) });
-    const r = await reversarEgresoAdministrativoAction(
-      { movimientoId: "11111111-1111-4111-8111-111111111111" },
-      { service, getActor: async () => MAESTRO },
-    );
-    expect(r).toEqual({ status: "already_reversed" });
+  it("ninguna Server Action de `lib/actions/` llama a `reversarEgreso` del servicio", () => {
+    const raiz = path.resolve(__dirname, "../../..");
+    const fuentes = (carpeta: string): string[] =>
+      readdirSync(path.join(raiz, carpeta), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? fuentes(`${carpeta}/${e.name}`) : /\.tsx?$/.test(e.name) ? [`${carpeta}/${e.name}`] : [],
+      );
+    const acciones = fuentes("lib/actions");
+    expect(acciones.length, "CONTROL DE NO-VACUIDAD: no se encontro ninguna accion").toBeGreaterThan(10);
+    const conReverso = acciones.filter((f) => /\.reversarEgreso\s*\(/.test(codigoSinComentarios(f)));
+    expect(conReverso).toEqual([]);
+    // Y la contraprueba: la regla SI ve una llamada.
+    expect(/\.reversarEgreso\s*\(/.test("return service.reversarEgreso(data, actor);")).toBe(true);
+    expect(readFileSync(path.join(raiz, "lib/actions/wallet-anulacion.ts"), "utf8")).toContain("anularEgresoCajaAction");
   });
 });
 
@@ -200,7 +192,14 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
   }
 
   function gasto(fecha: string) {
-    return { tipoEgreso: "gasto_variable", monto: "1500.00", descripcion: "Papeleria", fecha };
+    return {
+      claveIdempotencia: randomUUID(), // ficha 461 (R66)
+      tipoEgreso: "gasto_variable",
+      monto: "1500.00",
+      descripcion: "Papeleria",
+      contraparteNombre: "Librería Central", // ficha 458-C (D5): obligatorio en el gasto
+      fecha,
+    };
   }
 
   it("R20: fecha FUTURA -> validation_error con la clave `fecha`, sin tocar el service", async () => {
@@ -259,7 +258,7 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x", fecha: "2026-08-28" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "gasto_fijo", monto: "100.00", descripcion: "x", fecha: "2026-08-28" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("validation_error");
@@ -270,11 +269,68 @@ describe("registrarEgresoAdministrativoAction — la fecha del egreso (R20/R21)"
     conRelojEnAhora();
     const service = fakeService();
     const r = await registrarEgresoAdministrativoAction(
-      { tipoEgreso: "sueldo", monto: "100.00", descripcion: "x" },
+      { claveIdempotencia: randomUUID(), tipoEgreso: "sueldo", monto: "100.00", descripcion: "x", contraparteNombre: "Ana" },
       { service, getActor: async () => MAESTRO },
     );
     expect(r.status).toBe("ok");
     const entrada = (service.registrarEgreso as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(Object.keys(entrada)).not.toContain("fecha");
+  });
+});
+
+// ── FICHA 458-C (TC.1, D5 heredado de la 458-B, revisión m1) — «a quién» OBLIGATORIO en el borde ──
+//
+// Con `RegistrarMovimientoCajaDialog` retirado, el servidor exige «a quién» en sueldo y gasto de
+// Ordenex. Se mide el BORDE (la action con su schema real) y no el servicio: ausente, en blanco o
+// con solo espacios → `validation_error` en `contraparteNombre` SIN tocar el servicio; presente →
+// llega al servicio recortado. La corrección de caja lo sigue teniendo opcional (lo mide
+// `wallet-registro-comprobante-458.test.ts` contra Postgres).
+
+describe("458-C D5 — registrarEgresoAdministrativoAction exige «a quién» en sueldo y gasto", () => {
+  const base = { tipoEgreso: "sueldo", monto: "100.00", descripcion: "Sueldo de septiembre" };
+
+  for (const [caso, extra] of [
+    ["ausente", {}],
+    ["vacío", { contraparteNombre: "" }],
+    ["solo espacios", { contraparteNombre: "   " }],
+  ] as const) {
+    for (const tipoEgreso of ["sueldo", "gasto_variable"] as const) {
+      it(`${tipoEgreso} con «a quién» ${caso} → validation_error en contraparteNombre, sin tocar el servicio`, async () => {
+        const service = fakeService();
+        const r = await registrarEgresoAdministrativoAction(
+          { ...base, tipoEgreso, claveIdempotencia: randomUUID(), ...extra },
+          { service, getActor: async () => MAESTRO },
+        );
+        expect(r.status).toBe("validation_error");
+        if (r.status !== "validation_error") throw new Error("esperado validation_error");
+        expect(r.fieldErrors.contraparteNombre).toEqual(["Escribí a quién se le pagó."]);
+        expect(service.registrarEgreso).not.toHaveBeenCalled();
+      });
+    }
+  }
+
+  it("con FormData y sin «a quién» también cae en el borde (la vía del diálogo)", async () => {
+    const service = fakeService();
+    const fd = new FormData();
+    fd.set("claveIdempotencia", randomUUID());
+    fd.set("tipoEgreso", "gasto_variable");
+    fd.set("monto", "100.00");
+    fd.set("descripcion", "Tinta");
+    const r = await registrarEgresoAdministrativoAction(fd, { service, getActor: async () => MAESTRO });
+    expect(r.status).toBe("validation_error");
+    expect(service.registrarEgreso).not.toHaveBeenCalled();
+  });
+
+  it("CONTROL: con «a quién» llega al servicio, recortado", async () => {
+    const service = fakeService();
+    const r = await registrarEgresoAdministrativoAction(
+      { ...base, claveIdempotencia: randomUUID(), contraparteNombre: "  María Solano  " },
+      { service, getActor: async () => MAESTRO },
+    );
+    expect(r.status).toBe("ok");
+    expect(service.registrarEgreso).toHaveBeenCalledWith(
+      expect.objectContaining({ contraparteNombre: "María Solano" }),
+      MAESTRO,
+    );
   });
 });

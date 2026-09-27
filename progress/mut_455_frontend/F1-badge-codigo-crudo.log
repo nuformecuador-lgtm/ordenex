@@ -1,0 +1,432 @@
+MUTACION F1-badge-codigo-crudo
+archivo: app/(app)/ordenes/_components/EstatusBadge.tsx
+cambio (numstat): 1	1	app/(app)/ordenes/_components/EstatusBadge.tsx
+-   const label = nombreDeEstado(value);
++   const label = value;
+tests: ['tests/unit/components/estatus-badge.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/components/estatus-badge.test.tsx (25 tests | 24 failed) 57ms
+     × entregado → «Entregado» 25ms
+     × novedad → «Novedad» 2ms
+     × devolviendo_a_tienda → «Devolviendo a tienda» 2ms
+     × reprogramado → «Reprogramado» 3ms
+     × en_ruta_bodega_central → «En ruta a bodega central» 2ms
+     × en_bodega_central → «En bodega central» 1ms
+     × en_preparacion → «En preparación» 1ms
+     × mensajero_recogiendo_en_bodega → «Mensajero recogiendo en la bodega» 1ms
+     × en_ruta_bodega_satelite → «En ruta a bodega satélite» 1ms
+     × en_reparto → «En reparto» 1ms
+     × devolucion_a_origen_por_rechazo → «Devolución a origen por rechazo» 1ms
+     × en_bodega_satelite → «En bodega satélite» 1ms
+     × devuelta_a_tienda → «Devuelta a tienda» 1ms
+     × novedad_interna → «Novedad interna» 1ms
+     × por_devolver_a_bodega_central → «Por devolver a bodega central» 1ms
+     × devolviendo_a_bodega_central → «Devolviendo a bodega central» 1ms
+     × por_devolver_a_tienda → «Por devolver a tienda» 1ms
+     × por_recolectar_en_tienda → «Por recolectar en tienda» 1ms
+     × incidente → «Incidente» 1ms
+     × recolectando → «Recolectando» 1ms
+     × «En ruta a bodega satélite» no interpola la zona (la prop de la feature 30 ya no existe) 1ms
+     × R10: un código desconocido dice «Estado no reconocido», nunca el código (R3) 1ms
+     × R11: un retirado se lee con su nombre histórico y « (estado retirado)» 1ms
+     × vacío o nulo → «—» (la celda vacía de siempre) 2ms
+
+ Test Files  1 failed (1)
+      Tests  24 failed | 1 passed (25)
+   Start at  08:09:07
+   Duration  1.88s (transform 98ms, setup 160ms, import 315ms, tests 57ms, environment 1.08s)
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 24 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > entregado → «Entregado»
+AssertionError: expected 'entregado' to be 'Entregado' // Object.is equality
+
+Expected: "Entregado"
+Received: "entregado"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > novedad → «Novedad»
+AssertionError: expected 'novedad' to be 'Novedad' // Object.is equality
+
+Expected: "Novedad"
+Received: "novedad"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > devolviendo_a_tienda → «Devolviendo a tienda»
+AssertionError: expected 'devolviendo_a_tienda' to be 'Devolviendo a tienda' // Object.is equality
+
+Expected: "Devolviendo a tienda"
+Received: "devolviendo_a_tienda"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > reprogramado → «Reprogramado»
+AssertionError: expected 'reprogramado' to be 'Reprogramado' // Object.is equality
+
+Expected: "Reprogramado"
+Received: "reprogramado"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_ruta_bodega_central → «En ruta a bodega central»
+AssertionError: expected 'en_ruta_bodega_central' to be 'En ruta a bodega central' // Object.is equality
+
+Expected: "En ruta a bodega central"
+Received: "en_ruta_bodega_central"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_bodega_central → «En bodega central»
+AssertionError: expected 'en_bodega_central' to be 'En bodega central' // Object.is equality
+
+Expected: "En bodega central"
+Received: "en_bodega_central"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_preparacion → «En preparación»
+AssertionError: expected 'en_preparacion' to be 'En preparación' // Object.is equality
+
+Expected: "En preparación"
+Received: "en_preparacion"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > mensajero_recogiendo_en_bodega → «Mensajero recogiendo en la bodega»
+AssertionError: expected 'mensajero_recogiendo_en_bodega' to be 'Mensajero recogiendo en la bodega' // Object.is equality
+
+Expected: "Mensajero recogiendo en la bodega"
+Received: "mensajero_recogiendo_en_bodega"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_ruta_bodega_satelite → «En ruta a bodega satélite»
+AssertionError: expected 'en_ruta_bodega_satelite' to be 'En ruta a bodega satélite' // Object.is equality
+
+Expected: "En ruta a bodega satélite"
+Received: "en_ruta_bodega_satelite"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_reparto → «En reparto»
+AssertionError: expected 'en_reparto' to be 'En reparto' // Object.is equality
+
+Expected: "En reparto"
+Received: "en_reparto"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > devolucion_a_origen_por_rechazo → «Devolución a origen por rechazo»
+AssertionError: expected 'devolucion_a_origen_por_rechazo' to be 'Devolución a origen por rechazo' // Object.is equality
+
+Expected: "Devolución a origen por rechazo"
+Received: "devolucion_a_origen_por_rechazo"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > en_bodega_satelite → «En bodega satélite»
+AssertionError: expected 'en_bodega_satelite' to be 'En bodega satélite' // Object.is equality
+
+Expected: "En bodega satélite"
+Received: "en_bodega_satelite"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > devuelta_a_tienda → «Devuelta a tienda»
+AssertionError: expected 'devuelta_a_tienda' to be 'Devuelta a tienda' // Object.is equality
+
+Expected: "Devuelta a tienda"
+Received: "devuelta_a_tienda"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > novedad_interna → «Novedad interna»
+AssertionError: expected 'novedad_interna' to be 'Novedad interna' // Object.is equality
+
+Expected: "Novedad interna"
+Received: "novedad_interna"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > por_devolver_a_bodega_central → «Por devolver a bodega central»
+AssertionError: expected 'por_devolver_a_bodega_central' to be 'Por devolver a bodega central' // Object.is equality
+
+Expected: "Por devolver a bodega central"
+Received: "por_devolver_a_bodega_central"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > devolviendo_a_bodega_central → «Devolviendo a bodega central»
+AssertionError: expected 'devolviendo_a_bodega_central' to be 'Devolviendo a bodega central' // Object.is equality
+
+Expected: "Devolviendo a bodega central"
+Received: "devolviendo_a_bodega_central"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > por_devolver_a_tienda → «Por devolver a tienda»
+AssertionError: expected 'por_devolver_a_tienda' to be 'Por devolver a tienda' // Object.is equality
+
+Expected: "Por devolver a tienda"
+Received: "por_devolver_a_tienda"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > por_recolectar_en_tienda → «Por recolectar en tienda»
+AssertionError: expected 'por_recolectar_en_tienda' to be 'Por recolectar en tienda' // Object.is equality
+
+Expected: "Por recolectar en tienda"
+Received: "por_recolectar_en_tienda"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > incidente → «Incidente»
+AssertionError: expected 'incidente' to be 'Incidente' // Object.is equality
+
+Expected: "Incidente"
+Received: "incidente"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > recolectando → «Recolectando»
+AssertionError: expected 'recolectando' to be 'Recolectando' // Object.is equality
+
+Expected: "Recolectando"
+Received: "recolectando"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:51:33
+     49| describe("455/R2 — el chip pinta el nombre exacto de los 20, sin zona"…
+     50|   it.each(Object.entries(ESPERADO))("%s → «%s»", (value, nombre) => {
+     51|     expect(textoDelChip(value)).toBe(nombre);
+       |                                 ^
+     52|     expect(estatusLabel(value)).toBe(nombre);
+     53|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > «En ruta a bodega satélite» no interpola la zona (la prop de la feature 30 ya no existe)
+AssertionError: expected 'en_ruta_bodega_satelite' to be 'En ruta a bodega satélite' // Object.is equality
+
+Expected: "En ruta a bodega satélite"
+Received: "en_ruta_bodega_satelite"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:56:53
+     54|
+     55|   it("«En ruta a bodega satélite» no interpola la zona (la prop de la …
+     56|     expect(textoDelChip("en_ruta_bodega_satelite")).toBe("En ruta a bo…
+       |                                                     ^
+     57|   });
+     58|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R3 · R10 · R11 — lo que no es un estado vigente > R10: un código desconocido dice «Estado no reconocido», nunca el código (R3)
+AssertionError: expected 'estado_del_futuro' to be 'Estado no reconocido' // Object.is equality
+
+Expected: "Estado no reconocido"
+Received: "estado_del_futuro"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:66:47
+     64| describe("455/R3 · R10 · R11 — lo que no es un estado vigente", () => {
+     65|   it("R10: un código desconocido dice «Estado no reconocido», nunca el…
+     66|     expect(textoDelChip("estado_del_futuro")).toBe("Estado no reconoci…
+       |                                               ^
+     67|     expect(estatusLabel("estado_del_futuro")).toBe("Estado no reconoci…
+     68|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R3 · R10 · R11 — lo que no es un estado vigente > R11: un retirado se lee con su nombre histórico y « (estado retirado)»
+AssertionError: expected 'ayuda_tienda' to be 'Ayuda solicitada a la tienda (estado …' // Object.is equality
+
+Expected: "Ayuda solicitada a la tienda (estado retirado)"
+Received: "ayuda_tienda"
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:71:42
+     69|
+     70|   it("R11: un retirado se lee con su nombre histórico y « (estado reti…
+     71|     expect(textoDelChip("ayuda_tienda")).toBe("Ayuda solicitada a la t…
+       |                                          ^
+     72|     expect(textoDelChip("devolucion_por_confirmar")).toBe("Devolución …
+     73|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/24]⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R3 · R10 · R11 — lo que no es un estado vigente > vacío o nulo → «—» (la celda vacía de siempre)
+AssertionError: expected '' to be '—' // Object.is equality
+
+- Expected
++ Received
+
+- —
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:78:30
+     76|     expect(estatusLabel(null)).toBe("—");
+     77|     expect(estatusLabel("")).toBe("—");
+     78|     expect(textoDelChip("")).toBe("—");
+       |                              ^
+     79|   });
+     80| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/24]⎯
+
+
+RESTAURADO_LIMPIO=True

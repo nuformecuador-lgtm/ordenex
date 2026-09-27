@@ -1,0 +1,84 @@
+# MUTACION G5-sin-estadoNombre
+archivo: lib/api/openapi-spec.ts
+linea: 1349
+- "          estadoNombre: schemaNombre(\"estado\"), // FICHA 455 (R24)\n          destinatario:"
++ "          destinatario:"
+tests: tests/unit/api/openapi-nombres-455.guardia.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  3 failed | 3 passed (6)
+FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > R24/R25: ningun codigo sin su `…Nombre` en todo el objeto OpenAPI
+FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > no-vacuidad: los once `…Nombre` estan donde el diseño los pide
+FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > el `.yaml` espejo declara cada `…Nombre` tantas veces como el objeto TS
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts (6 tests | 3 failed) 12ms
+     × R24/R25: ningun codigo sin su `…Nombre` en todo el objeto OpenAPI 6ms
+     × no-vacuidad: los once `…Nombre` estan donde el diseño los pide 1ms
+     × el `.yaml` espejo declara cada `…Nombre` tantas veces como el objeto TS 1ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 passed (6)
+   Start at  06:14:14
+   Duration  483ms (transform 122ms, setup 55ms, import 197ms, tests 12ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > R24/R25: ningun codigo sin su `…Nombre` en todo el objeto OpenAPI
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "$.components.schemas.OrdenListItem.properties.estadoNombre",
++ ]
+
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts:84:41
+     82| describe("455/R24 · R25 · R29 (G5) — el contrato publicado", () => {
+     83|   it("R24/R25: ningun codigo sin su `…Nombre` en todo el objeto OpenAP…
+     84|     expect(faltasDeNombre(openApiSpec)).toEqual([]);
+       |                                         ^
+     85|   });
+     86|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > no-vacuidad: los once `…Nombre` estan donde el diseño los pide
+AssertionError: expected [ 'numGuia', 'numRemision', …(11) ] to include 'estadoNombre'
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts:88:49
+     86|
+     87|   it("no-vacuidad: los once `…Nombre` estan donde el diseño los pide",…
+     88|     expect(Object.keys(props("OrdenListItem"))).toContain("estadoNombr…
+       |                                                 ^
+     89|     expect(Object.keys(props("OrdenGestion"))).toEqual(expect.arrayCon…
+     90|     expect(Object.keys(props("Evidencia"))).toContain("resultadoNombre…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/unit/api/openapi-nombres-455.guardia.test.ts > 455/R24 · R25 · R29 (G5) — el contrato publicado > el `.yaml` espejo declara cada `…Nombre` tantas veces como el objeto TS
+AssertionError: estadoNombre: expected 7 to be 6 // Object.is equality
+
+- Expected
++ Received
+
+- 6
++ 7
+
+ ❯ tests/unit/api/openapi-nombres-455.guardia.test.ts:121:72
+    119|     const enTs = (nombre: string) => (JSON.stringify(schemas).match(ne…
+    120|     for (const nombre of ["estadoNombre", "resultadoNombre", "estadoRe…
+    121|       expect(cuenta(new RegExp(`^\\s+${nombre}:\\s*$`, "gm")), nombre)…
+       |                                                                        ^
+    122|     }
+    123|     expect(YAML).not.toMatch(/^\s+estatus:/m);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

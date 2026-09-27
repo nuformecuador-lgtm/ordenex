@@ -1,0 +1,33 @@
+Ordenex
+Analítica
+Órdenes
+Novedades
+Mi wallet
+Ayuda
+TT
+Tania Tienda
+Admin de tienda
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+TIENDAS
+Mi wallet
+Novedades
+Órdenes
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+
+Elegí un tema del índice
+
+Cada documento explica una pantalla: qué ves, qué podés hacer y qué no. También llegás a la ayuda de la pantalla en la que estés con el botón «?» del encabezado.

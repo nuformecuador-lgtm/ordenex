@@ -67,6 +67,8 @@ function makeOrden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: 1,
     ...over,
   };
@@ -151,7 +153,7 @@ function formDataEnviado(): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregada" });
+  gestionarMock.mockResolvedValue({ status: "ok", ordenId: "g1", estado: "entregado" });
 });
 
 afterEach(() => {

@@ -22,19 +22,19 @@ const CIERRE = "c-1";
 /** Las gestiones que el recálculo lee del cierre: dos entregas y una devolución. */
 const GESTIONES_DEL_CIERRE = [
   {
-    resultado: "entregada",
+    resultado: "entregado",
     pagos: [
       { metodo: "efectivo", monto: new Prisma.Decimal("6000") },
       { metodo: "SINPE", monto: new Prisma.Decimal("4000") },
     ],
   },
   {
-    resultado: "entregada",
+    resultado: "entregado",
     pagos: [{ metodo: "transferencia", monto: new Prisma.Decimal("2500.50") }],
   },
   // Una devolución no aporta a ningún balde (R8/R25): si aportara, el total del cierre
   // crecería con dinero que nadie cobró.
-  { resultado: "devuelta", pagos: [] },
+  { resultado: "novedad", pagos: [] },
 ];
 
 function clienteFalso(
@@ -154,7 +154,7 @@ describe("CierresAdminRepository.actualizarPagosGestion — las guardias", () =>
     expect(where.id).toBe(GESTION);
     // Una gestión ANULADA no se corrige, y solo una ENTREGA tiene desglose.
     expect(where.anuladaAt).toBeNull();
-    expect(where.resultado).toBe("entregada");
+    expect(where.resultado).toBe("entregado");
     // El estado y el alcance van DENTRO de la relación con el cierre: es donde viven.
     expect(where.cierre).toEqual({
       is: { estado: { in: ["solicitado", "vencido"] }, destinoTipo: "bodega_central" },

@@ -111,3 +111,55 @@ export function validarUrlMigraciones(env: EnvUrls): ResultadoUrl {
 
   return { status: "ausente" };
 }
+
+// ── FICHA 432 — LA UNICA MIGRACION QUE ESTE PASO PUEDE DESATASCAR SOLA ────────────────────
+//
+// INCIDENTE que lo motiva (2026-09-16 02:33 UTC): al mergear la 429, `migrate deploy` aplico
+// `20260918120100_zona_sinpe` (columnas nullables) y acto seguido intento
+// `20260918120200_zona_sinpe_no_nulo`, que ABORTA A PROPOSITO si alguna zona no tiene SINPE.
+// Entre las dos tenia que correr la siembra, y `migrate deploy` no deja hueco: las aplica
+// todas de un tiron. El build murio —lo disenado— pero ese fallo queda apuntado en
+// `_prisma_migrations`, y desde entonces TODO `migrate deploy` posterior se niega con P3009.
+// Los deploys de preview estuvieron caidos hasta que alguien lo resolvio a mano.
+//
+// POR QUE UNA LISTA BLANCA Y NO "resuelve cualquier P3009". Auto-resolver a ciegas convertiria
+// este paso en una maquina de enmascarar fallos reales: una migracion que falle por un dato
+// corrupto quedaria marcada como revertida y el despliegue seguiria como si nada. La lista
+// tiene UNA entrada y se exige que el nombre coincida EXACTAMENTE.
+//
+// CADUCA. En cuanto las tres bases (local, preview, produccion) tengan el SINPE sembrado y la
+// migracion aplicada, esta lista se vacia y el reintento deja de existir. No es una
+// caracteristica del despliegue: es la salida de un incidente concreto.
+export const MIGRACIONES_AUTO_RESOLUBLES: readonly string[] = [
+  "20260918120200_zona_sinpe_no_nulo",
+];
+
+export type DecisionAutoResolucion =
+  | { resolver: false; motivo: string }
+  | { resolver: true; migracion: string };
+
+/**
+ * Lee la salida de un `migrate deploy` que fallo y dice si este paso puede desatascarlo solo.
+ *
+ * PURA a proposito: es la pieza que decide si se toca `_prisma_migrations`, asi que tiene que
+ * poder probarse sin base, sin CLI y sin red, con la salida real de Prisma pegada como texto.
+ *
+ * Exige LAS DOS cosas —el codigo `P3009` y un nombre de la lista blanca— porque cada una sola
+ * es insuficiente: `P3009` a secas no dice CUAL fallo, y el nombre puede aparecer en la salida
+ * de un fallo completamente distinto (por ejemplo un error de sintaxis al aplicarla).
+ */
+export function decidirAutoResolucion(salida: string): DecisionAutoResolucion {
+  if (!salida.includes("P3009")) {
+    return { resolver: false, motivo: "el fallo no es P3009 (migracion previa fallida)" };
+  }
+
+  const migracion = MIGRACIONES_AUTO_RESOLUBLES.find((nombre) => salida.includes(nombre));
+  if (migracion === undefined) {
+    return {
+      resolver: false,
+      motivo: "es P3009 pero la migracion fallida NO esta en la lista blanca",
+    };
+  }
+
+  return { resolver: true, migracion };
+}

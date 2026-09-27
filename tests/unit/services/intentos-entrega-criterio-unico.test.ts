@@ -35,11 +35,11 @@ const HORA = 60 * 60 * 1000;
 
 const ID_DEVUELTA = "os-devuelta";
 const ESTATUS: Record<string, string> = {
-  devuelta: ID_DEVUELTA,
-  reprogramada: "os-reprogramada",
+  novedad: ID_DEVUELTA,
+  reprogramado: "os-reprogramada",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 const ORDEN = "o1";
@@ -155,30 +155,30 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   it.each([
     {
       caso: "2 cierres APROBADOS con `devuelta`",
-      filas: [gestion("devuelta", "c1"), gestion("devuelta", "c2")],
+      filas: [gestion("novedad", "c1"), gestion("novedad", "c2")],
       esperado: 2,
     },
     {
       caso: "1 `devuelta` + 2 `reprogramada` en 3 cierres aprobados",
       filas: [
-        gestion("devuelta", "c1"),
-        gestion("reprogramada", "c2"),
-        gestion("reprogramada", "c3"),
+        gestion("novedad", "c1"),
+        gestion("reprogramado", "c2"),
+        gestion("reprogramado", "c3"),
       ],
       esperado: 3,
     },
     {
       caso: "las mismas 3 gestiones con los cierres en `solicitado`",
       filas: [
-        gestion("devuelta", "c1", "solicitado"),
-        gestion("reprogramada", "c2", "solicitado"),
-        gestion("reprogramada", "c3", "solicitado"),
+        gestion("novedad", "c1", "solicitado"),
+        gestion("reprogramado", "c2", "solicitado"),
+        gestion("reprogramado", "c3", "solicitado"),
       ],
       esperado: 0,
     },
     {
       caso: "R29: 2 gestiones vigentes en el MISMO cierre aprobado",
-      filas: [gestion("devuelta", "c1"), gestion("reprogramada", "c1")],
+      filas: [gestion("novedad", "c1"), gestion("reprogramado", "c1")],
       esperado: 1,
     },
     { caso: "orden sin gestiones", filas: [], esperado: 0 },
@@ -206,9 +206,9 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   // el drawer muestra 3 y el cron ESCALA a `rechazada` (lo que dispara `cobroRechazado`, 56).
   it("R15: 1 devuelta + 2 reprogramadas en 3 cierres APROBADOS -> drawer 3 y el cron ESCALA", async () => {
     const { service, ordenRepo } = montar([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2"),
-      gestion("reprogramada", "c3"),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2"),
+      gestion("reprogramado", "c3"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
@@ -236,9 +236,9 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   // NINGUNA se implementa: Q5 sigue abierta y es decision del humano.
   it("Q5 (ABIERTA): con los cierres en `solicitado` el conteo es 0 y el cron LIBERA en bucle", async () => {
     const { service, ordenRepo } = montar([
-      gestion("devuelta", "c1", "solicitado"),
-      gestion("reprogramada", "c2", "solicitado"),
-      gestion("reprogramada", "c3", "solicitado"),
+      gestion("novedad", "c1", "solicitado"),
+      gestion("reprogramado", "c2", "solicitado"),
+      gestion("reprogramado", "c3", "solicitado"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
@@ -257,8 +257,8 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   // el rechazo a la tienda de mas.
   it("R29: 2 gestiones vigentes en el MISMO cierre aprobado -> 1, y el cron LIBERA", async () => {
     const { service, ordenRepo } = montar([
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c1"),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c1"),
     ]);
 
     const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
@@ -288,9 +288,9 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
   //     `devolucion-sla-dinero.test.ts` sigue verde sin tocarse.
   it("R18-a/b/c/d: la sintetica del cron NO suma como INTENTO pero SI cobra como RECHAZO", async () => {
     const visitasReales: FilaGestionFake[] = [
-      gestion("devuelta", "c1"),
-      gestion("reprogramada", "c2"),
-      gestion("devuelta", "c3"),
+      gestion("novedad", "c1"),
+      gestion("reprogramado", "c2"),
+      gestion("novedad", "c3"),
     ];
 
     // (1) R18-c: el cron sigue comparando el conteo contra el umbral ANTES de escalar. 3 visitas
@@ -311,7 +311,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
 
     // (2) R18-a/b: el mundo DESPUES del escalado — la sintetica ya existe, cayo en el cierre `c4`
     // del mensajero y ese cierre se APROBO. El conteo sigue siendo 3, no 4.
-    const sintetica = gestion("rechazada", "c4", "aprobado", {
+    const sintetica = gestion("devolucion_a_origen_por_rechazo", "c4", "aprobado", {
       origenTiposHistorial: ["escalado_devuelta_sla"],
     });
     const despues = montar([...visitasReales, sintetica]);
@@ -321,20 +321,20 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     // (3) R18-d/R17: y esa MISMA gestion sintetica sigue cobrando el rechazo. El monto sale del
     // `resultado` y de la tarifa; el conteo de intentos no entra en la formula por ningun lado.
     const tarifa = { cobroEntregado: "2.00", cobroRechazado: "1.50" };
-    expect(ingresoBodegaPorResultado("rechazada", tarifa)).toBe("1.50");
+    expect(ingresoBodegaPorResultado("devolucion_a_origen_por_rechazo", tarifa)).toBe("1.50");
     // Y no cobra por lo que no es un rechazo: las visitas reales que si contaron aportan 0.00.
-    expect(ingresoBodegaPorResultado("devuelta", tarifa)).toBe("0.00");
-    expect(ingresoBodegaPorResultado("reprogramada", tarifa)).toBe("0.00");
+    expect(ingresoBodegaPorResultado("novedad", tarifa)).toBe("0.00");
+    expect(ingresoBodegaPorResultado("reprogramado", tarifa)).toBe("0.00");
   });
 
   // R7: el lote no es una comodidad, es un requisito. Con N ordenes se emite UNA consulta.
   it("R7: el lote de N ordenes emite UNA sola consulta", async () => {
     const otras: FilaGestionFake[] = [
-      { ...gestion("devuelta", "c1"), ordenId: "o2" },
-      { ...gestion("reprogramada", "c2"), ordenId: "o3" },
-      { ...gestion("entregada", "c3"), ordenId: "o4" },
+      { ...gestion("novedad", "c1"), ordenId: "o2" },
+      { ...gestion("reprogramado", "c2"), ordenId: "o3" },
+      { ...gestion("entregado", "c3"), ordenId: "o4" },
     ];
-    const { service, prisma } = montar([gestion("devuelta", "c0"), ...otras]);
+    const { service, prisma } = montar([gestion("novedad", "c0"), ...otras]);
 
     const mapa = await service.contarIntentosEnLote([ORDEN, "o2", "o3", "o4", "o5"]);
 
@@ -375,37 +375,37 @@ describe("237/R6/R7 — la gestion de la tienda desde ayuda cuenta UN intento, y
   it.each([
     {
       caso: "R6: una orden que paso por ayuda y resolvio LA TIENDA, con su cierre aprobado",
-      filas: [gestionDeLaTienda("rechazada", "c1")],
+      filas: [gestionDeLaTienda("devolucion_a_origen_por_rechazo", "c1")],
       esperado: 1,
     },
     {
       caso: "R6: lo mismo con `reprogramada` (los dos desenlaces que la ficha concede)",
-      filas: [gestionDeLaTienda("reprogramada", "c1")],
+      filas: [gestionDeLaTienda("reprogramado", "c1")],
       esperado: 1,
     },
     {
       caso: "R7: DOS gestiones vigentes de la tienda en el MISMO cierre aprobado",
-      filas: [gestionDeLaTienda("reprogramada", "c1"), gestionDeLaTienda("rechazada", "c1")],
+      filas: [gestionDeLaTienda("reprogramado", "c1"), gestionDeLaTienda("devolucion_a_origen_por_rechazo", "c1")],
       esperado: 1,
     },
     {
       caso: "R7: una del MENSAJERO y otra de la TIENDA en el mismo cierre aprobado",
-      filas: [gestion("reprogramada", "c1"), gestionDeLaTienda("rechazada", "c1")],
+      filas: [gestion("reprogramado", "c1"), gestionDeLaTienda("devolucion_a_origen_por_rechazo", "c1")],
       esperado: 1,
     },
     {
       caso: "R6: con el cierre en `solicitado` todavia no cuenta (el ancla es la APROBACION)",
-      filas: [gestionDeLaTienda("rechazada", "c1", "solicitado")],
+      filas: [gestionDeLaTienda("devolucion_a_origen_por_rechazo", "c1", "solicitado")],
       esperado: 0,
     },
     {
       caso: "R6: sin cierre (recien registrada) no cuenta: espera al cierre que la vincule",
-      filas: [gestionDeLaTienda("rechazada", null, null)],
+      filas: [gestionDeLaTienda("devolucion_a_origen_por_rechazo", null, null)],
       esperado: 0,
     },
     {
       caso: "R39: anulada -> deja de contar, venga de donde venga",
-      filas: [{ ...gestionDeLaTienda("rechazada", "c1"), anuladaAt: new Date("2026-07-19") }],
+      filas: [{ ...gestionDeLaTienda("devolucion_a_origen_por_rechazo", "c1"), anuladaAt: new Date("2026-07-19") }],
       esperado: 0,
     },
   ])("$caso -> $esperado, identico en drawer, cron y lote", async ({ filas, esperado }) => {
@@ -431,7 +431,7 @@ describe("237/R6/R7 — la gestion de la tienda desde ayuda cuenta UN intento, y
     // La MISMA gestion, con las tres familias de la ayuda en su historial: la ida y la vuelta que
     // la orden fue acumulando, mas la del desenlace. Solo la tercera es visita real.
     const { service } = montar([
-      gestion("rechazada", "c1", "aprobado", {
+      gestion("devolucion_a_origen_por_rechazo", "c1", "aprobado", {
         origenTiposHistorial: [
           "solicitud_ayuda_tienda", // 235: pedir auxilio NO es un intento
           "rescate_ayuda_tienda", // 235: retirarlo tampoco
@@ -447,7 +447,7 @@ describe("237/R6/R7 — la gestion de la tienda desde ayuda cuenta UN intento, y
     // solo tiene las dos familias de la 235 NO cuenta. Es decir, lo que suma el intento es
     // exactamente `gestion_tienda_ayuda` estando en `ORIGEN_TIPOS_VISITA_REAL`, y nada mas.
     const { service } = montar([
-      gestion("rechazada", "c1", "aprobado", {
+      gestion("devolucion_a_origen_por_rechazo", "c1", "aprobado", {
         origenTiposHistorial: ["solicitud_ayuda_tienda", "rescate_ayuda_tienda"],
       }),
     ]);

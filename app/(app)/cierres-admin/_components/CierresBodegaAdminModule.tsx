@@ -16,10 +16,21 @@ import {
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
+// ⭑ FICHA 431 (T17, R25): las DOS acciones de la conciliacion, el MISMO componente que monta el
+// desglose de `/wallet/satelites`. Mismo boton para la misma fila: si esta pantalla tuviera su
+// propia copia, las dos podrian acabar diciendo cosas distintas sobre si el dinero llego.
+import { ConciliacionAcciones } from "@/components/shared/conciliacion/ConciliacionAcciones";
+// ⭑ FICHA 431: la fecha de la consolidacion en el CALENDARIO DE COSTA RICA. `solicitadoAt` es un
+// instante UTC y `slice(0, 10)` daria el dia siguiente para toda consolidacion hecha despues de
+// las 18:00 — y esa fecha es lo que identifica el bulto en el dialogo.
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import {
   verCierreBodegaDetalle,
-  aprobarCierreBodega,
-  rechazarCierreBodega,
+  // ⭑ FICHA 431 (T17, R16/D2): `aprobarCierreBodega` y `rechazarCierreBodega` YA NO SE
+  // IMPORTAN AQUI. La aprobacion de nivel 2 dejo de ser una puerta: lo que queda es MARCAR que
+  // el efectivo llego, y eso lo hace `ConciliacionAcciones` con las acciones de la conciliacion.
+  // El camino viejo sigue en el arbol (Q4) y es IMPOSIBLE de escribir contra la base por el
+  // `CHECK` de R15; lo que se retira aqui es la superficie, que era su unica boca.
   listarGestionesCierresBodegaCompleto,
   listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
@@ -163,7 +174,23 @@ export interface CierresBodegaAdminModuleProps {
    * funcionando sin filtrar— en vez de romperse.
    */
   catalogoFiltros?: CatalogoFiltrosCierresDTO;
+  /**
+   * ⭑ FICHA 431 (R25/R27) — si el actor puede MARCAR y DESMARCAR la conciliacion. Lo decide el
+   * SERVIDOR con `esAccesoTotal`, el MISMO predicado con el que `ConciliacionSatelitesService`
+   * responde `forbidden`: son las dos mitades del control, y esconder el boton no es una de
+   * ellas por si sola.
+   *
+   * **Default `false`: falla cerrado.** Un montaje que se olvide de decidir el permiso no
+   * ofrece conciliar nada, que es el unico defecto seguro en una pantalla de dinero.
+   */
+  puedeConciliar?: boolean;
 }
+
+/**
+ * ⭑ FICHA 431 (T17): nombre accesible de la seccion de la accion. Se llamaba «Decision del
+ * cierre de bodega» y ya no hay ninguna decision que tomar: hay un hecho que registrar.
+ */
+const CONCILIACION_SECCION_LABEL = "Conciliación del cierre de bodega";
 
 /** Detalle abierto: la cabecera del cierre de bodega + sus cierre_dia incluidos. */
 interface DetalleAbierto {
@@ -349,6 +376,7 @@ export function CierresBodegaAdminModule({
   pendientes,
   historico,
   catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
+  puedeConciliar = false,
 }: Readonly<CierresBodegaAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
@@ -359,10 +387,8 @@ export function CierresBodegaAdminModule({
   // Evidencia (URL firmada, R12) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
   // Sub-modal de rechazo (R17): true = abierto.
-  const [rechazando, setRechazando] = useState(false);
+
   // Motivo del rechazo (obligatorio, R17) + su error de validación.
-  const [motivo, setMotivo] = useState("");
-  const [motivoError, setMotivoError] = useState<string | null>(null);
 
   // Feature 170 — FASE 2 (T J.2, R40/R42/R43): página visible de la COLA. El control vive
   // AQUÍ, en el módulo, junto al contador (decisión de Q-I6): así la guardia de T H.3 ve esta
@@ -457,9 +483,6 @@ export function CierresBodegaAdminModule({
 
   function cerrarDetalle() {
     setDetalle(null);
-    setRechazando(false);
-    setMotivo("");
-    setMotivoError(null);
   }
 
   /**
@@ -476,73 +499,26 @@ export function CierresBodegaAdminModule({
     router.refresh();
   }
 
-  /** Traduce un resultado de dominio de error a feedback accionable + refresco. */
-  function manejarErrorDecision(
-    status:
-      | "conflict"
-      | "no_encontrada"
-      | "forbidden"
-      | "unauthenticated"
-      | "validation_error",
-  ) {
-    if (status === "conflict") {
-      toast.error("Este cierre de bodega ya fue resuelto.");
-    } else if (status === "no_encontrada") {
-      toast.error("El cierre de bodega ya no está disponible.");
-    } else if (status === "forbidden") {
-      toast.error("No tenés permiso para resolver este cierre de bodega.");
-    } else if (status === "unauthenticated") {
-      toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
-    } else {
-      toast.error("No se pudo resolver el cierre de bodega. Intentá de nuevo.");
-    }
-    cerrarDetalle();
-    refrescarListas();
-  }
-
-  /** R16: aprueba el cierre de bodega abierto. */
-  async function confirmarAprobacion() {
-    if (!detalle) return;
-    const result = await aprobarCierreBodega({
-      cierreBodegaId: detalle.cierre.cierreBodegaId,
-    });
-    if (result.status === "ok") {
-      toast.success("Cierre de bodega aprobado correctamente.");
-      cerrarDetalle();
-      refrescarListas();
-      return;
-    }
-    manejarErrorDecision(result.status);
-  }
-
-  /** R17: rechaza el cierre de bodega abierto con motivo obligatorio. */
-  async function confirmarRechazo() {
-    if (!detalle) return;
-    const motivoLimpio = motivo.trim();
-    if (motivoLimpio.length === 0) {
-      setMotivoError("El motivo de rechazo es obligatorio.");
-      return; // R17: sin motivo NO se envía
-    }
-    const result = await rechazarCierreBodega({
-      cierreBodegaId: detalle.cierre.cierreBodegaId,
-      motivo: motivoLimpio,
-    });
-    if (result.status === "ok") {
-      toast.success("Cierre de bodega rechazado correctamente.");
-      cerrarDetalle();
-      refrescarListas();
-      return;
-    }
-    if (result.status === "validation_error") {
-      const primero = Object.values(result.fieldErrors)[0]?.[0];
-      setMotivoError(primero ?? "El motivo de rechazo es obligatorio.");
-      return;
-    }
-    manejarErrorDecision(result.status);
-  }
+  // ⭑ FICHA 431 (T17, R16/D2) — AQUI VIVIAN `confirmarAprobacion`, `confirmarRechazo` y su
+  // traductor de errores. Los tres se retiran de ESTA pantalla, que era su unica boca.
+  //
+  // QUE LOS SUSTITUYE: `ConciliacionAcciones`, el mismo componente que monta el desglose de
+  // `/wallet/satelites`. Es la MISMA accion sobre la MISMA fila —marcar que el efectivo llego—,
+  // y dos copias acabarian diciendo cosas distintas sobre si el dinero esta en la central.
+  // Lleva su propio manejo de `conflict` / `no_encontrada` / `forbidden`, asi que el traductor
+  // de aqui se iba con ellas: mantenerlo habria dejado dos vocabularios de error para la misma
+  // operacion.
+  //
+  // «RECHAZAR» NO TIENE SUSTITUTO, Y ES EL PUNTO (R16): no se rechaza una consolidacion, se
+  // marca si llego o no. Lo reversible es la MARCA, y eso lo hace «Desmarcar», que no es lo
+  // mismo —desmarcar no manda a nadie a corregir nada, solo dice «esto todavia no ha llegado»—.
+  // Las `rechazado` historicas se quedan en la base (cero en produccion) y dejan de tener
+  // rotulo en pantalla.
+  //
+  // El refresco de las listas (`refrescarListas`) SI se conserva: la fila marcada se mueve de
+  // pestaña igual que antes se movia al aprobar.
 
   const cierreAbierto = detalle?.cierre ?? null;
-  const esPendiente = cierreAbierto?.estado === "solicitado";
   /**
    * 💰 Ficha 396 (R1/R2/R20) — la marca del NIVEL AGREGADO, y el interruptor de su desglose.
    *
@@ -855,77 +831,56 @@ export function CierresBodegaAdminModule({
               );
             })}
 
-            {/* Acciones: solo en un cierre de bodega PENDIENTE (`solicitado`). */}
-            {esPendiente ? (
-              <section
-                aria-label="Decisión del cierre de bodega"
-                className="flex flex-wrap justify-end gap-3 border-t pt-4"
-              >
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={() => {
-                    setMotivo("");
-                    setMotivoError(null);
-                    setRechazando(true);
-                  }}
-                >
-                  Rechazar
-                </Button>
-                <Button type="button" onClick={confirmarAprobacion}>
-                  Aprobar
-                </Button>
-              </section>
+            {/*
+              ⭑ FICHA 431 (T17, R16/R25/D2) — LA ACCION, Y LO QUE DEJO DE SER.
+
+              Aqui habia dos botones: «Aprobar» y «Rechazar», mas un sub-modal con motivo
+              obligatorio. Ese par ERA la puerta de nivel 2: mientras no se pulsara, la bodega
+              satelite no podia asignar ni una orden mas.
+
+              Ahora hay UNO: «Marcar recibido». No es el mismo boton con otro nombre —es otra
+              cosa—: no autoriza nada, dice que el efectivo LLEGO y cuanto se conto. Por eso
+              abre un dialogo con el declarado a la vista y un monto editable, y por eso es
+              REVERSIBLE («Desmarcar»): una marca informativa puesta por error tiene que poder
+              deshacerse, y deshacerla no mueve un colon.
+
+              «RECHAZAR» SE RETIRA SIN SUSTITUTO (R16). Rechazar una consolidacion era mandar a
+              la satelite a corregir un bulto que ya habia salido; hoy la respuesta a «llego
+              menos de lo declarado» es marcar POR LO QUE LLEGO y dejar la diferencia contando
+              en el saldo de esa bodega. Las `rechazado` historicas —cero en produccion— siguen
+              en la base y dejan de tener rotulo en pantalla.
+
+              SE MONTA PARA CUALQUIER ESTADO, no solo para `solicitado` como el par anterior: la
+              correccion y el desmarcado actuan sobre una YA marcada, y con el `esPendiente` de
+              antes no habria forma de deshacer nada. Que boton toca lo decide
+              `ConciliacionAcciones` a partir de la marca, con la MISMA funcion que pinta el
+              badge — asi el rotulo del boton y el del estado no pueden contradecirse.
+            */}
+            {/* Sin permiso NO se monta ni la sección: `ConciliacionAcciones` devuelve `null` y
+                quedaría una región con nombre accesible y nada dentro, que un lector de pantalla
+                anuncia como si hubiera algo que hacer. */}
+            {puedeConciliar ? (
+            <section
+              aria-label={CONCILIACION_SECCION_LABEL}
+              className="flex flex-wrap justify-end gap-3 border-t pt-4"
+            >
+              <ConciliacionAcciones
+                cierreBodegaId={detalle.cierre.cierreBodegaId}
+                bodega={detalle.cierre.zonaNombre}
+                fecha={fechaCalendarioCR(new Date(detalle.cierre.solicitadoAt))}
+                declarado={detalle.cierre.totales.efectivo}
+                marca={detalle.cierre}
+                nota={detalle.cierre.conciliadoNota}
+                puedeConciliar={puedeConciliar}
+                onCambio={() => {
+                  cerrarDetalle();
+                  refrescarListas();
+                }}
+              />
+            </section>
             ) : null}
           </div>
         ) : null}
-      </Modal>
-
-      {/* ---------- Sub-modal de rechazo con motivo obligatorio (R17) ---------- */}
-      <Modal
-        open={rechazando}
-        onOpenChange={(next) => {
-          if (!next) {
-            setRechazando(false);
-            setMotivoError(null);
-          }
-        }}
-        title="Rechazar cierre de bodega"
-        description="Indicá el motivo del rechazo. La bodega satélite lo verá para corregir."
-        confirmLabel="Rechazar cierre de bodega"
-        confirmVariant="destructive"
-        onConfirm={confirmarRechazo}
-        closeOnConfirm={false}
-      >
-        <div className="flex flex-col gap-2">
-          <label htmlFor="motivo-rechazo-bodega" className="text-sm font-medium">
-            Motivo del rechazo
-          </label>
-          <textarea
-            id="motivo-rechazo-bodega"
-            value={motivo}
-            onChange={(e) => {
-              setMotivo(e.target.value);
-              if (motivoError) setMotivoError(null);
-            }}
-            rows={4}
-            aria-required="true"
-            aria-invalid={motivoError !== null}
-            aria-describedby={
-              motivoError ? "motivo-rechazo-bodega-error" : undefined
-            }
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          {motivoError ? (
-            <p
-              id="motivo-rechazo-bodega-error"
-              role="alert"
-              className="text-sm text-destructive"
-            >
-              {motivoError}
-            </p>
-          ) : null}
-        </div>
       </Modal>
 
       {/* ---------- Visor de evidencia (URL firmada, R12) ---------- */}

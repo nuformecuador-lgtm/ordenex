@@ -1,0 +1,326 @@
+[
+  {
+    "id": "4 estado de cuenta de Tania: saldo inicial arriba; saldo corrido de la última fila = tarjeta = listado",
+    "estado": "OK",
+    "listado": "Tania Tienda ₡147.670,10 A favor Ver estado de cuenta",
+    "tarjetas": "Saldo actual ₡147.670,10 Ordenex le debe ₡147.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10",
+    "primeraFila": "— Saldo inicial ₡0",
+    "ultimaFila": "2026-09-26 Cobro por rechazo anulado Anulación Gestión de orden · cobro por rechazo · guía 32670963 Ver Registró: Ana Admin ₡1.500 ₡147.670,10 Ver",
+    "saldoSql": "147670.10",
+    "acciones": "Ordenex le cobra a la tienda Ordenex le paga a la tienda",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "5 «Ordenex le cobra a la tienda» 5.000",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡147.670,10 Después: ₡142.670,10 Flujo de dinero registrado ₡13.483.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.336.262,62 Después: ₡13.341.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡147.670,10 Después: ₡142.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "aviso": "Procesando…",
+    "tarjetaTras": "Saldo actual ₡142.670,10 Ordenex le debe ₡142.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡48.729,90 Saldo al final del periodo ₡142.670,10",
+    "listadoTras": "Tania Tienda ₡142.670,10 A favor Ver estado de cuenta"
+  },
+  {
+    "id": "R7/R8 tras el cobro de 5.000 (paso 5)",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "140300.50",
+    "cifra": "13483932.72",
+    "ganancia": "13341262.62",
+    "de_tiendas": "142670.10",
+    "capital": "0",
+    "suma_saldos": "142670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "6 «Ordenex paga un gasto de una tienda» a Facebook 10.000",
+    "estado": "FALLO",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡142.670,10 Después: ₡132.670,10 Flujo de dinero registrado Antes: ₡13.483.932,72 Después: ₡13.473.932,72 Ganancia de Ordenex ₡13.341.262,62 · no cambia Lo que Ordenex les debe a las tiendas Antes: ₡142.670,10 Después: ₡132.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "aviso": "Procesando…"
+  },
+  {
+    "id": "R7/R8 tras el pago de un gasto de la tienda (paso 6)",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "150300.50",
+    "cifra": "13473932.72",
+    "ganancia": "13341262.62",
+    "de_tiendas": "132670.10",
+    "capital": "0",
+    "suma_saldos": "132670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "4 Tania en contra: «<Tienda> le debe ₡… a Ordenex»; «La tienda le paga» visible; «Ordenex le paga» deshabilitado con motivo",
+    "estado": "OK",
+    "avisoEnContra": "Así, Tania Tienda queda con el saldo en contra: -₡67.329,90.",
+    "tarjetas": "Saldo actual -₡67.329,90 Tania Tienda le debe ₡67.329,90 a Ordenex Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡258.729,90 Saldo al final del periodo -₡67.329,90",
+    "acciones": "La tienda le paga a Ordenex Ordenex le cobra a la tienda Ordenex le paga a la tienda Ordenex no le debe nada a Tania Tienda: sin saldo a favor no hay nada que pagarle.",
+    "tiendaPagaVisible": 1,
+    "ordenexPagaDeshabilitado": true
+  },
+  {
+    "id": "R7/R8 con Tania en contra",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "150300.50",
+    "cifra": "13473932.72",
+    "ganancia": "13541262.62",
+    "de_tiendas": "-67329.90",
+    "capital": "0",
+    "suma_saldos": "-67329.90",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "4 «Ver» → «Anular…» el cobro de 200.000 desde el estado de cuenta",
+    "estado": "OK",
+    "panel": "Ordenex le cobra a la tienda 2026-09-26 · Sale ₡200.000 A quién Tania Tienda Por qué Cobro R458F-maestro para dejarla en contra De dónde sale Registrado a mano Comprobante Sin comprobante. Adjuntar comprobante Registró Maestro QA Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.473.932,72 Ganancia de Ordenex ₡13.541.262,62 Lo que Ordenex les debe a las tiendas -₡67.329,90 Saldo inicial y aportes ₡0 Saldo de la tienda -₡67.329,90 Anular… Cerrar",
+    "aviso": "Procesando…",
+    "tarjetas": "Saldo actual ₡132.670,10 Ordenex le debe ₡132.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡58.729,90 Saldo al final del periodo ₡132.670,10",
+    "filaAnulada": "Ordenex le cobra a la tienda Cobro R458F-maestro para dejarla en contra Registrado a mano Registró: Maestro QA Anulado el 2026-09-26 por Maestro QA · R458F-maestro devolver la tienda a favor "
+  },
+  {
+    "id": "R7/R8 tras anular el cobro de 200.000",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "150300.50",
+    "cifra": "13473932.72",
+    "ganancia": "13341262.62",
+    "de_tiendas": "132670.10",
+    "capital": "0",
+    "suma_saldos": "132670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "08-tienda filtro por cierre (buscar por nombre y por día; sin ID)",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "20",
+      "50",
+      "100",
+      "Todos los cierres",
+      "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+      "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+      "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos"
+    ],
+    "porBusqueda": {
+      "Rita": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+      ],
+      "2026-08-13": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+        "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos"
+      ]
+    },
+    "elegido": "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+    "disparador": "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+    "filasTrasFiltrar": 5,
+    "esperado": 5,
+    "muestra": [
+      " — Saldo inicial ₡0 ",
+      " 2026-09-24 Contra-entrega cobrado a los clientes de la tienda Cierre del día · 2026-09-24 · Rita Recorrido Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡32.500 ₡159.012,79 Ver",
+      " 2026-09-24 IVA del flete cobrado a la tienda Cierre del día · 2026-09-24 · Rita Recorrido Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡1.300 ₡157.712,79 Ver"
+    ]
+  },
+  {
+    "id": "08-tienda órdenes de un cierre",
+    "estado": "OK",
+    "boton": "Ver las órdenes que componen Contra-entrega cobrado a los clientes de la tienda del 2026-09-24",
+    "panel": "Cierre del día 2026-09-24 Mensajero: Rita Recorrido 5 de 14 órdenes del cierre aportan a este concepto Importe del movimiento: ₡32.500 Descargar Guía Destinatario Tienda Resultado Aporte 40520764 Cliente Recorrido 1 Tania Entregado ₡5.500 59144030 Cliente Recorrido 4 Tania Entregado ₡7.000 71377932 Cliente Recorrido 5 Tania Entregado ₡7.500 80975515 Cliente Recorrido 2 Tania Entregado ₡6.000 92987981 Cliente Recorrido 3 Tania Entregado ₡6.500 1-5 de 5 ‹ ›",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "9 descarga del estado de cuenta (filtrado por cierre)",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "filas": 7,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-09-24",
+        "Contra-entrega cobrado a los clientes de la tienda",
+        null,
+        "Cierre del día · 2026-09-24 · Rita Recorrido",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        null,
+        "32500.00",
+        "159012.79"
+      ],
+      [
+        "2026-09-24",
+        "IVA del flete cobrado a la tienda",
+        null,
+        "Cierre del día · 2026-09-24 · Rita Recorrido",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "1300.00",
+        null,
+        "157712.79"
+      ]
+    ],
+    "ultima": [
+      "2026-09-24",
+      "IVA de la comisión cobrado a la tienda",
+      null,
+      "Cierre del día · 2026-09-24 · Rita Recorrido",
+      null,
+      "Automático · Aprobación del cierre por Ana Admin",
+      "147.89",
+      null,
+      "146427.40"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  },
+  {
+    "id": "9 descarga completa: sin uuid, origen legible, saldo corrido; última fila = tarjeta",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "filas": 45,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-08-12",
+        "Comisión de contra-entrega cobrada a la tienda",
+        null,
+        "Cierre del día · 2026-08-12 · Marco Mensajero",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "4343.50",
+        null,
+        "-4343.50"
+      ],
+      [
+        "2026-08-12",
+        "IVA del flete cobrado a la tienda",
+        null,
+        "Cierre del día · 2026-08-12 · Marco Mensajero",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "1560.00",
+        null,
+        "-5903.50"
+      ]
+    ],
+    "ultima": [
+      "2026-09-26",
+      "Cobro de Ordenex a la tienda anulado",
+      "Anulación · Cobro R458F-maestro para dejarla en contra",
+      "Cobro de Ordenex a una tienda · Tania Tienda",
+      null,
+      "Maestro QA",
+      null,
+      "200000.00",
+      "132670.10",
+      "Anulación"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": [],
+    "tarjeta": "₡132.670,10"
+  },
+  {
+    "id": "9 descarga de pagos registrados de la tienda",
+    "estado": "FALLO",
+    "error": "page.waitForEvent: Timeout 120000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n=============================="
+  }
+]

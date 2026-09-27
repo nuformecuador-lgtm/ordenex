@@ -86,7 +86,7 @@ describe("recortarPorAlcance — alcance `zona` (R13)", () => {
   });
 
   it("el RESTO del objeto queda intacto, campo a campo", () => {
-    const original = ordenDelDetalle({ id: "o1", resultadoDelDia: "entregada" });
+    const original = ordenDelDetalle({ id: "o1", resultadoDelDia: "entregado" });
     const recortada = recortarPorAlcance(original, ZONA);
 
     // Todo lo que no es un campo restringido tiene que llegar igual. Se compara contra el

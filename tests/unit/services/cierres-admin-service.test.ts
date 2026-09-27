@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 import { reintentosConfig } from "@/lib/config/reintentos";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
@@ -74,7 +75,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "12.50",
     metodoPago: "efectivo",
     motivo: null,
@@ -142,16 +143,22 @@ function fakeSignedUrls(overrides: Partial<ISignedUrlProvider> = {}): ISignedUrl
 
 // Feature 109 (T3.1): ids del catalogo que `aprobarCierre` resuelve para la config de liberacion.
 const ESTATUS_IDS: Record<string, string | null> = {
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
   en_bodega_central: "s-en-bodega",
   en_bodega_satelite: "s-en-bodega-sat",
   // Feature 239 (T2.1): los DOS del ANCLAJE. A diferencia de los de arriba NO son opcionales: si
   // el catalogo no los tiene, la aprobacion NO ocurre (R9, fallo cerrado).
   devolucion_por_confirmar: "s-devolucion-por-confirmar",
-  devuelta: "s-devuelta",
+  novedad: "s-devuelta",
   // FEATURE 276 (T9, R21): el DESTINO del rechazo por agotamiento de intentos. Entra en la MISMA
   // condicion que los tres de la 109, asi que sin el la config de liberacion no se cablea.
-  rechazada: "s-rechazada",
+  devolucion_a_origen_por_rechazo: "s-rechazada",
+  // FICHA 454 (T1.7): los de la APLICACION DE GESTIONES al aprobar — el origen `en_reparto` y el
+  // destino de cada resultado. Fallo cerrado como el de la 239: sin cualquiera, no se aprueba.
+  en_reparto: "s-en-reparto",
+  entregado: "s-entregada",
+  reprogramado: "s-reprogramada",
+  incidente: "s-incidente",
 };
 
 function newService(
@@ -198,6 +205,7 @@ function newService(
         Object.fromEntries(ids.map((id) => [id, "0.00"])),
       ),
     },
+    sinRetenidas(), // FICHA 462: 7.o argumento requerido; este archivo no mide la marca
   );
   return { service, repo, zonaRepo, ordenRepo, signedUrls, liquidacionRepo };
 }
@@ -400,7 +408,7 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
         gestiones: [
           gestionRow({
             gestionId: "a",
-            resultado: "entregada",
+            resultado: "entregado",
             ingresoOrdenex: conIngreso({
               flete: "2500.00",
               ivaFlete: "325.00",
@@ -413,7 +421,7 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
           }),
           gestionRow({
             gestionId: "b",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             ingresoOrdenex: conIngreso({
               fleteDevolucion: "1000.00",
               ivaFleteDevolucion: "130.00",
@@ -455,7 +463,7 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
         rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
         // Una reprogramación no aporta a ningún concepto.
-        gestiones: [gestionRow({ gestionId: "a", resultado: "reprogramada" })],
+        gestiones: [gestionRow({ gestionId: "a", resultado: "reprogramado" })],
       })),
     });
     const { service } = newService({ repo });
@@ -524,7 +532,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
 
   function repoCon(
     cierre: Partial<CierreAdminResumenRow>,
-    gestiones: Array<{ gestionId: string; resultado: "entregada" | "rechazada" | "reprogramada"; ingresoOrdenex?: IngresoOrdenexDTO }>,
+    gestiones: Array<{ gestionId: string; resultado: "entregado" | "devolucion_a_origen_por_rechazo" | "reprogramado"; ingresoOrdenex?: IngresoOrdenexDTO }>,
   ): Repo {
     return fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
@@ -551,8 +559,8 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalIngresoBodegaRechazos: "450.25",
         },
         [
-          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
-          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+          { gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
         ],
       ),
     });
@@ -587,8 +595,8 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalIngresoBodegaRechazos: "450.25",
         },
         [
-          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
-          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+          { gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
         ],
       ),
     });
@@ -617,7 +625,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalPagoMensajero: "3600.35",
           totalIngresoBodegaRechazos: "0.00",
         },
-        [{ gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA }],
+        [{ gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA }],
       ),
     });
 
@@ -646,7 +654,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalIngresoBodegaRechazos: "450.25",
         },
         // Una reprogramacion no aporta a ningun concepto: no factura, y aun asi se paga.
-        [{ gestionId: "a", resultado: "reprogramada" }],
+        [{ gestionId: "a", resultado: "reprogramado" }],
       ),
     });
 
@@ -682,8 +690,8 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalIngresoBodegaRechazos: "450.25",
         },
         [
-          { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
-          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+          { gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA },
+          { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
         ],
       ),
     });
@@ -723,7 +731,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalPagoMensajero: "3600.35",
           totalIngresoBodegaRechazos: "0.00",
         },
-        [{ gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA }],
+        [{ gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA }],
       ),
     });
 
@@ -744,7 +752,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
           totalPagoMensajero: "0.00",
           totalIngresoBodegaRechazos: "450.25",
         },
-        [{ gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA }],
+        [{ gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA }],
       ),
     });
 
@@ -765,7 +773,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
   it("aprobado y CON flete por rechazo: el cargo YA ocurrio", async () => {
     const { service } = newService({
       repo: repoCon({ estado: "aprobado" }, [
-        { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+        { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
       ]),
     });
     const r = await service.verCierreDetalle("c1", MAESTRO);
@@ -778,7 +786,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
     async (estado) => {
       const { service } = newService({
         repo: repoCon({ estado }, [
-          { gestionId: "b", resultado: "rechazada", ingresoOrdenex: RECHAZADA },
+          { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
         ]),
       });
       const r = await service.verCierreDetalle("c1", MAESTRO);
@@ -790,7 +798,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
   it("aprobado pero SIN un solo rechazo: no hay cargo del que hablar", async () => {
     const { service } = newService({
       repo: repoCon({ estado: "aprobado" }, [
-        { gestionId: "a", resultado: "entregada", ingresoOrdenex: ENTREGADA },
+        { gestionId: "a", resultado: "entregado", ingresoOrdenex: ENTREGADA },
       ]),
     });
     const r = await service.verCierreDetalle("c1", MAESTRO);
@@ -811,29 +819,29 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
         rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
-          gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SINPE" }),
+          gestionRow({ gestionId: "a", resultado: "entregado", montoRecibido: "30.00", metodoPago: "SINPE" }),
           gestionRow({
             gestionId: "b",
-            resultado: "reprogramada",
+            resultado: "reprogramado",
             montoRecibido: null,
             metodoPago: null,
             motivo: "ausente",
             fechaReprogramacion: "2026-07-20",
           }),
-          gestionRow({ gestionId: "c", resultado: "devuelta", montoRecibido: null, metodoPago: null }),
+          gestionRow({ gestionId: "c", resultado: "novedad", montoRecibido: null, metodoPago: null }),
         ],
       })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["a"]);
-    expect(r.grupos.reprogramada.map((g) => g.gestionId)).toEqual(["b"]);
-    expect(r.grupos.devuelta.map((g) => g.gestionId)).toEqual(["c"]);
-    expect(r.grupos.rechazada).toEqual([]);
-    expect(r.grupos.entregada[0].montoRecibido).toBe("30.00"); // string escala 2
-    expect(typeof r.grupos.entregada[0].montoRecibido).toBe("string");
-    expect(r.grupos.reprogramada[0].fechaReprogramacion).toBe("2026-07-20");
+    expect(r.grupos.entregado.map((g) => g.gestionId)).toEqual(["a"]);
+    expect(r.grupos.reprogramado.map((g) => g.gestionId)).toEqual(["b"]);
+    expect(r.grupos.novedad.map((g) => g.gestionId)).toEqual(["c"]);
+    expect(r.grupos.devolucion_a_origen_por_rechazo).toEqual([]);
+    expect(r.grupos.entregado[0].montoRecibido).toBe("30.00"); // string escala 2
+    expect(typeof r.grupos.entregado[0].montoRecibido).toBe("string");
+    expect(r.grupos.reprogramado[0].fechaReprogramacion).toBe("2026-07-20");
   });
 
   it("R7: firma la evidencia en lote y expone SOLO la URL firmada, nunca el storage_path", async () => {
@@ -846,7 +854,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
         gestiones: [
           gestionRow({
             gestionId: "a",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             montoRecibido: null,
             metodoPago: null,
             evidenciaStoragePath: "o1/rechazo.jpg",
@@ -859,7 +867,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(signedUrls.createSignedUrls).toHaveBeenCalledWith(["o1/rechazo.jpg"], expect.any(Number));
-    const rechazada = r.grupos.rechazada[0];
+    const rechazada = r.grupos.devolucion_a_origen_por_rechazo[0];
     expect(rechazada.evidenciaUrl).toBe("https://signed/o1/rechazo.jpg");
     expect(rechazada).not.toHaveProperty("evidenciaStoragePath");
   });
@@ -885,17 +893,17 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
         rechazosDeTienda: [],
         cierre: resumenRow({ totalPagoMensajero: "5.00" }),
         gestiones: [
-          gestionRow({ gestionId: "a", resultado: "entregada", pagoMensajero: "5.00" }),
-          gestionRow({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null, pagoMensajero: "0.00" }),
+          gestionRow({ gestionId: "a", resultado: "entregado", pagoMensajero: "5.00" }),
+          gestionRow({ gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, pagoMensajero: "0.00" }),
         ],
       })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.grupos.entregada[0].pagoMensajero).toBe("5.00"); // snapshot leido de la columna
-    expect(r.grupos.rechazada[0].pagoMensajero).toBe("0.00");
-    expect(typeof r.grupos.entregada[0].pagoMensajero).toBe("string"); // R23
+    expect(r.grupos.entregado[0].pagoMensajero).toBe("5.00"); // snapshot leido de la columna
+    expect(r.grupos.devolucion_a_origen_por_rechazo[0].pagoMensajero).toBe("0.00");
+    expect(typeof r.grupos.entregado[0].pagoMensajero).toBe("string"); // R23
     // R17: la cabecera del detalle trae el total snapshot.
     expect(r.cierre.totalPagoMensajero).toBe("5.00");
   });
@@ -908,17 +916,17 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
         rechazosDeTienda: [],
         cierre: resumenRow({ totalIngresoBodegaRechazos: "3.00" }),
         gestiones: [
-          gestionRow({ gestionId: "a", resultado: "entregada", ingresoBodegaRechazo: "0.00" }),
-          gestionRow({ gestionId: "b", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00" }),
+          gestionRow({ gestionId: "a", resultado: "entregado", ingresoBodegaRechazo: "0.00" }),
+          gestionRow({ gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00" }),
         ],
       })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.grupos.rechazada[0].ingresoBodegaRechazo).toBe("3.00"); // snapshot leido de la columna
-    expect(r.grupos.entregada[0].ingresoBodegaRechazo).toBe("0.00");
-    expect(typeof r.grupos.rechazada[0].ingresoBodegaRechazo).toBe("string"); // R22
+    expect(r.grupos.devolucion_a_origen_por_rechazo[0].ingresoBodegaRechazo).toBe("3.00"); // snapshot leido de la columna
+    expect(r.grupos.entregado[0].ingresoBodegaRechazo).toBe("0.00");
+    expect(typeof r.grupos.devolucion_a_origen_por_rechazo[0].ingresoBodegaRechazo).toBe("string"); // R22
     // R16: la cabecera del detalle trae el total snapshot del ingreso de bodega.
     expect(r.cierre.totalIngresoBodegaRechazos).toBe("3.00");
   });
@@ -969,7 +977,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
         gestiones: [
           gestionRow({
             gestionId: "sla",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             montoRecibido: null,
             metodoPago: null,
             ingresoBodegaRechazo: "3.00",
@@ -978,7 +986,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
           }),
           gestionRow({
             gestionId: "man",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             montoRecibido: null,
             metodoPago: null,
             ingresoBodegaRechazo: "2.00",
@@ -1003,7 +1011,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
     const { service } = newService({ repo: repoConMezcla() });
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
-    const byId = Object.fromEntries(r.grupos.rechazada.map((g) => [g.gestionId, g.esRechazoSla]));
+    const byId = Object.fromEntries(r.grupos.devolucion_a_origen_por_rechazo.map((g) => [g.gestionId, g.esRechazoSla]));
     expect(byId.sla).toBe(true);
     expect(byId.man).toBe(false);
   });
@@ -1031,8 +1039,8 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
           totalIngresoBodegaRechazos: "7.00",
         }),
         gestiones: [
-          gestionRow({ gestionId: "sla", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00", esRechazoSla: true }),
-          gestionRow({ gestionId: "man", resultado: "rechazada", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "2.00", esRechazoSla: false }),
+          gestionRow({ gestionId: "sla", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "3.00", esRechazoSla: true }),
+          gestionRow({ gestionId: "man", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, metodoPago: null, ingresoBodegaRechazo: "2.00", esRechazoSla: false }),
         ],
       })),
     });
@@ -1122,8 +1130,8 @@ describe("CierresAdminService.aprobarCierre (R10/R12/R13)", () => {
 });
 
 // Feature 109 — la APROBACION pasa la config de LIBERACION de `sin_gestionar` (R16/R20); el RECHAZO no.
-describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestionar` (R16/R20)", () => {
-  it("R16: resuelve los estatus destino (sin_gestionar/en_bodega_central/satelite) + zona central y los pasa", async () => {
+describe("Feature 109 · aprobarCierre — config de liberación de `novedad_interna` (R16/R20)", () => {
+  it("R16: resuelve los estatus destino (novedad_interna/en_bodega_central/satelite) + zona central y los pasa", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service, ordenRepo } = newService({ repo });
 
@@ -1140,20 +1148,25 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
       rechazadaEstatusId: "s-rechazada",
       umbralIntentos: reintentosConfig.MIN_INTENTOS_ENTREGA,
     });
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("sin_gestionar");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("novedad_interna");
   });
 
-  it("R16 defensivo: catálogo sin `sin_gestionar` (seed pendiente) -> liberacionSinGestionar undefined", async () => {
+  it("R16 defensivo: catálogo sin `novedad_interna` (seed pendiente) -> liberacionSinGestionar undefined", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({
       repo,
       estatusIds: {
-        sin_gestionar: null,
+        novedad_interna: null,
         en_bodega_central: "s-b",
         en_bodega_satelite: "s-bs",
-        // Feature 239: los del anclaje SI estan; lo que este caso mide es el defensivo de la 109.
-        devolucion_por_confirmar: "s-devolucion-por-confirmar",
-        devuelta: "s-devuelta",
+        // Feature 239 -> FICHA 454: los de la aplicacion SI estan; lo que este caso mide es el
+        // defensivo de la 109.
+        en_reparto: "s-en-reparto",
+        entregado: "s-entregada",
+        reprogramado: "s-reprogramada",
+        devolucion_a_origen_por_rechazo: "s-rechazada",
+        novedad: "s-devuelta",
+        incidente: "s-incidente",
       },
     });
 
@@ -1171,26 +1184,39 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
 // para siempre —invisible, sin reloj y sin que nadie se entere—, que es el estado del que esta
 // feature viene a sacarnos.
 describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (R4/R9)", () => {
-  it("R4: resuelve el pre-estado y `devuelta` y los pasa al repo", async () => {
+  // ⏳ 2026-09-23 (FICHA 454, T1.7/T1.1): el anclaje de la 239 (pre-estado
+  // `devolucion_por_confirmar` -> `devuelta`) se sustituye por la APLICACION DE GESTIONES: al
+  // aprobar, cada gestion de calle del cierre lleva la orden de `en_reparto` a su destino, y la
+  // `devuelta` va DIRECTA a `devuelta`. El fallo cerrado (R9 de la 239) se conserva, ampliado a los
+  // seis ids.
+  it("454/T1.7: resuelve `en_reparto` y el destino de cada resultado y los pasa al repo", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service, ordenRepo } = newService({ repo });
 
     await service.aprobarCierre("c1", MAESTRO);
 
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.anclajeDevolucion).toEqual({
-      preEstadoId: "s-devolucion-por-confirmar",
-      devueltaId: "s-devuelta",
+    expect(arg.aplicacionGestiones).toEqual({
+      enRepartoId: "s-en-reparto",
+      destinoPorResultado: {
+        entregado: "s-entregada",
+        reprogramado: "s-reprogramada",
+        devolucion_a_origen_por_rechazo: "s-rechazada",
+        novedad: "s-devuelta",
+        incidente: "s-incidente",
+      },
     });
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devolucion_por_confirmar");
-    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devuelta");
+    expect(arg).not.toHaveProperty("anclajeDevolucion");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("novedad");
+    expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolucion_por_confirmar");
   });
 
-  it("R9: catalogo SIN el pre-estado -> la aprobacion NO ocurre y no hay efectos parciales", async () => {
+  it("R9: catalogo SIN `en_reparto` -> la aprobacion NO ocurre y no hay efectos parciales", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({
       repo,
-      estatusIds: { ...ESTATUS_IDS, devolucion_por_confirmar: null },
+      estatusIds: { ...ESTATUS_IDS, en_reparto: null },
     });
 
     const r = await service.aprobarCierre("c1", MAESTRO);
@@ -1210,7 +1236,7 @@ describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (
 
   it("R9: catalogo SIN `devuelta` -> mismo fallo cerrado (no se aprueba a medias)", async () => {
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
-    const { service } = newService({ repo, estatusIds: { ...ESTATUS_IDS, devuelta: null } });
+    const { service } = newService({ repo, estatusIds: { ...ESTATUS_IDS, novedad: null } });
 
     const r = await service.aprobarCierre("c1", MAESTRO);
 
@@ -1227,6 +1253,8 @@ describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.nuevoEstado).toBe("rechazado");
     expect(arg.anclajeDevolucion).toBeUndefined();
+    // FICHA 454: tampoco aplica gestiones (el rechazo las deja pendientes, R13).
+    expect(arg.aplicacionGestiones).toBeUndefined();
   });
 });
 
@@ -1237,7 +1265,7 @@ describe("Feature 238 · aprobarCierre — alcance de la confirmacion fisica (R3
   it("R38: el adminSatelite recibe la MISMA exigencia, con SU alcance en la lectura", async () => {
     const repo = fakeRepo({
       findGestionesRetornablesDelCierre: vi.fn(async () => [
-        { gestionId: "g-dev", numGuia: 9001, resultado: "devuelta" as const },
+        { gestionId: "g-dev", numGuia: 9001, resultado: "novedad" as const },
       ]),
     });
     const { service } = newService({ repo });
@@ -1257,7 +1285,7 @@ describe("Feature 238 · aprobarCierre — alcance de la confirmacion fisica (R3
   it("R6/R13: un adminSatelite SIN zona -> no_encontrada, sin leer el conjunto del cierre", async () => {
     const repo = fakeRepo({
       findGestionesRetornablesDelCierre: vi.fn(async () => [
-        { gestionId: "g-dev", numGuia: 9001, resultado: "devuelta" as const },
+        { gestionId: "g-dev", numGuia: 9001, resultado: "novedad" as const },
       ]),
     });
     const { service } = newService({ repo, zonaSatelite: null });
@@ -1353,7 +1381,7 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
         // predicados distintos — los feeds 42/43/44 (sin filtro) y la guardia de cobertura de
         // indemnizaciones + su feed (`resultado: "incidente"`). Sin honrarlo, la guardia veria
         // gestiones `entregada` como si fueran incidentes.
-        findMany: vi.fn(async (args?: { where?: { resultado?: string } }) =>
+        findMany: vi.fn(async (args?: { where?: { resultado?: string; eventos?: unknown } }) =>
           (gestiones as GestionFixture[])
             .map((g, i) => ({
               id: `g${i}`,
@@ -1364,7 +1392,11 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
             }))
             .filter((g) =>
               args?.where?.resultado === undefined ? true : g.resultado === args.where.resultado,
-            ),
+            )
+            // FICHA 454 (T1.7): el doble HONRA tambien el filtro de «gestion de calle con evento de
+            // registro» de la aplicacion al aprobar. Estas gestiones son LEGADAS (sin evento), asi que
+            // la aplicacion no encuentra nada y la suite sigue midiendo solo el dinero.
+            .filter(() => args?.where?.eventos === undefined),
         ),
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
@@ -1462,8 +1494,8 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     // resultado que sigue debitando el retorno a la tienda; una devuelta ya no debita nada y
     // dejaria a `t2` sin ninguna fila que comprobar.
     const { repo, tiendaRows } = buildStack([
-      gestion("entregada", "t1", "10000.00"),
-      gestion("rechazada", "t2", null),
+      gestion("entregado", "t1", "10000.00"),
+      gestion("devolucion_a_origen_por_rechazo", "t2", null),
     ]);
     const { service } = newService({ repo });
 
@@ -1493,7 +1525,7 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
   });
 
   it("R13: vencido->aprobado alimenta el ledger por tienda una sola vez", async () => {
-    const { repo, prisma, tiendaRows } = buildStack([gestion("entregada", "t1", "5000.00")]);
+    const { repo, prisma, tiendaRows } = buildStack([gestion("entregado", "t1", "5000.00")]);
     const { service } = newService({ repo });
 
     const r = await service.aprobarCierre("c-vencido", MAESTRO);
@@ -1766,7 +1798,7 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
         rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
-          gestionRow({ gestionId: "g1", resultado: "entregada" }),
+          gestionRow({ gestionId: "g1", resultado: "entregado" }),
           gestionRow({
             gestionId: "g-inc",
             ordenId: "o2",
@@ -1785,10 +1817,10 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
     if (r.status !== "ok") throw new Error("esperaba ok");
     // Las CINCO claves siempre presentes (el grupo vacio no desaparece del contrato).
     expect(Object.keys(r.grupos).sort()).toEqual(
-      ["devuelta", "entregada", "incidente", "rechazada", "reprogramada"].sort(),
+      ["novedad", "entregado", "incidente", "devolucion_a_origen_por_rechazo", "reprogramado"].sort(),
     );
     expect(r.grupos.incidente.map((g) => g.gestionId)).toEqual(["g-inc"]);
-    expect(r.grupos.entregada.map((g) => g.gestionId)).toEqual(["g1"]);
+    expect(r.grupos.entregado.map((g) => g.gestionId)).toEqual(["g1"]);
   });
 
   it("R17: un incidente NO aporta ingreso de Ordenex a los totales del cierre", async () => {
@@ -1913,8 +1945,8 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
         rechazosDeTienda: [],
         cierre: resumenRow(),
         gestiones: [
-          gestionRow({ gestionId: "g1", resultado: "entregada" }),
-          gestionRow({ gestionId: "g2", resultado: "rechazada", motivo: "cliente rechazó" }),
+          gestionRow({ gestionId: "g1", resultado: "entregado" }),
+          gestionRow({ gestionId: "g2", resultado: "devolucion_a_origen_por_rechazo", motivo: "cliente rechazó" }),
         ],
       })),
     });
@@ -1923,7 +1955,7 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
     const r = await service.verCierreDetalle("c1", MAESTRO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
-    for (const g of [...r.grupos.entregada, ...r.grupos.rechazada]) {
+    for (const g of [...r.grupos.entregado, ...r.grupos.devolucion_a_origen_por_rechazo]) {
       expect(g.causaIncidente).toBeNull();
       expect(g.indemnizacion).toBeNull();
     }
@@ -1948,7 +1980,7 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
         gestiones: [
           gestionRow({
             gestionId: "a",
-            resultado: "entregada",
+            resultado: "entregado",
             evidenciaStoragePath: "o1/entregada.jpg",
           }),
         ],
@@ -1968,9 +2000,9 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.grupos.entregada[0]!.evidenciaUrl).toBeNull();
+    expect(r.grupos.entregado[0]!.evidenciaUrl).toBeNull();
     // Y lo que decide el dinero sigue intacto: el comprobante no depende de las fotos.
-    expect(r.grupos.entregada[0]!.gestionId).toBe("a");
+    expect(r.grupos.entregado[0]!.gestionId).toBe("a");
   });
 
   it("evidencia que el storage no pudo firmar -> esa gestion queda sin URL, el resto igual", async () => {
@@ -1982,7 +2014,7 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.grupos.entregada[0]!.evidenciaUrl).toBeNull();
+    expect(r.grupos.entregado[0]!.evidenciaUrl).toBeNull();
   });
 });
 
@@ -2070,7 +2102,7 @@ describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
     // El caso EMPAREJADO: el mismo cierre, con y sin lista. Los cinco grupos y los siete importes
     // tienen que salir IDENTICOS. Si alguien concatenara estas ordenes a `grupos.entregada` —o
     // las sumara a un total— este caso se pone rojo.
-    const gestion = gestionRow({ gestionId: "g1", resultado: "entregada", montoRecibido: "30.00" });
+    const gestion = gestionRow({ gestionId: "g1", resultado: "entregado", montoRecibido: "30.00" });
     const conLista = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
         cierre: resumenRow(),
@@ -2198,7 +2230,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
       ordenId: "o-1",
       tiendaId: "t-norte",
       tiendaNombre: "Tienda Norte",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "100000.00",
       metodoPago: "efectivo",
       ingresoOrdenex: ingreso({
@@ -2216,7 +2248,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
       ordenId: "o-2",
       tiendaId: "t-norte",
       tiendaNombre: "Tienda Norte",
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       montoRecibido: null,
       metodoPago: null,
       ingresoOrdenex: ingreso({
@@ -2231,7 +2263,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
       ordenId: "o-3",
       tiendaId: "t-sur",
       tiendaNombre: "Tienda Sur",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "40000.00",
       metodoPago: "SINPE",
       ingresoOrdenex: ingreso({
@@ -2521,7 +2553,7 @@ describe("425/B11 — verCierreDetalle emite `rechazosDeTienda`", () => {
   });
 
   it("R16: la lista NO se cuela en ningun grupo ni mueve un solo importe del DTO", async () => {
-    const gestion = gestionRow({ gestionId: "g1", resultado: "entregada", montoRecibido: "30.00" });
+    const gestion = gestionRow({ gestionId: "g1", resultado: "entregado", montoRecibido: "30.00" });
     const a = await newService({
       repo: repoConRechazos(
         [rechazoDTO(), rechazoDTO({ gestionId: "g-2" }), rechazoDTO({ gestionId: "g-3" })],

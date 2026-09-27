@@ -97,10 +97,10 @@ const ORIGEN_ASIGNACION_RECOLECCION = "asignacion_recoleccion";
  * que R27 persigue.
  */
 export const CONTADOR_POR_RESULTADO = {
-  entregada: "entregadas",
-  reprogramada: "reprogramadas",
-  devuelta: "devueltas",
-  rechazada: "rechazadas",
+  entregado: "entregadas",
+  reprogramado: "reprogramadas",
+  novedad: "devueltas",
+  devolucion_a_origen_por_rechazo: "rechazadas",
   incidente: "incidentes",
 } as const satisfies Record<GestionResultado, keyof TotalesTableroDia>;
 
@@ -114,7 +114,7 @@ export const CONTADOR_POR_RESULTADO = {
  * AL CONTADOR con el que tiene que cuadrar (R52) en vez de fiarlo a que los dos nombres se
  * parezcan.
  */
-export const RESULTADO_ENTREGADA = "entregada" satisfies GestionResultado;
+export const RESULTADO_ENTREGADA = "entregado" satisfies GestionResultado;
 
 /** Fila cruda del tablero. `COUNT` devuelve `bigint`: se convierte en el mapeo (nota 5). */
 interface FilaConteoRow {

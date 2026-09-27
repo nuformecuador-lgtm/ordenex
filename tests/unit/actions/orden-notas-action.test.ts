@@ -43,7 +43,7 @@ function serviceDoble(): IOrdenNotaService {
 }
 
 /** El service REAL sobre un repositorio en memoria. `filas` es la evidencia de «no crea nota». */
-function servicioReal(estatusValue = "devuelta") {
+function servicioReal(estatusValue = "novedad") {
   const filas: OrdenNotaRow[] = [];
   const repo: IOrdenNotaRepository = {
     listarPorOrden: vi.fn(async () => filas),
@@ -70,6 +70,7 @@ function servicioReal(estatusValue = "devuelta") {
             // puerta al adminTienda. Se retiro con la columna: la ventana vuelve a depender SOLO
             // del estatus (R36), que es lo que estos casos ya median.
             estatusValue,
+            ayudaAbierta: false, // ficha 454 (U12)
             deletedAt: null,
             // Feature 261 (B15): obligatorio en `OrdenParaHilo`. El hilo de notas no lo consume.
             fechaReparto: null,

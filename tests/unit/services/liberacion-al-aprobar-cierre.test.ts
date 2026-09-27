@@ -17,6 +17,7 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { LiberacionResult } from "@/lib/interfaces/services/ILiberacionReprogramadaService";
+import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 
 /**
  * FICHA 315 (defecto de produccion del 2026-08-28) — **APROBAR UN CIERRE LIBERA SUS REPROGRAMADAS
@@ -150,6 +151,7 @@ function newService(
         signedUrls,
         liquidacionRepo,
         premiosRepo,
+        sinRetenidas(), // FICHA 462: 7.o argumento requerido; este caso no mide la marca
         undefined,
       )
     : new CierresAdminService(
@@ -159,6 +161,7 @@ function newService(
         signedUrls,
         liquidacionRepo,
         premiosRepo,
+        sinRetenidas(), // FICHA 462: 7.o argumento requerido; este caso no mide la marca
         undefined,
         liberar,
       );

@@ -8,8 +8,13 @@
 // pide tres respuestas, las suma donde hace falta con el sumador money-safe y las rotula.
 //
 // Es deliberado hasta el detalle de las CUATRO primeras cifras: `verResumenCajaAction`
-// devuelve el mismo `CajaResumenDTO` que pinta `CajaResumenCard` en el wallet, asi que
-// «Dinero en caja» y «Ganancia de Ordenex» valen aqui LO MISMO que alla, numero por numero.
+// devuelve el mismo `CajaResumenDTO` que pinta `CajaResumenCard` en el wallet, asi que la cifra
+// principal de la caja y «Ganancia de Ordenex» valen aqui LO MISMO que alla, numero por numero.
+//
+// Ficha 459 (T A.9): y se LLAMAN igual. El rotulo y la pista de la cifra principal salen de la
+// MISMA funcion que usa la tarjeta (`rotuloCifraPrincipal` / `pistaCifraPrincipal`), con el
+// estado que decide el servidor: «Flujo de dinero registrado» sin saldo inicial, «Dinero en caja»
+// con uno vigente (R15, R16, R18).
 // Recalcularlas —aunque fuera con la misma formula— habria creado una segunda definicion de
 // la ganancia, y dos definiciones de la ganancia acaban dando dos ganancias.
 //
@@ -17,9 +22,9 @@
 //
 // Las tres llamadas van con la entrada VACIA: estos KPIs son el estado de las cuentas HOY, no
 // el de un periodo. Por eso esta seccion no cuelga de la barra de entregas y no re-consulta
-// cuando alguien cambia un filtro. Consecuencia que hay que tener presente: «Dinero en caja»
-// es el saldo del libro entero; con filtros seria «el neto del periodo», que es otra cifra con
-// el mismo nombre — el propio DTO lleva `periodoFiltrado` justamente para no confundirlas.
+// cuando alguien cambia un filtro. Consecuencia que hay que tener presente: la cifra principal
+// es la del libro entero; con filtros seria «el neto del periodo», que es otra cifra — el propio
+// DTO lleva `periodoFiltrado` justamente para no confundirlas.
 //
 // ─── QUIEN LOS VE: LO DECIDEN LOS SERVICIOS, NO ESTE ARCHIVO ────────────────────────────
 //
@@ -35,6 +40,11 @@ import { listarCuentasPorPagarCompletoAction } from "@/lib/actions/wallet-mensaj
 import { listarSaldosTiendasCompletoAction } from "@/lib/actions/wallet-tienda";
 import { verResumenCajaAction } from "@/lib/actions/wallet";
 import { sumarMontos } from "@/lib/utils/kpis-financieros";
+import {
+  CAJA_RESUMEN_LABEL,
+  pistaCifraPrincipal,
+  rotuloCifraPrincipal,
+} from "@/app/(app)/wallet/_components/wallet-labels";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 
 /**
@@ -51,23 +61,27 @@ export type KpiFinanciero =
   | { readonly estado: "error"; readonly id: string; readonly etiqueta: string; readonly mensaje: string };
 
 /** Los rotulos, en un solo sitio. Los cuatro primeros son los del wallet, palabra por palabra:
- *  la misma cifra con dos nombres distintos en dos pantallas se lee como dos cifras. */
+ *  la misma cifra con dos nombres distintos en dos pantallas se lee como dos cifras.
+ *
+ *  Ficha 459 (T A.9): `enCaja` es el rotulo que se usa MIENTRAS NO HAY RESUMEN (denegado o
+ *  error), cuando el estado de la caja no se conoce. Es el de «flujo», y no «Dinero en caja», por
+ *  la misma razon que la tarjeta: la app solo sabe cuanto dinero hay si una persona registro un
+ *  saldo inicial (R16). Con resumen, el rotulo lo elige `rotuloCifraPrincipal`. */
 const ETIQUETA = {
   ingresos: "Ingresos",
   egresos: "Egresos",
-  enCaja: "Dinero en caja",
-  ganancia: "Ganancia de Ordenex",
+  enCaja: CAJA_RESUMEN_LABEL.flujo,
+  ganancia: CAJA_RESUMEN_LABEL.ganancia,
   porPagarTiendas: "Por pagar a tiendas",
   porPagarMensajeros: "Por pagar a mensajeros",
 } as const;
 
 const PISTA = {
-  enCaja: "Todo lo que entró menos todo lo que salió, incluido el dinero de las tiendas",
-  ganancia: "Lo que Ordenex gana menos lo que gasta",
-  // ⚠ NO es la tercera línea del wallet («contra-entrega cobrado y aún no entregado»): aquella
-  // es el COD bruto, y de ese dinero Ordenex todavía descuenta flete, comisión e impuesto.
-  // Esto es la suma de los saldos ya netos de cada tienda, que es lo que de verdad hay que
-  // pagarles. Decirlo aquí evita que las dos cifras se lean como la misma y «no cuadren».
+  ganancia: CAJA_RESUMEN_LABEL.gananciaPista,
+  // Ficha 459 (T A.9, R24): la suma de los saldos ya netos de cada tienda. Desde la 459 la
+  // línea «De las tiendas» del wallet es ESTA misma deuda (salvo los cobros de un costo, que
+  // bajan el saldo sin pasar por la caja): ya no es el contra-entrega bruto, y nada aquí dice
+  // que lo sea.
   porPagarTiendas: "Suma del saldo de cada tienda, ya descontado lo de Ordenex",
   porPagarMensajeros: "Suma de lo devengado y aún no pagado a cada mensajero",
 } as const;
@@ -91,7 +105,7 @@ function error(id: string, etiqueta: string, mensaje = MENSAJE_ERROR): KpiFinanc
 const CATALOGO: readonly [string, string, string | undefined][] = [
   ["ingresos", ETIQUETA.ingresos, undefined],
   ["egresos", ETIQUETA.egresos, undefined],
-  ["enCaja", ETIQUETA.enCaja, PISTA.enCaja],
+  ["enCaja", ETIQUETA.enCaja, undefined],
   ["ganancia", ETIQUETA.ganancia, PISTA.ganancia],
   ["porPagarTiendas", ETIQUETA.porPagarTiendas, PISTA.porPagarTiendas],
   ["porPagarMensajeros", ETIQUETA.porPagarMensajeros, PISTA.porPagarMensajeros],
@@ -138,6 +152,13 @@ async function kpisDeCaja(): Promise<KpiFinanciero[]> {
   }
 
   const { resumen } = respuesta;
+  // Ficha 459 (T A.9): el rotulo y la pista de la cifra principal, de la MISMA funcion que la
+  // tarjeta del wallet y con el estado del servidor. Sin filtros (esta llamada va con `{}`), asi
+  // que la pista siempre existe; el `?? undefined` solo cubre el tipo.
+  const rotulo: Record<string, string> = { enCaja: rotuloCifraPrincipal(resumen) };
+  const pistaPorId: Record<string, string | undefined> = {
+    enCaja: pistaCifraPrincipal(resumen) ?? undefined,
+  };
   const montos: Record<string, string> = {
     ingresos: resumen.entradas,
     egresos: resumen.salidas,
@@ -145,13 +166,17 @@ async function kpisDeCaja(): Promise<KpiFinanciero[]> {
     ganancia: resumen.ganancia,
   };
 
-  return entradas.map(([id, etiqueta, pista]) => ({
-    estado: "ok" as const,
-    id,
-    etiqueta,
-    ...(pista === undefined ? {} : { pista }),
-    monto: montos[id] ?? "0.00",
-  }));
+  return entradas.map(([id, etiquetaCatalogo, pistaCatalogo]) => {
+    const etiqueta = rotulo[id] ?? etiquetaCatalogo;
+    const pista = id in pistaPorId ? pistaPorId[id] : pistaCatalogo;
+    return {
+      estado: "ok" as const,
+      id,
+      etiqueta,
+      ...(pista === undefined ? {} : { pista }),
+      monto: montos[id] ?? "0.00",
+    };
+  });
 }
 
 /**

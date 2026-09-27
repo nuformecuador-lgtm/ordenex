@@ -118,7 +118,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
     // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
-    transicionarAyuda: vi.fn().mockResolvedValue(true),
+    registrarAyudaSolicitada: vi.fn().mockResolvedValue(true), // ficha 454
+    registrarAyudaResuelta: vi.fn().mockResolvedValue(true), // ficha 454
     findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
     findParaEliminacionApi: vi.fn().mockResolvedValue(null),
@@ -128,6 +129,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),
     findNovedadesByTienda: vi.fn().mockResolvedValue([]),
     findFechaSolicitudAyuda: vi.fn().mockResolvedValue(new Map()),
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()), // ficha 454
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),
@@ -818,7 +820,7 @@ describe("BulkOrdenService.cargarMasiva — monto redondeado al colon (feature 2
         // Primera llamada: el pre-chequeo no ve la remision (la fila entra como creada).
         .mockResolvedValueOnce(new Map())
         // Segunda: la reclasificacion pregunta por quien ocupa el numero.
-        .mockResolvedValueOnce(new Map([["REM-1", "entregada"]])),
+        .mockResolvedValueOnce(new Map([["REM-1", "entregado"]])),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
@@ -834,7 +836,7 @@ describe("BulkOrdenService.cargarMasiva — monto redondeado al colon (feature 2
 describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
   it("R25: remision existente en DB -> duplicada con el estatus de la orden existente", async () => {
     const repo = buildRepo({
-      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregada"]])),
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-1", "entregado"]])),
     });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
@@ -844,7 +846,7 @@ describe("BulkOrdenService.cargarMasiva — deduplicacion (R25/R26)", () => {
     if (r.status === "ok") {
       expect(r.summary.duplicadas).toBe(1);
       expect(r.summary.creadas).toBe(0);
-      expect(r.summary.filas[0]).toMatchObject({ resultado: "duplicada", estatus: "entregada" });
+      expect(r.summary.filas[0]).toMatchObject({ resultado: "duplicada", estatus: "entregado" });
     }
     expectSinPersistir(repo);
   });
@@ -958,10 +960,10 @@ describe("BulkOrdenService.cargarMasiva — bifurcacion por bodega (feature 27 +
     const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    const r = await service.cargarMasiva([row({ estatus: "entregada" })], TIENDA);
+    const r = await service.cargarMasiva([row({ estatus: "entregado" })], TIENDA);
 
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
-    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("entregada");
+    expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("entregado");
     if (r.status === "ok") expect(r.summary.filas[0].estatus).toBe("en_preparacion");
   });
 

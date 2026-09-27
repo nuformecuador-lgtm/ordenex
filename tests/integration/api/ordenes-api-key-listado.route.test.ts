@@ -26,7 +26,7 @@ function okListado(): ApiOrdenListadoDTO {
       {
         numGuia: 10234,
         numRemision: "REM-1",
-        estado: "en_bodega_central",
+        estado: "en_bodega_central", estadoNombre: "En bodega central",
         destinatario: "Ana",
         telefonoDest: "099",
         producto: "Caja",
@@ -109,7 +109,7 @@ describe("GET /api/ordenes/api-key — listado (R8/R9/R10)", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pagination).toEqual({ limit: 50, offset: 0, total: 173 });
-    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central" });
+    expect(json.items[0]).toMatchObject({ numGuia: 10234, estado: "en_bodega_central", estadoNombre: "En bodega central" });
   });
 
   it("R8: ignora tiendaId de la query (el service recibe el actor, no el input)", async () => {
@@ -270,6 +270,7 @@ describe("GET /api/ordenes/api-key — `mensajero` de punta a punta (feature 404
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "mensajero",
       "montoCobrar",
       "numGuia",
@@ -284,7 +285,7 @@ describe("GET /api/ordenes/api-key — `mensajero` de punta a punta (feature 404
     expect(json.items[0]).toMatchObject({
       numGuia: 10234,
       numRemision: "REM-1",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       destinatario: "Ana",
       telefonoDest: "0991234567",
       producto: "Caja",

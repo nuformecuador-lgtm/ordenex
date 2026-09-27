@@ -1,0 +1,770 @@
+
+> ordenex@0.1.0 dev R:\job\singularis\projects\ordenex
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.111:3000
+- Environments: .env
+✓ Ready in 574ms
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+- Experiments (use with caution):
+  · serverActions
+
+○ Compiling /login ...
+ GET /login 200 in 6.3s (next.js: 5.7s, proxy.ts: 252ms, application-code: 384ms)
+ POST /login 200 in 430ms (next.js: 5ms, proxy.ts: 6ms, application-code: 420ms)
+  └─ ƒ login({"email":"admin.qa@ordenex.test","password":"Prueba123*QA"}) in 356ms lib/actions/auth.ts
+ GET /dashboard 200 in 2.8s (next.js: 2.3s, proxy.ts: 12ms, application-code: 428ms)
+ GET /dashboard 200 in 288ms (next.js: 14ms, proxy.ts: 26ms, application-code: 248ms)
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+ POST /dashboard 200 in 109ms (next.js: 9ms, proxy.ts: 24ms, application-code: 76ms)
+  └─ ƒ listarNotificaciones() in 39ms lib/actions/notificaciones.ts
+ POST /dashboard 200 in 557ms (next.js: 9ms, proxy.ts: 14ms, application-code: 535ms)
+  └─ ƒ listarPostulacionesPendientes({"page":1,"pageSize":20}) in 518ms lib/actions/aprobacion-postulaciones.ts
+ POST /dashboard 200 in 73ms (next.js: 9ms, proxy.ts: 18ms, application-code: 47ms)
+  └─ ƒ listarPostulacionesRecurso({"atendidas":false,"page":1,"pageSize":20}) in 26ms lib/actions/atencion-postulaciones-recurso.ts
+○ Compiling /analitica ...
+ GET /analitica 200 in 6.6s (next.js: 5.4s, proxy.ts: 25ms, application-code: 1237ms)
+ POST /analitica 200 in 86ms (next.js: 7ms, proxy.ts: 10ms, application-code: 69ms)
+  └─ ƒ listarNotificaciones() in 43ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 72ms (next.js: 4ms, proxy.ts: 7ms, application-code: 61ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 43ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 92ms (next.js: 6ms, proxy.ts: 7ms, application-code: 79ms)
+  └─ ƒ consultarConteoEntregas({}) in 52ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 56ms (next.js: 9ms, proxy.ts: 13ms, application-code: 34ms)
+  └─ ƒ consultarConteoPorStatus({}) in 20ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 66ms (next.js: 8ms, proxy.ts: 10ms, application-code: 48ms)
+  └─ ƒ consultarCicloVida({}) in 32ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 58ms (next.js: 5ms, proxy.ts: 14ms, application-code: 39ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 20ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 57ms (next.js: 9ms, proxy.ts: 10ms, application-code: 37ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 14ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 51ms (next.js: 9ms, proxy.ts: 16ms, application-code: 26ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 11ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 60ms (next.js: 5ms, proxy.ts: 11ms, application-code: 44ms)
+  └─ ƒ consultarConteoProductos({}) in 29ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 22ms (next.js: 3ms, proxy.ts: 5ms, application-code: 14ms)
+  └─ ƒ consultarCohorteCarga({}) in 6ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 272ms (next.js: 3ms, proxy.ts: 5ms, application-code: 264ms)
+ POST /dashboard 200 in 85ms (next.js: 32ms, proxy.ts: 37ms, application-code: 16ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 605ms (next.js: 9ms, proxy.ts: 16ms, application-code: 579ms)
+ POST /analitica 200 in 61ms (next.js: 7ms, proxy.ts: 7ms, application-code: 46ms)
+  └─ ƒ listarNotificaciones() in 31ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 102ms (next.js: 7ms, proxy.ts: 8ms, application-code: 87ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 68ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 43ms (next.js: 6ms, proxy.ts: 13ms, application-code: 24ms)
+  └─ ƒ consultarConteoEntregas({}) in 10ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 62ms (next.js: 6ms, proxy.ts: 11ms, application-code: 45ms)
+  └─ ƒ consultarConteoPorStatus({}) in 25ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 129ms (next.js: 71ms, proxy.ts: 23ms, application-code: 34ms)
+  └─ ƒ consultarCicloVida({}) in 14ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 52ms (next.js: 7ms, proxy.ts: 14ms, application-code: 30ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 14ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 103ms (next.js: 26ms, proxy.ts: 34ms, application-code: 43ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 23ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 45ms (next.js: 6ms, proxy.ts: 12ms, application-code: 26ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 13ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 63ms (next.js: 8ms, proxy.ts: 11ms, application-code: 45ms)
+  └─ ƒ consultarConteoProductos({}) in 25ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 46ms (next.js: 5ms, proxy.ts: 12ms, application-code: 29ms)
+  └─ ƒ consultarCohorteCarga({}) in 17ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 217ms (next.js: 6ms, proxy.ts: 10ms, application-code: 201ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET',
+  digest: '1074079976'
+}
+ GET /analitica 200 in 579ms (next.js: 13ms, proxy.ts: 14ms, application-code: 553ms)
+ POST /analitica 200 in 38ms (next.js: 4ms, proxy.ts: 6ms, application-code: 28ms)
+  └─ ƒ listarNotificaciones() in 18ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 42ms (next.js: 4ms, proxy.ts: 6ms, application-code: 33ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 19ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 39ms (next.js: 5ms, proxy.ts: 6ms, application-code: 28ms)
+  └─ ƒ consultarConteoEntregas({}) in 20ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 31ms (next.js: 5ms, proxy.ts: 7ms, application-code: 20ms)
+  └─ ƒ consultarConteoPorStatus({}) in 13ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 41ms (next.js: 4ms, proxy.ts: 10ms, application-code: 27ms)
+  └─ ƒ consultarCicloVida({}) in 20ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 61ms (next.js: 24ms, proxy.ts: 9ms, application-code: 28ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 21ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 43ms (next.js: 9ms, proxy.ts: 11ms, application-code: 24ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 9ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 26ms (next.js: 5ms, proxy.ts: 7ms, application-code: 15ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 7ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 40ms (next.js: 5ms, proxy.ts: 7ms, application-code: 28ms)
+  └─ ƒ consultarConteoProductos({}) in 18ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 30ms (next.js: 5ms, proxy.ts: 6ms, application-code: 19ms)
+  └─ ƒ consultarCohorteCarga({}) in 12ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 160ms (next.js: 5ms, proxy.ts: 5ms, application-code: 150ms)
+ POST /dashboard 200 in 98ms (next.js: 12ms, proxy.ts: 75ms, application-code: 11ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 532ms (next.js: 11ms, proxy.ts: 17ms, application-code: 504ms)
+ POST /analitica 200 in 43ms (next.js: 5ms, proxy.ts: 6ms, application-code: 33ms)
+  └─ ƒ listarNotificaciones() in 23ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 87ms (next.js: 9ms, proxy.ts: 6ms, application-code: 72ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 41ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 34ms (next.js: 6ms, proxy.ts: 9ms, application-code: 19ms)
+  └─ ƒ consultarConteoEntregas({}) in 9ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 23ms (next.js: 4ms, proxy.ts: 7ms, application-code: 12ms)
+  └─ ƒ consultarConteoPorStatus({}) in 4ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 38ms (next.js: 5ms, proxy.ts: 7ms, application-code: 26ms)
+  └─ ƒ consultarCicloVida({}) in 18ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 34ms (next.js: 4ms, proxy.ts: 5ms, application-code: 25ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 15ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 37ms (next.js: 11ms, proxy.ts: 8ms, application-code: 18ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 9ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 32ms (next.js: 3ms, proxy.ts: 5ms, application-code: 25ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 13ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 50ms (next.js: 6ms, proxy.ts: 8ms, application-code: 36ms)
+  └─ ƒ consultarConteoProductos({}) in 22ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 23ms (next.js: 3ms, proxy.ts: 6ms, application-code: 14ms)
+  └─ ƒ consultarCohorteCarga({}) in 7ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 186ms (next.js: 20ms, proxy.ts: 10ms, application-code: 156ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET',
+  digest: '1074079976'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 512ms (next.js: 13ms, proxy.ts: 12ms, application-code: 487ms)
+ POST /analitica 200 in 47ms (next.js: 4ms, proxy.ts: 22ms, application-code: 21ms)
+  └─ ƒ listarNotificaciones() in 12ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 60ms (next.js: 6ms, proxy.ts: 8ms, application-code: 45ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 30ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 28ms (next.js: 6ms, proxy.ts: 6ms, application-code: 16ms)
+  └─ ƒ consultarConteoEntregas({}) in 8ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 24ms (next.js: 4ms, proxy.ts: 6ms, application-code: 15ms)
+  └─ ƒ consultarConteoPorStatus({}) in 5ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 32ms (next.js: 3ms, proxy.ts: 5ms, application-code: 23ms)
+  └─ ƒ consultarCicloVida({}) in 12ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 40ms (next.js: 4ms, proxy.ts: 9ms, application-code: 27ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 19ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 54ms (next.js: 23ms, proxy.ts: 8ms, application-code: 23ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 9ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 35ms (next.js: 4ms, proxy.ts: 4ms, application-code: 27ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 18ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 43ms (next.js: 5ms, proxy.ts: 9ms, application-code: 29ms)
+  └─ ƒ consultarConteoProductos({}) in 20ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 35ms (next.js: 4ms, proxy.ts: 5ms, application-code: 26ms)
+  └─ ƒ consultarCohorteCarga({}) in 19ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 185ms (next.js: 6ms, proxy.ts: 5ms, application-code: 175ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 512ms (next.js: 14ms, proxy.ts: 18ms, application-code: 479ms)
+ POST /analitica 200 in 54ms (next.js: 6ms, proxy.ts: 7ms, application-code: 42ms)
+  └─ ƒ listarNotificaciones() in 33ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 52ms (next.js: 4ms, proxy.ts: 6ms, application-code: 42ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 29ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 19ms (next.js: 5ms, proxy.ts: 5ms, application-code: 9ms)
+  └─ ƒ consultarConteoEntregas({}) in 3ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 28ms (next.js: 6ms, proxy.ts: 5ms, application-code: 17ms)
+  └─ ƒ consultarConteoPorStatus({}) in 9ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 30ms (next.js: 4ms, proxy.ts: 4ms, application-code: 22ms)
+  └─ ƒ consultarCicloVida({}) in 15ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 33ms (next.js: 6ms, proxy.ts: 12ms, application-code: 15ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 7ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 42ms (next.js: 12ms, proxy.ts: 12ms, application-code: 18ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 8ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 30ms (next.js: 4ms, proxy.ts: 10ms, application-code: 16ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 9ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 32ms (next.js: 7ms, proxy.ts: 5ms, application-code: 20ms)
+  └─ ƒ consultarConteoProductos({}) in 11ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 24ms (next.js: 4ms, proxy.ts: 6ms, application-code: 14ms)
+  └─ ƒ consultarCohorteCarga({}) in 8ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 173ms (next.js: 8ms, proxy.ts: 9ms, application-code: 157ms)
+ POST /dashboard 200 in 96ms (next.js: 11ms, proxy.ts: 78ms, application-code: 8ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 482ms (next.js: 8ms, proxy.ts: 15ms, application-code: 459ms)
+ POST /analitica 200 in 46ms (next.js: 5ms, proxy.ts: 7ms, application-code: 34ms)
+  └─ ƒ listarNotificaciones() in 21ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 67ms (next.js: 5ms, proxy.ts: 8ms, application-code: 54ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 39ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 38ms (next.js: 6ms, proxy.ts: 5ms, application-code: 27ms)
+  └─ ƒ consultarConteoEntregas({}) in 18ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 42ms (next.js: 6ms, proxy.ts: 9ms, application-code: 27ms)
+  └─ ƒ consultarConteoPorStatus({}) in 18ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 48ms (next.js: 5ms, proxy.ts: 9ms, application-code: 34ms)
+  └─ ƒ consultarCicloVida({}) in 25ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 36ms (next.js: 5ms, proxy.ts: 10ms, application-code: 21ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 13ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 58ms (next.js: 12ms, proxy.ts: 11ms, application-code: 34ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 19ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 43ms (next.js: 7ms, proxy.ts: 8ms, application-code: 29ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 18ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 34ms (next.js: 7ms, proxy.ts: 8ms, application-code: 19ms)
+  └─ ƒ consultarConteoProductos({}) in 8ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 27ms (next.js: 4ms, proxy.ts: 5ms, application-code: 18ms)
+  └─ ƒ consultarCohorteCarga({}) in 12ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 162ms (next.js: 3ms, proxy.ts: 8ms, application-code: 151ms)
+ POST /dashboard 200 in 76ms (next.js: 8ms, proxy.ts: 63ms, application-code: 6ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 513ms (next.js: 8ms, proxy.ts: 19ms, application-code: 486ms)
+ POST /analitica 200 in 33ms (next.js: 4ms, proxy.ts: 7ms, application-code: 22ms)
+  └─ ƒ listarNotificaciones() in 12ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 91ms (next.js: 5ms, proxy.ts: 7ms, application-code: 79ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 28ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 28ms (next.js: 4ms, proxy.ts: 5ms, application-code: 19ms)
+  └─ ƒ consultarConteoEntregas({}) in 9ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 40ms (next.js: 6ms, proxy.ts: 10ms, application-code: 24ms)
+  └─ ƒ consultarConteoPorStatus({}) in 16ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 32ms (next.js: 6ms, proxy.ts: 6ms, application-code: 20ms)
+  └─ ƒ consultarCicloVida({}) in 13ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 28ms (next.js: 5ms, proxy.ts: 6ms, application-code: 17ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 9ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 42ms (next.js: 9ms, proxy.ts: 11ms, application-code: 22ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 9ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 45ms (next.js: 6ms, proxy.ts: 7ms, application-code: 32ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 24ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 57ms (next.js: 9ms, proxy.ts: 8ms, application-code: 40ms)
+  └─ ƒ consultarConteoProductos({}) in 17ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 22ms (next.js: 3ms, proxy.ts: 5ms, application-code: 13ms)
+  └─ ƒ consultarCohorteCarga({}) in 7ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 153ms (next.js: 3ms, proxy.ts: 4ms, application-code: 147ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 525ms (next.js: 11ms, proxy.ts: 22ms, application-code: 492ms)
+ POST /analitica 200 in 44ms (next.js: 6ms, proxy.ts: 6ms, application-code: 31ms)
+  └─ ƒ listarNotificaciones() in 13ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 49ms (next.js: 8ms, proxy.ts: 6ms, application-code: 35ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 22ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 34ms (next.js: 4ms, proxy.ts: 4ms, application-code: 25ms)
+  └─ ƒ consultarConteoEntregas({}) in 17ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 33ms (next.js: 5ms, proxy.ts: 7ms, application-code: 21ms)
+  └─ ƒ consultarConteoPorStatus({}) in 13ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 43ms (next.js: 6ms, proxy.ts: 8ms, application-code: 29ms)
+  └─ ƒ consultarCicloVida({}) in 22ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 29ms (next.js: 5ms, proxy.ts: 9ms, application-code: 15ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 6ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 58ms (next.js: 8ms, proxy.ts: 31ms, application-code: 19ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 7ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 36ms (next.js: 5ms, proxy.ts: 8ms, application-code: 22ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 15ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 47ms (next.js: 8ms, proxy.ts: 7ms, application-code: 32ms)
+  └─ ƒ consultarConteoProductos({}) in 22ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 46ms (next.js: 10ms, proxy.ts: 5ms, application-code: 31ms)
+  └─ ƒ consultarCohorteCarga({}) in 21ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 167ms (next.js: 3ms, proxy.ts: 7ms, application-code: 157ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 505ms (next.js: 7ms, proxy.ts: 15ms, application-code: 482ms)
+ POST /analitica 200 in 47ms (next.js: 5ms, proxy.ts: 8ms, application-code: 34ms)
+  └─ ƒ listarNotificaciones() in 23ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 46ms (next.js: 5ms, proxy.ts: 7ms, application-code: 34ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 23ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 34ms (next.js: 5ms, proxy.ts: 8ms, application-code: 21ms)
+  └─ ƒ consultarConteoEntregas({}) in 13ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 60ms (next.js: 9ms, proxy.ts: 4ms, application-code: 47ms)
+  └─ ƒ consultarConteoPorStatus({}) in 19ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 26ms (next.js: 6ms, proxy.ts: 6ms, application-code: 13ms)
+  └─ ƒ consultarCicloVida({}) in 5ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 35ms (next.js: 7ms, proxy.ts: 6ms, application-code: 22ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 10ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 44ms (next.js: 6ms, proxy.ts: 12ms, application-code: 25ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 9ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 50ms (next.js: 7ms, proxy.ts: 8ms, application-code: 35ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 25ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 39ms (next.js: 5ms, proxy.ts: 8ms, application-code: 26ms)
+  └─ ƒ consultarConteoProductos({}) in 19ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 26ms (next.js: 3ms, proxy.ts: 5ms, application-code: 18ms)
+  └─ ƒ consultarCohorteCarga({}) in 10ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 147ms (next.js: 3ms, proxy.ts: 5ms, application-code: 139ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET',
+  digest: '1074079976'
+}
+ GET /analitica 200 in 437ms (next.js: 11ms, proxy.ts: 20ms, application-code: 405ms)
+ POST /analitica 200 in 39ms (next.js: 6ms, proxy.ts: 6ms, application-code: 27ms)
+  └─ ƒ listarNotificaciones() in 17ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 50ms (next.js: 6ms, proxy.ts: 6ms, application-code: 39ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 19ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 55ms (next.js: 6ms, proxy.ts: 6ms, application-code: 43ms)
+  └─ ƒ consultarConteoEntregas({}) in 36ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 31ms (next.js: 6ms, proxy.ts: 7ms, application-code: 18ms)
+  └─ ƒ consultarConteoPorStatus({}) in 11ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 32ms (next.js: 4ms, proxy.ts: 6ms, application-code: 22ms)
+  └─ ƒ consultarCicloVida({}) in 13ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 39ms (next.js: 5ms, proxy.ts: 8ms, application-code: 26ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 16ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 36ms (next.js: 7ms, proxy.ts: 7ms, application-code: 23ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 11ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 35ms (next.js: 6ms, proxy.ts: 7ms, application-code: 22ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 13ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 28ms (next.js: 5ms, proxy.ts: 5ms, application-code: 17ms)
+  └─ ƒ consultarConteoProductos({}) in 10ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 31ms (next.js: 3ms, proxy.ts: 4ms, application-code: 23ms)
+  └─ ƒ consultarCohorteCarga({}) in 16ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 172ms (next.js: 5ms, proxy.ts: 8ms, application-code: 158ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 599ms (next.js: 13ms, proxy.ts: 20ms, application-code: 566ms)
+ POST /analitica 200 in 39ms (next.js: 4ms, proxy.ts: 6ms, application-code: 29ms)
+  └─ ƒ listarNotificaciones() in 20ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 49ms (next.js: 4ms, proxy.ts: 5ms, application-code: 40ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 29ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 24ms (next.js: 4ms, proxy.ts: 7ms, application-code: 12ms)
+  └─ ƒ consultarConteoEntregas({}) in 5ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 30ms (next.js: 3ms, proxy.ts: 4ms, application-code: 23ms)
+  └─ ƒ consultarConteoPorStatus({}) in 16ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 37ms (next.js: 6ms, proxy.ts: 8ms, application-code: 23ms)
+  └─ ƒ consultarCicloVida({}) in 14ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 29ms (next.js: 4ms, proxy.ts: 8ms, application-code: 18ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 12ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 42ms (next.js: 10ms, proxy.ts: 8ms, application-code: 24ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 12ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 35ms (next.js: 3ms, proxy.ts: 6ms, application-code: 25ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 13ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 32ms (next.js: 6ms, proxy.ts: 5ms, application-code: 21ms)
+  └─ ƒ consultarConteoProductos({}) in 14ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 22ms (next.js: 4ms, proxy.ts: 5ms, application-code: 14ms)
+  └─ ƒ consultarCohorteCarga({}) in 8ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 173ms (next.js: 6ms, proxy.ts: 10ms, application-code: 157ms)
+ GET /login 200 in 64ms (next.js: 3ms, proxy.ts: 2ms, application-code: 59ms)
+ POST /login 200 in 210ms (next.js: 4ms, proxy.ts: 3ms, application-code: 203ms)
+  └─ ƒ login({"email":"admin.qa@ordenex.test","password":"Prueba123*QA"}) in 173ms lib/actions/auth.ts
+ GET /dashboard 200 in 233ms (next.js: 3ms, proxy.ts: 6ms, application-code: 225ms)
+ GET /dashboard 200 in 173ms (next.js: 9ms, proxy.ts: 16ms, application-code: 147ms)
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+ POST /dashboard 200 in 218ms (next.js: 7ms, proxy.ts: 13ms, application-code: 198ms)
+  └─ ƒ listarNotificaciones() in 96ms lib/actions/notificaciones.ts
+ POST /dashboard 200 in 157ms (next.js: 22ms, proxy.ts: 59ms, application-code: 76ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 590ms (next.js: 5ms, proxy.ts: 25ms, application-code: 560ms)
+ POST /analitica 200 in 46ms (next.js: 5ms, proxy.ts: 7ms, application-code: 34ms)
+  └─ ƒ listarNotificaciones() in 25ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 58ms (next.js: 3ms, proxy.ts: 6ms, application-code: 48ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 33ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 27ms (next.js: 5ms, proxy.ts: 5ms, application-code: 17ms)
+  └─ ƒ consultarConteoEntregas({}) in 9ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 6ms, application-code: 17ms)
+  └─ ƒ consultarConteoPorStatus({}) in 10ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 26ms (next.js: 6ms, proxy.ts: 5ms, application-code: 15ms)
+  └─ ƒ consultarCicloVida({}) in 5ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 31ms (next.js: 4ms, proxy.ts: 7ms, application-code: 20ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 12ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 36ms (next.js: 6ms, proxy.ts: 15ms, application-code: 15ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 4ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 37ms (next.js: 6ms, proxy.ts: 13ms, application-code: 17ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 7ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 41ms (next.js: 4ms, proxy.ts: 8ms, application-code: 29ms)
+  └─ ƒ consultarConteoProductos({}) in 20ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 5ms, application-code: 17ms)
+  └─ ƒ consultarCohorteCarga({}) in 9ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 158ms (next.js: 7ms, proxy.ts: 10ms, application-code: 141ms)
+ GET /analitica 200 in 368ms (next.js: 12ms, proxy.ts: 12ms, application-code: 343ms)
+ POST /analitica 200 in 37ms (next.js: 5ms, proxy.ts: 8ms, application-code: 25ms)
+  └─ ƒ listarNotificaciones() in 16ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 58ms (next.js: 4ms, proxy.ts: 9ms, application-code: 46ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 31ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 41ms (next.js: 6ms, proxy.ts: 8ms, application-code: 27ms)
+  └─ ƒ consultarConteoEntregas({}) in 17ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 32ms (next.js: 4ms, proxy.ts: 9ms, application-code: 20ms)
+  └─ ƒ consultarConteoPorStatus({}) in 13ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 24ms (next.js: 4ms, proxy.ts: 6ms, application-code: 14ms)
+  └─ ƒ consultarCicloVida({}) in 8ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 43ms (next.js: 5ms, proxy.ts: 14ms, application-code: 24ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 13ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 54ms (next.js: 10ms, proxy.ts: 21ms, application-code: 23ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 10ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 35ms (next.js: 4ms, proxy.ts: 7ms, application-code: 24ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 16ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 39ms (next.js: 4ms, proxy.ts: 6ms, application-code: 29ms)
+  └─ ƒ consultarConteoProductos({}) in 19ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 28ms (next.js: 4ms, proxy.ts: 6ms, application-code: 18ms)
+  └─ ƒ consultarCohorteCarga({}) in 11ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 164ms (next.js: 6ms, proxy.ts: 6ms, application-code: 152ms)
+ POST /dashboard 200 in 151ms (next.js: 29ms, proxy.ts: 98ms, application-code: 24ms)
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 440ms (next.js: 14ms, proxy.ts: 14ms, application-code: 412ms)
+ POST /analitica 200 in 45ms (next.js: 5ms, proxy.ts: 11ms, application-code: 29ms)
+  └─ ƒ listarNotificaciones() in 16ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 63ms (next.js: 4ms, proxy.ts: 11ms, application-code: 49ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 33ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 41ms (next.js: 5ms, proxy.ts: 9ms, application-code: 27ms)
+  └─ ƒ consultarConteoEntregas({}) in 18ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 45ms (next.js: 10ms, proxy.ts: 5ms, application-code: 30ms)
+  └─ ƒ consultarConteoPorStatus({}) in 19ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 36ms (next.js: 4ms, proxy.ts: 6ms, application-code: 27ms)
+  └─ ƒ consultarCicloVida({}) in 19ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 30ms (next.js: 4ms, proxy.ts: 9ms, application-code: 17ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 9ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 44ms (next.js: 15ms, proxy.ts: 9ms, application-code: 20ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 10ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 29ms (next.js: 3ms, proxy.ts: 6ms, application-code: 19ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 12ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 6ms, application-code: 17ms)
+  └─ ƒ consultarConteoProductos({}) in 7ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 28ms (next.js: 4ms, proxy.ts: 7ms, application-code: 17ms)
+  └─ ƒ consultarCohorteCarga({}) in 9ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 166ms (next.js: 4ms, proxy.ts: 8ms, application-code: 154ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 474ms (next.js: 10ms, proxy.ts: 20ms, application-code: 444ms)
+ POST /analitica 200 in 51ms (next.js: 4ms, proxy.ts: 7ms, application-code: 40ms)
+  └─ ƒ listarNotificaciones() in 23ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 45ms (next.js: 5ms, proxy.ts: 6ms, application-code: 34ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 21ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 33ms (next.js: 7ms, proxy.ts: 5ms, application-code: 20ms)
+  └─ ƒ consultarConteoEntregas({}) in 13ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 41ms (next.js: 6ms, proxy.ts: 9ms, application-code: 27ms)
+  └─ ƒ consultarConteoPorStatus({}) in 19ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 7ms, application-code: 15ms)
+  └─ ƒ consultarCicloVida({}) in 8ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 20ms (next.js: 4ms, proxy.ts: 4ms, application-code: 11ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 3ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 42ms (next.js: 8ms, proxy.ts: 12ms, application-code: 22ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 12ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 34ms (next.js: 5ms, proxy.ts: 9ms, application-code: 21ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 14ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 34ms (next.js: 6ms, proxy.ts: 7ms, application-code: 21ms)
+  └─ ƒ consultarConteoProductos({}) in 13ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 27ms (next.js: 3ms, proxy.ts: 6ms, application-code: 18ms)
+  └─ ƒ consultarCohorteCarga({}) in 12ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 318ms (next.js: 4ms, proxy.ts: 6ms, application-code: 308ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 401ms (next.js: 10ms, proxy.ts: 15ms, application-code: 376ms)
+ POST /analitica 200 in 45ms (next.js: 8ms, proxy.ts: 8ms, application-code: 29ms)
+  └─ ƒ listarNotificaciones() in 17ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 45ms (next.js: 4ms, proxy.ts: 8ms, application-code: 33ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 24ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 34ms (next.js: 4ms, proxy.ts: 4ms, application-code: 27ms)
+  └─ ƒ consultarConteoEntregas({}) in 18ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 46ms (next.js: 5ms, proxy.ts: 11ms, application-code: 29ms)
+  └─ ƒ consultarConteoPorStatus({}) in 21ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 26ms (next.js: 7ms, proxy.ts: 6ms, application-code: 13ms)
+  └─ ƒ consultarCicloVida({}) in 7ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 38ms (next.js: 7ms, proxy.ts: 7ms, application-code: 24ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 15ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 41ms (next.js: 6ms, proxy.ts: 11ms, application-code: 24ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 11ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 25ms (next.js: 4ms, proxy.ts: 6ms, application-code: 15ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 7ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 28ms (next.js: 5ms, proxy.ts: 7ms, application-code: 16ms)
+  └─ ƒ consultarConteoProductos({}) in 7ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 27ms (next.js: 5ms, proxy.ts: 6ms, application-code: 16ms)
+  └─ ƒ consultarCohorteCarga({}) in 10ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 172ms (next.js: 6ms, proxy.ts: 5ms, application-code: 161ms)
+ POST /dashboard 200 in 153ms (next.js: 44ms, proxy.ts: 76ms, application-code: 33ms)
+ GET /analitica 200 in 395ms (next.js: 12ms, proxy.ts: 17ms, application-code: 367ms)
+ POST /analitica 200 in 46ms (next.js: 4ms, proxy.ts: 9ms, application-code: 33ms)
+  └─ ƒ listarNotificaciones() in 24ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 49ms (next.js: 4ms, proxy.ts: 7ms, application-code: 38ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 27ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 27ms (next.js: 4ms, proxy.ts: 6ms, application-code: 17ms)
+  └─ ƒ consultarConteoEntregas({}) in 11ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 30ms (next.js: 4ms, proxy.ts: 7ms, application-code: 19ms)
+  └─ ƒ consultarConteoPorStatus({}) in 11ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 34ms (next.js: 3ms, proxy.ts: 5ms, application-code: 26ms)
+  └─ ƒ consultarCicloVida({}) in 15ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 44ms (next.js: 6ms, proxy.ts: 11ms, application-code: 27ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 19ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 39ms (next.js: 6ms, proxy.ts: 9ms, application-code: 24ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 7ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 31ms (next.js: 5ms, proxy.ts: 6ms, application-code: 19ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 13ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 31ms (next.js: 5ms, proxy.ts: 6ms, application-code: 19ms)
+  └─ ƒ consultarConteoProductos({}) in 13ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 28ms (next.js: 4ms, proxy.ts: 7ms, application-code: 17ms)
+  └─ ƒ consultarCohorteCarga({}) in 10ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 169ms (next.js: 3ms, proxy.ts: 6ms, application-code: 161ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 468ms (next.js: 11ms, proxy.ts: 15ms, application-code: 442ms)
+ POST /analitica 200 in 42ms (next.js: 3ms, proxy.ts: 8ms, application-code: 31ms)
+  └─ ƒ listarNotificaciones() in 21ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 54ms (next.js: 6ms, proxy.ts: 8ms, application-code: 40ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 31ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 26ms (next.js: 5ms, proxy.ts: 6ms, application-code: 15ms)
+  └─ ƒ consultarConteoEntregas({}) in 8ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 33ms (next.js: 3ms, proxy.ts: 4ms, application-code: 25ms)
+  └─ ƒ consultarConteoPorStatus({}) in 17ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 29ms (next.js: 3ms, proxy.ts: 7ms, application-code: 19ms)
+  └─ ƒ consultarCicloVida({}) in 11ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 40ms (next.js: 5ms, proxy.ts: 8ms, application-code: 27ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 20ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 46ms (next.js: 7ms, proxy.ts: 11ms, application-code: 28ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 14ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 22ms (next.js: 4ms, proxy.ts: 5ms, application-code: 13ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 5ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 24ms (next.js: 6ms, proxy.ts: 6ms, application-code: 12ms)
+  └─ ƒ consultarConteoProductos({}) in 5ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 32ms (next.js: 3ms, proxy.ts: 6ms, application-code: 24ms)
+  └─ ƒ consultarCohorteCarga({}) in 16ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 159ms (next.js: 3ms, proxy.ts: 5ms, application-code: 151ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 463ms (next.js: 10ms, proxy.ts: 15ms, application-code: 439ms)
+ POST /analitica 200 in 50ms (next.js: 6ms, proxy.ts: 7ms, application-code: 37ms)
+  └─ ƒ listarNotificaciones() in 28ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 40ms (next.js: 4ms, proxy.ts: 7ms, application-code: 30ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 20ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 33ms (next.js: 4ms, proxy.ts: 5ms, application-code: 24ms)
+  └─ ƒ consultarConteoEntregas({}) in 15ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 27ms (next.js: 4ms, proxy.ts: 6ms, application-code: 18ms)
+  └─ ƒ consultarConteoPorStatus({}) in 8ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 33ms (next.js: 3ms, proxy.ts: 5ms, application-code: 24ms)
+  └─ ƒ consultarCicloVida({}) in 13ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 33ms (next.js: 5ms, proxy.ts: 8ms, application-code: 20ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 13ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 44ms (next.js: 8ms, proxy.ts: 10ms, application-code: 27ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 13ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 31ms (next.js: 4ms, proxy.ts: 5ms, application-code: 22ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 10ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 29ms (next.js: 4ms, proxy.ts: 5ms, application-code: 21ms)
+  └─ ƒ consultarConteoProductos({}) in 13ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 23ms (next.js: 4ms, proxy.ts: 4ms, application-code: 15ms)
+  └─ ƒ consultarCohorteCarga({}) in 8ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 228ms (next.js: 7ms, proxy.ts: 25ms, application-code: 196ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 651ms (next.js: 27ms, proxy.ts: 20ms, application-code: 605ms)
+ POST /analitica 200 in 52ms (next.js: 5ms, proxy.ts: 7ms, application-code: 40ms)
+  └─ ƒ listarNotificaciones() in 29ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 60ms (next.js: 5ms, proxy.ts: 7ms, application-code: 48ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 32ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 44ms (next.js: 7ms, proxy.ts: 8ms, application-code: 30ms)
+  └─ ƒ consultarConteoEntregas({}) in 20ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 55ms (next.js: 7ms, proxy.ts: 11ms, application-code: 36ms)
+  └─ ƒ consultarConteoPorStatus({}) in 22ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 33ms (next.js: 5ms, proxy.ts: 7ms, application-code: 20ms)
+  └─ ƒ consultarCicloVida({}) in 11ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 41ms (next.js: 6ms, proxy.ts: 8ms, application-code: 26ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 16ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 51ms (next.js: 15ms, proxy.ts: 18ms, application-code: 18ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 7ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 45ms (next.js: 4ms, proxy.ts: 5ms, application-code: 37ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 28ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 44ms (next.js: 7ms, proxy.ts: 7ms, application-code: 31ms)
+  └─ ƒ consultarConteoProductos({}) in 23ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 4ms, application-code: 17ms)
+  └─ ƒ consultarCohorteCarga({}) in 8ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 150ms (next.js: 3ms, proxy.ts: 6ms, application-code: 140ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 425ms (next.js: 8ms, proxy.ts: 18ms, application-code: 400ms)
+ POST /analitica 200 in 42ms (next.js: 4ms, proxy.ts: 5ms, application-code: 32ms)
+  └─ ƒ listarNotificaciones() in 23ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 43ms (next.js: 3ms, proxy.ts: 5ms, application-code: 36ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 25ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 32ms (next.js: 5ms, proxy.ts: 7ms, application-code: 20ms)
+  └─ ƒ consultarConteoEntregas({}) in 10ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 30ms (next.js: 6ms, proxy.ts: 6ms, application-code: 18ms)
+  └─ ƒ consultarConteoPorStatus({}) in 10ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 30ms (next.js: 6ms, proxy.ts: 5ms, application-code: 19ms)
+  └─ ƒ consultarCicloVida({}) in 8ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 29ms (next.js: 4ms, proxy.ts: 7ms, application-code: 18ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 10ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 61ms (next.js: 14ms, proxy.ts: 19ms, application-code: 28ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 20ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 32ms (next.js: 3ms, proxy.ts: 4ms, application-code: 26ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 17ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 30ms (next.js: 3ms, proxy.ts: 4ms, application-code: 22ms)
+  └─ ƒ consultarConteoProductos({}) in 14ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 26ms (next.js: 4ms, proxy.ts: 4ms, application-code: 18ms)
+  └─ ƒ consultarCohorteCarga({}) in 11ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 146ms (next.js: 3ms, proxy.ts: 4ms, application-code: 139ms)
+ POST /dashboard 200 in 25ms (next.js: 5ms, proxy.ts: 12ms, application-code: 9ms)
+ GET /analitica 200 in 483ms (next.js: 10ms, proxy.ts: 15ms, application-code: 458ms)
+ POST /analitica 200 in 35ms (next.js: 3ms, proxy.ts: 5ms, application-code: 26ms)
+  └─ ƒ listarNotificaciones() in 17ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 53ms (next.js: 6ms, proxy.ts: 8ms, application-code: 40ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 25ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 34ms (next.js: 3ms, proxy.ts: 5ms, application-code: 26ms)
+  └─ ƒ consultarConteoEntregas({}) in 13ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 35ms (next.js: 4ms, proxy.ts: 6ms, application-code: 25ms)
+  └─ ƒ consultarConteoPorStatus({}) in 17ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 27ms (next.js: 6ms, proxy.ts: 6ms, application-code: 14ms)
+  └─ ƒ consultarCicloVida({}) in 7ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 50ms (next.js: 5ms, proxy.ts: 6ms, application-code: 40ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 17ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 46ms (next.js: 7ms, proxy.ts: 15ms, application-code: 24ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 10ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 33ms (next.js: 4ms, proxy.ts: 8ms, application-code: 22ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 14ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 33ms (next.js: 5ms, proxy.ts: 5ms, application-code: 24ms)
+  └─ ƒ consultarConteoProductos({}) in 13ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 23ms (next.js: 4ms, proxy.ts: 7ms, application-code: 12ms)
+  └─ ƒ consultarCohorteCarga({}) in 6ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 146ms (next.js: 4ms, proxy.ts: 4ms, application-code: 138ms)
+Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException: Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ uncaughtException:  Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+⨯ Error: aborted
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+ GET /analitica 200 in 483ms (next.js: 25ms, proxy.ts: 22ms, application-code: 436ms)
+ POST /analitica 200 in 41ms (next.js: 6ms, proxy.ts: 8ms, application-code: 26ms)
+  └─ ƒ listarNotificaciones() in 19ms lib/actions/notificaciones.ts
+ POST /analitica 200 in 51ms (next.js: 4ms, proxy.ts: 7ms, application-code: 41ms)
+  └─ ƒ obtenerCatalogoFiltrosOrdenes() in 20ms lib/actions/filtros-ordenes.ts
+ POST /analitica 200 in 28ms (next.js: 4ms, proxy.ts: 8ms, application-code: 15ms)
+  └─ ƒ consultarConteoEntregas({}) in 8ms lib/actions/conteo-entregas.ts
+ POST /analitica 200 in 46ms (next.js: 4ms, proxy.ts: 6ms, application-code: 35ms)
+  └─ ƒ consultarConteoPorStatus({}) in 27ms lib/actions/conteo-por-status.ts
+ POST /analitica 200 in 27ms (next.js: 4ms, proxy.ts: 7ms, application-code: 15ms)
+  └─ ƒ consultarCicloVida({}) in 6ms lib/actions/ciclo-vida.ts
+ POST /analitica 200 in 38ms (next.js: 6ms, proxy.ts: 7ms, application-code: 25ms)
+  └─ ƒ consultarConteoCargadasPorDia({}) in 18ms lib/actions/conteo-cargadas-por-dia.ts
+ POST /analitica 200 in 47ms (next.js: 8ms, proxy.ts: 13ms, application-code: 25ms)
+  └─ ƒ consultarConteoDevoluciones({}) in 12ms lib/actions/conteo-devoluciones.ts
+ POST /analitica 200 in 29ms (next.js: 4ms, proxy.ts: 7ms, application-code: 18ms)
+  └─ ƒ consultarConteoHoyGestion({}) in 7ms lib/actions/conteo-hoy-gestion.ts
+ POST /analitica 200 in 23ms (next.js: 3ms, proxy.ts: 5ms, application-code: 15ms)
+  └─ ƒ consultarConteoProductos({}) in 6ms lib/actions/conteo-productos.ts
+ POST /analitica 200 in 24ms (next.js: 3ms, proxy.ts: 6ms, application-code: 15ms)
+  └─ ƒ consultarCohorteCarga({}) in 9ms lib/actions/cohorte-carga.ts
+ GET /dashboard 200 in 165ms (next.js: 3ms, proxy.ts: 5ms, application-code: 156ms)

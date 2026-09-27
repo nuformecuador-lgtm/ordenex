@@ -7,6 +7,7 @@ import type {
   VerDetalleDeMovimientoCompletoInput,
   VerDetalleDeMovimientoInput,
 } from "@/lib/types/detalle-movimiento";
+import type { OrdenesDeFilaInput } from "@/lib/types/estado-cuenta";
 
 /**
  * Ficha 344 (design §3.3) — contrato del servicio que abre una fila del libro de movimientos:
@@ -86,4 +87,10 @@ export interface IDetalleMovimientoService {
     input: VerDetalleDeMovimientoCompletoInput,
     actor: Actor,
   ): Promise<VerDetalleMovimientoCompletoServiceResult>;
+  /**
+   * FICHA 458-D (servidor, R19) — el detalle de una fila del ESTADO DE CUENTA de una tienda o de un
+   * mensajero desde la oficina (acceso total). La cuenta va en el `WHERE` del movimiento y, en la
+   * tienda, tambien en el de las ordenes; el mensajero no reparte ningun concepto por orden.
+   */
+  verDetalleDeFilaDeCuenta(input: OrdenesDeFilaInput, actor: Actor): Promise<VerDetalleMovimientoServiceResult>;
 }

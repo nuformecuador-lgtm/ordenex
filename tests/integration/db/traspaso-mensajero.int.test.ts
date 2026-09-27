@@ -75,7 +75,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
     }
     FKS = fks;
 
-    const valores = ["en_reparto", "ayuda_tienda", "entregada", "por_recoger"];
+    const valores = ["en_reparto", "ayuda_tienda", "entregado", "mensajero_recogiendo_en_bodega"];
     const estados = await prisma.orderStatus.findMany({
       where: { value: { in: valores } },
       select: { id: true, value: true },
@@ -575,7 +575,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
     // Reescribir el autor de ESA gestion moveria el pago y el cierre del origen al destino sin que
     // nada se pusiera rojo. Por eso se siembran las DOS: la de la orden del lote (con cierre e
     // importes) y la de la entregada fuera del lote.
-    const r = await conEscenario([{}, { estatusValue: "entregada" }], async (ctx) => {
+    const r = await conEscenario([{}, { estatusValue: "entregado" }], async (ctx) => {
       const [enReparto, entregada] = ctx.ids;
 
       // El cierre del dia anterior del ORIGEN, ya aprobado, que contiene la gestion previa.
@@ -595,7 +595,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
         data: {
           ordenId: enReparto,
           mensajeroId: ctx.origenId,
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           motivo: "el cliente pidio recibirla otro dia",
           cierreId: cierre.id,
           pagoMensajero: "800.00",
@@ -607,7 +607,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
         data: {
           ordenId: entregada,
           mensajeroId: ctx.origenId,
-          resultado: "entregada",
+          resultado: "entregado",
           montoRecibido: "15000.00",
           pagoMensajero: "1200.00",
         },
@@ -670,7 +670,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
     expect(r.despuesDelLote.pagoMensajero?.toString()).toBe("800");
     expect(r.despuesDelLote.montoRecibido).toBeNull();
     expect(r.despuesDelLote.ingresoBodegaRechazo).toBeNull();
-    expect(r.despuesDelLote.resultado).toBe("reprogramada");
+    expect(r.despuesDelLote.resultado).toBe("reprogramado");
     // Y el cierre que la contiene sigue siendo del origen, con el mismo total.
     expect(r.cierreDespues.mensajeroId).toBe(r.origenId);
     expect(r.cierreDespues.totalPagoMensajero.toString()).toBe("800");
@@ -930,7 +930,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
 
     it("⭑ una orden ENTREGADA en el lote: ni ella ni las buenas se mueven", async () => {
       const r = await esperarConflicto(
-        [{}, { estatusValue: "entregada" }],
+        [{}, { estatusValue: "entregado" }],
         (ctx) => ctx.ids,
       );
       expect(r.error).toBeInstanceOf(TraspasoMensajeroConflictoError);
@@ -1144,7 +1144,7 @@ describeSiHayBase("427/T9 — el traspaso entre mensajeros, contra Postgres real
       // La segunda se entrega DESPUES de la validacion del servicio (aqui, antes de llamar al repo).
       await ctx.crudo.orden.update({
         where: { id: ctx.ids[1] },
-        data: { estatusId: ESTATUS.entregada },
+        data: { estatusId: ESTATUS.entregado },
       });
 
       let error: unknown = null;

@@ -1,0 +1,189 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Caja principal
+Tiendas
+Mensajeros
+Satélites
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+AA
+Ana Admin
+Administrador
+Wallet
+
+Caja principal de Ordenex: libro de movimientos, dinero en caja y ganancia de Ordenex
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Registrar movimiento
+Dinero en caja
+Positivo
+₡13.527.662,62
+Todo lo que entró y salió, incluido el dinero de las tiendas
+Entró
+₡13.568.463,12
+Salió
+₡40.800,50
+Movimientos
+36
+Registros del periodo que estás viendo
+De las tiendas
+₡191.400
+Contra-entrega cobrado y aún no entregado a las tiendas
+
+No es lo que se les debe a las tiendas: es más, porque de este dinero Ordenex todavía descuenta el flete, la comisión y el impuesto. La deuda exacta de cada tienda está en Wallet → Tiendas.
+
+Ver la deuda de cada tienda
+De Ordenex
+Positivo
+₡13.336.262,62
+Ganancia de Ordenex
+Lo que Ordenex gana menos lo que gasta
+Ingresos de Ordenex
+₡13.377.063,12
+Gastos de Ordenex
+₡40.800,50
+
+«Dinero en caja» incluye el contra-entrega que se cobró a nombre de las tiendas, que no es de Ordenex y hay que entregarlo. «Ganancia de Ordenex» no lo incluye: es solo lo que Ordenex gana menos lo que gasta.
+
+Cómo se compone la ganancia de Ordenex
+Ingresos y gastos propios del conjunto filtrado, concepto por concepto: fletes, comisiones, impuestos, gastos, sueldos, indemnizaciones, pagos a mensajeros y ajustes. No incluye el dinero de las tiendas: el contra-entrega cobrado no es de Ordenex y por eso no está en la ganancia.
+Ingresos
+Flete
+₡31.000
+Flete por rechazo
+₡1.000
+Comisión COD
+₡6.699
+IVA del flete
+₡4.030
+IVA del flete por rechazo
+₡130
+IVA de la comisión
+₡870,90
+Ajuste (ingreso)
+₡13.333.333,22
+Total de ingresos
+₡13.377.063,12
+Egresos
+Gastos fijos
+₡0
+Gastos variables
+₡0
+Sueldos
+₡0
+Indemnizaciones
+₡15.500
+Pagos a mensajeros
+₡23.800
+Ajustes (egreso)
+₡1.500,50
+Total de egresos
+₡40.800,50
+Ganancia de Ordenex
+Positivo
+₡13.336.262,62
+Gastos fijos (plantillas)
+El sistema cobra estos gastos por su cuenta, según la periodicidad que tenga cada una — salvo las que requieren aprobación, que esperan tu decisión en la wallet antes de salir de la caja. No los registres a mano: administrá acá las plantillas y desactivá las que ya no correspondan.
+Nueva plantilla
+Descargar
+Concepto	Monto	Periodicidad	Próximo cobro	Cobro	Estado	Acciones
+
+
+Todavía no hay plantillas de gasto fijo.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50
+Libro de movimientos
+Tipo
+Todos los tipos
+Categoría
+Todas las categorías
+Desde
+Hasta
+Aplicar
+Limpiar
+Descargar
+Desglose
+	Fecha	Tipo	Categoría	Monto	Origen	Dueño	Acciones
+
+	2026-09-24	Ingreso	Contra-entrega cobrado	₡6.000	Cierre del día	
+Tienda	
+
+	2026-09-24	Ingreso	IVA del flete	₡390	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	IVA del flete por rechazo	₡130	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	IVA de la comisión	₡27,30	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	Flete por rechazo	₡1.000	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	Flete	₡3.000	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	Comisión COD	₡210	Cierre del día	
+Ordenex	
+
+	2026-09-24	Egreso	Indemnización por incidente	₡3.000	Cierre del día	
+Ordenex	
+
+	2026-09-24	Egreso	Pago a mensajero	₡8.500	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	Contra-entrega cobrado	₡32.500	Cierre del día	
+Tienda	
+
+	2026-09-24	Ingreso	Comisión COD	₡1.137,50	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	IVA de la comisión	₡147,89	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	Flete	₡10.000	Cierre del día	
+Ordenex	
+
+	2026-09-24	Ingreso	IVA del flete	₡1.300	Cierre del día	
+Ordenex	
+
+	2026-08-19	Egreso	Indemnización por incidente	₡12.500	Cierre del día	
+Ordenex	
+
+	2026-08-13	Egreso	Pago a mensajero	₡1.700	Cierre del día	
+Ordenex	
+
+	2026-08-13	Ingreso	Contra-entrega cobrado	₡12.500	Cierre del día	
+Tienda	
+
+	2026-08-13	Ingreso	Flete	₡2.000	Cierre del día	
+Ordenex	
+
+	2026-08-13	Ingreso	IVA del flete	₡260	Cierre del día	
+Ordenex	
+
+	2026-08-13	Ingreso	IVA de la comisión	₡56,88	Cierre del día	
+Ordenex	
+1-20 de 36
+‹
+›

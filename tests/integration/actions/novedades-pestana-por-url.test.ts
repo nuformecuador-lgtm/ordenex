@@ -113,11 +113,11 @@ afterEach(() => {
 });
 
 describe("R7 — `/novedades?superficie=` deja abierta ESA superficie", () => {
-  it("R7: con `?superficie=devolucion` la pestaña activa es «En devolución»", async () => {
+  it("R7: con `?superficie=devolucion` la pestaña activa es «Novedad»", async () => {
     // El literal se escribe A MANO, no se compara contra `TEXTOS_POR_GRUPO`: un texto comparado
     // con su propia fuente está siempre verde y seguiría pasando con el rótulo mal escrito.
     expect(await pestanaActivaCon({ superficie: "devolucion" })).toBe(
-      "En devolución",
+      "Novedad",
     );
   });
 
@@ -143,7 +143,7 @@ describe("R7 — `/novedades?superficie=` deja abierta ESA superficie", () => {
 
     const query = new URL(accion.atajo.href, "https://ordenex.co").searchParams;
     expect(await pestanaActivaCon({ superficie: query.get("superficie") ?? undefined })).toBe(
-      "En devolución",
+      "Novedad",
     );
   });
 });
@@ -180,7 +180,7 @@ describe("R66 — lo desconocido cae al defecto y la página responde 200", () =
   it("R66: el array cuyo PRIMER valor es válido sí abre esa superficie", async () => {
     // Control positivo del caso de arriba: la lectura del array no es «ignorar siempre».
     expect(await pestanaActivaCon({ superficie: ["devolucion", "chorizo"] })).toBe(
-      "En devolución",
+      "Novedad",
     );
   });
 });

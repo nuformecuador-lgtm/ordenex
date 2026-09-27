@@ -124,7 +124,7 @@ export class CorreccionFechaReprogramacionRepository
         UPDATE "gestion_orden"
         SET "fecha_reprogramacion" = ${input.fecha}::date
         WHERE "id" = ${vigente.id}
-          AND "resultado" = 'reprogramada'
+          AND "resultado" = 'reprogramado'
           AND "anulada_at" IS NULL
           AND "fecha_reprogramacion" IS NOT NULL
           AND "fecha_reprogramacion" <> ${input.fecha}::date

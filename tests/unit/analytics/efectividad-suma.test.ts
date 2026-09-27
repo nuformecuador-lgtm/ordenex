@@ -152,7 +152,7 @@ describe("FICHA 346 · un desenlace NUEVO del catálogo entra solo", () => {
     const modulo = await import("@/app/(app)/analitica/_components/entregas/efectividad");
     const r = modulo.calcularEfectividad(
       desglose([
-        ["entregada", 3],
+        ["entregado", 3],
         [SEXTO, 5],
         [EN_CURSO[0], 2],
       ]),
@@ -170,7 +170,7 @@ describe("FICHA 346 · un desenlace NUEVO del catálogo entra solo", () => {
     // «otros»: mientras el catálogo no lo nombre, un status desconocido está en proceso.
     const r = calcularEfectividad(
       desglose([
-        ["entregada", 3],
+        ["entregado", 3],
         ["custodiada_en_puerto", 5],
         [EN_CURSO[0], 2],
       ]),
@@ -199,10 +199,10 @@ describe("FICHA 346 · `Crema Especial MLX`, la captura del 2026-08-29", () => {
    * ninguna aserción se mueve.
    */
   const CREMA_ESPECIAL_MLX = desglose([
-    ["entregada", 3],
-    ["rechazada", 2],
-    ["devuelta", 4],
-    ["reprogramada", 2],
+    ["entregado", 3],
+    ["devolucion_a_origen_por_rechazo", 2],
+    ["novedad", 4],
+    ["reprogramado", 2],
     ["en_reparto", 13],
   ]);
 

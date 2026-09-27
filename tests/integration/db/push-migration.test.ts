@@ -155,7 +155,11 @@ describe("410/R49 — el `down.sql` del enum, y la leccion de recrear con lista"
     // enum en SU rama, y todas siguen siendo ciertas porque el rollback va de la ultima hacia atras.
     const anteriores = fs
       .readdirSync(MIGRACIONES, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && e.name.includes("job_tipo") && e.name !== ENUM)
+      // ⏳ 2026-09-23 (FICHA 454): AQUI DECIA `e.name !== ENUM`, que metia en el barrido tambien las
+      // migraciones de `job_tipo` POSTERIORES a esta. Una posterior TIENE que nombrar `push_web`: su
+      // down recrea el enum con la lista que ya lo incluye (`20260923120000_job_tipo_webhook_evento`).
+      // La regla que este caso vigila es sobre las ANTERIORES —fotos de su momento—, y eso es `<`.
+      .filter((e) => e.isDirectory() && e.name.includes("job_tipo") && e.name < ENUM)
       .map((e) => e.name);
     // AUTOCOMPROBACION: si el recorrido no encontrara carpetas, el barrido seria verde por vacio.
     expect(anteriores.length).toBeGreaterThanOrEqual(8);
@@ -180,7 +184,11 @@ describeSiHayBase("410 — y lo que SOLO sabe el motor: la base tiene lo que la 
     expect(lista.length).toBeGreaterThanOrEqual(10);
     expect(lista).toContain("push_web");
     // «Al final»: los valores previos conservan su orden de comparacion.
-    expect(lista[lista.length - 1]).toBe("push_web");
+    // ⏳ 2026-09-23 (FICHA 454): AQUI DECIA `expect(lista[lista.length - 1]).toBe("push_web")`. El
+    // enum CRECIO (`webhook_evento`, `20260923120000_job_tipo_webhook_evento`), asi que «al final»
+    // ya no es la ultima posicion: es «justo detras de los nueve previos», que es lo unico que esta
+    // migracion puede prometer (mismo cambio que la 410 le hizo a la de bienvenida).
+    expect(lista.indexOf("push_web")).toBe(lista.indexOf("whatsapp_bienvenida") + 1);
   });
 
   it("⭑ las dos tablas existen con sus columnas", async () => {

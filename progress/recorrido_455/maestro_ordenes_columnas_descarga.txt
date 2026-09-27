@@ -1,0 +1,24 @@
+Columnas del archivo
+Nº Guía
+Nº Remisión
+Estado
+Destinatario
+Teléfono del destinatario
+Producto
+Peso (kg)
+Dirección
+Tienda
+Zona
+Provincia
+Cantón
+Distrito
+Monto a cobrar
+Flete + IVA
+Comisión + IVA
+Mensajero
+Intentos
+Fecha de creación
+Día de reparto
+Fecha de reprogramación
+Notas de la tienda
+Restablecer

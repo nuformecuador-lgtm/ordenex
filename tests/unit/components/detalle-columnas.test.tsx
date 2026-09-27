@@ -246,7 +246,7 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
     // una de esas columnas siguiera montada, `PriceLabel` pintaria el cero de un hueco —«esta
     // orden no paga flete»— que es una afirmacion FALSA, y peor que enseñar la cifra.
     const fila = recortarPorAlcance(
-      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregada" }),
+      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregado" }),
       "zona",
     );
     const { celdas } = pintar("zona", fila);
@@ -267,7 +267,7 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
     // hay. Montar las columnas de dinero sobre una fila recortada es exactamente el fallo que
     // R15 describe, y aqui se provoca a proposito.
     const fila = recortarPorAlcance(
-      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregada" }),
+      ordenDelDetalle({ id: "o1", resultadoDelDia: "entregado" }),
       "zona",
     );
     const { celdas } = pintar("global", fila);
@@ -281,10 +281,10 @@ describe("columnasDetalle — un dato retirado no se pinta como cero ni como gui
 
 describe("columnasDetalle — «Resultado del día» (R22/R27)", () => {
   it("se etiqueta con el mapa compartido de estatus", () => {
-    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramada" }));
+    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramado" }));
     const columna = idsMontados("zona").indexOf(COLUMNA_RESULTADO_ID);
     const celda = tabla.querySelectorAll("tbody td")[columna];
-    expect(celda?.textContent?.trim()).toBe("Reprogramada");
+    expect(celda?.textContent?.trim()).toBe("Reprogramado");
   });
 
   it("sin gestion hoy pinta el marcador de vacio, no una cadena cruda ni un cero", () => {
@@ -312,5 +312,29 @@ describe("el fixture de este archivo NO esta vacio", () => {
     expect(fila.fleteConIva).toBe(CENTINELAS.flete);
     expect(fila.comisionConIva).toBe(CENTINELAS.comision);
     expect(fila.relaciones?.tienda?.tarifa?.fulfillment).toBe(CENTINELAS.tarifa);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* FICHA 456 (T3.10, design §5.1 fila 14; R9, R10) — botón de información       */
+/* -------------------------------------------------------------------------- */
+
+describe("456 · «Resultado del día» y «Estado» con su botón de información", () => {
+  it("R10 — el resultado lleva su botón; `null` es «—» sin botón", () => {
+    const { tabla } = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: "reprogramado" }));
+    const columna = idsMontados("zona").indexOf(COLUMNA_RESULTADO_ID);
+    const celda = tabla.querySelectorAll("tbody td")[columna] as HTMLElement;
+    expect(within(celda).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Qué significa «Reprogramado»",
+    ]);
+    cleanup();
+    const vacio = pintar("zona", ordenDelDetalle({ id: "o1", resultadoDelDia: null })).tabla;
+    const celdaVacia = vacio.querySelectorAll("tbody td")[columna] as HTMLElement;
+    expect(within(celdaVacia).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("R9 — la columna «Estado» (heredada de `/ordenes`) también lleva el botón", () => {
+    const { tabla } = pintar("zona");
+    expect(within(tabla).getAllByRole("button", { name: /^Qué significa «/ }).length).toBeGreaterThan(0);
   });
 });

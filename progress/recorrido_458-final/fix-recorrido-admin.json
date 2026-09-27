@@ -1,0 +1,9 @@
+{
+  "avisoSinpeCerrado": 1,
+  "f2Admin": "Cobros de gasto fijo por aprobar\nNadie los cobró todavía: el dinero sigue en la caja. Solo el maestro puede aprobarlos o rechazarlos.\n1 por aprobar\nConcepto\tPeríodo\tMonto\tGenerado el\nR458Z- Alquiler de bodega\tseptiembre de 2026\t₡7.000\t26 de septiembre de 2026",
+  "f2AdminBotones": 0,
+  "f2Asistente": {
+    "pregunta": "Veo «Cobros de gasto fijo por aprobar». ¿Los puedo aprobar yo?",
+    "conversacion": "Veo «Cobros de gasto fijo por aprobar». ¿Los puedo aprobar yo?\n\nNo, esos cobros de gasto fijo por aprobar solo los puede aprobar o rechazar el maestro. Vos, como admin, ves la misma lista pero sin los botones de Aprobar/Rechazar — no podés decidir sobre ellos.\n\nSi hay uno esperando, avisale al maestro para que lo revise. Mientras nadie decida, ese dinero no sale de la caja.\nWallet · Caja"
+  }
+}

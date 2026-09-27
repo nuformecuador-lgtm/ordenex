@@ -1,0 +1,2464 @@
+// GET /api/ordenes/api-key?limit=100 -> HTTP 200
+{
+  "items": [
+    {
+      "numGuia": 38589325,
+      "numRemision": "Q454-02",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Quepos 2",
+      "telefonoDest": "88464002",
+      "producto": "Producto prueba 454 #2",
+      "direccion": "Parque central de Quepos",
+      "montoCobrar": 6000,
+      "createdAt": "2026-09-24T07:57:09.203Z",
+      "mensajero": {
+        "id": "d803b28a-3685-4672-a956-cb581cbc922a",
+        "nombre": "Quino QUEPOS"
+      },
+      "zona": {
+        "id": "6df0e4f5-e5fa-4e7a-8a45-1fd3b708c3d4",
+        "nombre": "QUEPOS"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 57202592,
+      "numRemision": "Q454-01",
+      "estado": "por_devolver_a_bodega_central",
+      "estadoNombre": "Por devolver a bodega central",
+      "destinatario": "Cliente Quepos 1",
+      "telefonoDest": "88464001",
+      "producto": "Producto prueba 454 #1",
+      "direccion": "Muelle de Quepos, 100 m norte",
+      "montoCobrar": 5500,
+      "createdAt": "2026-09-24T07:57:09.203Z",
+      "mensajero": {
+        "id": "d803b28a-3685-4672-a956-cb581cbc922a",
+        "nombre": "Quino QUEPOS"
+      },
+      "zona": {
+        "id": "6df0e4f5-e5fa-4e7a-8a45-1fd3b708c3d4",
+        "nombre": "QUEPOS"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "192.50",
+        "ivaComision": "25.03",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "192.50",
+        "ivaComision": "25.03",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 75067153,
+      "numRemision": "R454-06",
+      "estado": "reprogramado",
+      "estadoNombre": "Reprogramado",
+      "destinatario": "Cliente Recorrido 6",
+      "telefonoDest": "88454006",
+      "producto": "Producto prueba 454 #6",
+      "direccion": "Universidad de Costa Rica, Facultad de Derecho",
+      "montoCobrar": 8000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "280.00",
+        "ivaComision": "36.40",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "280.00",
+        "ivaComision": "36.40",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 44203146,
+      "numRemision": "R454-09",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Cliente Recorrido 9",
+      "telefonoDest": "88454009",
+      "producto": "Producto prueba 454 #9",
+      "direccion": "Frente al parque central de Curridabat",
+      "montoCobrar": 9500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "332.50",
+        "ivaComision": "43.23",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "332.50",
+        "ivaComision": "43.23",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 80975515,
+      "numRemision": "R454-02",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 2",
+      "telefonoDest": "88454002",
+      "producto": "Producto prueba 454 #2",
+      "direccion": "Frente al parque central de Curridabat",
+      "montoCobrar": 6000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "210.00",
+        "ivaComision": "27.30",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 92987981,
+      "numRemision": "R454-03",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 3",
+      "telefonoDest": "88454003",
+      "producto": "Producto prueba 454 #3",
+      "direccion": "Teatro Nacional, 50 m este",
+      "montoCobrar": 6500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 32670963,
+      "numRemision": "R454-14",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Cliente Recorrido 14",
+      "telefonoDest": "88454014",
+      "producto": "Producto prueba 454 #14",
+      "direccion": "Iglesia de Desamparados, 100 m oeste",
+      "montoCobrar": 12000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "420.00",
+        "ivaComision": "54.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "420.00",
+        "ivaComision": "54.60",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 71377932,
+      "numRemision": "R454-05",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 5",
+      "telefonoDest": "88454005",
+      "producto": "Producto prueba 454 #5",
+      "direccion": "Multiplaza Escazú, 200 m sur",
+      "montoCobrar": 7500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "262.50",
+        "ivaComision": "34.13",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "262.50",
+        "ivaComision": "34.13",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 13761058,
+      "numRemision": "R454-13",
+      "estado": "incidente",
+      "estadoNombre": "Incidente",
+      "destinatario": "Cliente Recorrido 13",
+      "telefonoDest": "88454013",
+      "producto": "Producto prueba 454 #13",
+      "direccion": "Universidad de Costa Rica, Facultad de Derecho",
+      "montoCobrar": 11500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "402.50",
+        "ivaComision": "52.33",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "402.50",
+        "ivaComision": "52.33",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 20447061,
+      "numRemision": "R454-12",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Cliente Recorrido 12",
+      "telefonoDest": "88454012",
+      "producto": "Producto prueba 454 #12",
+      "direccion": "Multiplaza Escazú, 200 m sur",
+      "montoCobrar": 11000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "385.00",
+        "ivaComision": "50.05",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "385.00",
+        "ivaComision": "50.05",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 82916953,
+      "numRemision": "R454-11",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Cliente Recorrido 11",
+      "telefonoDest": "88454011",
+      "producto": "Producto prueba 454 #11",
+      "direccion": "Universidad Nacional, entrada principal",
+      "montoCobrar": 10500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "367.50",
+        "ivaComision": "47.78",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "367.50",
+        "ivaComision": "47.78",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 35371107,
+      "numRemision": "R454-07",
+      "estado": "reprogramado",
+      "estadoNombre": "Reprogramado",
+      "destinatario": "Cliente Recorrido 7",
+      "telefonoDest": "88454007",
+      "producto": "Producto prueba 454 #7",
+      "direccion": "Iglesia de Desamparados, 100 m oeste",
+      "montoCobrar": 8500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "297.50",
+        "ivaComision": "38.68",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "297.50",
+        "ivaComision": "38.68",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 28296862,
+      "numRemision": "R454-10",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Cliente Recorrido 10",
+      "telefonoDest": "88454010",
+      "producto": "Producto prueba 454 #10",
+      "direccion": "Teatro Nacional, 50 m este",
+      "montoCobrar": 10000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "350.00",
+        "ivaComision": "45.50",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "350.00",
+        "ivaComision": "45.50",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 16757840,
+      "numRemision": "R454-08",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Cliente Recorrido 8",
+      "telefonoDest": "88454008",
+      "producto": "Producto prueba 454 #8",
+      "direccion": "Mall San Pedro, 100 m norte",
+      "montoCobrar": 9000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "315.00",
+        "ivaComision": "40.95",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "315.00",
+        "ivaComision": "40.95",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 59144030,
+      "numRemision": "R454-04",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 4",
+      "telefonoDest": "88454004",
+      "producto": "Producto prueba 454 #4",
+      "direccion": "Universidad Nacional, entrada principal",
+      "montoCobrar": 7000,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "245.00",
+        "ivaComision": "31.85",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "245.00",
+        "ivaComision": "31.85",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 40520764,
+      "numRemision": "R454-01",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Cliente Recorrido 1",
+      "telefonoDest": "88454001",
+      "producto": "Producto prueba 454 #1",
+      "direccion": "Mall San Pedro, 100 m norte",
+      "montoCobrar": 5500,
+      "createdAt": "2026-09-24T07:37:52.294Z",
+      "mensajero": {
+        "id": "b4000961-715a-4f05-8b40-5060e41caa55",
+        "nombre": "Rita Recorrido"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "192.50",
+        "ivaComision": "25.03",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "192.50",
+        "ivaComision": "25.03",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": null,
+      "numRemision": "REM-T302-1",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Prueba 302",
+      "telefonoDest": "88881111",
+      "producto": "Caja",
+      "direccion": "Av. Central",
+      "montoCobrar": 15,
+      "createdAt": "2026-09-04T18:06:52.339Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "0.53",
+        "ivaComision": "0.07",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111130",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Jenny Villegas Ramírez",
+      "telefonoDest": "71162123",
+      "producto": "1 * Lima Eléctrica Profesional para Pies.",
+      "direccion": "-Mercado central San José Avenida primera calle 6 pabellon de las Flores. Tramo.",
+      "montoCobrar": 11900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "416.50",
+        "ivaComision": "54.15",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111118",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Juan jose suarez trejos",
+      "telefonoDest": "86623218",
+      "producto": "1 * AND.",
+      "direccion": "Contigo acondomlnlo real guayabos Granadilla  -",
+      "montoCobrar": 12900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "451.50",
+        "ivaComision": "58.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111125",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Joaquín Gerardo Ruiz Bravo",
+      "telefonoDest": "61905035",
+      "producto": "2 * Parche Antivarices L.",
+      "direccion": "Hospital Marcial Fallas, Desamparados 300 mts al Sur, 100 mts Este y 200 mts al",
+      "montoCobrar": 13900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "486.50",
+        "ivaComision": "63.25",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990115,
+      "numRemision": "111115",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Marianela Oreamuno bolaños",
+      "telefonoDest": "88835559",
+      "producto": "1 * Spray Analgésico Dental l Alivio del dolor de muelas.",
+      "direccion": "-Corrida Bad, José María Zeledón casa WS7, casa W 17 tercera etapa casa de rejas",
+      "montoCobrar": 13900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "486.50",
+        "ivaComision": "63.25",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111127",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Carolina Vega",
+      "telefonoDest": "88972498",
+      "producto": "1 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "Residencial Lomas de San Antonio San Antonio  -",
+      "montoCobrar": 12900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "451.50",
+        "ivaComision": "58.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111128",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Gustavo -",
+      "telefonoDest": "88319185",
+      "producto": "1 * BATANA.",
+      "direccion": "Universidad de Costa Rica San Pedro  -",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111139",
+      "estado": "por_recolectar_en_tienda",
+      "estadoNombre": "Por recolectar en tienda",
+      "destinatario": "Andres -",
+      "telefonoDest": "60590610",
+      "producto": "2 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "Condominio zona rosa , casa 6 San Rafael  -",
+      "montoCobrar": 15260,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "534.10",
+        "ivaComision": "69.43",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111112",
+      "estado": "mensajero_recogiendo_en_bodega",
+      "estadoNombre": "Mensajero recogiendo en la bodega",
+      "destinatario": "Magaly Aguilar",
+      "telefonoDest": "88825831",
+      "producto": "1 * Protector Dental.",
+      "direccion": "Universidad de Costa Rica, Edificio Administrativo A. San Pedro  -",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111113",
+      "estado": "mensajero_recogiendo_en_bodega",
+      "estadoNombre": "Mensajero recogiendo en la bodega",
+      "destinatario": "Cristina Fonseca",
+      "telefonoDest": "89212847",
+      "producto": "1 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "Del Restaurante Taco Bell, 500 mts Oeste Edificio esquinero de 3 pisos mano dere",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111114",
+      "estado": "devolucion_a_origen_por_rechazo",
+      "estadoNombre": "Devolución a origen por rechazo",
+      "destinatario": "Elizabeth Blanco",
+      "telefonoDest": "83946478",
+      "producto": "2 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "100 sur 150 este de McDonalds frente Plaza del Sol. Casa mano derecha Curridabat",
+      "montoCobrar": 17000,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "595.00",
+        "ivaComision": "77.35",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111120",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Alejandra -",
+      "telefonoDest": "70461068",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "San Rafael San Rafael Arriba  -",
+      "montoCobrar": 17739,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "620.87",
+        "ivaComision": "80.71",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111123",
+      "estado": "incidente",
+      "estadoNombre": "Incidente",
+      "destinatario": "Alejandra Ramírez Zamora",
+      "telefonoDest": "88107332",
+      "producto": "1 * Nebulizador Inalámbrico.",
+      "direccion": "Pinares de Curridabat de la BMW 200 norte y 25 oeste cuarta casa mano derecha Sá",
+      "montoCobrar": 11900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "416.50",
+        "ivaComision": "54.15",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111124",
+      "estado": "mensajero_recogiendo_en_bodega",
+      "estadoNombre": "Mensajero recogiendo en la bodega",
+      "destinatario": "Laura Ramírez Barquero",
+      "telefonoDest": "83724585",
+      "producto": "1 * Crema Dental Blanqueadora.",
+      "direccion": "Condominio Avenida 46 apto 303 Sánchez  -",
+      "montoCobrar": 14900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "521.50",
+        "ivaComision": "67.80",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111131",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Gustavo Herrera",
+      "telefonoDest": "60500639",
+      "producto": "2 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "Fresh market guayabos, residencial quinta guayabos casa B15 Curridabat  -",
+      "montoCobrar": 21000,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "735.00",
+        "ivaComision": "95.55",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111132",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Gina Montero",
+      "telefonoDest": "72431929",
+      "producto": "1 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "De taco bell san pedro 400 oeste 25 norte condominio antea #9 San Pedro  -",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111135",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Randall flores",
+      "telefonoDest": "89913772",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "clinica Marcial fallas Días Desamparados -",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111137",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Miguel -",
+      "telefonoDest": "70890716",
+      "producto": "1 * Crema anti verrugas.",
+      "direccion": "Calle las brisas Granadilla  -",
+      "montoCobrar": 14990,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "524.65",
+        "ivaComision": "68.20",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111138",
+      "estado": "mensajero_recogiendo_en_bodega",
+      "estadoNombre": "Mensajero recogiendo en la bodega",
+      "destinatario": "Yendri",
+      "telefonoDest": "70159130",
+      "producto": "2 * Crema Dental Blanqueadora.",
+      "direccion": "Sanjose Tirrases  -",
+      "montoCobrar": 27040,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "946.40",
+        "ivaComision": "123.03",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111111",
+      "estado": "mensajero_recogiendo_en_bodega",
+      "estadoNombre": "Mensajero recogiendo en la bodega",
+      "destinatario": "Jose Ruiz",
+      "telefonoDest": "71097350",
+      "producto": "2 * Parche Antivarices L. 1 * Gel de Abejas.",
+      "direccion": "Supermercado la Maravilla Gravilias  -",
+      "montoCobrar": 16618,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "581.63",
+        "ivaComision": "75.61",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990136,
+      "numRemision": "111136",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Roger Francisco Maradiaga paiz",
+      "telefonoDest": "70696798",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "La Uruca del puente juan Pablo segundo la Uruca ala par dela empresa binbo la em",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990117,
+      "numRemision": "111117",
+      "estado": "novedad_interna",
+      "estadoNombre": "Novedad interna",
+      "destinatario": "Anabelle Vargas Castro",
+      "telefonoDest": "88451598",
+      "producto": "1 * Lima Eléctrica Profesional para Pies. 1 * Gel de Abejas.",
+      "direccion": "Calle el Jardín  75 Oeste, muro gris claro, verjas color vino Damas  -",
+      "montoCobrar": 14618,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "511.63",
+        "ivaComision": "66.51",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "111129",
+      "estado": "novedad_interna",
+      "estadoNombre": "Novedad interna",
+      "destinatario": "Evaristo Allen",
+      "telefonoDest": "85911315",
+      "producto": "1 * Spray Protector.",
+      "direccion": "El solar  casa 18 a del súper j y C 150 mts al este San Antonio  -",
+      "montoCobrar": 14900,
+      "createdAt": "2026-07-24T22:40:49.111Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "521.50",
+        "ivaComision": "67.80",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "REM-0001",
+      "estado": "novedad_interna",
+      "estadoNombre": "Novedad interna",
+      "destinatario": "Juan Pérez",
+      "telefonoDest": "88887777",
+      "producto": "Camiseta talla M",
+      "direccion": "Av. Central, 200m norte del parque",
+      "montoCobrar": 26,
+      "createdAt": "2026-07-24T01:47:35.668Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "0.91",
+        "ivaComision": "0.12",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63254",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Alejandra Ramírez Zamora",
+      "telefonoDest": "88107332",
+      "producto": "1 * Nebulizador Inalámbrico.",
+      "direccion": "Pinares de Curridabat de la BMW 200 norte y 25 oeste cuarta casa mano derecha Sá",
+      "montoCobrar": 11900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "416.50",
+        "ivaComision": "54.15",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63358",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Alejandra -",
+      "telefonoDest": "70461068",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "San Rafael San Rafael Arriba  -",
+      "montoCobrar": 17739,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "620.87",
+        "ivaComision": "80.71",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63482",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Cristina Fonseca",
+      "telefonoDest": "89212847",
+      "producto": "1 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "Del Restaurante Taco Bell, 500 mts Oeste Edificio esquinero de 3 pisos mano dere",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63490",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Magaly Aguilar",
+      "telefonoDest": "88825831",
+      "producto": "1 * Protector Dental.",
+      "direccion": "Universidad de Costa Rica, Edificio Administrativo A. San Pedro  -",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63494",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Jose Ruiz",
+      "telefonoDest": "71097350",
+      "producto": "2 * Parche Antivarices L. 1 * Gel de Abejas.",
+      "direccion": "Supermercado la Maravilla Gravilias  -",
+      "montoCobrar": 16618,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "581.63",
+        "ivaComision": "75.61",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63447",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Marianela Oreamuno bolaños",
+      "telefonoDest": "88835559",
+      "producto": "1 * Spray Analgésico Dental l Alivio del dolor de muelas.",
+      "direccion": "-Corrida Bad, José María Zeledón casa WS7, casa W 17 tercera etapa casa de rejas",
+      "montoCobrar": 13900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "486.50",
+        "ivaComision": "63.25",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63059",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Randall flores",
+      "telefonoDest": "89913772",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "clinica Marcial fallas Días Desamparados -",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63192",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Gustavo -",
+      "telefonoDest": "88319185",
+      "producto": "1 * BATANA.",
+      "direccion": "Universidad de Costa Rica San Pedro  -",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63106",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Gustavo Herrera",
+      "telefonoDest": "60500639",
+      "producto": "2 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "Fresh market guayabos, residencial quinta guayabos casa B15 Curridabat  -",
+      "montoCobrar": 21000,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "735.00",
+        "ivaComision": "95.55",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63046",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Miguel -",
+      "telefonoDest": "70890716",
+      "producto": "1 * Crema anti verrugas.",
+      "direccion": "Calle las brisas Granadilla  -",
+      "montoCobrar": 14990,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "524.65",
+        "ivaComision": "68.20",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63124",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Jenny Villegas Ramírez",
+      "telefonoDest": "71162123",
+      "producto": "1 * Lima Eléctrica Profesional para Pies.",
+      "direccion": "-Mercado central San José Avenida primera calle 6 pabellon de las Flores. Tramo.",
+      "montoCobrar": 11900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "416.50",
+        "ivaComision": "54.15",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63469",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Elizabeth Blanco",
+      "telefonoDest": "83946478",
+      "producto": "2 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "100 sur 150 este de McDonalds frente Plaza del Sol. Casa mano derecha Curridabat",
+      "montoCobrar": 17000,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "595.00",
+        "ivaComision": "77.35",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63416",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Anabelle Vargas Castro",
+      "telefonoDest": "88451598",
+      "producto": "1 * Lima Eléctrica Profesional para Pies. 1 * Gel de Abejas.",
+      "direccion": "Calle el Jardín  75 Oeste, muro gris claro, verjas color vino Damas  -",
+      "montoCobrar": 14618,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "511.63",
+        "ivaComision": "66.51",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63237",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Joaquín Gerardo Ruiz Bravo",
+      "telefonoDest": "61905035",
+      "producto": "2 * Parche Antivarices L.",
+      "direccion": "Hospital Marcial Fallas, Desamparados 300 mts al Sur, 100 mts Este y 200 mts al",
+      "montoCobrar": 13900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "486.50",
+        "ivaComision": "63.25",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63446",
+      "estado": "novedad_interna",
+      "estadoNombre": "Novedad interna",
+      "destinatario": "Marianela Oreamuno bolaños",
+      "telefonoDest": "88835559",
+      "producto": "1 * DEPILADOR MAGICO AFEITADO FACIL.",
+      "direccion": "-Corrida Bad, José María Zeledón casa WS7, casa W 17 tercera etapa casa de rejas",
+      "montoCobrar": 11700,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": {
+        "id": "5bab161f-2139-4fdf-bb9f-159aec38b780",
+        "nombre": "Mensajero test"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "409.50",
+        "ivaComision": "53.24",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63413",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Juan jose suarez trejos",
+      "telefonoDest": "86623218",
+      "producto": "1 * AND.",
+      "direccion": "Contigo acondomlnlo real guayabos Granadilla  -",
+      "montoCobrar": 12900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "451.50",
+        "ivaComision": "58.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63101",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Gina Montero",
+      "telefonoDest": "72431929",
+      "producto": "1 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "De taco bell san pedro 400 oeste 25 norte condominio antea #9 San Pedro  -",
+      "montoCobrar": 10900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "381.50",
+        "ivaComision": "49.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63216",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Carolina Vega",
+      "telefonoDest": "88972498",
+      "producto": "1 * Spray Herbal para Hemorroides l Alivio Natural.",
+      "direccion": "Residencial Lomas de San Antonio San Antonio  -",
+      "montoCobrar": 12900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "451.50",
+        "ivaComision": "58.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63028",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Andres -",
+      "telefonoDest": "60590610",
+      "producto": "2 * Polvo Destapador de Cañerias Mágico.",
+      "direccion": "Condominio zona rosa , casa 6 San Rafael  -",
+      "montoCobrar": 15260,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "534.10",
+        "ivaComision": "69.43",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63041",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Yendri",
+      "telefonoDest": "70159130",
+      "producto": "2 * Crema Dental Blanqueadora.",
+      "direccion": "Sanjose Tirrases  -",
+      "montoCobrar": 27040,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "946.40",
+        "ivaComision": "123.03",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63050",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Roger Francisco Maradiaga paiz",
+      "telefonoDest": "70696798",
+      "producto": "1 * TURKESTERONE.",
+      "direccion": "La Uruca del puente juan Pablo segundo la Uruca ala par dela empresa binbo la em",
+      "montoCobrar": 17700,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "619.50",
+        "ivaComision": "80.54",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63175",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Evaristo Allen",
+      "telefonoDest": "85911315",
+      "producto": "1 * Spray Protector.",
+      "direccion": "El solar  casa 18 a del súper j y C 150 mts al este San Antonio  -",
+      "montoCobrar": 14900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "521.50",
+        "ivaComision": "67.80",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "63241",
+      "estado": "novedad_interna",
+      "estadoNombre": "Novedad interna",
+      "destinatario": "Laura Ramírez Barquero",
+      "telefonoDest": "83724585",
+      "producto": "1 * Crema Dental Blanqueadora.",
+      "direccion": "Condominio Avenida 46 apto 303 Sánchez  -",
+      "montoCobrar": 14900,
+      "createdAt": "2026-07-24T01:24:32.156Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "521.50",
+        "ivaComision": "67.80",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990017,
+      "numRemision": "QA-R-0021",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Daniela Porras",
+      "telefonoDest": "87600001",
+      "producto": "Tabla de surf (cera)",
+      "direccion": "Quepos, Quepos",
+      "montoCobrar": 4200,
+      "createdAt": "2026-07-23T19:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "147.00",
+        "ivaComision": "19.11",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990016,
+      "numRemision": "QA-R-0020",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Kevin Zuniga",
+      "telefonoDest": "87600000",
+      "producto": "Traje de bano",
+      "direccion": "Quepos, Quepos",
+      "montoCobrar": 17500,
+      "createdAt": "2026-07-23T18:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "612.50",
+        "ivaComision": "79.63",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 53521827,
+      "numRemision": "QA-R-0018",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Roberto Villalobos",
+      "telefonoDest": "87400002",
+      "producto": "Parlante portatil",
+      "direccion": "San Vicente, Moravia",
+      "montoCobrar": 26500,
+      "createdAt": "2026-07-23T17:59:22.255Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "927.50",
+        "ivaComision": "120.58",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": null,
+      "numRemision": "QA-R-0019",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Melissa Arce",
+      "telefonoDest": "87500001",
+      "producto": "Kit de maquillaje",
+      "direccion": "San Rafael, Oreamuno",
+      "montoCobrar": 19900,
+      "createdAt": "2026-07-23T17:59:22.255Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "696.50",
+        "ivaComision": "90.55",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 97865841,
+      "numRemision": "QA-R-0017",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Alejandra Mena",
+      "telefonoDest": "87400001",
+      "producto": "Juego de toallas",
+      "direccion": "Colón, Mora",
+      "montoCobrar": 11200,
+      "createdAt": "2026-07-23T16:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "392.00",
+        "ivaComision": "50.96",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 19887906,
+      "numRemision": "QA-R-0016",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Jose Fallas",
+      "telefonoDest": "87400000",
+      "producto": "Camisa formal",
+      "direccion": "San Pedro, Montes de Oca",
+      "montoCobrar": 14000,
+      "createdAt": "2026-07-23T15:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "490.00",
+        "ivaComision": "63.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": null
+    },
+    {
+      "numGuia": 990015,
+      "numRemision": "QA-R-0015",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Carolina Vega",
+      "telefonoDest": "87300001",
+      "producto": "Termo acero",
+      "direccion": "Tres Ríos, La Unión",
+      "montoCobrar": 6500,
+      "createdAt": "2026-07-23T12:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "227.50",
+        "ivaComision": "29.58",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990014,
+      "numRemision": "QA-R-0014",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Esteban Ramirez",
+      "telefonoDest": "87300000",
+      "producto": "Mochila escolar",
+      "direccion": "Heredia, Heredia",
+      "montoCobrar": 9800,
+      "createdAt": "2026-07-23T11:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "343.00",
+        "ivaComision": "44.59",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "343.00",
+        "ivaComision": "44.59",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990007,
+      "numRemision": "QA-R-0007",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Paula Herrera",
+      "telefonoDest": "87100002",
+      "producto": "Libros (paquete)",
+      "direccion": "Occidental, Cartago",
+      "montoCobrar": null,
+      "createdAt": "2026-07-23T01:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990006,
+      "numRemision": "QA-R-0006",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Luis Jimenez",
+      "telefonoDest": "87100001",
+      "producto": "Cargador USB-C",
+      "direccion": "San Antonio, Belén",
+      "montoCobrar": 5600,
+      "createdAt": "2026-07-23T00:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "196.00",
+        "ivaComision": "25.48",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990005,
+      "numRemision": "QA-R-0005",
+      "estado": "entregado",
+      "estadoNombre": "Entregado",
+      "destinatario": "Mariana Solis",
+      "telefonoDest": "87100000",
+      "producto": "Blusa y falda",
+      "direccion": "Barva, Barva",
+      "montoCobrar": 21000,
+      "createdAt": "2026-07-22T23:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "735.00",
+        "ivaComision": "95.55",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990004,
+      "numRemision": "QA-R-0004",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Andres Chaves",
+      "telefonoDest": "87000003",
+      "producto": "Set de sartenes",
+      "direccion": "Aserrí, Aserrí",
+      "montoCobrar": 8900,
+      "createdAt": "2026-07-22T20:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "311.50",
+        "ivaComision": "40.50",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "311.50",
+        "ivaComision": "40.50",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 990003,
+      "numRemision": "QA-R-0003",
+      "estado": "en_preparacion",
+      "estadoNombre": "En preparación",
+      "destinatario": "Sofia Rojas",
+      "telefonoDest": "87000002",
+      "producto": "Zapatos talla 42",
+      "direccion": "Alajuelita, Alajuelita",
+      "montoCobrar": 34000,
+      "createdAt": "2026-07-22T19:59:22.255Z",
+      "mensajero": null,
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "1190.00",
+        "ivaComision": "154.70",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990002,
+      "numRemision": "QA-R-0002",
+      "estado": "en_bodega_satelite",
+      "estadoNombre": "En bodega satélite",
+      "destinatario": "Diego Mora",
+      "telefonoDest": "87000001",
+      "producto": "Cafetera",
+      "direccion": "Tambor, Alajuela",
+      "montoCobrar": 0,
+      "createdAt": "2026-07-22T18:59:22.255Z",
+      "mensajero": null,
+      "zona": {
+        "id": "30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+        "nombre": "Quepos"
+      },
+      "costoEstimado": {
+        "flete": "3000.00",
+        "iva": "390.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 990001,
+      "numRemision": "QA-R-0001",
+      "estado": "por_devolver_a_tienda",
+      "estadoNombre": "Por devolver a tienda",
+      "destinatario": "Karla Vargas",
+      "telefonoDest": "87000000",
+      "producto": "Audifonos bluetooth",
+      "direccion": "Alajuela, Alajuela",
+      "montoCobrar": 12500,
+      "createdAt": "2026-07-22T17:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "437.50",
+        "ivaComision": "56.88",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "437.50",
+        "ivaComision": "56.88",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 990013,
+      "numRemision": "QA-R-0013",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Valeria Segura",
+      "telefonoDest": "87200006",
+      "producto": "Lampara de escritorio",
+      "direccion": "Guadalupe, Goicoechea",
+      "montoCobrar": 15000,
+      "createdAt": "2026-07-22T07:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "525.00",
+        "ivaComision": "68.25",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "525.00",
+        "ivaComision": "68.25",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 990012,
+      "numRemision": "QA-R-0012",
+      "estado": "en_reparto",
+      "estadoNombre": "En reparto",
+      "destinatario": "Oscar Brenes",
+      "telefonoDest": "87200005",
+      "producto": "Teclado mecanico",
+      "direccion": "San Joaquín, Flores",
+      "montoCobrar": 22000,
+      "createdAt": "2026-07-22T03:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "770.00",
+        "ivaComision": "100.10",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990011,
+      "numRemision": "QA-R-0011",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Natalia Campos",
+      "telefonoDest": "87200004",
+      "producto": "Auriculares gamer",
+      "direccion": "Escazú, Escazú",
+      "montoCobrar": 27000,
+      "createdAt": "2026-07-22T02:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "945.00",
+        "ivaComision": "122.85",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990010,
+      "numRemision": "QA-R-0010",
+      "estado": "devolviendo_a_tienda",
+      "estadoNombre": "Devolviendo a tienda",
+      "destinatario": "Ricardo Aguilar",
+      "telefonoDest": "87200003",
+      "producto": "Perfume importado",
+      "direccion": "El Tejar, El Guarco",
+      "montoCobrar": 32000,
+      "createdAt": "2026-07-22T01:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "1120.00",
+        "ivaComision": "145.60",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "0.00",
+        "iva": "0.00",
+        "comision": "0.00",
+        "ivaComision": "0.00",
+        "fulfillment": "0.00"
+      }
+    },
+    {
+      "numGuia": 990009,
+      "numRemision": "QA-R-0009",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Gabriela Nunez",
+      "telefonoDest": "87200002",
+      "producto": "Bolso de mano",
+      "direccion": "Desamparados, Desamparados",
+      "montoCobrar": 18500,
+      "createdAt": "2026-07-22T00:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "647.50",
+        "ivaComision": "84.18",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "647.50",
+        "ivaComision": "84.18",
+        "fulfillment": "800.00"
+      }
+    },
+    {
+      "numGuia": 990008,
+      "numRemision": "QA-R-0008",
+      "estado": "novedad",
+      "estadoNombre": "Novedad",
+      "destinatario": "Fernando Castro",
+      "telefonoDest": "87200001",
+      "producto": "Reloj inteligente",
+      "direccion": "Curridabat, Curridabat",
+      "montoCobrar": 45000,
+      "createdAt": "2026-07-21T23:59:22.255Z",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "zona": {
+        "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+        "nombre": "GAM"
+      },
+      "costoEstimado": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "1575.00",
+        "ivaComision": "204.75",
+        "fulfillment": "800.00"
+      },
+      "costoReal": {
+        "flete": "2000.00",
+        "iva": "260.00",
+        "comision": "1575.00",
+        "ivaComision": "204.75",
+        "fulfillment": "800.00"
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 100,
+    "offset": 0,
+    "total": 84
+  }
+}

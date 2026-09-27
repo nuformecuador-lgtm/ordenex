@@ -262,7 +262,10 @@ describe("R20/R37 · el balance de la caja lo produce derivarBalance, con bruto 
 /* R1 / R8 (183) — las tres de Q1 publican SOLO bruto, y no llaman a derivarBalance */
 /* -------------------------------------------------------------------------- */
 
-describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12⟩", () => {
+describe("R1 · la metrica homogenea de prefijo no publica neto ⟨D12⟩", () => {
+  // FICHA 458-B (revision B2, 2026-09-26): eran TRES. `ingreso_flete` e `ingreso_iva` ganaron el
+  // reverso de la anulacion de un cobro por rechazo y publican neto (bloque de abajo); la unica
+  // lista homogenea que queda es `ingreso_comision_cod`. El contrato de R1 no cambia para ella.
   const CAJA = [
     { categoria: "ingreso_flete" as const, tipo: "ingreso" as const, suma: "1000.00" },
     { categoria: "ingreso_flete_devolucion" as const, tipo: "ingreso" as const, suma: "5.00" },
@@ -271,7 +274,7 @@ describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12�
   /** Feature 180 — el mismo libro por cubo; el rango `dia` tiene uno solo. */
   const CAJA_POR_CUBO = CAJA.map((f) => ({ ...f, indiceCubo: 0 }));
 
-  for (const id of ["ingreso_flete", "ingreso_comision_cod", "ingreso_iva"]) {
+  for (const id of ["ingreso_comision_cod"]) {
     it(`el DTO SERIALIZADO de \`${id}\` no lleva la clave \`neto\`, ni vacia ni en null`, async () => {
       const { servicio } = armarServicio({ caja: CAJA, cajaPorCubo: CAJA_POR_CUBO });
       const r = await servicio.consultar(consultaDe(id));
@@ -292,7 +295,7 @@ describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12�
   it("R8 · a `derivarBalance` no se le pide una resta contra cero: no se la llama", async () => {
     espiaBalance.mockClear();
     const { servicio } = armarServicio({ caja: CAJA, cajaPorCubo: CAJA_POR_CUBO });
-    await servicio.consultar(consultaDe("ingreso_flete"));
+    await servicio.consultar(consultaDe("ingreso_comision_cod"));
     // NI UNA llamada, y desde la 180 eso dice mas que antes: la vista publica ademas una fila
     // por cubo, asi que un desglose que construyera sus filas con el otro constructor —el que
     // lleva neto— aparecería aqui como una llamada de mas (⟨D7⟩ / R27).
@@ -305,6 +308,61 @@ describe("R1 · las tres metricas homogeneas de prefijo no publican neto ⟨D12�
       ["1005", "0"],
       ["1005", "0"],
     ]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 458-B (revision B2) — flete e IVA netean la anulacion del cobro por rechazo  */
+/* -------------------------------------------------------------------------- */
+
+describe("458-B B2 · `ingreso_flete` e `ingreso_iva` descuentan el reverso de la anulacion", () => {
+  // Cobro por rechazo aprobado: flete 1 000,00 + IVA 130,00; anulado: sus dos reversos por el
+  // mismo monto. Literales escritos a mano: el neto es lo que Ordenex de verdad cobro (0,00).
+  const CAJA = [
+    { categoria: "ingreso_flete_devolucion" as const, tipo: "ingreso" as const, suma: "1000.00" },
+    { categoria: "egreso_reverso_flete_devolucion" as const, tipo: "egreso" as const, suma: "1000.00" },
+    { categoria: "ingreso_iva_flete_devolucion" as const, tipo: "ingreso" as const, suma: "130.00" },
+    { categoria: "egreso_reverso_iva_flete_devolucion" as const, tipo: "egreso" as const, suma: "130.00" },
+  ];
+
+  it("`ingreso_flete`: bruto 2 000,00 (los dos movimientos) y neto 0,00; el total y la fila, iguales", async () => {
+    // El doble devuelve la caja que se le da, sin filtrar: aqui solo las del flete, como haria el
+    // repositorio con las categorias que la metrica declara.
+    const flete = CAJA.filter((f) => f.categoria.includes("flete_devolucion") && !f.categoria.includes("iva"));
+    const { servicio } = armarServicio({
+      caja: flete,
+      cajaPorCubo: flete.map((f) => ({ ...f, indiceCubo: 0 })),
+    });
+    const r = await servicio.consultar(consultaDe("ingreso_flete"));
+    if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
+    const total = conNeto(r.datos.vistas[0].total, "ingreso_flete / total");
+    expect(total.bruto).toBe("2000.00");
+    expect(total.neto).toBe("0.00");
+    const fila = conNeto(r.datos.vistas[0].filas[0].importe, "ingreso_flete / fila");
+    expect(fila.neto).toBe("0.00");
+  });
+
+  it("`ingreso_iva`: bruto 260,00 y neto 0,00", async () => {
+    const iva = CAJA.filter((f) => f.categoria.includes("iva"));
+    const { servicio } = armarServicio({
+      caja: iva,
+      cajaPorCubo: iva.map((f) => ({ ...f, indiceCubo: 0 })),
+    });
+    const r = await servicio.consultar(consultaDe("ingreso_iva"));
+    if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
+    const total = conNeto(r.datos.vistas[0].total, "ingreso_iva / total");
+    expect(total.bruto).toBe("260.00");
+    expect(total.neto).toBe("0.00");
+  });
+
+  it("sin anulacion el neto es el bruto (1 000,00): el cambio no mueve nada donde no hay reverso", async () => {
+    const solo = [CAJA[0]];
+    const { servicio } = armarServicio({ caja: solo, cajaPorCubo: solo.map((f) => ({ ...f, indiceCubo: 0 })) });
+    const r = await servicio.consultar(consultaDe("ingreso_flete"));
+    if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
+    const total = conNeto(r.datos.vistas[0].total, "ingreso_flete / total");
+    expect(total.bruto).toBe("1000.00");
+    expect(total.neto).toBe("1000.00");
   });
 });
 
@@ -323,8 +381,10 @@ describe("R27 · todo importe es STRING escala 2, con aritmetica Decimal", () =>
     const r = await servicio.consultar(consultaDe("ingreso_flete"));
     if (r.status !== "ok" || r.datos.tipo !== "vistas") throw new Error("no son vistas");
 
-    // Desde ⟨D12⟩ `ingreso_flete` publica solo el bruto; la aritmetica Decimal es la misma.
-    expect(soloBruto(r.datos.vistas[0].total, "ingreso_flete").bruto).toBe("0.30");
+    // Desde la 458-B (B2) `ingreso_flete` vuelve a publicar neto; la aritmetica Decimal es la misma.
+    const total = conNeto(r.datos.vistas[0].total, "ingreso_flete / total");
+    expect(total.bruto).toBe("0.30");
+    expect(total.neto).toBe("0.30");
   });
 
   it("y en `egresos`, que si publica neto, tampoco hay coma flotante", async () => {

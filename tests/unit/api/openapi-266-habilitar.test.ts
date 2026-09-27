@@ -133,11 +133,20 @@ describe("266 — la rama B es deuda declarada: el contrato NO gana ningun event
     // ⏳ 2026-09-01 — esto miraba la seccion `webhooks:`, que ya no existe: el unico evento se
     // publica como el schema `WebhookOrdenEstadoActualizado`. La afirmacion no cambia, cambia
     // donde se lee: los schemas de evento son EXACTAMENTE uno.
+    //
+    // ⏳ 2026-09-23 (FICHA 454, R33/R36): entra el SEGUNDO schema de evento, `WebhookOrdenEvento`
+    // (los hechos de orden que NO son un cambio de estado: gestion registrada/anulada/corregida y la
+    // ayuda). Es un alta firmada por el spec, no un gancho «por si acaso».
+    //
+    // Lo que la 266 prohibia sigue prohibido: NO hay un evento `orden.habilitada`. La habilitacion
+    // por API de una ayuda abierta aparece SOLO como `via: "api"` del evento `orden.ayuda_resuelta`
+    // (454/R24), que es el cierre de la ayuda —no un aviso de la habilitacion en si—.
     const schemasDeEvento = Object.keys(spec.components.schemas).filter((n) => n.startsWith("Webhook"));
-    expect(schemasDeEvento).toEqual(["WebhookOrdenEstadoActualizado"]);
+    expect(schemasDeEvento).toEqual(["WebhookOrdenEstadoActualizado", "WebhookOrdenEvento"]);
     const evento = JSON.stringify(spec.components.schemas.WebhookOrdenEstadoActualizado);
     expect(evento).not.toContain("habilitada");
     expect(evento).not.toContain("habilitacion");
+    expect(JSON.stringify(spec.components.schemas.WebhookOrdenEvento)).not.toContain("orden.habilitada");
   });
 });
 

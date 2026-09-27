@@ -1,0 +1,88 @@
+Ordenex
+Analítica
+Órdenes
+Novedades
+Mi wallet
+Ayuda
+TT
+Tania Tienda
+Admin de tienda
+Mi wallet
+
+Tu saldo a favor: COD recaudado menos los descuentos de Ordenex, con el desglose por cierre y concepto
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Saldo a favor
+A favor
+₡147.670,10
+A tu favor
+₡191.400
+COD recaudado y ajustes
+Cargos de Ordenex
+₡43.729,90
+Fletes, comisión, IVA y cobros de Ordenex
+Ya pagado
+₡0
+Lo que Ordenex ya te entregó
+
+«Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.
+
+Desglose de movimientos
+Cierre
+Todos los cierres
+Concepto
+Todos los conceptos
+Desde
+Hasta
+Aplicar
+Limpiar
+Descargar
+Desglose
+	Fecha	Tipo	Concepto	Monto	Origen
+
+	2026-09-24	Débito	Comisión COD	₡210	Cierre del día
+
+	2026-09-24	Débito	Flete	₡3.000	Cierre del día
+
+	2026-09-24	Débito	IVA del flete por rechazo	₡130	Cierre del día
+
+	2026-09-24	Crédito	COD recaudado	₡6.000	Cierre del día
+
+	2026-09-24	Débito	Flete por rechazo	₡1.000	Cierre del día
+
+	2026-09-24	Débito	IVA de la comisión	₡27,30	Cierre del día
+
+	2026-09-24	Débito	IVA del flete	₡390	Cierre del día
+
+	2026-09-24	Débito	Comisión COD	₡1.137,50	Cierre del día
+
+	2026-09-24	Débito	Flete	₡10.000	Cierre del día
+
+	2026-09-24	Crédito	COD recaudado	₡32.500	Cierre del día
+
+	2026-09-24	Débito	IVA de la comisión	₡147,89	Cierre del día
+
+	2026-09-24	Débito	IVA del flete	₡1.300	Cierre del día
+
+	2026-08-13	Crédito	COD recaudado	₡12.500	Cierre del día
+
+	2026-08-13	Débito	Flete	₡2.000	Cierre del día
+
+	2026-08-13	Débito	Comisión COD	₡437,50	Cierre del día
+
+	2026-08-13	Débito	IVA del flete	₡260	Cierre del día
+
+	2026-08-13	Débito	IVA de la comisión	₡56,88	Cierre del día
+
+	2026-08-13	Débito	IVA de la comisión	₡74,17	Cierre del día
+
+	2026-08-13	Débito	IVA del flete	₡520	Cierre del día
+
+	2026-08-13	Débito	Comisión COD	₡570,50	Cierre del día
+1-20 de 27
+‹
+›

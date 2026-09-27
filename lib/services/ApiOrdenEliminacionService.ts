@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   ApiOrdenEliminacionResult,
@@ -151,6 +152,7 @@ export class ApiOrdenEliminacionService implements IApiOrdenEliminacionService {
         numGuia: orden.numGuia,
         numRemision: orden.numRemision,
         estado: orden.estatusValue,
+        estadoNombre: nombreDeEstado(orden.estatusValue), // FICHA 455 (R24)
       },
     };
   }

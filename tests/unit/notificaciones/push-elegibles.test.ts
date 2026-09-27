@@ -46,7 +46,7 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
     }
   });
 
-  it("⭑ son ONCE elegibles y SEIS no, tal como los conto el diseno aprobado", () => {
+  it("⭑ son DOCE elegibles y SEIS no, tal como los conto el diseno aprobado (+1 de la 462)", () => {
     const elegibles = Object.entries(PUSH_ELEGIBLE)
       .filter(([, e]) => e.push === "si")
       .map(([k]) => k)
@@ -68,6 +68,9 @@ describe("410/R2 — el catalogo cubre TODOS los eventos del enum, ni uno menos"
       // unico del catalogo que se apaga solo al pasar la medianoche. Y siempre AGREGADA: una sola
       // notificacion con la cifra dentro, jamas un push por orden.
       "reparto_manana",
+      // ⭑ FICHA 462 (R21/R24): DINERO parado (el paquete no sale) y PLAZO (son reprogramadas de
+      // HOY). Siempre AGREGADA: una fila por ambito con la cifra dentro, a las 07:00 CR.
+      "reprogramadas_esperan_cierre",
       // ⭑ FICHA 427 (R43): PLAZO (las ordenes son de hoy y ya estan en la calle) y CONSECUENCIA
       // REAL Y PERSONAL (si no se entera, no sale a repartirlas y el paquete no llega). Su hermano
       // `traspaso_ordenes_cedido` NO esta, y eso es la otra mitad de R43.
@@ -273,5 +276,26 @@ describe("413/R31 — `reparto_manana` es elegible para el MENSAJERO y para nadi
     const entrada = PUSH_ELEGIBLE.reparto_manana;
     expect(entrada.push).toBe("si");
     expect(entrada.push === "si" && entrada.roles).toEqual(["mensajero"]);
+  });
+});
+
+describe("462/R21 — `reprogramadas_esperan_cierre` empuja a admin y bodega satelite; el maestro lo ve en campana", () => {
+  it("⭑ SI para `admin` y `adminSatelite`; NO para maestro, adminTienda, mensajero ni apiKey", () => {
+    // Precedente aprobado de los dos avisos hermanos sobre cierres (`cierre_dia_por_aprobar`,
+    // `devoluciones_represadas`): «para admin y bodega satelite». Literales a mano.
+    expect(esElegiblePush("reprogramadas_esperan_cierre", "admin")).toBe(true);
+    expect(esElegiblePush("reprogramadas_esperan_cierre", "adminSatelite")).toBe(true);
+    for (const rol of ["maestro", "adminTienda", "mensajero", "apiKey"] as const) {
+      expect(esElegiblePush("reprogramadas_esperan_cierre", rol), `${rol} no deberia recibir este push`).toBe(false);
+    }
+    expect(eventoPuedeEmpujar("reprogramadas_esperan_cierre")).toBe(true);
+  });
+
+  it("⭑ los roles salen del modulo de configuracion (ajustable), y hoy son exactamente esos dos", () => {
+    // La lista vive en `lib/config/reprogramadas-retenidas.ts` porque el humano puede ajustarla;
+    // aqui se afirma el valor de HOY a mano, para que cambiarla obligue a tocar este test.
+    const entrada = PUSH_ELEGIBLE.reprogramadas_esperan_cierre;
+    expect(entrada.push).toBe("si");
+    expect(entrada.push === "si" && [...entrada.roles]).toEqual(["admin", "adminSatelite"]);
   });
 });

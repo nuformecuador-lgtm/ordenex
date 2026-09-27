@@ -36,20 +36,20 @@ beforeEach(async () => {
 });
 
 describe("recuperarABodega (R13/R14/R17/R21)", () => {
-  it("R13/R14/R17: UPDATE guardado por estatus=devuelta -> destino, limpia mensajero + asignado_at, append actor=admin", async () => {
+  it("R13/R14/R17: UPDATE guardado por estatus=novedad -> destino, limpia mensajero + asignado_at, append actor=admin", async () => {
     const prisma = buildPrisma();
 
     const ok = await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_satelite"),
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
       actorUsuarioId: "admin-1",
     });
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
     // R21: guarda por estado + no borrada.
-    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("novedad"), deletedAt: null });
     // R13/R14: destino de bodega + handoff limpio (mensajero + asignado_at a null).
     // Feature 110/R2/R4/R6: prioridad=true va DENTRO del mismo data (una sola escritura).
     // Feature 246 (T3.5, R9/R10): `fechaReparto: null` entra en la MISMA igualdad EXACTA, y por
@@ -69,7 +69,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("devuelta"),
+        estatusOrigenId: idEstado("novedad"),
         estatusDestinoId: idEstado("en_bodega_satelite"),
         actorUsuarioId: "admin-1", // R17: trazabilidad del actor (no del cron)
         origenTipo: "recuperacion_manual", // R17
@@ -84,7 +84,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"), // central
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
       actorUsuarioId: "maestro-1",
     });
     expect(prisma.orden.updateMany.mock.calls[0][0].data.estatusId).toBe(idEstado("en_bodega_central"));
@@ -98,7 +98,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"),
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
       actorUsuarioId: "maestro-1",
     });
     // R4: una sola llamada a orden.updateMany (no hay segunda escritura para encender prioridad).
@@ -124,7 +124,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     const ok = await repoWith(prisma).recuperarABodega({
       ordenId: "o1",
       destinoEstatusId: idEstado("en_bodega_central"),
-      estatusDevueltaId: idEstado("devuelta"),
+      estatusDevueltaId: idEstado("novedad"),
       actorUsuarioId: "admin-1",
     });
 
@@ -140,7 +140,7 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
       repoWith(prisma).recuperarABodega({
         ordenId: "o1",
         destinoEstatusId: idEstado("en_bodega_central"),
-        estatusDevueltaId: idEstado("devuelta"),
+        estatusDevueltaId: idEstado("novedad"),
         actorUsuarioId: "admin-1",
       }),
     ).rejects.toThrow("historial down");

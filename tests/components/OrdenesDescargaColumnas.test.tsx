@@ -93,7 +93,7 @@ function makeOrden(i: number): OrdenListItemDTO {
     numGuia: 1000 + i,
     numRemision: `REM-${String(i).padStart(3, "0")}`,
     estatusId: "est-entregada",
-    estatusValue: "entregada",
+    estatusValue: "entregado",
     destinatario: `Destinatario ${i}`,
     telefonoDest: "0999999999",
     tiendaId: "t1",

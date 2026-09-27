@@ -50,6 +50,8 @@ function makeOrden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: 1,
     marcarLuego: false,
     intentosEntrega: 0,

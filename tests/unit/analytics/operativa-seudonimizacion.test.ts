@@ -68,12 +68,12 @@ describe("R7 · politica real: el id se conserva porque el rol puede verlo", () 
   it("la seudonimizacion no se aplica a dimensiones que no son el mensajero", async () => {
     // Un `adminTienda` desagregando por estatus recibe la etiqueta del estatus tal cual: la
     // politica de identidad es del MENSAJERO, no un borrado indiscriminado.
-    const etiquetas = new Map([["e-entregada", { value: "entregada", label: "entregada" }]]);
+    const etiquetas = new Map([["e-entregada", { value: "entregado", label: "entregado" }]]);
     const serie = await servicioCon(rollupFalso(CUBOS, etiquetas)).consultar(
       consultaDe("ordenes_por_estado", TIENDA),
       "estatus",
     );
-    expect(serie.puntos[0].dimension).toBe("entregada");
+    expect(serie.puntos[0].dimension).toBe("entregado");
   });
 });
 

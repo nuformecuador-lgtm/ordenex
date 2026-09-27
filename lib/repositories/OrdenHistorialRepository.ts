@@ -1,3 +1,6 @@
+import { whereTieneRegistroDeCalle } from "@/lib/repositories/gestion-pendiente";
+import { senalesGestionDe, SIN_SENALES_GESTION } from "@/lib/repositories/ayuda-abierta";
+import type { SenalesGestionDTO } from "@/lib/types/orden";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CambioEstadoEntrada,
@@ -12,6 +15,7 @@ import {
 import {
   ORIGEN_TIPOS_VISITA_REAL,
   RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
+  type OrdenHistorialEventoDTO,
   type OrdenHistorialTransicionDTO,
 } from "@/lib/types/orden-historial";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
@@ -26,9 +30,10 @@ import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre
 // cero churn en los 11 call-sites; moverlos a un modulo propio es deuda NOMBRADA para otro PR,
 // porque mezclar el cambio de significado con un refactor de superficie deja al reviewer sin
 // diff legible).
+// FICHA 454 (T1.21): + `ordenEvento`, la cuarta fuente de la linea de tiempo (solo lectura).
 type OrdenHistorialPrismaClient = Pick<
   PrismaClient,
-  "ordenHistorialEstado" | "gestionOrden" | "$queryRaw"
+  "ordenHistorialEstado" | "gestionOrden" | "ordenEvento" | "$queryRaw"
 >;
 
 // Fila cruda de `findOrigenesReversion`. `value` NULL = la fila de historial mas reciente con
@@ -211,9 +216,20 @@ export function whereIntentosVigentes(
     // es el MISMO filtro de fuera, repetido a proposito para que el `EXISTS` entre por
     // `@@index([ordenId, createdAt])` (ver el bloque de rendimiento del JSDoc). `in`, jamas
     // `none`/`notIn`: lista de INCLUSION (R34-c).
-    historialEstados: {
-      some: { ordenId, origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } },
-    },
+    //
+    // ⏳ 2026-09-23 (FICHA 454, design §10, DA) — LA 6.ª CONDICION GANA UNA SEGUNDA VIA DE INCLUSION.
+    // Con la 454 la gestion de calle NO escribe historial al registrarse; la transicion se escribe al
+    // APROBAR y la de una `devuelta` lleva la familia `anclaje_devolucion`, que NO puede entrar en
+    // `ORIGEN_TIPOS_VISITA_REAL` (la guardia 239/R16 lo prohibe con razon). Sin esta segunda via, las
+    // `devuelta` nuevas dejarian de contar: el conteo caeria, nadie llegaria al tope y no se cobraria.
+    // La segunda via es el evento `gestion_registrada`, que SOLO escriben las dos vias de CALLE (el
+    // mensajero y la tienda desde una ayuda): sigue siendo LISTA DE INCLUSION y ninguna sintetica lo
+    // tiene (`sinteticas-sin-evento-registro.guardia.test.ts`). Las otras cinco condiciones no se tocan:
+    // antes de aprobarse su cierre una gestion no cuenta — el mismo numero que hoy en todo instante.
+    OR: [
+      { historialEstados: { some: { ordenId, origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } } } },
+      whereTieneRegistroDeCalle(),
+    ],
   };
 }
 
@@ -286,6 +302,52 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
     entradas: CambioEstadoEntrada[],
   ): Promise<void> {
     await appendCambioEstado(tx, entradas);
+  }
+
+  /**
+   * FICHA 454 (T1.21, R30): los hechos sin transicion de la orden, para la linea de tiempo. Usa el
+   * indice `(orden_id, created_at)` de `orden_evento`. No expone `motivo` ni el mensajero.
+   */
+  async findEventosByOrden(ordenId: string): Promise<OrdenHistorialEventoDTO[]> {
+    const filas = await this.prisma.ordenEvento.findMany({
+      where: { ordenId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        tipo: true,
+        resultado: true,
+        resultadoAnterior: true,
+        actorRol: true,
+        createdAt: true,
+        actor: { select: NOMBRE_USUARIO_SELECT },
+      },
+    });
+    return filas.map((fila) => ({
+      clase: "evento_orden" as const,
+      tipo: fila.tipo,
+      resultado: fila.resultado,
+      resultadoAnterior: fila.resultadoAnterior,
+      actorNombre: nombreCompletoUsuario(fila.actor),
+      actorRol: fila.actorRol, // 427/R26: el CONGELADO de la fila
+      createdAt: fila.createdAt,
+    }));
+  }
+
+  /**
+   * FICHA 454 (R29): las señales del detalle, con la MISMA consulta que anota los listados
+   * (`senalesGestionDe`), aqui con un solo id. `registradaAt` sale ya en ISO, como en el listado.
+   */
+  async findSenalesGestion(ordenId: string): Promise<SenalesGestionDTO> {
+    const s = (await senalesGestionDe(this.prisma, [ordenId])).get(ordenId) ?? SIN_SENALES_GESTION;
+    return {
+      gestionPendiente:
+        s.gestionPendiente === null
+          ? null
+          : {
+              resultado: s.gestionPendiente.resultado,
+              registradaAt: s.gestionPendiente.registradaAt.toISOString(),
+            },
+      ayudaAbierta: s.ayudaAbierta,
+    };
   }
 
   /** R26/R5: linea de tiempo de la orden, orden cronologico (created_at asc), con labels. */

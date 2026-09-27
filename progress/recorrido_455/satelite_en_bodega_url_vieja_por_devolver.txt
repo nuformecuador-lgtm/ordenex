@@ -1,0 +1,35 @@
+En bodega
+
+Órdenes que ya están en tu bodega satélite: asignar a un mensajero, enviar a central o recuperar.
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+Salir
+Recibir paquete
+Tienes 1 cierre abierto de tus mensajeros.
+Puedes seguir asignando órdenes a los mensajeros que no tienen un cierre activo.
+Órdenes de la bodega
+
+0 de 8 órdenes
+
+Estado: Por devolver a bodega central
+Filtros (1)
+Limpiar todo
+
+Descargar
+	Nº Guía	Nº Remisión	Estado	Intentos	Destinatario	Producto	Dirección	Tienda	Zona	Provincia	Cantón	Distrito	Monto a cobrar	Mensajero	Fecha de creación	Tiempo	Acciones
+
+
+Ninguna orden coincide con los filtros.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50

@@ -42,7 +42,9 @@
 
 import type { FilaProductoDTO } from "@/lib/types/conteo-productos";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
+import { ETIQUETA_EN_PROCESO } from "./desenlaces-de-fila";
 import { calcularEfectividad } from "./efectividad";
 import { textoComposicionOtrosResultados } from "./otros-resultados";
 
@@ -75,15 +77,17 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
   { clave: "producto", encabezado: "Producto" },
   { clave: "unidades", encabezado: "Unidades" },
   { clave: "ordenes", encabezado: "Órdenes" },
-  { clave: "entregadas", encabezado: "Entregadas" },
-  { clave: "rechazadas", encabezado: "Rechazadas" },
+  // FICHA 455 (2026-09-24, R5): una columna que cuenta UN desenlace lleva su nombre exacto.
+  { clave: "entregadas", encabezado: NOMBRE_ESTADO.entregado },
+  { clave: "rechazadas", encabezado: NOMBRE_ESTADO.devolucion_a_origen_por_rechazo },
   // FICHA 346 — el resto de los desenlaces. Mismo rotulo que la pantalla, a proposito: el
   // archivo se abre al lado de la tabla y dos nombres para la misma cifra se leen como dos
   // cifras distintas.
   { clave: "otros_resultados", encabezado: "Otros resultados" },
   // FICHA 347 (R58) — DE QUE se compone la anterior, en UNA celda de texto.
   { clave: "otros_resultados_detalle", encabezado: "Otros resultados (detalle)" },
-  { clave: "en_proceso", encabezado: "En proceso" },
+  // FICHA 455 (R6): un GRUPO, con el rótulo propio de la pantalla (antes «En proceso», retirado).
+  { clave: "en_proceso", encabezado: ETIQUETA_EN_PROCESO },
   // La UNIDAD va en el encabezado porque la celda lleva PUNTOS porcentuales (37.5), no la
   // fraccion cruda (0.375): sin decirlo, un 37.5 se lee como cualquier cosa. ⟨Q7⟩ del spec
   // pregunta si se prefiere lo contrario; mientras no se responda, el archivo se parece a la

@@ -11,7 +11,7 @@ import type { CierreDestinoTipo } from "@/lib/types/cierre";
 
 // Estado de ORIGEN elegible (la orden REPOSA en `devuelta`, feature 99) y destinos de bodega por
 // zona. Valores de catalogo ya sembrados; esta feature NO agrega estados.
-const ESTADO_ORIGEN = "devuelta";
+const ESTADO_ORIGEN = "novedad";
 const ESTADO_EN_BODEGA = "en_bodega_central"; // reintento -> bodega central
 const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite"; // reintento -> bodega satelite
 

@@ -1,0 +1,1883 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (425 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio[0m
+[0;32m✓ el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta[0m
+-> pnpm run typecheck
+
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea
+> tsc --noEmit
+
+[0;32m✓ typecheck paso[0m
+-> pnpm run lint
+
+> ordenex@0.1.0 lint R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea
+> eslint
+
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\_components\Sidebar.tsx
+  303:9  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\analitica\_components\AnaliticaShell.tsx
+   2:10  warning  'ChartColumn' is defined but never used  @typescript-eslint/no-unused-vars
+   5:10  warning  'EmptyState' is defined but never used   @typescript-eslint/no-unused-vars
+  61:3   warning  'filtros' is defined but never used      @typescript-eslint/no-unused-vars
+  62:3   warning  'operativo' is defined but never used    @typescript-eslint/no-unused-vars
+  63:3   warning  'financiero' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\cierres-admin\_components\CierresAdminModule.tsx
+  72:10  warning  'money' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\configuracion\tarifas\_components\CobroVehiculoTarifas.tsx
+  230:6  warning  React Hook useEffect has a missing dependency: 'onChange'. Either include it or remove the dependency array. If 'onChange' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\mis-asignaciones\_components\GestionarOrdenPanel.tsx
+  75:10  warning  'EnviarPlantillaWhatsappButton' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\mis-asignaciones\_components\UbicacionMapaInner.tsx
+  31:7  warning  'CENTRO_FALLBACK' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\novedades\_components\novedad-a-orden-card.ts
+  107:10  warning  '_causa' is defined but never used            @typescript-eslint/no-unused-vars
+  108:20  warning  '_mensajeroNombre' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\app\(app)\recoleccion\_components\RecoleccionModule.tsx
+  3:23  warning  'useMemo' is defined but never used          @typescript-eslint/no-unused-vars
+  7:10  warning  'ContactoButtons' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\lib\cache\cache-nula.ts
+  25:19  warning  '_origen' is defined but never used  @typescript-eslint/no-unused-vars
+  25:48  warning  '_tags' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\lib\repositories\WebhookSuscripcionRepository.ts
+  172:5  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\lib\repositories\ZonaRepository.ts
+  10:10  warning  'normalizeName' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\AnalyticsGraficaReparto.test.tsx
+  49:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\AnalyticsPesoBajoUnPunto.test.tsx
+  80:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\CierreMensajeroDetalleCascadas.test.tsx
+  16:15  warning  'CierreEstado' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\DineroIdentidadesEnPantalla.test.tsx
+  508:1  warning  Unused eslint-disable directive (no problems were reported from 'import/first')
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\RepartoModule.test.tsx
+  154:10  warning  'ordenCardsEnReparto' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\WebhookAccionCell.test.tsx
+  7:3  warning  'within' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\components\descarga\DescargarGestionesDialog.test.tsx
+  137:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+  150:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\integration\db\detalle-movimiento-cierre-postgres.test.ts
+  407:3  warning  'pageSize' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\integration\db\geografia-alta.test.ts
+  95:32  warning  's' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\integration\repositories\deshacer-asignacion.historial.test.ts
+  40:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\corregir-datos-cliente.action.test.ts
+  21:33  warning  '_input' is defined but never used    @typescript-eslint/no-unused-vars
+  21:68  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+  25:41  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+  25:59  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\deshacer-asignacion.action.test.ts
+   17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+   17:66  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+  122:35  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  122:68  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\eliminar-orden.action.test.ts
+  17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:61  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\geografia.composition-root.test.ts
+  23:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\rastreo-publico-action.test.ts
+  27:34  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  27:52  warning  '_factor' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\recuperar-orden.action.test.ts
+  17:34  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:63  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\actions\traspasar-mensajero.test.ts
+  35:20  warning  '_args' is defined but never used   @typescript-eslint/no-unused-vars
+  65:12  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  65:45  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\_fake-prisma-dinero.ts
+  571:33  warning  '_id' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\alcance-bordes.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\cache-invalidacion-backfill.test.ts
+  64:37  warning  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\ciclo-vida.test.ts
+  298:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\cohorte-carga-action.test.ts
+  45:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-cargadas-action.test.ts
+  23:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-devoluciones.test.ts
+  320:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-entregas-action.test.ts
+  16:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-hoy-gestion-action.test.ts
+  21:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-por-status-servicio.test.ts
+  157:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\conteo-productos-action.test.ts
+  35:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\operativa-sumabilidad.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\analytics\productos-dinero-alcance.test.ts
+  7:3  warning  'resolverAlcanceProductos' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\auth\google-adc-token.test.ts
+  25:38  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\components\analytics-topes.test.ts
+  25:7  warning  'serie' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\components\etiquetas-pdf.test.ts
+   31:3   warning  'MAQUETA_BASE' is defined but never used     @typescript-eslint/no-unused-vars
+   32:14  warning  'PT_A_MM_MAQUETA' is defined but never used  @typescript-eslint/no-unused-vars
+  174:10  warning  'lineasDe' is defined but never used         @typescript-eslint/no-unused-vars
+  306:10  warning  'textosConY' is defined but never used       @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\components\recuperar-orden.ui.test.tsx
+  273:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\guards\dinero-centimos-cuando-existen.guardia.test.ts
+  239:10  warning  'salidasQueCasan' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\guards\quitador-comentarios.guardia.test.ts
+  123:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+  244:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\pdf\etiquetas-pdf-lote.test.ts
+  132:10  warning  'textosConY' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\api-key-repository.test.ts
+  180:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cierre-aporte-repository.test.ts
+  53:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  54:30  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  55:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cierres-admin-gestiones-where.test.ts
+  45:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  48:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  50:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cierres-bodega-gestiones-where.test.ts
+  32:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  34:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  36:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cierres-filtros-where.test.ts
+  41:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  42:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cierres-gestiones-descarga-dto.test.ts
+  122:29  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\colas-paginadas-where.test.ts
+  44:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  45:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\cuentas-por-pagar-paginado-where.test.ts
+  42:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\desglose-mensajero-cierre-derivado.test.ts
+  53:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\gasto-fijo-plantilla-eliminar.test.ts
+  50:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\historicos-paginados-where.test.ts
+  42:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\orden-repository.listado-filtros-257.test.ts
+  36:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  37:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\premio-ranking-lecturas.test.ts
+   23:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  115:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  210:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  211:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  212:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  301:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\ranking-snapshot-repository.test.ts
+   52:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   59:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   62:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   68:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  224:54  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\satelite-paginado-where.test.ts
+  103:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\repositories\tarifa-repository.test.ts
+  316:23  warning  '_omitida' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\scripts\backfill-marcador-config-geocode-cli.test.ts
+  6:8  warning  'InformeBackfillMarcador' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\_dobles-analitica-financiera.ts
+  201:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  201:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+  249:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  249:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\api-pdf-etiqueta-service.test.ts
+   84:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   84:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:47  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+   91:14  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   91:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:47  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+  102:45  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  102:66  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+  106:37  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  106:58  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\caja-premio-ranking-feed.test.ts
+  26:12  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  26:26  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+  88:43  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  88:57  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\chat-whatsapp-sinpe-del-servidor.test.ts
+  47:40  warning  '_entrada' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\cierre-dia-pasados-paginado.test.ts
+  72:24  warning  '_mensajeroId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\cierres-admin-filtro-estado.test.ts
+  53:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  53:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  53:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  59:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  59:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  59:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  65:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  65:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  68:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  68:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\corregir-datos-cliente-bodega-satelite.test.ts
+  112:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  113:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  114:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\corregir-datos-cliente-geo-retirada.test.ts
+  94:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  95:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  96:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\corregir-datos-cliente-service.test.ts
+  118:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  119:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  120:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\corregir-datos-cliente-texto-etiqueta.test.ts
+   99:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  100:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  101:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\corte-diario-seleccion.test.ts
+  118:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\deshacer-asignacion-service.test.ts
+  75:7   warning  '_origenes' is defined but never used   @typescript-eslint/no-unused-vars
+  76:7   warning  '_historial' is defined but never used  @typescript-eslint/no-unused-vars
+  77:7   warning  '_zonaId' is defined but never used     @typescript-eslint/no-unused-vars
+  90:12  warning  '_items' is defined but never used      @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\geocodificacion-service.test.ts
+  346:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\habilitar-novedad-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\premio-ranking-devengo-service.test.ts
+  135:40  warning  '_m' is defined but never used     @typescript-eslint/no-unused-vars
+  135:52  warning  '_dias' is defined but never used  @typescript-eslint/no-unused-vars
+  135:67  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\rastreo-publico-service.test.ts
+  42:38  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  43:43  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\rescate-ayuda-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\solicitud-ayuda-service.test.ts
+  70:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\tope-intentos-dto-derivado.test.ts
+  1:36  warning  'afterEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\traspaso-mensajero-service.test.ts
+  502:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  503:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  559:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  560:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  574:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  577:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  594:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  595:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  616:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  619:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  629:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  630:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\wallet-detalle-movimiento.test.ts
+  77:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  78:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  78:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  79:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  83:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  84:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\wallet-tienda-detalle-movimiento.test.ts
+  79:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  83:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  87:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  88:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\services\webhook-estado-service.test.ts
+  160:43  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  160:59  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  161:46  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  161:62  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  178:39  warning  '_ctx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea\tests\unit\utils\capturar-ubicacion.test.ts
+  37:9  warning  '_err' is defined but never used       @typescript-eslint/no-unused-vars
+  38:9  warning  '_opciones' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 200 problems (0 errors, 200 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
+[0;32m✓ lint paso[0m
+[0;32m✓ DATABASE_URL resuelta: los 188 archivos de tests contra Postgres SI se ejecutan[0m
+-> pnpm run test:cambiados (con reporte JSON)
+
+> ordenex@0.1.0 test:cambiados R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea
+> vitest run --changed origin/dev --passWithNoTests "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-cambiados.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea
+
+ ✓ tests/components/ChatBurbujaContenido.test.tsx (12 tests) 760ms
+stderr | tests/components/ChatNotaVoz.test.tsx > Nota de voz del composer (E2) > R16: si el permiso se concede pero el grabador no arranca, las pistas se paran igual
+[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+
+ ✓ tests/components/ChatNotaVoz.test.tsx (8 tests) 1225ms
+     ✓ R14: graba en el PRIMER formato de la lista de Meta que el dispositivo soporta  350ms
+     ✓ R6: la nota va SIN pie y el texto escrito NO se pierde al enviarla  375ms
+ ✓ tests/components/ChatBurbujaMedia.test.tsx (24 tests) 1362ms
+ ✓ tests/components/ChatComposerAdjunto.test.tsx (17 tests) 2300ms
+     ✓ R1: el clip ofrece las CUATRO vias de adjuntar, cada una con nombre accesible  343ms
+     ✓ R5: con adjunto y texto sale UN SOLO mensaje, con el texto como pie  360ms
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · el cuarto botón «Ayuda» del panel > está junto a los otros tres gestos de la puerta y arranca sin marcar
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · el cuarto botón «Ayuda» del panel > está junto a los otros tres gestos de la puerta y arranca sin marcar
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > Corte: Reparto monta SU apartado y ninguna superficie de recogida
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > Corte: Reparto monta SU apartado y ninguna superficie de recogida
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > dos clicks seguidos NO disparan dos llamadas (cerrojo anti-doble-click)
+An update to MarcarLuegoToggle inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · el cuarto botón «Ayuda» del panel > 235/R16: el panel NO se abre sobre una orden en ayuda, así que su rótulo es FIJO
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 296: la card del portal del mensajero NO muestra el dato del mensajero
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > Sin órdenes en reparto: muestra el aviso y NO renderiza el panel de detalle
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R18: la card marcada muestra el badge 'Gestionar más tarde'; la no marcada no
+[AppError:INTERNAL] Error: `cookies` was called outside a request scope. Read more: https://nextjs.org/docs/messages/next-dynamic-api-wrong-context
+    at throwForMissingRequestStore (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\app-render\work-unit-async-storage.external.js:75:33)
+    at cookies (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\request\cookies.js:126:67)
+    at resolveActorFromSession (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/auth/resolve-actor.ts:16:29)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:73:66
+    at withErrorHandler (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/errors/with-error-handler.ts:15:18)
+    at listarNotasOrden (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:72:19)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx:388:5
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/_internal/index.mjs:64:42
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:403:21
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:583:21
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R18: la card marcada muestra el badge 'Gestionar más tarde'; la no marcada no
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R19: las órdenes marcadas se muestran DESPUÉS de las no marcadas, sin cambiar la secuencia de ruta
+[AppError:INTERNAL] Error: `cookies` was called outside a request scope. Read more: https://nextjs.org/docs/messages/next-dynamic-api-wrong-context
+    at throwForMissingRequestStore (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\app-render\work-unit-async-storage.external.js:75:33)
+    at cookies (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\request\cookies.js:126:67)
+    at resolveActorFromSession (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/auth/resolve-actor.ts:16:29)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:73:66
+    at withErrorHandler (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/errors/with-error-handler.ts:15:18)
+    at listarNotasOrden (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:72:19)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx:388:5
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/_internal/index.mjs:64:42
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:403:21
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:583:21
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R19: las órdenes marcadas se muestran DESPUÉS de las no marcadas, sin cambiar la secuencia de ruta
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R19: sin órdenes marcadas, el orden de ruta del server se conserva intacto
+[AppError:INTERNAL] Error: `cookies` was called outside a request scope. Read more: https://nextjs.org/docs/messages/next-dynamic-api-wrong-context
+    at throwForMissingRequestStore (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\app-render\work-unit-async-storage.external.js:75:33)
+    at cookies (R:\job\singularis\projects\ordenex\node_modules\.pnpm\next@16.2.10_@babel+core@7._9c8a4c1244403c1262c0b6dc80971b90\node_modules\next\dist\server\request\cookies.js:126:67)
+    at resolveActorFromSession (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/auth/resolve-actor.ts:16:29)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:73:66
+    at withErrorHandler (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/errors/with-error-handler.ts:15:18)
+    at listarNotasOrden (R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/lib/actions/orden-notas.ts:72:19)
+    at R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx:388:5
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/_internal/index.mjs:64:42
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:403:21
+    at file:///R:/job/singularis/projects/ordenex/node_modules/.pnpm/swr@2.4.2_react@19.2.4/node_modules/swr/dist/index/index.mjs:583:21
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/MarcarLuegoToggle.test.tsx > MarcarLuegoToggle (feature 115 / T8) > R19: sin órdenes marcadas, el orden de ruta del server se conserva intacto
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/components/MarcarLuegoToggle.test.tsx (7 tests) 1076ms
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > sin ninguna marcada no aparece la sección: no se añade un encabezado vacío
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > la marcada sale del listado principal y aparece abajo, una sola vez
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > con TODAS marcadas el listado principal lo dice, en vez de quedarse en blanco
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > 235/R16: la card de ayuda YA NO ofrece «Gestionar» (llamaría a una acción que rechaza)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > 235/R19: la card conserva «Recuperar», que es la salida de vuelta
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > 235/R37: el chip de la card NO dice «En reparto», que es lo que la orden dejó de ser
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · las órdenes con ayuda se van abajo, a su propia sección > 235/R37: y el COLOR de ese chip es el de `warning` sólido, fijado y no heredado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · la orden en ayuda sale de la ruta, pero no del chat > 235/R15: NO llega al mapa de ruta — la parada desaparece, no solo su card
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · la orden en ayuda sale de la ruta, pero no del chat > 235/R15: y su card aparece UNA sola vez, en la sección de abajo
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · la orden en ayuda sale de la ruta, pero no del chat > 235/R15: su card NO lleva la marca «Pendiente de optimizar», que sí sigue en el listado de arriba
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyuda.test.tsx > Reparto · la orden en ayuda sale de la ruta, pero no del chat > 235/P8: SÍ sigue entre los contactos del chat — el paquete sigue en su moto
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/components/RepartoAyuda.test.tsx (18 tests) 2650ms
+     ✓ está junto a los otros tres gestos de la puerta y arranca sin marcar  436ms
+     ✓ no se puede confirmar sin motivo, y con motivo envía la orden y el texto recortado  833ms
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R6/R2 (113): con una orden activa la vista COLAPSA a foco — las demás cards no están en el DOM y no hay 'Termina la gestión en curso'
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx > 237/R40 — la orden resuelta por la tienda desaparece del portal del mensajero > ANTES: mientras la tienda no ha resuelto, la orden está en el apartado de ayuda
+An update to GestionarOrdenPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx > 237/R40 — la orden resuelta por la tienda desaparece del portal del mensajero > ANTES: mientras la tienda no ha resuelto, la orden está en el apartado de ayuda
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx > 237/R40 — la orden resuelta por la tienda desaparece del portal del mensajero > DESPUÉS: el servidor deja de mandarla y no queda ni en la sección, ni en la lista
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/components/GestionarOrdenPanelHilo.test.tsx (3 tests) 712ms
+     ✓ la lista de asignaciones no pide el hilo de todas las órdenes  359ms
+stderr | tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx > 237/R40 — la orden resuelta por la tienda desaparece del portal del mensajero > y tampoco vuelve a ser parada del mapa (que es donde la 235 se quemó)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx (3 tests) 738ms
+     ✓ ANTES: mientras la tienda no ha resuelto, la orden está en el apartado de ayuda  452ms
+ ✓ tests/components/ChatConversacionPlantillaDiaria.test.tsx (5 tests) 645ms
+     ✓ EL BUG: con una plantilla de AYER en el hilo, hoy se puede volver a enviar  379ms
+ ✓ tests/components/ChatBurbujaSistema.test.tsx (6 tests) 418ms
+ ✓ tests/components/ChatContactoAntesDeRecoger.test.tsx (18 tests) 5426ms
+     ✓ desde Reparto, el cliente de un paquete que aún no lleva encima está en la lista  710ms
+     ✓ y la que ya lleva encima sigue estando: esta ficha suma, no sustituye  319ms
+     ✓ ⭑ y la de HOY no lleva ninguna de las dos: la marca DISTINGUE, no adorna  300ms
+     ✓ la conversación abierta también lo dice: es donde se escribe la promesa  356ms
+     ✓ y con la de hoy delante, esa nota no existe  355ms
+     ✓ «Ver detalle» despliega dirección y producto de la orden abierta  425ms
+     ✓ arranca plegado: lo que se abre es un chat, y el hilo va primero  385ms
+     ✓ ninguna fila del chat lleva «Gestionar» ni «Recoger», tampoco dentro de «Ver detalle»  413ms
+     ✓ la fila de la asignada se anuncia como «Por recoger», no como en reparto  312ms
+ ✓ tests/unit/components/chat-contactos.test.ts (16 tests) 10ms
+ ✓ tests/components/MisAsignacionesPage.test.tsx (12 tests) 531ms
+     ✓ R9: el rol mensajero ve el apartado de reparto y los KPIs  391ms
+ ✓ tests/components/ChatReacciones.test.tsx (5 tests) 365ms
+ ✓ tests/components/ChatConversacionLlamada.test.tsx (3 tests) 212ms
+ ✓ tests/components/ChatConversacionTono.test.tsx (6 tests) 206ms
+ ✓ tests/components/ChatNoLeidos.test.tsx (14 tests) 426ms
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R35: en el paso de detalle (sin fijar el puntero) NO hay 'Cancelar gestión' ni se libera
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R17: el detalle ofrece Llamar (tel:) y Mensaje (chat), y ya no el WhatsApp wa.me plano
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R28: muestra el nº de secuencia de la ruta en la card; las paradas sin posición se marcan 'Pendiente de optimizar'
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R30: con la ruta 'desactualizada' muestra el aviso de que el orden no está actualizado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R30: aunque la ruta esté 'vigente', si hay paradas sin optimizar también avisa
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R30: ruta vigente y sin pendientes NO muestra el aviso
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R31/R32: el botón 'Sincronizar ruta' está montado en el módulo del mensajero
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R28/mapa: el mapa de ruta está presente y recibe SOLO las paradas con coordenadas
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/§10.2 caso 1 · bloqueado por ACUMULAR (N=2, V=0), con la fecha de la JORNADA
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1), con el puntero al final
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/R60 · sin jornada fiable la fecha DESAPARECE entera y el resto se lee igual
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/R51 · el aviso NO promete recibir asignaciones ni recoger en tiendas
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 271/R5 · un solo cierre YA enviado (N=1, V=0) NO bloquea nada
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R12: bloqueado muestra el aviso accionable de BLOQUEO
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R12: sin bloqueo NO muestra el aviso de bloqueo total
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R14: bloqueado deshabilita las cards de 'En reparto' y NO renderiza el panel de gestión (escoger/gestionar)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R14: sin bloqueo, los controles de gestión siguen operativos (el panel se monta)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R1: cada card en reparto muestra el detalle COMPLETO (Pedido/Entrega/Cobro) de SU orden
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R2: el texto 'Termina la gestión en curso' no aparece en NINGÚN estado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R3: bloqueado sin gestión — las cards están deshabilitadas y AÚN muestran el detalle completo
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R4: con una gestión activa NO se ofrece gestionar OTRA orden (sus cards no están en el DOM)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R5: con una gestión activa la vista entra en foco y el panel muestra la orden ACTIVA
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R7: en foco NO se renderiza el mapa de ruta ni 'Sincronizar ruta'
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R10: al volver ordenEnGestionId a null se SALE del foco y se restaura la vista completa
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R11: sin órdenes en reparto muestra el vacío y NO entra en foco (aunque haya puntero)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > R12: bloqueado con puntero fijado NO entra en foco (precede el aviso de bloqueo total, sin panel)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 114/R1: renderiza un campo de búsqueda de guías (searchbox) sobre el grupo en reparto
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 114/R1: en modo foco NO se renderiza el buscador (no hay cards que filtrar)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 117/R1: renderiza los selects de Cantón y Distrito en el módulo del mensajero
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 117/R1: en modo foco NO se renderiza el filtro cantón/distrito (no hay lista que filtrar)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule > 117/R3: sin cantón elegido, el select de Distrito está deshabilitado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R18/R24: la card POS de 'por gestionar' muestra el dato con 2 intentos
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R19: la card con 0 intentos LO MUESTRA igual (no se omite)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R19: sin el campo (DTO viejo) la card muestra 0
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R24: cada card lleva SU número, no el de la vecina
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R18: el detalle lo presenta como un CAMPO más (<dt>/<dd>), como sus hermanos
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R32/D6: el dato NO vive en la fila de marcas informativas (que son badges)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R32: sin ninguna marca, la fila de marcas sigue sin renderizarse (sin hueco)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > MisAsignaciones — intentos de entrega (feature 160) > R20: el dato no trae el umbral ('de N')
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — Entregas no monta ninguna superficie de recolección (feature 167) > R33: ni región, ni escáner, ni aviso, ni conteo, ni enlace al apartado nuevo
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — Entregas no monta ninguna superficie de recolección (feature 167) > R33: tampoco con el mensajero BLOQUEADO (donde el aviso podría colarse)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — orden reservada para mañana (feature 246) > R22: la orden ya recogida anoche sigue diciendo «Para mañana», y la de hoy no
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — orden reservada para mañana (feature 246) > R23: la reservada NO se esconde ni sale de la ruta: es una parada más
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — orden reservada para mañana (feature 246) > R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — orden reservada para mañana (feature 246) > 277/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el botón de gestionar de una reservada (feature 261/R12) > R12: el botón «Gestionar» de la reservada está DESHABILITADO, y el de la de hoy no
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el botón de gestionar de una reservada (feature 261/R12) > R12: la mitad POSITIVA — sin reserva ese mismo botón está habilitado
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el botón de gestionar de una reservada (feature 261/R12) > R9: la card reservada NO se esconde ni se recorta — sigue entera y en su sección
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R38/R40: con el orden calculado en la app, el aviso está desde el PRIMER render — sin pulsar nada
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R38/R45: con `secuenciaFuente` = proveedor NO hay aviso — el orden lo calculó el servicio de rutas: no hay nada que revisar
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R38/R45: con `secuenciaFuente` = null NO hay aviso — no consta quién lo calculó (ruta anterior a esta feature, o 0/1 parada)
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R44: avisa sin nombrar la causa — el mensajero no puede hacer nada con ella
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R41/R42: el texto del aviso no lleva jerga interna, ni siglas, ni datos de nadie
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | tests/components/RepartoModule.test.tsx > RepartoModule — el orden de las paradas es aproximado (feature 265) > R43: las TRES señales conviven y siguen siendo tres cosas distintas
+An update to ChatFlotante inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/components/RepartoModule.test.tsx (103 tests) 19256ms
+     ✓ Corte: Reparto monta SU apartado y ninguna superficie de recogida  442ms
+     ✓ Rediseño: 'Gestionar' en la card, tras CONFIRMAR, lleva la orden al PANEL de detalle  393ms
+     ✓ Pedido humano: la orden que YA se está gestionando tiene 'Gestionar' DESHABILITADO  413ms
+     ✓ Rediseño: los controles propios de la card NO seleccionan de rebote  445ms
+     ✓ R17 + F98: verificar con la guía CORRECTA fija el puntero (escogerParaGestion) y revela los 4 botones  454ms
+     ✓ F98: verificar con una guía DISTINTA NO fija el puntero ni revela los 4 botones  366ms
+     ✓ R21: si escoger devuelve conflict, muestra Toast y NO revela los 4 botones  388ms
+     ✓ R22/R23: ENTREGAR muestra sus campos y envía foto + monto + método en el FormData  1097ms
+     ✓ ENTREGAR sin cobro (montoCobrar 0): no monta el editor y envía monto 0 SIN líneas  576ms
+     ✓ R25/R26: REPROGRAMAR envía fecha futura + motivo  466ms
+     ✓ R27/R28 + 73/R9 + 75: DEVOLVER envía la causa, el motivo y la evidencia  706ms
+     ✓ 73/R3+R4 (T5.2): DEVOLVER muestra las 3 causas con su etiqueta en español, sin slugs  384ms
+     ✓ 73/R5 (T5.3): el selector de causa NO aparece en Entregar / Reprogramar / Rechazar  1064ms
+     ✓ 73/R6 (T5.3): DEVOLVER sin causa NO envía y muestra el error junto al campo  518ms
+     ✓ 73/R4 (T5.4): cambiar de resultado y volver a Devolver no arrastra la causa anterior  552ms
+     ✓ R29/R30: RECHAZAR envía foto + motivo  429ms
+     ✓ Rediseño: desde los campos, 'Atrás' vuelve a los 4 botones sin perder el puntero  459ms
+     ✓ R22 (cliente): ENTREGAR sin foto ni método NO envía y muestra errores por campo  387ms
+     ✓ R22/R24: un validation_error del servidor se muestra por campo  608ms
+     ✓ R35: 'Cancelar gestión' tras fijar el puntero libera (liberarGestion) y refresca  315ms
+     ✓ R35: en el path de ÉXITO (onSuccess) NO se llama a liberarGestion  585ms
+     ✓ 117/R5: cambiar de cantón resetea el distrito a 'todos'  501ms
+     ✓ 117/R6: filtrar por cantón+distrito muestra solo las coincidentes y excluye distrito nulo  407ms
+     ✓ 117/R8: 'Limpiar filtros' restaura la lista completa y limpia ambos selects  425ms
+     ✓ 117/R8: elegir 'Todos los cantones' desde el desplegable restaura la lista completa  376ms
+     ✓ 117/R12 + 114: el filtro cantón/distrito se COMPONE en AND con el buscador de texto  326ms
+
+ Test Files  18 passed (18)
+      Tests  280 passed (280)
+   Start at  00:42:24
+   Duration  26.05s (transform 5.39s, setup 3.95s, import 38.02s, tests 38.32s, environment 36.00s)
+
+JSON report written to R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/.vitest/rojos-cambiados.json
+-> pnpm run test:guardias (con reporte JSON)
+
+> ordenex@0.1.0 test:guardias R:\job\singularis\projects\ordenex\.claude\worktrees\agent-a83eb63fb453fc7ea
+> vitest run guard "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-guardias.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea
+
+ ✓ tests/unit/analytics/backfill-guards.test.ts (21 tests) 1424ms
+     ✓ el censo cubre todo lo que importa los modulos de la 125  398ms
+     ✓ ni el backfill declara superficie, ni nadie con superficie lo importa  326ms
+     ✓ la constante vive en un solo archivo y su procedencia existe de verdad  327ms
+     ✓ el unico archivo de la 124 que la 125 amplia es el de configuracion, y solo suma  328ms
+ ✓ tests/integration/db/analytics-daily-guards.test.ts (26 tests) 1758ms
+     ✓ no hay repositorio, servicio ni interfaz con el nombre de la TABLA  643ms
+ ✓ tests/unit/guards/catalogo-postgres-acota-esquema.guardia.test.ts (7 tests) 2013ms
+     ✓ el barrido encuentra archivos y consultas: si midiera cero, el verde no valdria nada  1053ms
+     ✓ ⭑ NINGUNA consulta del arbol lee un catalogo sin decir de que esquema habla  953ms
+ ✓ tests/guards/tarifa-status-retirado.guard.test.ts (8 tests) 2247ms
+     ✓ ningun archivo de lib/, app/ ni db/schema.prisma los nombra fuera de un comentario  359ms
+     ✓ ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePorTienda`  957ms
+     ✓ `db/migrations/` queda FUERA del censo, y la cita historica sigue ahi intacta  878ms
+ ✓ tests/integration/db/zona-central-guarda-y-rastro.test.ts (17 tests) 1367ms
+ ✓ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts (15 tests) 1823ms
+     ✓ R2/R6 — con una dependencia ausente el paso CORTA en rojo y NO da el visto bueno  425ms
+     ✓ R4 — con el arbol completo el paso pasa y da el visto bueno con la cifra  417ms
+ ✓ tests/unit/guards/revision-sinpe-no-bloquea.guardia.test.ts (7 tests) 1434ms
+     ✓ el censo encuentra el resolvedor (anti-vacuidad: si no, no vigila nada)  381ms
+     ✓ ⭑ NINGUN archivo que nombre la revision decide un `redirect`/`notFound`/403 con ella  351ms
+     ✓ ⭑ CONTRAPRUEBA — un `redirect` inyectado en el resolvedor pone la guardia roja  695ms
+ ✓ tests/unit/descarga/adaptador-conjunto.guardia.test.ts (11 tests) 1455ms
+     ✓ las tres relecturas que llegaron a cero consumidores siguen en cero  369ms
+     ✓ CONTROL POSITIVO: las lecturas DEDICADAS que las sustituyeron sí se llaman  479ms
+ ✓ tests/unit/analytics/modulo-puro.guardia.test.ts (30 tests) 1443ms
+     ✓ importa los diez modulos sin DATABASE_URL y ninguno lanza  565ms
+     ✓ metrics.ts es el unico archivo del repo que declara metricas  381ms
+     ✓ el cubo sin_asignar se escribe una sola vez, en lib/analytics (R30)  309ms
+ ✓ tests/unit/descarga/columnas-asercion-de-orden.guardia.test.ts (3 tests) 1424ms
+     ✓ AUTOCOMPROBACIÓN: el detector encuentra los casos conocidos y rechaza el que no cuenta  774ms
+     ✓ ninguna constante COLUMNAS_DESCARGA_* del árbol se queda sin aserción de orden  646ms
+ ✓ tests/unit/guards/no-embalaje.test.ts (1 test) 4452ms
+     ✓ no queda ninguna referencia a 'embalaje' fuera del whitelist  4449ms
+ ✓ tests/unit/guards/censo-order-status-rename.test.ts (8 tests) 1098ms
+     ✓ no hay coincidencias case-sensitive de los 7 values retirados en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  625ms
+     ✓ no hay ninguna aparicion del literal exacto en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  465ms
+ ✓ tests/unit/guards/anclaje-vs-intentos.guardia.test.ts (19 tests) 1138ms
+     ✓ `whereIntentosVigentes` se declara UNA sola vez, y en el modulo del conteo  382ms
+     ✓ el filtro por la familia del ANCLAJE vive en UN solo modulo de lectura  347ms
+     ✓ no existe ningun helper COMPARTIDO de «cierre aprobado»  351ms
+ ✓ tests/unit/guards/regla-241-caducada.guardia.test.ts (7 tests) 993ms
+ ✓ tests/unit/guards/gestion-aprobada-retirada.guardia.test.ts (8 tests) 921ms
+     ✓ ningun modulo de codigo la menciona (censo sobre fuente sin comentarios)  837ms
+ ✓ tests/unit/guards/premio-ranking-alcance.guardia.test.ts (14 tests) 1058ms
+ ✓ tests/unit/guards/caja-173-alcance.guardia.test.ts (29 tests) 1046ms
+ ✓ tests/unit/guards/sinpe-en-toda-superficie.guardia.test.ts (9 tests) 930ms
+     ✓ ⭑ la cadena `negocioDesdeEnv` no aparece en ningun archivo censado  333ms
+     ✓ ⭑ CONTRAPRUEBA — el mismo detector encuentra `negocioConSinpe`, que SI existe  306ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > con trabajo declarado el aviso espera, y aparece cuando el usuario termina
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/monto-cobrar-entero.guardia.test.ts (13 tests) 931ms
+     ✓ todo schema zod que declare `monto_cobrar` esta censado  304ms
+ ✓ tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts (16 tests) 686ms
+     ✓ ⭑ el predicado estrecho no aparece en NINGUN otro modulo de produccion  363ms
+     ✓ ⭑ el arbol sigue teniendo MUCHOS consumidores de `esAccesoTotal`: la paridad no se movio  305ms
+ ✓ tests/unit/guards/ayuda-columna-retirada.guardia.test.ts (14 tests) 968ms
+     ✓ ningun modulo de codigo la usa (censo sobre fuente sin comentarios)  886ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > G2: si el usuario empieza algo entre el aviso y el clic, no se pide el relevo
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/factura-contraste.guardia.test.ts (50 tests) 862ms
+     ✓ ningún otro archivo de `tests/` tiene una segunda copia de la fórmula de contraste  462ms
+     ✓ ninguna verificación de `tests/` se apoya en el detector de `.claude/skills`  366ms
+ ✓ tests/unit/guards/sinpe-sin-variables-de-entorno.guardia.test.ts (6 tests) 723ms
+     ✓ ⭑ CONTRAPRUEBA — un infractor INYECTADO en memoria pone la guardia roja  346ms
+ ✓ tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts (22 tests) 1481ms
+     ✓ con la rama de entrega abierta y el monto tecleado, hay trabajo en curso  387ms
+ ✓ tests/unit/guards/marcador-fallo-config-declaracion-unica.guardia.test.ts (14 tests) 681ms
+     ✓ y en `tests/` solo lo escribe a mano el test de R14  402ms
+ ✓ tests/unit/guards/geografia-renombrado-punto-unico.guardia.test.ts (12 tests) 545ms
+ ✓ tests/unit/analytics/export-csv-frontera.guardia.test.ts (17 tests) 680ms
+ ✓ tests/unit/guards/dinero-centimos-cuando-existen.guardia.test.ts (28 tests) 671ms
+ ✓ tests/unit/analytics/financiera-fuente.guardia.test.ts (13 tests) 489ms
+ ✓ tests/unit/analytics/rollup-guards.test.ts (21 tests) 498ms
+ ✓ tests/unit/tablero-dia/buckets-estatus.guardia.test.ts (31 tests) 538ms
+     ✓ ningun otro archivo del arbol declara buckets junto a values de estatus  522ms
+ ✓ tests/unit/guards/geografia-sin-borrado-fisico.guardia.test.ts (8 tests) 488ms
+ ✓ tests/unit/descarga/contadores-cabecera.guardia.test.ts (5 tests) 586ms
+ ✓ tests/unit/analytics/cache-tags.guardia.test.ts (3 tests) 535ms
+     ✓ solo el catalogo de la 135 (y su test) contienen las cadenas de `ANALITICA_TAGS`  525ms
+ ✓ tests/unit/analytics/catalogo-produccion.guardia.test.ts (5 tests) 503ms
+     ✓ nadie fuera del catalogo decide datos por `estadoProduccion`, `universo` ni `derivadaDe`  418ms
+ ✓ tests/unit/guards/impresion-flujo.guardia.test.ts (58 tests) 566ms
+     ✓ ningun otro archivo de `tests/` define una segunda copia del parser  532ms
+ ✓ tests/unit/guards/filtros-url-r25.test.ts (3 tests) 6120ms
+ ✓ tests/unit/guards/correccion-fecha-reprogramacion.guardia.test.ts (16 tests) 500ms
+ ✓ tests/unit/guards/censo-simpe.test.ts (1 test) 478ms
+     ✓ no hay coincidencias case-sensitive de 'SIMPE' en app/, lib/, tests/, e2e/  477ms
+ ✓ tests/unit/guards/ranking-snapshot-cron.guardia.test.ts (10 tests) 451ms
+ ✓ tests/unit/analytics/operativa-frontera.guardia.test.ts (11 tests) 423ms
+ ✓ tests/unit/analytics/cache-financiera.guardia.test.ts (3 tests) 366ms
+     ✓ el dominio `financiera` no se cachea  355ms
+ ✓ tests/unit/guards/push-cableado-unico.guardia.test.ts (22 tests) 594ms
+     ✓ ⭑ el repositorio que sale de `notificadores.ts` es un `NotificacionRepositoryConPush`  568ms
+ ✓ tests/unit/descarga/cobertura-tablas.guardia.test.ts (4 tests) 424ms
+ ✓ tests/unit/analytics/alcance-fuente-unica.guardia.test.ts (13 tests) 379ms
+     ✓ ningun archivo del repo fuera de metrics.ts declara una tabla de alcance por rol  338ms
+ ✓ tests/unit/guards/pagos-proyeccion.guardia.test.ts (10 tests) 388ms
+ ✓ tests/unit/analytics/export-financiero-frontera.guardia.test.ts (32 tests) 356ms
+ ✓ tests/unit/guards/busqueda-texto-solo-lectura.test.ts (9 tests) 380ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  368ms
+ ✓ tests/unit/guards/historial-accion-punto-unico.guardia.test.ts (7 tests) 382ms
+     ✓ ningun OTRO archivo del arbol escribe en la tabla  371ms
+ ✓ tests/unit/components/analytics-paquete-guard.test.ts (15 tests) 376ms
+ ✓ tests/integration/db/zona-guardado-conserva-inactivos.test.ts (2 tests) 596ms
+ ✓ tests/unit/guards/geografia-predicado-unico.guardia.test.ts (10 tests) 328ms
+ ✓ tests/unit/guards/clave-remision-solo-lectura.guardia.test.ts (12 tests) 375ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  365ms
+ ✓ tests/unit/guards/p2003-detector-unico.guardia.test.ts (8 tests) 319ms
+     ✓ ningun OTRO archivo del arbol lo nombra  306ms
+ ✓ tests/unit/guards/sin-mensajero-sugerido.test.ts (3 tests) 284ms
+ ✓ tests/unit/guards/egreso-indemnizacion-emisores.test.ts (9 tests) 306ms
+ ✓ tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts (4 tests) 264ms
+ ✓ tests/unit/analytics/alcance-bordes.guardia.test.ts (11 tests) 262ms
+ ✓ tests/unit/guards/umbral-origen-declarado.guardia.test.ts (7 tests) 262ms
+ ✓ tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts (11 tests) 229ms
+ ✓ tests/unit/guards/censo-catalogo-estados-v2.test.ts (8 tests) 237ms
+ ✓ tests/unit/guards/pagos-frontera.guardia.test.ts (16 tests) 192ms
+ ✓ tests/unit/guards/nota-privada-retirada.guardia.test.ts (9 tests) 244ms
+ ✓ tests/unit/guards/impresion-sin-dark.guardia.test.ts (14 tests) 182ms
+ ✓ tests/unit/descarga/columnas-sensibles.guardia.test.ts (5 tests) 301ms
+ ✓ tests/unit/guards/costo-orden-forma-unica.guardia.test.ts (11 tests) 259ms
+ ✓ tests/unit/guards/contrasena-generada-superficie.guardia.test.ts (14 tests) 220ms
+ ✓ tests/unit/guards/api-keys-tabla-una-linea.guardia.test.tsx (6 tests) 404ms
+ ✓ tests/unit/guards/tope-indemnizacion-emisores.test.ts (7 tests) 190ms
+ ✓ tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts (7 tests) 173ms
+ ✓ tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts (15 tests) 172ms
+ ✓ tests/unit/guards/contrasena-maqueta-unica.guardia.test.ts (4 tests) 163ms
+ ✓ tests/unit/analytics/alcance-obligatorio.guardia.test.ts (20 tests) 132ms
+ ✓ tests/unit/guards/gestiones-detalle-lista-blanca.guardia.test.ts (10 tests) 147ms
+ ✓ tests/unit/analytics/cache-config.guardia.test.ts (6 tests) 134ms
+ ✓ tests/unit/guards/push-intencion-de-baja.guardia.test.ts (39 tests) 153ms
+ ✓ tests/unit/guards/push-alta-punto-unico.guardia.test.ts (24 tests) 124ms
+ ✓ tests/unit/guards/quitador-comentarios.guardia.test.ts (47 tests) 108ms
+ ✓ tests/unit/guards/test-citado-desaparecido.guardia.test.ts (13 tests) 118ms
+ ✓ tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts (25 tests) 112ms
+ ✓ tests/unit/guards/cascada-central-en-las-dos-pantallas.guardia.test.ts (11 tests) 90ms
+ ✓ tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts (21 tests) 103ms
+ ✓ tests/unit/analytics/cache-aislamiento.guardia.test.ts (4 tests) 96ms
+ ✓ tests/unit/guards/pagos-captura.guardia.test.ts (31 tests) 108ms
+ ✓ tests/unit/repositories/criterio-unico.guardia.test.ts (22 tests) 75ms
+ ✓ tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts (59 tests) 80ms
+ ✓ tests/unit/guards/rutas-336-retiradas.guardia.test.ts (16 tests) 85ms
+ ✓ tests/unit/tablero-dia/color-contador.guardia.test.tsx (15 tests) 188ms
+ ✓ tests/unit/guards/liquidacion-money-safe.test.ts (7 tests) 70ms
+ ✓ tests/unit/guards/historial-accion-forma-tabla.guardia.test.ts (12 tests) 75ms
+ ✓ tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts (37 tests) 60ms
+ ✓ tests/unit/guards/carga-del-mensajero.guardia.test.ts (18 tests) 59ms
+ ✓ tests/unit/guards/liquidacion-reparto-bloqueos.guardia.test.ts (25 tests) 65ms
+ ✓ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts (10 tests) 63ms
+ ✓ tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts (28 tests) 54ms
+ ✓ tests/unit/tablero-dia/cache-sin-invalidacion.guardia.test.ts (6 tests) 50ms
+ ✓ tests/unit/domain/order-status-transiciones.guardia.test.ts (176 tests) 57ms
+ ✓ tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts (11 tests) 62ms
+ ✓ tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts (7 tests) 53ms
+ ✓ tests/unit/guards/decision5-revertida.guardia.test.ts (19 tests) 54ms
+ ✓ tests/unit/analytics/tablero-agregado-frontera.guardia.test.ts (7 tests) 45ms
+ ✓ tests/unit/repositories/registrar-cambio-estado.guardia.test.ts (88 tests) 44ms
+ ✓ tests/unit/tablero-dia/primitivas.guardia.test.ts (33 tests) 41ms
+ ✓ tests/unit/tablero-dia/frontera.guardia.test.ts (34 tests) 36ms
+ ✓ tests/unit/guards/liquidacion-alcance.test.ts (4 tests) 45ms
+ ✓ tests/unit/analytics/definiciones-catalogo.guardia.test.ts (12 tests) 42ms
+ ✓ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests) 91ms
+ ✓ tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts (22 tests) 35ms
+ ✓ tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts (24 tests) 26ms
+ ✓ tests/unit/analytics/financiera-borde.guardia.test.ts (32 tests) 41ms
+ ✓ tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts (19 tests) 42ms
+ ✓ tests/unit/guards/d5-revertida.guardia.test.ts (19 tests) 41ms
+ ✓ tests/unit/analytics/agregado-alcance.guardia.test.ts (13 tests) 39ms
+ ✓ tests/unit/guards/rastreo-dto-lista-blanca.guardia.test.ts (6 tests) 41ms
+ ✓ tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts (44 tests) 30ms
+ ✓ tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts (12 tests) 29ms
+ ✓ tests/unit/analytics/ranges-reuso.guardia.test.ts (6 tests) 33ms
+ ✓ tests/unit/guards/mi-wallet-335.guardia.test.ts (18 tests) 34ms
+ ✓ tests/unit/guards/impresion-tokens.guardia.test.ts (47 tests) 28ms
+ ✓ tests/unit/guards/historial-acciones-solo-lectura.guardia.test.ts (19 tests) 30ms
+ ✓ tests/unit/guards/api-key-dependencias-usuario.guardia.test.ts (12 tests) 28ms
+ ✓ tests/unit/guards/landing-sin-maqueta.guardia.test.ts (23 tests) 28ms
+ ✓ tests/unit/guards/tablero-financiero.guardia.test.ts (29 tests) 28ms
+ ✓ tests/unit/analytics/financiera-repositorios.guardia.test.ts (25 tests) 35ms
+ ✓ tests/unit/guards/filtros-url-r25-propiedad.test.tsx (1 test) 248ms
+ ✓ tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts (8 tests) 33ms
+ ✓ tests/unit/analytics/financiera-forma-importe.guardia.test.ts (4 tests) 32ms
+ ✓ tests/unit/guards/incidente-admin-aislamiento.test.ts (24 tests) 31ms
+ ✓ tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts (13 tests) 29ms
+ ✓ tests/unit/analytics/alcance-columnas.guardia.test.ts (9 tests) 30ms
+ ✓ tests/unit/guards/pwa-relevo-y-purga.guardia.test.ts (25 tests) 27ms
+ ✓ tests/unit/guards/contraste-tokens.guardia.test.ts (47 tests) 29ms
+ ✓ tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts (14 tests) 30ms
+ ✓ tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts (18 tests) 24ms
+ ✓ tests/unit/guards/entregas-sin-recoleccion.test.ts (21 tests) 26ms
+ ✓ tests/unit/guards/api-sin-redirect-sin-sesion.guardia.test.ts (5 tests) 23ms
+ ✓ tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts (7 tests) 23ms
+ ✓ tests/unit/repositories/gestion-ubicacion-solo-escritura.guardia.test.ts (3 tests) 26ms
+ ✓ tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts (8 tests) 24ms
+ ✓ tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts (16 tests) 26ms
+ ✓ tests/unit/guards/geocode-salud-sin-prosa.guardia.test.ts (25 tests) 22ms
+ ✓ tests/unit/analytics/operativa-solo-lectura.guardia.test.ts (7 tests) 21ms
+ ✓ tests/unit/guards/jobs-handler-por-tipo.guardia.test.ts (5 tests) 58ms
+ ✓ tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts (11 tests) 432ms
+ ✓ tests/unit/guards/cierre-detalle-superficies.guardia.test.ts (4 tests) 21ms
+ ✓ tests/unit/analytics/financiera-alcance.guardia.test.ts (12 tests) 29ms
+ ✓ tests/unit/analytics/financiera-desglose-ids.guardia.test.ts (11 tests) 21ms
+ ✓ tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts (21 tests) 23ms
+ ✓ tests/unit/services/tablero-dia-cache-aislamiento.guardia.test.ts (5 tests) 26ms
+ ✓ tests/unit/guards/pwa-push.guardia.test.ts (20 tests) 31ms
+ ✓ tests/unit/guards/pagos-aritmetica-decimal.guardia.test.ts (15 tests) 24ms
+ ✓ tests/unit/guards/etiquetas-maqueta-unica.guardia.test.ts (10 tests) 20ms
+ ✓ tests/unit/analytics/financiera-correspondencia.guardia.test.ts (12 tests) 29ms
+ ✓ tests/unit/analytics/alcance-dinero.guardia.test.ts (13 tests) 22ms
+ ✓ tests/unit/guards/deriva-primer-intento.guardia.test.ts (22 tests) 21ms
+ ✓ tests/unit/guards/historial-accion-money-safe.guardia.test.ts (18 tests) 27ms
+ ✓ tests/unit/guards/premisa-saltos-caducada.guardia.test.ts (10 tests) 19ms
+ ✓ tests/unit/guards/ranking-ventana-dia.guardia.test.ts (12 tests) 18ms
+ ✓ tests/unit/guards/tema-encendido.guardia.test.ts (17 tests) 21ms
+ ✓ tests/unit/guards/cierres-descarga-detallada-frontera.guardia.test.ts (5 tests) 18ms
+ ✓ tests/unit/guards/filtros-cierres-alcance.guardia.test.ts (7 tests) 21ms
+ ✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests) 18ms
+ ✓ tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts (20 tests) 21ms
+ ✓ tests/unit/analytics/operativa-fuente.guardia.test.ts (5 tests) 20ms
+ ✓ tests/unit/guards/caja-derivaciones.guardia.test.ts (9 tests) 18ms
+ ✓ tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts (7 tests) 20ms
+ ✓ tests/unit/analytics/operativa-sumabilidad.guardia.test.ts (5 tests) 17ms
+ ✓ tests/unit/db/orden-clave-remision.guardia.test.ts (16 tests) 16ms
+ ✓ tests/unit/guards/zona-reconciliacion-no-retarifa.guardia.test.ts (6 tests) 16ms
+ ✓ tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts (19 tests) 19ms
+ ✓ tests/unit/guards/rastreo-frontera.guardia.test.ts (29 tests) 19ms
+ ✓ tests/unit/analytics/metrics-dinero.guardia.test.ts (10 tests) 16ms
+ ✓ tests/unit/guards/jobs-recurrentes-con-siembra.guardia.test.ts (21 tests) 22ms
+ ✓ tests/unit/guards/mensajero-forma-unica.guardia.test.ts (6 tests) 15ms
+ ✓ tests/unit/guards/incidente-exhaustividad.test.ts (8 tests) 14ms
+ ✓ tests/unit/analytics/catalogo-universo.guardia.test.ts (16 tests) 14ms
+ ✓ tests/unit/analytics/financiera-180-trazabilidad.guardia.test.ts (7 tests) 15ms
+ ✓ tests/unit/guards/autorizacion-texto-no-miente.guardia.test.ts (18 tests) 15ms
+ ✓ tests/unit/tablero-dia/reversion-r49.guardia.test.ts (12 tests) 16ms
+ ✓ tests/unit/analytics/cohorte-frontera.guardia.test.ts (12 tests) 16ms
+ ✓ tests/unit/guards/eliminar-por-estado.guardia.test.ts (23 tests) 16ms
+ ✓ tests/unit/guards/openapi-canal-rutas-reales.guardia.test.ts (16 tests) 15ms
+ ✓ tests/unit/guards/orden-nota-frontera.guardia.test.ts (10 tests) 13ms
+ ✓ tests/unit/analytics/aislamiento.guardia.test.ts (8 tests) 13ms
+ ✓ tests/unit/guards/recoleccion-no-contamina.test.ts (5 tests) 16ms
+ ✓ tests/unit/guards/historial-correccion-dia.guardia.test.ts (24 tests) 16ms
+ ✓ tests/unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts (8 tests) 15ms
+ ✓ tests/unit/guards/red-de-errores.guardia.test.ts (13 tests) 14ms
+ ✓ tests/unit/guards/orden-remision-alcance.guardia.test.ts (9 tests) 14ms
+ ✓ tests/unit/guards/notifications-bell-tokens.guardia.test.ts (7 tests) 13ms
+ ✓ tests/unit/guards/tope-intentos-invariante.guardia.test.ts (9 tests) 11ms
+ ✓ tests/unit/guards/pago-mensajero-money-safe.guardia.test.ts (8 tests) 14ms
+ ✓ tests/unit/descarga/ambito-columnas.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/guards/atajo-aviso-ruta-visible.guardia.test.ts (10 tests) 11ms
+ ✓ tests/unit/guards/cron-hora-cr.guardia.test.ts (10 tests) 10ms
+ ✓ tests/unit/analytics/financiera-trazabilidad.guardia.test.ts (5 tests) 14ms
+ ✓ tests/unit/guards/novedad-acciones-una-tabla.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/historial-acciones-roles-una-sola-fuente.guardia.test.ts (13 tests) 14ms
+ ✓ tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts (11 tests) 10ms
+ ✓ tests/unit/tablero-dia/d10-revertida.guardia.test.ts (12 tests) 14ms
+ ✓ tests/unit/guards/historico-roles-una-sola-fuente.guardia.test.ts (10 tests) 13ms
+ ✓ tests/unit/guards/notifications-bell-sin-reloj.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts (10 tests) 8ms
+ ✓ tests/unit/guards/ancla-de-carga.guardia.test.ts (7 tests) 14ms
+ ✓ tests/unit/guards/estados-reparto-mensajero-unica-fuente.guardia.test.ts (6 tests) 12ms
+ ✓ tests/unit/guards/rastreo-modal-tema.guardia.test.ts (6 tests) 10ms
+ ✓ tests/unit/guards/credenciales-sin-consola-cruda.guardia.test.ts (7 tests) 9ms
+ ✓ tests/unit/scripts/migrate-deploy-guardas.test.ts (15 tests) 11ms
+ ✓ tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/historico-sin-migracion.guardia.test.ts (10 tests) 10ms
+ ✓ tests/unit/analytics/financiera-produccion.guardia.test.ts (5 tests) 9ms
+ ✓ tests/unit/guards/origenes-admitidos-en-cierre.guardia.test.ts (8 tests) 9ms
+ ✓ tests/unit/guards/satelite-proyeccion-compartida.guardia.test.ts (3 tests) 13ms
+ ✓ tests/unit/guards/tope-intentos-pii.guardia.test.ts (5 tests) 10ms
+ ✓ tests/unit/analytics/cohorte-terminales.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/descarga/cierre-gestiones-cabecera.guardia.test.ts (2 tests) 6ms
+ ✓ tests/unit/guards/html-lang.guardia.test.ts (3 tests) 9ms
+ ✓ tests/unit/guards/motivo-automatico-sin-jerga.guardia.test.ts (7 tests) 7ms
+ ✓ tests/unit/analytics/cubo-temporal-tope.guardia.test.ts (6 tests) 9ms
+ ✓ tests/unit/guards/notifications-bell-ancho.guardia.test.ts (4 tests) 11ms
+ ✓ tests/unit/components/calendario-ancho-de-celda.guardia.test.ts (4 tests) 8ms
+ ✓ tests/unit/analytics/cache-clave-alcance.guardia.test.ts (4 tests) 8ms
+ ✓ tests/unit/analytics/export-financiero-alcance.guardia.test.ts (12 tests) 23ms
+ ✓ tests/unit/services/tablero-dia-metrica.guardia.test.ts (5 tests) 9ms
+ ✓ tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts (7 tests) 6ms
+ ✓ tests/unit/analytics/etiquetas-visibles.guardia.test.ts (4 tests) 5ms
+ ✓ tests/unit/descarga/cierres-descarga-detallada-money.guardia.test.ts (2 tests) 4ms
+ ✓ tests/unit/guards/dia-reparto-tokens.guardia.test.ts (3 tests) 4ms
+
+ Test Files  228 passed (228)
+      Tests  3320 passed (3320)
+   Start at  00:42:52
+   Duration  30.65s (transform 11.15s, setup 7.59s, import 71.84s, tests 63.95s, environment 20.34s)
+
+JSON report written to R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a83eb63fb453fc7ea/.vitest/rojos-guardias.json
+[0;32m✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 246 ejecutado(s), todos en el baseline conocido)[0m
+[1;33m! modo rapido: solo los tests relacionados con tus cambios + las guardias.[0m
+[1;33m! El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas.[0m
+[1;33m! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at[0m
+[0;32m✓ .env presente[0m
+[0;32m== init OK ==[0m
+Siguiente: abre AGENTS.md y sigue el flujo desde ahi.
+INIT_EXIT=0

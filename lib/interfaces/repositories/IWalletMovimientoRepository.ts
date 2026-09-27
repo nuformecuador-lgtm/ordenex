@@ -1,4 +1,5 @@
 import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { PrismaClient } from "@prisma/client";
 import type {
   AgregadoCajaRow,
@@ -14,6 +15,18 @@ import type {
 // Cliente de transaccion aceptado por crearMovimientos: cualquier cosa que exponga
 // `walletMovimiento` (el `tx` de un $transaction, o el PrismaClient completo).
 export type WalletTxClient = Pick<PrismaClient, "walletMovimiento">;
+
+/**
+ * FICHA 458-B (design §4.1, R42/R74) — lo LATERAL de un movimiento de caja registrado a mano: «a
+ * quién» y la referencia (`wallet_anotacion`) y el comprobante ya subido (`wallet_comprobante`). Se
+ * escriben en la MISMA transacción que el asiento y solo si el asiento se escribió (con la clave
+ * repetida no se escribe nada). Ausentes ⇒ el registro es byte a byte el de antes.
+ */
+export interface LateralesDelRegistro {
+  /** Al menos uno de los dos no nulo (CHECK de la tabla); ya recortados y no vacíos. */
+  anotacion?: { contraparteNombre: string | null; referencia: string | null };
+  comprobante?: { storagePath: string; contentType: string; subidoPor: string };
+}
 
 // Fila a insertar en el libro. `monto` STRING (money-safe); origenId NULL solo en manual.
 export interface CrearMovimientoInput {
@@ -48,9 +61,20 @@ export interface CrearMovimientoInput {
    * dos libros.
    */
   fechaMovimiento?: Date;
+  /**
+   * Ficha 461 (R66/R67/R68, auditoria D2) — la clave de idempotencia del CLIENTE, SOLO en los tres
+   * movimientos que una persona decide (correccion de caja, sueldo, gasto de Ordenex). Va a la
+   * columna UNIQUE `clave_idempotencia`; con `skipDuplicates` un choque deja `count = 0` y el
+   * servicio relee por la clave (`obtenerPorClave`) para responder `ya_registrado`.
+   *
+   * OPCIONAL con la misma forma que `id` y `fechaMovimiento`: ausente ⇒ la columna queda NULL y
+   * ninguno de los escritores automaticos cambia de comportamiento.
+   */
+  claveIdempotencia?: string;
 }
 
-// Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento.
+// Filtros del listado del libro (R20). Rango de fechas sobre fecha_movimiento: `desde` inclusivo,
+// `hasta` EXCLUSIVO (ficha 461/R72: el borde manda el inicio del dia CR siguiente).
 export interface ListarMovimientosFiltros {
   page: number;
   pageSize: number;
@@ -68,6 +92,14 @@ export interface ListarMovimientosFiltros {
    * `categoria` (no en su lugar), asi que el filtro del usuario y el de la fila conviven.
    */
   categorias?: readonly WalletMovimientoCategoria[];
+  /**
+   * Ficha 458-E (TE.2, R59) — «A quién»: una tienda, un mensajero o el nombre libre anotado. Lo
+   * resuelve el REPOSITORIO en el WHERE (cruce por origen, design §3.4), en la MISMA consulta que
+   * pagina, cuenta y agrega: nunca una lista de ids que viaje en un `IN`.
+   *
+   * OPCIONAL: ausente ⇒ la consulta es la de siempre (el `where` de Prisma, byte a byte).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 export interface ListarMovimientosPage {
@@ -90,6 +122,14 @@ export interface BalanceFiltros {
    * (`tests/integration/db/composicion-detalle-postgres.test.ts`).
    */
   categorias?: readonly WalletMovimientoCategoria[];
+  /**
+   * Ficha 458-E (TE.2, R59) — «A quién»: una tienda, un mensajero o el nombre libre anotado. Lo
+   * resuelve el REPOSITORIO en el WHERE (cruce por origen, design §3.4), en la MISMA consulta que
+   * pagina, cuenta y agrega: nunca una lista de ids que viaje en un `IN`.
+   *
+   * OPCIONAL: ausente ⇒ la consulta es la de siempre (el `where` de Prisma, byte a byte).
+   */
+  aQuien?: AQuienFiltro;
 }
 
 // Feature 45 (R11) — desglose de egresos por tipo, ya como STRING (money-safe). Deriva de un
@@ -127,6 +167,7 @@ export interface IWalletMovimientoRepository {
   crearMovimientoRegistrado(
     mov: CrearMovimientoInput & { id: string },
     registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+    laterales?: LateralesDelRegistro,
   ): Promise<number>;
   /**
    * R20/R24: pagina el libro (fecha_movimiento desc) con filtros en el WHERE.
@@ -155,6 +196,12 @@ export interface IWalletMovimientoRepository {
    * que el cliente falsee el monto). null si no existe.
    */
   obtenerPorId(id: string): Promise<WalletMovimientoDTO | null>;
+  /**
+   * Ficha 461 (R68) — el movimiento que lleva ESA clave de idempotencia, o `null`. Es la relectura
+   * del segundo envio: `crearMovimientos` devolvio 0 porque el indice unico de la clave ya tenia la
+   * fila, y el servicio responde `ya_registrado` con ella. `findUnique` sobre la columna UNIQUE.
+   */
+  obtenerPorClave(claveIdempotencia: string): Promise<WalletMovimientoDTO | null>;
   /**
    * Feature 45 (R11): desglose de egresos administrativos por tipo (gasto fijo / variable /
    * sueldo) del conjunto filtrado (mismos filtros que el libro). groupBy(categoria) +
@@ -187,4 +234,13 @@ export interface IWalletMovimientoRepository {
     origenId: string,
     categoria: WalletMovimientoCategoria,
   ): Promise<WalletMovimientoDTO | null>;
+  /**
+   * Ficha 459 (design §2.5, R15/R71) — el dia, en Costa Rica, del PRIMER movimiento de la caja
+   * (`MIN(fecha_movimiento)`), como `YYYY-MM-DD`; `null` con el libro vacio. SIN filtros: es el
+   * «desde» del flujo registrado, no una cifra del periodo.
+   *
+   * `excluirCapital`: sin los conceptos de capital (saldo inicial y aportes). Lo usa el saldo
+   * inicial (R71): su fecha no puede ser posterior al primer movimiento que NO es de capital.
+   */
+  primerDiaDeLaCaja(opciones?: { excluirCapital?: boolean }): Promise<string | null>;
 }

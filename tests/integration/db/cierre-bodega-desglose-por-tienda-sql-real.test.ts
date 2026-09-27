@@ -272,7 +272,7 @@ describeSiHayBase(
             tiendaCongelada: string;
             tiendaViva: string;
             montoCobrar: string;
-            resultado: "entregada" | "rechazada";
+            resultado: "entregado" | "devolucion_a_origen_por_rechazo";
             pago: { metodo: "efectivo" | "SINPE"; monto: string } | null;
           }) => {
             const numRemision = `R-${SUFIJO}-${opciones.clave}`;
@@ -375,7 +375,7 @@ describeSiHayBase(
             tiendaCongelada: tiendaA,
             tiendaViva: tiendaB,
             montoCobrar: "100000.00",
-            resultado: "entregada",
+            resultado: "entregado",
             pago: { metodo: "efectivo", monto: "100000.00" },
           });
           const a2 = await sembrar({
@@ -386,7 +386,7 @@ describeSiHayBase(
             tiendaCongelada: tiendaA,
             tiendaViva: tiendaB,
             montoCobrar: "20000.00",
-            resultado: "rechazada",
+            resultado: "devolucion_a_origen_por_rechazo",
             pago: null,
           });
           // BETO: una de la tienda B y otra de la tienda A → DOS tiendas, y la A repetida.
@@ -398,7 +398,7 @@ describeSiHayBase(
             tiendaCongelada: tiendaB,
             tiendaViva: tiendaA,
             montoCobrar: "40000.00",
-            resultado: "entregada",
+            resultado: "entregado",
             pago: { metodo: "SINPE", monto: "40000.00" },
           });
           const b2 = await sembrar({
@@ -409,7 +409,7 @@ describeSiHayBase(
             tiendaCongelada: tiendaA,
             tiendaViva: tiendaB,
             montoCobrar: "25000.00",
-            resultado: "entregada",
+            resultado: "entregado",
             pago: { metodo: "efectivo", monto: "25000.00" },
           });
 

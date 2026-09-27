@@ -349,7 +349,7 @@ describe("410/R26 — varias suscripciones, y el fallo de una no impide las dema
         suscripcion("s-2", "u-m"),
         suscripcion("s-3", "u-m"),
       ],
-      respuestas: { "s-2": { status: "rechazada", detalle: "suscripcion s-2: HTTP 400" } },
+      respuestas: { "s-2": { status: "devolucion_a_origen_por_rechazo", detalle: "suscripcion s-2: HTTP 400" } },
     });
 
     await service.ejecutar(job());
@@ -412,7 +412,7 @@ describe("410/R33+R34+R36 — la tabla de desenlaces decide quien reintenta", ()
 
   it("⭑ `rechazada`: NO lanza y NO borra — el problema es nuestro, no de la persona", async () => {
     const { service, canal } = montar({
-      respuestas: { "s-1": { status: "rechazada", detalle: "suscripcion s-1: HTTP 400" } },
+      respuestas: { "s-1": { status: "devolucion_a_origen_por_rechazo", detalle: "suscripcion s-1: HTTP 400" } },
     });
     await expect(service.ejecutar(job())).resolves.toBeUndefined();
     expect(canal.eliminarPorId).not.toHaveBeenCalled();
@@ -459,7 +459,7 @@ describe("410/R23 — ni el endpoint ni las claves aparecen en un log", () => {
       suscripciones: [suscripcion("s-1", "u-m"), suscripcion("s-2", "u-m")],
       respuestas: {
         "s-1": { status: "caducada" },
-        "s-2": { status: "rechazada", detalle: "suscripcion s-2: HTTP 400" },
+        "s-2": { status: "devolucion_a_origen_por_rechazo", detalle: "suscripcion s-2: HTTP 400" },
       },
       logger,
     });

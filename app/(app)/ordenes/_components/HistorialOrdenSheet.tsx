@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { ObtenerHistorialOrdenResult } from "@/lib/actions/orden-historial";
 
 import { HistorialOrdenTimeline } from "./HistorialOrdenTimeline";
+import { NotaGestionPendiente } from "./NotaGestionPendiente";
 
 // Feature 49 (T6.2, R28/R29) — drawer "Ver historial" por fila. Al ABRIRSE llama a la
 // Server Action `obtenerHistorialOrden(ordenId)` (borde de servidor: resuelve el actor por
@@ -175,10 +176,20 @@ function HistorialOrdenBody({ estado }: { estado: CargaState }) {
       // Action ya autorizo por visibilidad de la orden (R17), asi que un
       // forbidden/not_found/unauthenticated nunca llega aqui y el badge no aparece
       // para quien no tiene visibilidad; no se añade regla de permisos nueva.
-      const { intentos, umbral } = estado;
+      //
+      // FICHA 454 (T2.2, R29) — el detalle de la orden dice lo mismo que su fila del listado: si
+      // la gestión de calle está registrada y el cierre sin aprobar, «<Resultado> · pendiente de
+      // confirmación»; si hay una ayuda a la tienda abierta, «Ayuda solicitada a la tienda». Las
+      // dos señales vienen en el MISMO `ok` (leídas después de autorizar); aquí no se deriva nada.
+      const { intentos, umbral, gestionPendiente, ayudaAbierta } = estado;
       const intentosLabel = `Intento ${intentos} de ${umbral}`;
       return (
         <div className="flex flex-col gap-4">
+          <NotaGestionPendiente
+            resultadoPendiente={gestionPendiente?.resultado ?? null}
+            ayudaAbierta={ayudaAbierta === true}
+            className="self-start"
+          />
           {intentos >= 1 ? (
             <Badge
               variant="secondary"

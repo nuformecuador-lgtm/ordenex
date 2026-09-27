@@ -1,0 +1,389 @@
+MUTACION F16-satelite-zona
+archivo: app/(app)/recepcion-satelite/_components/PorRecibirModule.tsx
+cambio (numstat): 1	1	app/(app)/recepcion-satelite/_components/PorRecibirModule.tsx
+-   return estatusLabel(orden.estatusValue);
++   return `${estatusLabel(orden.estatusValue)} de ${orden.zonaNombre}`;
+tests: ['tests/components/PorRecibirModule.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/components/PorRecibirModule.test.tsx (10 tests | 1 failed) 639ms
+     × R1/R2: lista cada orden con su remisión, su estado legible y su detalle, SIN ningún botón 147ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  08:11:15
+   Duration  3.06s (transform 220ms, setup 160ms, import 956ms, tests 639ms, environment 1.09s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/PorRecibirModule.test.tsx > PorRecibirModule — las tarjetas > R1/R2: lista cada orden con su remisión, su estado legible y su detalle, SIN ningún botón
+TestingLibraryElementError: Unable to find an element with the text: En ruta a bodega satélite. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<li>
+  <article
+    class="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3 shadow-sm"
+  >
+    <header
+      class="flex items-start justify-between gap-2"
+    >
+      <div
+        class="min-w-0 leading-none"
+      >
+        <p
+          class="truncate font-mono text-xs font-bold tracking-wide text-foreground"
+        >
+          REM-R1
+        </p>
+        <p
+          class="mt-0.5 text-[11px] font-semibold text-muted-foreground"
+        >
+          Guía 1001
+        </p>
+      </div>
+      <span
+        class="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"
+      >
+        En ruta a bodega satélite de Limón
+      </span>
+    </header>
+    <div
+      class="flex items-center gap-2"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-package size-4 shrink-0 text-brand"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"
+        />
+        <path
+          d="M12 22V12"
+        />
+        <polyline
+          points="3.29 7 12 12 20.71 7"
+        />
+        <path
+          d="m7.5 4.27 9 5.15"
+        />
+      </svg>
+      <div
+        class="min-w-0"
+      >
+        <p
+          class="truncate text-sm font-bold text-foreground"
+        >
+          Ana Pérez
+        </p>
+        <p
+          class="truncate text-xs text-muted-foreground"
+        >
+          Caja mediana
+        </p>
+      </div>
+    </div>
+    <div
+      class="flex items-center gap-2 rounded-lg bg-navy px-2 py-1.5 text-white"
+    >
+      <svg
+        aria-hidden="true"
+        class="lucide lucide-map-pin size-3.5 shrink-0 text-brand"
+        fill="none"
+        height="24"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+        />
+        <circle
+          cx="12"
+          cy="10"
+          r="3"
+        />
+      </svg>
+      <div
+        class="min-w-0 flex-1"
+      >
+        <span
+          class="block truncate text-xs font-semibold"
+        >
+          Central
+          <span
+            class="text-white/60"
+          >
+             · 
+            Limón
+          </span>
+        </span>
+        <span
+          class="block truncate text-[0.6875rem] text-white/70"
+        >
+          Calle 1, casa 2
+        </span>
+      </div>
+    </div>
+    <div
+      class="flex items-center justify-between gap-2"
+    >
+      <div
+        class="min-w-0"
+      >
+        <p
+          class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+        >
+          A cobrar
+        </p>
+        <p
+          class="font-mono text-base font-bold text-foreground"
+        >
+          ₡150
+        </p>
+      </div>
+      <span
+        class="tabular-nums"
+      >
+        Intentos: 0
+      </span>
+    </div>
+    <div
+      data-closed=""
+      data-slot="collapsible"
+    >
+      <button
+        aria-disabled="false"
+        aria-expanded="false"
+        class="flex w-full items-center justify-center gap-1 rounded-lg border border-border py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted"
+        data-slot="collapsible-trigger"
+        tabindex="0"
+        type="button"
+      >
+        Ver detalle completo
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-chevron-down size-3.5 transition-transform"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m6 9 6 6 6-6"
+          />
+        </svg>
+      </button>
+      <div
+        class="collapsible-panel"
+        data-closed=""
+        data-slot="collapsible-content"
+        hidden=""
+        id="base-ui-_r_1_"
+        style="--collapsible-panel-height: auto; --collapsible-panel-width: auto;"
+      >
+        <div
+          class="mt-2 border-t border-border pt-2"
+        >
+          <dl
+            class="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-3"
+          >
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Nº Guía
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground font-mono"
+              >
+                1001
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Nº Remisión
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground font-mono"
+              >
+                REM-R1
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Estado
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                En ruta a bodega satélite de Limón
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Tienda
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                Tienda X
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Destinatario
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                Ana Pérez
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Teléfono
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground font-mono"
+              >
+                88880000
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Dirección
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                Calle 1, casa 2
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Ubicación
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                Limón · Limón · Central · Limón
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Producto
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                Caja mediana
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Monto a cobrar
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground font-mono"
+              >
+                ₡150
+              </dd>
+            </div>
+            <div
+              class="min-w-0"
+            >
+              <dt
+                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Intentos
+              </dt>
+              <dd
+                class="mt-0.5 text-sm font-semibold text-foreground"
+              >
+                <span
+                  class="tabular-nums"
+                >
+                  0
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </article>
+</li>
+ ❯ Object.getElementError ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:109:15
+ ❯ tests/components/PorRecibirModule.test.tsx:136:30
+    134|     expect(tarjetas).toHaveLength(2);
+    135|     for (const tarjeta of tarjetas) {
+    136|       expect(within(tarjeta).getAllByText(ESTADO_EN_RUTA).length).toBe…
+       |                              ^
+    137|     }
+    138|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+RESTAURADO_LIMPIO=True

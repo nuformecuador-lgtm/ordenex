@@ -5,7 +5,8 @@ import {
   WALLET_MOVIMIENTO_CATEGORIA_SEED,
   type WalletMovimientoCategoria,
 } from "@/lib/types/wallet";
-import { CATEGORIA_LABEL, CATEGORIA_OPTIONS } from "@/app/(app)/wallet/_components/wallet-labels";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 import type { GestionResultado } from "@prisma/client";
 
 // Feature 158 (R5/R31) — LA RED DE EXHAUSTIVIDAD, verificada en runtime.
@@ -45,10 +46,10 @@ describe("R5 — los mapas por RESULTADO clasifican `incidente` explicitamente",
     const src = leer(LIB, "services", "MisAsignacionesService.ts");
     const fn = src.slice(src.indexOf("function buildGestionData"));
     const casos: GestionResultado[] = [
-      "entregada",
-      "reprogramada",
-      "devuelta",
-      "rechazada",
+      "entregado",
+      "reprogramado",
+      "novedad",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ];
     for (const caso of casos) expect(fn, `falta el case "${caso}"`).toContain(`case "${caso}":`);
@@ -74,7 +75,7 @@ describe("R5 — los mapas por RESULTADO clasifican `incidente` explicitamente",
 
 describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
   it("R31: `CATEGORIA_LABEL` tiene etiqueta legible EN ESPANOL para la indemnizacion", () => {
-    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización por incidente");
+    expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
     // No es el slug crudo: la etiqueta se escribio, no se derivo del enum.
     expect(CATEGORIA_LABEL.egreso_indemnizacion).not.toBe("egreso_indemnizacion");
   });
@@ -87,11 +88,17 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
     expect(Object.keys(CATEGORIA_LABEL)).toHaveLength(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
   });
 
-  it("R31: la categoria aparece como opcion del filtro (se puebla desde el SEED)", () => {
-    const opciones = CATEGORIA_OPTIONS.map((o) => o.value);
+  it("R31: la categoria aparece como opcion del filtro cuando tiene movimientos (458-A, R13)", () => {
+    const lista = opcionesDeConceptos(
+      [{ categoria: "egreso_indemnizacion", movimientos: 1 }],
+      CATEGORIA_LABEL,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const opciones = lista.map((o) => o.value);
     expect(opciones).toContain("egreso_indemnizacion");
-    const opcion = CATEGORIA_OPTIONS.find((o) => o.value === "egreso_indemnizacion");
-    expect(opcion?.label).toBe("Indemnización por incidente");
+    const opcion = lista.find((o) => o.value === "egreso_indemnizacion");
+    expect(opcion?.label).toBe("Indemnización que Ordenex paga por un incidente (1)");
   });
 
   it("R5: las etiquetas de resultado de los dos detalles clasifican `incidente`", () => {
@@ -109,8 +116,14 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
       path.join(APP, "(app)", "cierres-admin", "_components", "cierre-labels.ts"),
       "utf8",
     );
+    // FICHA 455 (2026-09-24, R4/R5): la etiqueta ya no es un literal escrito a mano («Incidentes»):
+    // sale de la fuente única (`nombreDeResultado`). Lo que se exige sigue siendo lo mismo: que la
+    // ÚNICA declaración clasifique `incidente`, ahora con su nombre derivado y su texto vacío.
     expect(etiquetas, "cierre-labels.ts sin etiqueta de incidente").toMatch(
-      /incidente:\s*"Incidentes"/,
+      /incidente:\s*nombreDeResultado\("incidente"\)/,
+    );
+    expect(etiquetas, "cierre-labels.ts sin texto de grupo vacio de incidente").toMatch(
+      /incidente:\s*textoResultadoVacio\("incidente"\)/,
     );
 
     for (const archivo of [
@@ -121,9 +134,9 @@ describe("R5/R31 — la categoria nueva esta clasificada en la wallet", () => {
       expect(src, `${path.basename(archivo)} no lee RESULTADO_LABEL de cierre-labels`).toMatch(
         /RESULTADO_LABEL/,
       );
-      expect(src, `${path.basename(archivo)} sin texto de grupo vacio`).toMatch(
-        /incidente:\s*"No hay incidentes\."/,
-      );
+      // FICHA 455 (2026-09-24): el texto vacío se declara UNA vez en `cierre-labels` (arriba) y
+      // los dos detalles lo LEEN; antes cada uno tenía su mapa con «No hay incidentes.».
+      expect(src, `${path.basename(archivo)} sin texto de grupo vacio`).toMatch(/RESULTADO_VACIO/);
     }
   });
 });

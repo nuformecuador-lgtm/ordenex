@@ -74,7 +74,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
     FKS = fks;
     ACTOR = fks.tiendaId;
 
-    const valores = ["por_recoger", "en_reparto", "ayuda_tienda", "entregada"];
+    const valores = ["mensajero_recogiendo_en_bodega", "en_reparto", "ayuda_tienda", "entregado"];
     const estados = await prisma.orderStatus.findMany({
       where: { value: { in: valores } },
       select: { id: true, value: true },
@@ -136,7 +136,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
             destinatario: "Corpus 262",
             telefonoDest: "88880000",
             producto: "caja",
-            estatusId: ESTATUS[s.estatusValue ?? "por_recoger"],
+            estatusId: ESTATUS[s.estatusValue ?? "mensajero_recogiendo_en_bodega"],
             tiendaId: FKS.tiendaId,
             zonaId: s.zonaId ?? FKS.zonaId,
             provinciaId: FKS.provinciaId,
@@ -157,7 +157,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
 
   /** Los tres estados admitidos, ya resueltos a id. */
   function estatusIdsAdmitidos(): string[] {
-    return [ESTATUS.por_recoger, ESTATUS.en_reparto, ESTATUS.ayuda_tienda];
+    return [ESTATUS.mensajero_recogiendo_en_bodega, ESTATUS.en_reparto, ESTATUS.ayuda_tienda];
   }
 
   /* ------------------------------------------------------------------------ */
@@ -166,7 +166,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
 
   it("⭑ R1/R27: la fila queda con el dia nuevo y todo lo demas IDENTICO", async () => {
     const { antes, despues, aplicadas } = await conOrdenes(
-      [{ estatusValue: "por_recoger", fechaReparto: MANANA }],
+      [{ estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: MANANA }],
       async (ctx) => {
         const columnas = {
           estatusId: true,
@@ -213,10 +213,10 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
     expect(aplicadas[0].fechaNueva).toEqual(HOY);
   });
 
-  it("R6: los TRES estados admitidos se corrigen (`por_recoger`, `en_reparto`, `ayuda_tienda`)", async () => {
+  it("R6: los TRES estados admitidos se corrigen (`mensajero_recogiendo_en_bodega`, `en_reparto`, `ayuda_tienda`)", async () => {
     const dias = await conOrdenes(
       [
-        { estatusValue: "por_recoger" },
+        { estatusValue: "mensajero_recogiendo_en_bodega" },
         { estatusValue: "en_reparto" },
         { estatusValue: "ayuda_tienda" },
       ],
@@ -310,8 +310,8 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
   it("⭑ R8/R22: si UNA orden pierde la guarda, NI UNA se corrige y NI UNA fila de rastro se escribe", async () => {
     const resultado = await conOrdenes(
       [
-        { estatusValue: "por_recoger", fechaReparto: MANANA },
-        { estatusValue: "entregada", fechaReparto: MANANA }, // pierde la guarda de estado
+        { estatusValue: "mensajero_recogiendo_en_bodega", fechaReparto: MANANA },
+        { estatusValue: "entregado", fechaReparto: MANANA }, // pierde la guarda de estado
       ],
       async (ctx) => {
         let lanzo: unknown = null;
@@ -345,7 +345,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
 
   it("el error nombra SOLO las que no se corrigieron", async () => {
     const ids = await conOrdenes(
-      [{ estatusValue: "por_recoger" }, { estatusValue: "entregada" }],
+      [{ estatusValue: "mensajero_recogiendo_en_bodega" }, { estatusValue: "entregado" }],
       async (ctx) => {
         try {
           await ctx.repo.corregirDiaRepartoLote(ctx.ids, HOY, estatusIdsAdmitidos(), null, {
@@ -369,7 +369,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
   /* ------------------------------------------------------------------------ */
 
   it("⭑ R9 (M-g): una orden en estado NO admitido no se corrige — la guarda esta en el `WHERE`", async () => {
-    const dia = await conOrdenes([{ estatusValue: "entregada" }], async (ctx) => {
+    const dia = await conOrdenes([{ estatusValue: "entregado" }], async (ctx) => {
       await ctx.repo
         .corregirDiaRepartoLote(ctx.ids, HOY, estatusIdsAdmitidos(), null, {
           actorUsuarioId: ACTOR,
@@ -609,7 +609,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
             destinatario: "Corpus 262",
             telefonoDest: "88880000",
             producto: "caja",
-            estatusId: ESTATUS.por_recoger,
+            estatusId: ESTATUS.mensajero_recogiendo_en_bodega,
             tiendaId: FKS.tiendaId,
             zonaId: FKS.zonaId,
             provinciaId: FKS.provinciaId,
@@ -694,7 +694,7 @@ describeSiHayBase("262/B12 — corregir el dia de reparto, contra Postgres real"
           destinatario: "Corpus 262",
           telefonoDest: "88880000",
           producto: "caja",
-          estatusId: ESTATUS.por_recoger,
+          estatusId: ESTATUS.mensajero_recogiendo_en_bodega,
           tiendaId: FKS.tiendaId,
           zonaId: FKS.zonaId,
           provinciaId: FKS.provinciaId,

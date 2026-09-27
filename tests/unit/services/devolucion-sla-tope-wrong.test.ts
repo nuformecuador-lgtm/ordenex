@@ -34,10 +34,10 @@ const DIA = 24 * HORA;
 const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
 const ESTATUS: Record<string, string> = {
-  devuelta: "os-devuelta",
+  novedad: "os-devuelta",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
 };
 
 function row(overrides: Partial<DevueltaSlaRow> = {}): DevueltaSlaRow {

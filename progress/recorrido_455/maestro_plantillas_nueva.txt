@@ -1,0 +1,42 @@
+Nueva plantilla
+Nombre
+Cuerpo
+Plantilla para envío de la tienda
+
+No pasa por la aprobación de WhatsApp: queda activa de inmediato y solo se envía desde Novedades.
+
+Así lo verá el cliente
+Campo a insertar
+Número de guía
+Número de guía de Ordenex. Vacío mientras la orden no la tenga asignada.
+{{guia}}
+Número de remisión
+Número con el que la tienda identifica el pedido en su propio sistema.
+{{remision}}
+Enlace de rastreo
+Enlace a la web con la guía ya escrita en el formulario de rastreo. Vacío si la orden aún no tiene guía.
+{{url_guia}}
+Cliente
+Nombre de la persona que recibe el envío.
+{{cliente}}
+Producto
+Descripción del contenido del paquete.
+{{producto}}
+Peso
+Peso declarado del paquete, en kilogramos. Vacío si la tienda no lo indicó.
+{{peso}}
+Tienda
+Nombre de la tienda que envía el pedido.
+{{tienda}}
+Monto a cobrar
+Lo que el cliente paga contra entrega, con símbolo y separador de miles.
+{{monto}}
+SINPE de la bodega
+Número SINPE al que el cliente transfiere. Es el de la bodega del mensajero asignado; si no tiene, el de la bodega de la orden.
+{{sinpe}}
+Titular del SINPE
+Nombre a cuyo favor está el SINPE de esa bodega, para que el cliente confirme antes de pagar.
+{{sinpe_nombre}}
+Cancelar
+Crear
+Close

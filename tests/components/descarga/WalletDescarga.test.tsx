@@ -23,11 +23,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
-import type {
-  CuentaPorPagarResumenDTO,
-  PagoMensajeroMovimientoDTO,
-} from "@/lib/types/wallet-mensajero";
+import type { FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
+import { estado as estadoCuenta, fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
 
 const listarMovimientosMock = vi.fn();
 const listarMovimientosCompletoMock = vi.fn();
@@ -43,21 +40,49 @@ vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosDeFilaAction: vi.fn(),
 }));
 
-const listarMisMovimientosMock = vi.fn();
-const listarMisMovimientosCompletoMock = vi.fn();
-vi.mock("@/lib/actions/wallet-tienda", () => ({
-  listarMisMovimientosAction: (...a: unknown[]) => listarMisMovimientosMock(...a),
-  listarMisMovimientosCompletoAction: (...a: unknown[]) =>
-    listarMisMovimientosCompletoMock(...a),
+// FICHA 458-E (T E.1, R56/R57): el módulo del libro lee «A quién» y «Registró» por los ids de la
+// página (y la descarga, por los del libro entero). Doble determinista: cada id se nombra por sí
+// mismo, sin exponerlo: «Cuenta N» por orden de primera aparicion (revision m5 de la 458-E: antes el
+// nombre llevaba el ultimo bloque del uuid, y un trozo de id en una celda pasaba la comprobacion R3).
+const NOMBRE_DE_CUENTA = new Map<string, string>();
+function nombreDeCuenta(id: string): string {
+  if (!NOMBRE_DE_CUENTA.has(id)) NOMBRE_DE_CUENTA.set(id, `Cuenta ${NOMBRE_DE_CUENTA.size + 1}`);
+  return NOMBRE_DE_CUENTA.get(id) as string;
+}
+const autoriaMock = vi.fn(async (input: { movimientoIds: string[] }) => ({
+  status: "ok" as const,
+  filas: input.movimientoIds.map((id) => ({
+    movimientoId: id,
+    aQuien: {
+      nombre: nombreDeCuenta(id),
+      beneficiario: null,
+      cuenta: null,
+      esOrdenex: false,
+    },
+    registro: { nombre: null, automatico: { accion: "aprobacion_cierre" as const, por: "Ana Maestra" } },
+  })),
+}));
+vi.mock("@/lib/actions/libro-caja-autoria", () => ({
+  autoriaDelLibroCajaAction: (...a: unknown[]) => autoriaMock(...(a as [{ movimientoIds: string[] }])),
 }));
 
-const listarPagosDeMensajeroMock = vi.fn();
-const listarPagosDeMensajeroCompletoMock = vi.fn();
-vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarPagosDeMensajeroAction: (...a: unknown[]) => listarPagosDeMensajeroMock(...a),
-  listarPagosDeMensajeroCompletoAction: (...a: unknown[]) =>
-    listarPagosDeMensajeroCompletoMock(...a),
+// FICHA 458-D (T D.5): `/mi-wallet` es el ESTADO DE CUENTA de la tienda; su descarga es el completo
+// de la tienda de la sesión (`verMiEstadoCuentaCompletoAction`, tope en el servidor).
+const verMiEstadoCuentaMock = vi.fn();
+const verMiEstadoCuentaCompletoMock = vi.fn();
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: vi.fn(),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: (...a: unknown[]) => verMiEstadoCuentaMock(...a),
+  verMiEstadoCuentaCompletoAction: (...a: unknown[]) => verMiEstadoCuentaCompletoMock(...a),
+  verOrdenesDeFilaAction: vi.fn(),
 }));
+vi.mock("@/lib/actions/wallet-tienda", () => ({
+  verDetalleDeMiMovimientoAction: vi.fn(),
+  verDetalleDeMiMovimientoCompletoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+
 
 vi.mock("@/lib/actions/wallet-egresos", () => ({
   reversarEgresoAdministrativoAction: vi.fn(),
@@ -111,12 +136,12 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
-import { MiWalletModule } from "@/app/(app)/mi-wallet/_components/MiWalletModule";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 // Feature 173 (T G.2/T G.3, R61/R62) — el filtro y la descarga del libro de caja.
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import {
   CATEGORIA_LABEL,
-  CATEGORIA_OPTIONS,
+  CATEGORIA_TODAS_OPTION,
   DUENO_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
@@ -139,44 +164,27 @@ function movimientoCaja(i: number): WalletMovimientoDTO {
     registradoPor: null,
     fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
     dueno: "propio", // feature 231 (R31): el flete es dinero de Ordenex
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
-function movimientoTienda(i: number): WalletTiendaMovimientoDTO {
-  return {
-    id: `t-${i}`,
-    tiendaId: "tienda-1",
-    tipo: "credito",
-    categoria: "cod_recaudado",
-    monto: `${500 + i}.25`,
-    origenTipo: "cierre_dia",
-    origenId: `o-${i}`,
+/** Una fila del estado de cuenta de la tienda (vista tienda), como la devuelve `verMiEstadoCuentaAction`. */
+function movimientoTienda(i: number): FilaEstadoCuentaDTO {
+  return filaEstado({
+    n: i,
+    fecha: `2026-07-${String(10 + i).padStart(2, "0")}`,
+    abono: `${500 + i}.25`,
+    saldoCorrido: `${500 + i}.25`,
     descripcion: `Crédito ${i}`,
-    fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
-  };
+    registro: { nombre: null, automatico: null },
+  });
 }
 
-function pagoMensajero(i: number): PagoMensajeroMovimientoDTO {
-  return {
-    id: `p-${i}`,
-    mensajeroId: "mensajero-1",
-    tipo: "devengo",
-    categoria: "pago_devengado",
-    monto: `${300 + i}.50`,
-    origenTipo: "cierre_dia",
-    origenId: `o-${i}`,
-    cierreId: `o-${i}`, // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
-    descripcion: `Devengo ${i}`,
-    fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
-  };
-}
 
 const CAJA_PAGINA = [movimientoCaja(1), movimientoCaja(2)];
 const CAJA_TODOS = Array.from({ length: 5 }, (_, i) => movimientoCaja(i + 1));
 const TIENDA_PAGINA = [movimientoTienda(1)];
 const TIENDA_TODOS = Array.from({ length: 4 }, (_, i) => movimientoTienda(i + 1));
-const PAGOS_PAGINA = [pagoMensajero(1)];
-const PAGOS_TODOS = Array.from({ length: 4 }, (_, i) => pagoMensajero(i + 1));
 
 // Feature 173 (T G.3): la cabecera del libro de caja pasa a las DOS cifras. Este archivo mide
 // la DESCARGA y el FILTRO, no la cabecera; el dato se adapta para que el módulo monte.
@@ -194,6 +202,14 @@ const RESUMEN = {
   // Feature 231 (R9/R10): sin dinero de terceros la porcion de las tiendas es 0.
   porcentajeTiendas: "0.00",
   modoComposicion: "dos_bolsillos" as const,
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero" as const,
+  deOrdenex: "1.00",
+  signoDeTerceros: "cero" as const,
+  deTercerosAbsoluto: "0.00",
+  estado: "flujo" as const,
+  flujoDesde: "2026-08-25",
 };
 // Feature 231 (T6.3): el módulo monta ahora la tarjeta de la ganancia, que recibe la
 // composición hermana del resumen. Este archivo mide la DESCARGA y el FILTRO, no esa tarjeta;
@@ -207,12 +223,16 @@ const COMPOSICION = {
     ingreso_iva_flete_devolucion: "0.00",
     ingreso_iva_comision_cod: "0.00",
     ingreso_ajuste: "0.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "1.00",
   // Ficha 339 (T1.3): las dos cubetas nuevas y la bandera del servidor.
   egresos: {
     egreso_pago_mensajero: "0.00",
     egreso_ajuste: "0.00",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+    egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+    egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
   },
   otrosEgresos: "0.00",
   hayOtrosEgresos: false,
@@ -230,35 +250,6 @@ const DESGLOSE_EGRESOS = {
   sueldo: "0.00",
   indemnizacion: "0.00",
   total: "1.00",
-};
-const SALDO_TIENDA = {
-  creditos: "500.25",
-  debitos: "0.00",
-  saldo: "500.25",
-  signo: "positivo" as const,
-};
-// Feature 172 (T G.2, R55): la cabecera de `/mi-wallet` pasa a tres importes. Este archivo
-// mide la DESCARGA, no la cabecera; el dato se anade para que el modulo monte.
-const DESGLOSE_TIENDA = {
-  aFavor: "500.25",
-  cargos: "0.00",
-  pagado: "0.00",
-  saldo: "500.25",
-  signo: "positivo" as const,
-};
-const CUENTA = {
-  devengado: "300.50",
-  pagado: "0.00",
-  cuentaPorPagar: "300.50",
-  signo: "positivo" as const,
-};
-const RESUMEN_MENSAJERO: CuentaPorPagarResumenDTO = {
-  mensajeroId: "mensajero-1",
-  mensajeroNombre: "Ana Mensajera",
-  devengado: "300.50",
-  pagado: "0.00",
-  cuentaPorPagar: "300.50",
-  signo: "positivo",
 };
 
 function envolver(ui: ReactElement) {
@@ -300,25 +291,17 @@ function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
 }
 
 function renderMiWallet() {
+  // FICHA 458-D (T D.5): el estado de cuenta de la tienda; la primera página baja del servidor.
   return envolver(
-    <MiWalletModule
-      movimientos={TIENDA_PAGINA}
-      total={60}
-      page={1}
-      pageSize={20}
-      saldo={SALDO_TIENDA}
-      desglose={DESGLOSE_TIENDA}
-      // Ficha 335: el catálogo de cierres del selector, REQUERIDO en los dos eslabones. Este
-      // archivo mide la DESCARGA del libro, que no cambia con el filtro de cierre; se siembra
-      // vacío y disponible, que es el estado de una tienda sin cierres todavía.
+    <MiEstadoCuenta
+      inicial={estadoCuenta({ filas: TIENDA_PAGINA, total: 60, page: 1, pageSize: 20 })}
+      // Ficha 335: el catálogo de cierres del selector, REQUERIDO. Este archivo mide la DESCARGA;
+      // se siembra vacío y disponible, el estado de una tienda sin cierres todavía.
       cierres={{ opciones: [], hayMas: false, disponible: true }}
     />,
   );
 }
 
-function renderDesgloseMensajero() {
-  return envolver(<DesglosePagosMensajero resumen={RESUMEN_MENSAJERO} />);
-}
 
 /**
  * Los ledgers: cómo se montan, cómo se llama su control y qué acción usan.
@@ -327,6 +310,11 @@ function renderDesgloseMensajero() {
  * decisión humana— con su `renderMisPagos`, sus dos mocks y su ruta de la lista de módulos de
  * presentación de más abajo (que se lee con `readFileSync`: dejarla habría reventado el archivo
  * ENTERO con ENOENT, no un caso). Quedan TRES.
+ *
+ * FICHA 458-D (T D.8, D14) — y quedan DOS: el desglose por cierre de un mensajero se retiró con su
+ * desplegable. Su sustituto es el estado de cuenta del mensajero, cuya descarga (periodo entero, saldo
+ * corrido, saldo inicial, sin ids) cubre `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts`
+ * (R32/R3).
  */
 const LEDGERS = [
   {
@@ -336,24 +324,24 @@ const LEDGERS = [
     completo: listarMovimientosCompletoMock,
     todos: CAJA_TODOS,
     pagina: CAJA_PAGINA,
+    // Filas de la tabla y del archivo que no son movimientos, y el importe de su primer movimiento.
+    filasFijas: 0,
+    importeArchivo: (filas: Record<string, unknown>[]) => filas[0].monto,
+    importeEsperado: CAJA_TODOS[0].monto,
   },
   {
-    titulo: "Desglose de movimientos",
-    tabla: "Desglose de movimientos",
+    // FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda: la
+    // tabla y el archivo llevan arriba la línea del saldo inicial (R20/R32) y el importe va en su
+    // columna de abono.
+    titulo: "Estado de cuenta de Tania Tienda",
+    tabla: "Estado de cuenta de Tania Tienda",
     montar: renderMiWallet,
-    completo: listarMisMovimientosCompletoMock,
+    completo: verMiEstadoCuentaCompletoMock,
     todos: TIENDA_TODOS,
     pagina: TIENDA_PAGINA,
-  },
-  {
-    titulo: `Desglose de ${RESUMEN_MENSAJERO.mensajeroNombre}`,
-    // El nombre accesible de la TABLA no es el del control: la tabla se llama "Desglose por
-    // cierre de X" desde la 44 y esta feature no le cambia el nombre a ninguna pantalla.
-    tabla: `Desglose por cierre de ${RESUMEN_MENSAJERO.mensajeroNombre}`,
-    montar: renderDesgloseMensajero,
-    completo: listarPagosDeMensajeroCompletoMock,
-    todos: PAGOS_TODOS,
-    pagina: PAGOS_PAGINA,
+    filasFijas: 1,
+    importeArchivo: (filas: Record<string, unknown>[]) => filas[1].abono,
+    importeEsperado: TIENDA_TODOS[0].abono,
   },
 ] as const;
 
@@ -369,28 +357,18 @@ function cebarDobles() {
     resumen: RESUMEN,
     composicion: COMPOSICION,
   });
-  listarMisMovimientosMock.mockResolvedValue({
+  verMiEstadoCuentaMock.mockResolvedValue({
     status: "ok",
-    data: { movimientos: TIENDA_PAGINA, total: 60, page: 1, saldo: SALDO_TIENDA },
-  });
-  listarPagosDeMensajeroMock.mockResolvedValue({
-    status: "ok",
-    data: { movimientos: PAGOS_PAGINA, total: 60, page: 1, pageSize: 20, cuenta: CUENTA },
+    estado: estadoCuenta({ filas: TIENDA_PAGINA, total: 60, page: 1, pageSize: 20 }),
   });
   listarMovimientosCompletoMock.mockResolvedValue({
     status: "ok",
     items: CAJA_TODOS,
     total: CAJA_TODOS.length,
   });
-  listarMisMovimientosCompletoMock.mockResolvedValue({
+  verMiEstadoCuentaCompletoMock.mockResolvedValue({
     status: "ok",
-    items: TIENDA_TODOS,
-    total: TIENDA_TODOS.length,
-  });
-  listarPagosDeMensajeroCompletoMock.mockResolvedValue({
-    status: "ok",
-    items: PAGOS_TODOS,
-    total: PAGOS_TODOS.length,
+    estado: estadoCuenta({ filas: TIENDA_TODOS, total: TIENDA_TODOS.length, page: 1, pageSize: TIENDA_TODOS.length }),
   });
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
 }
@@ -435,7 +413,7 @@ describe("Ledgers de dinero · descarga", () => {
       // pinta en carga un `<tr>` con `role="status"` y filas skeleton `aria-hidden` que no
       // cuentan como `row`, así que el número puede cuadrar a media carga.
       await waitFor(() => {
-        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + 1);
+        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + ledger.filasFijas + 1);
         expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
       });
 
@@ -443,11 +421,11 @@ describe("Ledgers de dinero · descarga", () => {
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
       const [, filas] = buildXlsxRowsMock.mock.calls[0];
-      expect(filas, `${ledger.titulo}: filas del archivo`).toHaveLength(ledger.todos.length);
+      expect(filas, `${ledger.titulo}: filas del archivo`).toHaveLength(ledger.todos.length + ledger.filasFijas);
       // Money-safe de punta a punta: el monto llega al archivo como el STRING del servidor,
       // con sus céntimos y sin el símbolo de colón (que rompería la celda como número).
-      expect(filas[0].monto).toBe(ledger.todos[0].monto);
-      expect(String(filas[0].monto)).not.toContain("₡");
+      expect(ledger.importeArchivo(filas)).toBe(ledger.importeEsperado);
+      expect(String(ledger.importeArchivo(filas))).not.toContain("₡");
 
       await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
       const [, mime] = descargarBlobMock.mock.calls[0];
@@ -491,7 +469,9 @@ describe("Ledgers de dinero · descarga", () => {
     const raiz = path.resolve(__dirname, "../../..");
     const presentacion = [
       "app/(app)/wallet/_components/WalletLedger.tsx",
-      "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
+      // FICHA 458-D (T D.5): `DesgloseTiendaLedger` se retiró; `/mi-wallet` es el estado de cuenta, que
+      // SÍ lee (SWR sobre la action de la tienda de la sesión, por diseño) y cuya descarga es el
+      // completo del servidor: lo miden los casos de arriba con `verMiEstadoCuentaCompletoAction`.
     ];
 
     for (const ruta of presentacion) {
@@ -559,6 +539,7 @@ function movimientoNuevo(
     registradoPor: null,
     fechaMovimiento: `2026-08-0${i}T14:00:00.000Z`,
     dueno: "terceros", // feature 231 (R31): los dos conceptos de la 173 son de las tiendas
+    documento: null, // ficha 459 (design §7.3): fila sin documento
   };
 }
 
@@ -569,20 +550,25 @@ const CAJA_CON_NUEVOS = [
 ];
 
 describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
-  it("T G.2 (R61): el filtro se puebla del SEED, no de una lista escrita a mano", () => {
-    // Esto es una VERIFICACIÓN, no una implementación: el `Select` de categoría ya se armaba
-    // del SEED desde la 42, así que las dos categorías nuevas entraron solas al añadirlas al
-    // catálogo. Lo que se afirma es justo eso —que sigue siendo así— porque el día que
-    // alguien sustituya el `map` por una lista literal, el filtro se quedará mudo ante la
-    // siguiente categoría y nadie se enterará hasta que falte una.
-    const valores = CATEGORIA_OPTIONS.map((o) => o.value);
+  it("T G.2 (R61) → 458-A (R13): el filtro ofrece las categorías CON movimientos, con su nombre", () => {
+    // Reescrito en la 458-A (TA.3): el `Select` ya NO se puebla del SEED (R95 lo prohíbe), sino
+    // de los conceptos con movimientos que devuelve el servidor. Lo que se conserva de la 173 es
+    // que ninguna categoría del catálogo pueda llegar al filtro sin nombre legible: se le pasan
+    // TODAS las del SEED como «con movimientos» y cada una sale rotulada, nunca con su valor.
+    const opcionesTodas = opcionesDeConceptos(
+      WALLET_MOVIMIENTO_CATEGORIA_SEED.map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const valores = opcionesTodas.map((o) => o.value);
     expect(valores).toEqual(["", ...WALLET_MOVIMIENTO_CATEGORIA_SEED]);
 
     for (const categoria of CATEGORIAS_173) {
-      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      const opcion = opcionesTodas.find((o) => o.value === categoria);
       expect(opcion, `el filtro no ofrece ${categoria}`).toBeDefined();
       // Y con nombre de persona, no con el valor del enum (R61).
-      expect(opcion?.label).toBe(CATEGORIA_LABEL[categoria]);
+      expect(opcion?.label).toBe(`${CATEGORIA_LABEL[categoria]} (1)`);
       expect(opcion?.label).not.toBe(categoria);
       expect(opcion?.label).not.toMatch(/_/);
     }
@@ -590,7 +576,7 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     // Ninguna categoría del catálogo se queda sin etiqueta legible: el barrido es sobre el
     // SEED en RUNTIME, no sobre las dos que esta feature añadió.
     for (const categoria of WALLET_MOVIMIENTO_CATEGORIA_SEED) {
-      const opcion = CATEGORIA_OPTIONS.find((o) => o.value === categoria);
+      const opcion = opcionesTodas.find((o) => o.value === categoria);
       expect(opcion?.label, `sin etiqueta: ${categoria}`).toBeTruthy();
       expect(opcion?.label).not.toBe(categoria);
     }
@@ -637,10 +623,9 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     // así el caso deja de hablar sólo de las dos categorías de la 173 y afirma lo general —que
     // ninguna categoría del catálogo añade ni quita columnas—, que es lo que el título dice.
     //
-    // La red de que las columnas son LAS QUE SON (las seis anteriores, en su orden, más
-    // «Dueño» en su sitio) la aporta el caso «R35: los encabezados anteriores conservan su
-    // orden y «Dueño» se añade», al final de este archivo. Si alguien borra aquél creyendo que
-    // la protección vive aquí, el libro se queda sin ella.
+    // La red de que las columnas son LAS QUE SON la aporta el caso «458-E R55: los encabezados del
+    // libro son los de la maqueta, en su orden», al final de este archivo. Si alguien borra aquél
+    // creyendo que la protección vive aquí, el libro se queda sin ella.
     const unaPorCategoria: WalletMovimientoDTO[] = WALLET_MOVIMIENTO_CATEGORIA_SEED.map(
       (categoria, i) => ({
         ...movimientoCaja(i + 1),
@@ -726,25 +711,26 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // Feature 231 (T5.1/T5.3) — la columna «Dueño», en la tabla y en el archivo.
 //
-// Los dos casos de aquí abajo son los que D1 pedía AÑADIR al cambiar la aserción de la 173:
-// el caso de arriba sigue protegiendo lo suyo —que las categorías de la 173 no tocan las
-// columnas— y estos fijan lo de ESTA feature: que «Dueño» está, dónde está, y que el archivo
-// dice exactamente la misma palabra que la pantalla.
+// FICHA 458-E (T E.1, design §5.2; R3, R55–R57) — REESCRITO en el MISMO commit que cambia las
+// columnas, como pide el design: aquí el literal ES el contrato. Antes: «R35: los encabezados
+// anteriores conservan su orden y «Dueño» se añade» (seis encabezados de la 170 + «Dueño» antes de
+// «Ver»). Ahora el libro tiene las columnas de la maqueta aprobada (pantalla 3) y «Dueño» viaja
+// DENTRO de «Monto» con la dirección. Lo que el caso R34 de la 231 protegía —que el archivo dice la
+// MISMA palabra que la pantalla— se conserva y se extiende a «A quién» y «Registró».
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** Los seis encabezados que el libro tenía ANTES de esta feature, en su orden. */
-const ENCABEZADOS_ANTERIORES = [
+/** 458-E — los encabezados del libro de la caja, en su orden (maqueta, pantalla 3). */
+const ENCABEZADOS_DEL_LIBRO = [
   "Fecha",
-  "Tipo",
-  "Categoría",
+  "Movimiento y motivo",
+  "A quién",
   "Monto",
-  "Origen",
-  "Acciones",
+  "Registró",
+  "Ver",
 ] as const;
 
-describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
-  it("R35: los encabezados anteriores conservan su orden y «Dueño» se añade", async () => {
-    // Un movimiento de cada naturaleza, para que la tabla tenga las dos palabras dentro.
+describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
+  it("458-E R55: los encabezados del libro son los de la maqueta, en su orden", async () => {
     renderCaja([movimientoCaja(1), movimientoNuevo("ingreso_cod_recaudado", 1)]);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
@@ -752,57 +738,92 @@ describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
       .getAllByRole("columnheader")
       .map((c) => c.textContent);
 
-    // Ninguna de las seis se movió ni se fue: filtradas del juego actual, salen en su orden.
-    expect(
-      encabezados.filter((h) => ENCABEZADOS_ANTERIORES.includes(h as never)),
-    ).toEqual([...ENCABEZADOS_ANTERIORES]);
-
-    // Y «Dueño» entra: una sola columna más, la ÚLTIMA de los datos —justo antes del botón—.
-    //
-    // FICHA 344 — el conteo pasa de 7 a 8 y NINGUNA columna de datos se movió, se añadió ni se
-    // fue: las seis de arriba salen en su orden y «Dueño» sigue justo antes de «Acciones». La de
-    // más es «Desglose», la columna del control de apertura que ANTEPONE la primitiva
-    // `DataTable` en cuanto el consumidor declara `renderExpanded` —lo declara ahora el libro,
-    // para abrir las órdenes que componen el importe de una fila de cierre—. No la declara este
-    // componente y no forma parte de la secuencia que este caso protege, así que se cuenta
-    // aparte y se NOMBRA: si el número volviera a subir, ya no sería por esto.
-    const COLUMNA_DE_DESGLOSE = 1;
-    expect(encabezados[0]).toBe("Desglose");
-    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1 + COLUMNA_DE_DESGLOSE);
-    expect(encabezados).toContain("Dueño");
-    expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Acciones") - 1);
+    // FICHA 344: la primera es «Desglose», la columna del control de apertura que ANTEPONE la
+    // primitiva `DataTable` al declarar `renderExpanded`; no la declara el libro y se nombra aparte.
+    expect(encabezados).toEqual(["Desglose", ...ENCABEZADOS_DEL_LIBRO]);
+    // Y ninguna de las columnas retiradas vuelve (su dato vive en «Movimiento y motivo» y «Monto»).
+    for (const retirada of ["Tipo", "Categoría", "Origen", "Dueño", "Acciones"]) {
+      expect(encabezados, retirada).not.toContain(retirada);
+    }
   });
 
-  it("R34: la descarga trae «Dueño» con el mismo texto que muestra la tabla", async () => {
+  it("R34 (231) / 458-E R56/R57: el archivo dice lo mismo que la tabla en «Dueño», «A quién» y «Registró»", async () => {
+    const user = userEvent.setup();
     const propio = movimientoCaja(1); // flete → dinero de Ordenex
     const terceros = movimientoNuevo("ingreso_cod_recaudado", 1); // contra-entrega → tienda
+    listarMovimientosMock.mockResolvedValue({
+      status: "ok",
+      data: { movimientos: [propio, terceros], total: 2, page: 1 },
+    });
+    listarMovimientosCompletoMock.mockResolvedValue({
+      status: "ok",
+      items: [propio, terceros],
+      total: 2,
+    });
     renderCaja([propio, terceros]);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
     const encabezados = within(tabla)
       .getAllByRole("columnheader")
       .map((c) => c.textContent);
-    const columna = encabezados.indexOf("Dueño");
-    expect(columna).toBeGreaterThan(-1);
+    const monto = encabezados.indexOf("Monto");
+    const aQuien = encabezados.indexOf("A quién");
+    const registro = encabezados.indexOf("Registró");
+    expect(Math.min(monto, aQuien, registro)).toBeGreaterThan(-1);
 
-    // Lo que se LEE en la celda de cada fila, en el orden en que llegaron.
+    // La autoría llega (lectura del módulo por los ids de la página).
+    await waitFor(() => {
+      expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
+      expect(within(tabla).queryByText("Cargando…")).toBeNull();
+      expect(within(tabla).getAllByText("Automático · Aprobación del cierre por Ana Maestra")).toHaveLength(2);
+    });
+
     const filasTabla = within(tabla).getAllByRole("row").slice(1);
-    const enPantalla = filasTabla.map(
-      (fila) => within(fila).getAllByRole("cell")[columna].textContent,
-    );
-    expect(enPantalla).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
+    const enPantalla = filasTabla.map((fila) => {
+      const celdas = within(fila).getAllByRole("cell");
+      return {
+        dueno: celdas[monto].querySelector("[data-dueno]")?.textContent,
+        aQuien: celdas[aQuien].textContent,
+        registro: celdas[registro].textContent,
+      };
+    });
+    expect(enPantalla.map((f) => f.dueno)).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
     // Las dos palabras son DISTINTAS: si «Ordenex» y «Tienda» fueran la misma, la columna
     // entera no diría nada y este caso pasaría igual.
     expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
 
-    // Y el archivo dice exactamente eso, celda a celda.
-    expect([propio, terceros].map((m) => filaDescargaMovimientoCaja(m).dueno)).toEqual(
-      enPantalla,
-    );
-    // La columna está declarada en la hoja, con su encabezado.
-    expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toContain("dueno");
+    // Y el archivo dice exactamente eso, celda a celda, con la autoría leída para el libro ENTERO.
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+    const [columnas, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(columnas.map((c) => c.key)).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave));
     expect(
-      COLUMNAS_DESCARGA_WALLET_CAJA.find((c) => c.clave === "dueno")?.encabezado,
-    ).toBe("Dueño");
+      filas.map((f) => ({ dueno: f.dueno, aQuien: f.aQuien, registro: f.registro })),
+    ).toEqual(enPantalla);
+    // R3: ningún id en ninguna celda del archivo — ni entero ni DENTRO de un texto (revisión m5).
+    const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    for (const fila of filas) {
+      for (const valor of Object.values(fila)) {
+        expect(String(valor)).not.toMatch(UUID);
+        for (const id of [propio.id, terceros.id, propio.origenId, terceros.origenId]) {
+          if (id !== null) expect(String(valor)).not.toContain(id);
+        }
+      }
+    }
+  });
+
+  it("458-E: si la autoría no se puede leer, la descarga NO produce archivo", async () => {
+    const user = userEvent.setup();
+    renderCaja();
+    await screen.findByRole("table", { name: "Libro de movimientos" });
+    // La tabla ya pidió SU autoría al montar; la siguiente lectura es la de la descarga, y falla.
+    await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(1));
+    autoriaMock.mockResolvedValueOnce({ status: "forbidden" } as never);
+
+    await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
+    await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(2));
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });

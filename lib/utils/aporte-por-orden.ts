@@ -4,6 +4,7 @@ import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigente
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import type { WalletIngresoConcepto, WalletMovimientoCategoria } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
+import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 
 /**
@@ -73,6 +74,20 @@ export const FUENTE_CAJA: Record<WalletMovimientoCategoria, FuenteDeAporte> = {
   egreso_sueldo: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   egreso_pago_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   ingreso_reverso_pago_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 459 (design §5): los cuatro conceptos nuevos no nacen de un cierre.
+  egreso_pago_por_cuenta_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ingreso_reverso_pago_por_cuenta_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ingreso_aporte_capital: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_aporte_capital: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 461 (design §4): el cobro de Ordenex a una tienda y su anulacion los decide una persona.
+  ingreso_cobro_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_cobro_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 457 (design §4, R51): el pago de una tienda a Ordenex y su anulacion los decide una persona.
+  ingreso_abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 458-B (design §2.3): la anulacion de un cobro por rechazo la decide una persona.
+  egreso_reverso_flete_devolucion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  egreso_reverso_iva_flete_devolucion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**
@@ -105,6 +120,40 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
   // FICHA 381: un cobro manual lo decide una PERSONA, no lo reparte ningun cierre. Abrir su detalle
   // responde «no nace de un cierre» en vez de irse a buscar un cierre que no existe.
   cobro_manual: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 459 (design §5): el pago por cuenta y su anulacion los decide una persona.
+  pago_por_cuenta: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  pago_por_cuenta_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 461 (design §4): la anulacion de un cobro de Ordenex la decide una persona.
+  cobro_tienda_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 457 (design §4, R51): el pago de la tienda a Ordenex y su anulacion no nacen de un cierre.
+  abono_tienda: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  abono_tienda_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  // FICHA 458-B (design §2.3): los creditos espejo de la anulacion de un cobro por rechazo.
+  flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  iva_flete_devolucion_anulado: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+};
+
+/**
+ * FICHA 458-D (servidor, R19) — el catalogo del LIBRO DEL MENSAJERO. `Record` TOTAL, mismo motivo.
+ *
+ * NINGUN concepto del mensajero se reparte por orden, y es un hecho medido, no una omision:
+ *
+ *  - `pago_devengado` es `cierre_dia.total_pago_mensajero` y `pago_efectivo` es `min(P, E)` del cierre
+ *    (`WalletMensajeroFeedService`): los dos son SNAPSHOT del cierre entero, y `cierre_detail` no
+ *    congela ningun pago por orden (no hay columna de la que sacarlo). Mismo motivo que
+ *    `egreso_pago_mensajero` en la caja.
+ *  - el resto (liquidacion, ajustes, premio del ranking) no nace de un cierre.
+ *
+ * La fila de cierre se abre igual y dice de donde sale su importe; el enlace a SU cierre lo da el
+ * origen de la fila (R7).
+ */
+export const FUENTE_MENSAJERO: Record<PagoMensajeroMovimientoCategoria, FuenteDeAporte> = {
+  pago_devengado: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
+  pago_efectivo: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
+  liquidacion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ajuste_devengo: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  ajuste_pago: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
+  premio_ranking: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
 };
 
 /**
@@ -166,14 +215,14 @@ export interface CriterioDeAporte {
 export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte> = {
   // Solo una ENTREGA factura flete, y sin tarifa congelada no hay monto que facturar.
   ingreso_flete: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
   },
   ingreso_iva_flete: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
@@ -183,14 +232,14 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
   // negocio. Volver a meterla sin tocar `derivarIngresoOrden` pone rojo el test de equivalencia,
   // que es exactamente para lo que existe.
   ingreso_flete_devolucion: {
-    resultados: ["rechazada"],
+    resultados: ["devolucion_a_origen_por_rechazo"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
   },
   ingreso_iva_flete_devolucion: {
-    resultados: ["rechazada"],
+    resultados: ["devolucion_a_origen_por_rechazo"],
     exigeCobraComision: false,
     exigeTarifa: true,
     exigeMontoCobrar: false,
@@ -199,14 +248,14 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
   // La comision COD y su IVA solo existen si la orden COBRA comision (R8/R26 de la 42). El
   // `exigeMontoCobrar` es la supresion de ceros, no parte de la formula.
   ingreso_comision_cod: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: true,
     exigeTarifa: true,
     exigeMontoCobrar: true,
     exigeMontoRecibido: false,
   },
   ingreso_iva_comision_cod: {
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     exigeCobraComision: true,
     exigeTarifa: true,
     exigeMontoCobrar: true,
@@ -222,7 +271,7 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
  * cuando alguno de ellos lo es.
  */
 export const CRITERIO_COD_RECAUDADO: CriterioDeAporte = {
-  resultados: ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"],
+  resultados: ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"],
   exigeCobraComision: false,
   exigeTarifa: false,
   exigeMontoCobrar: false,

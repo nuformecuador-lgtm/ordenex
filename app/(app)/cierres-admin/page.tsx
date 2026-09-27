@@ -181,6 +181,13 @@ export default async function CierresAdminPage() {
             pageSize: bodega.resueltos.pageSize,
           }}
           catalogoFiltros={catalogoFiltros}
+          /* ⭑ FICHA 431 (R25/R27): el permiso de marcar y desmarcar se resuelve SOLO
+             server-side y con el MISMO predicado (`esAccesoTotal`) con el que el servicio
+             responde `forbidden`. Hoy esta seccion solo se monta para acceso total, asi que el
+             valor es siempre `true`; se pasa igualmente y **no se escribe `true` literal**,
+             para que el dia que la cola se abra a un rol que mira y no concilia los botones
+             desaparezcan solos. Mismo criterio, palabra por palabra, que `/wallet/satelites`. */
+          puedeConciliar={esAccesoTotal(actor.rol)}
         />
       ) : null}
           </>

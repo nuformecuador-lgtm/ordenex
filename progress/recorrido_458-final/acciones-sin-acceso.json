@@ -1,0 +1,77 @@
+[
+  {
+    "id": "capturas de la sesión del maestro",
+    "estado": "OK",
+    "previsualizar": true,
+    "registrar": true,
+    "anular": true
+  },
+  {
+    "id": "mensajero: action previsualizar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "mensajero: action registrar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "mensajero: action anular → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "satelite: action previsualizar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "satelite: action registrar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "satelite: action anular → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "tienda: action previsualizar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "tienda: action registrar → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "tienda: action anular → forbidden",
+    "estado": "OK",
+    "http": 200,
+    "respuesta": "0:{\"a\":\"$@1\",\"f\":\"\",\"q\":\"\",\"i\":true,\"b\":\"development\"} 1:D\"$2\" 1:{\"status\":\"forbidden\"} "
+  },
+  {
+    "id": "sin escrituras (filas antes/después)",
+    "estado": "OK",
+    "antes": {
+      "caja": 78,
+      "tienda": 47,
+      "anul_cobro": 4
+    },
+    "despues": {
+      "caja": 78,
+      "tienda": 47,
+      "anul_cobro": 4
+    }
+  }
+]

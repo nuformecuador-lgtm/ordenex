@@ -1,0 +1,45 @@
+// GET /api/ordenes/api-key/orden/19887906 -> HTTP 200
+{
+  "numGuia": 19887906,
+  "numRemision": "QA-R-0016",
+  "estado": "en_reparto",
+  "estadoNombre": "En reparto",
+  "destinatario": "Jose Fallas",
+  "telefonoDest": "87400000",
+  "producto": "Camisa formal",
+  "direccion": "San Pedro, Montes de Oca",
+  "montoCobrar": 14000,
+  "createdAt": "2026-07-23T15:59:22.255Z",
+  "mensajero": {
+    "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+    "nombre": "Marco Mensajero"
+  },
+  "zona": {
+    "id": "dbed36dd-60f7-416f-bdd8-4c487d5e83ef",
+    "nombre": "GAM"
+  },
+  "costoEstimado": {
+    "flete": "2000.00",
+    "iva": "260.00",
+    "comision": "490.00",
+    "ivaComision": "63.70",
+    "fulfillment": "800.00"
+  },
+  "costoReal": null,
+  "evidencias": [],
+  "gestiones": [
+    {
+      "createdAt": "2026-09-24T06:56:41.709Z",
+      "resultado": "novedad",
+      "resultadoNombre": "Novedad",
+      "estadoResultante": null,
+      "estadoResultanteNombre": null,
+      "motivo": "not_found",
+      "mensajero": {
+        "id": "9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+        "nombre": "Marco Mensajero"
+      },
+      "pendienteConfirmacion": true
+    }
+  ]
+}

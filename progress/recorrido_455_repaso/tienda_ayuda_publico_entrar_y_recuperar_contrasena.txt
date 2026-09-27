@@ -1,0 +1,58 @@
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+TIENDAS
+Mi wallet
+Novedades
+Órdenes
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+Entrar a Ordenex
+
+Con tu correo y tu contraseña. Si la cuenta la creó la oficina, la contraseña te la pasaron al crearla.
+
+El código de verificación
+
+El sistema tiene un segundo paso de verificación por código, que se activa según un umbral de riesgo configurado por la operación. Hoy está configurado de forma que en la práctica no se pide, así que lo normal es entrar solo con correo y contraseña.
+
+Si alguna vez te aparece y te dice «El código es inválido o ha expirado», pedí uno nuevo — los códigos duran poco a propósito.
+
+Para la oficina: si un usuario reporta que le piden un código, conviene revisarlo. Con la configuración actual no debería estar pasando.
+Si no podés entrar
+
+«Correo o contraseña inválidos». Uno de los dos está mal. Fijate en el correo antes que en la contraseña: es lo que más se escribe mal.
+
+«Sesión expirada. Intentá de nuevo». Pasó mucho rato entre que abriste la pantalla y le diste a entrar. Volvé a intentarlo, no perdés nada.
+
+Entrás y no ves lo que esperabas. Cada rol ve pantallas distintas. Si te falta algo que antes tenías, tu cuenta puede haber cambiado de rol — eso lo resuelve la oficina.
+
+Recuperar la contraseña
+
+Desde Restablecer contraseña:
+
+Ponés tu correo y pedís el código de verificación.
+Te llega el código y lo escribís.
+Escribís la nueva contraseña dos veces.
+
+«Las contraseñas no coinciden» significa que las dos que escribiste son distintas — pasa con el autocompletado del teléfono; borrá las dos y escribilas de nuevo.
+
+Si el código no llega, revisá el correo no deseado. Si aun así no llega, la oficina puede restablecerte la contraseña directamente.
+
+Un consejo
+
+Si trabajás en la calle, instalá la aplicación en el teléfono cuando te lo ofrezca. Queda como una app más y no tenés que entrar por el navegador cada vez.
+
+Actualizado el 15/09/2026
+
+Siguiente: Postularse para trabajar

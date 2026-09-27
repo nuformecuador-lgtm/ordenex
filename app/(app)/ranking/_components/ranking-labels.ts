@@ -38,7 +38,7 @@ export const RANKING_COLUMNAS = {
   posicion: "Posición",
   mensajero: "Mensajero",
   porcentaje: "% del día",
-  conteo: "Entregadas / asignadas",
+  conteo: "Entregados / asignados",
 } as const;
 
 /** Iniciales para el avatar del podio: máx. 2 letras a partir del nombre. */
@@ -88,7 +88,7 @@ export const PREMIOS_FEEDBACK = {
 /** Etiquetas del podio visual (rediseño de la sección de ranking). */
 export const PODIO_LABELS = {
   titulo: "Ranking de mensajeros",
-  descripcion: "Efectividad · entregadas / asignadas · hoy",
+  descripcion: "Efectividad · entregados / asignados · hoy",
   conteoSufijo: "entregas",
   sinOcupante: "Sin ocupante",
   lugar: (posicion: number) => `${posicion}º lugar`,

@@ -1,0 +1,686 @@
+[
+  {
+    "id": "4 estado de cuenta de Tania: saldo inicial arriba; saldo corrido de la última fila = tarjeta = listado",
+    "estado": "OK",
+    "listado": "Tania Tienda ₡132.670,10 A favor Ver estado de cuenta",
+    "tarjetas": "Saldo actual ₡132.670,10 Ordenex le debe ₡132.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡58.729,90 Saldo al final del periodo ₡132.670,10",
+    "primeraFila": "— Saldo inicial ₡0",
+    "ultimaFila": "2026-09-26 Cobro de Ordenex a la tienda anulado Anulación Anulación · Cobro R458F-maestro para dejarla en contra Cobro de Ordenex a una tienda · Tania Tienda Registró: Maestro QA ₡200.000 ₡132.670,10 Ver",
+    "saldoSql": "132670.10",
+    "acciones": "Ordenex le cobra a la tienda Ordenex le paga a la tienda",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "5 «Ordenex le cobra a la tienda» 5.000",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡132.670,10 Después: ₡127.670,10 Flujo de dinero registrado ₡13.473.932,72 · no cambia Ganancia de Ordenex Antes: ₡13.341.262,62 Después: ₡13.346.262,62 Lo que Ordenex les debe a las tiendas Antes: ₡132.670,10 Después: ₡127.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "aviso": "Cobro registrado. El saldo de Tania Tienda queda en ₡127.670,10 · A favor. ×",
+    "tarjetaTras": "Saldo actual ₡127.670,10 Ordenex le debe ₡127.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡63.729,90 Saldo al final del periodo ₡127.670,10",
+    "listadoTras": "Tania Tienda ₡127.670,10 A favor Ver estado de cuenta"
+  },
+  {
+    "id": "R7/R8 tras el cobro de 5.000 (paso 5)",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "150300.50",
+    "cifra": "13473932.72",
+    "ganancia": "13346262.62",
+    "de_tiendas": "127670.10",
+    "capital": "0",
+    "suma_saldos": "127670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "6 «Ordenex paga un gasto de una tienda» a Facebook 10.000",
+    "estado": "OK",
+    "asiQueda": "Así queda Antes Después Saldo de Tania Tienda Antes: ₡127.670,10 Después: ₡117.670,10 Flujo de dinero registrado Antes: ₡13.473.932,72 Después: ₡13.463.932,72 Ganancia de Ordenex ₡13.346.262,62 · no cambia Lo que Ordenex les debe a las tiendas Antes: ₡127.670,10 Después: ₡117.670,10 Saldo inicial y aportes ₡0 · no cambia Cancelar Registrar",
+    "aviso": "Pago registrado. El saldo de Tania Tienda queda en ₡117.670,10 · A favor. ×",
+    "filasEnLaCaja": 1
+  },
+  {
+    "id": "R7/R8 tras el pago de un gasto de la tienda (paso 6)",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "160300.50",
+    "cifra": "13463932.72",
+    "ganancia": "13346262.62",
+    "de_tiendas": "117670.10",
+    "capital": "0",
+    "suma_saldos": "117670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "4 Tania en contra: «<Tienda> le debe ₡… a Ordenex»; «La tienda le paga» visible; «Ordenex le paga» deshabilitado con motivo",
+    "estado": "OK",
+    "avisoEnContra": "Así, Tania Tienda queda con el saldo en contra: -₡82.329,90.",
+    "tarjetas": "Saldo actual -₡82.329,90 Tania Tienda le debe ₡82.329,90 a Ordenex Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡273.729,90 Saldo al final del periodo -₡82.329,90",
+    "acciones": "La tienda le paga a Ordenex Ordenex le cobra a la tienda Ordenex le paga a la tienda Ordenex no le debe nada a Tania Tienda: sin saldo a favor no hay nada que pagarle.",
+    "tiendaPagaVisible": 1,
+    "ordenexPagaDeshabilitado": true
+  },
+  {
+    "id": "R7/R8 con Tania en contra",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "160300.50",
+    "cifra": "13463932.72",
+    "ganancia": "13546262.62",
+    "de_tiendas": "-82329.90",
+    "capital": "0",
+    "suma_saldos": "-82329.90",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "4 «Ver» → «Anular…» el cobro de 200.000 desde el estado de cuenta",
+    "estado": "OK",
+    "panel": "Ordenex le cobra a la tienda 2026-09-26 · Sale ₡200.000 A quién Tania Tienda Por qué Cobro R458F-admin para dejarla en contra De dónde sale Registrado a mano Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.463.932,72 Ganancia de Ordenex ₡13.546.262,62 Lo que Ordenex les debe a las tiendas -₡82.329,90 Saldo inicial y aportes ₡0 Saldo de la tienda -₡82.329,90 Anular… Cerrar",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "tarjetas": "Saldo actual ₡117.670,10 Ordenex le debe ₡117.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡73.729,90 Saldo al final del periodo ₡117.670,10",
+    "filaAnulada": "Ordenex le cobra a la tienda Cobro R458F-maestro para dejarla en contra Registrado a mano Registró: Maestro QA Anulado el 2026-09-26 por Maestro QA · R458F-maestro devolver la tienda a favor "
+  },
+  {
+    "id": "R7/R8 tras anular el cobro de 200.000",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "160300.50",
+    "cifra": "13463932.72",
+    "ganancia": "13346262.62",
+    "de_tiendas": "117670.10",
+    "capital": "0",
+    "suma_saldos": "117670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "08-tienda filtro por cierre (buscar por nombre y por día; sin ID)",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "20",
+      "50",
+      "100",
+      "Todos los cierres",
+      "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+      "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+      "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos"
+    ],
+    "porBusqueda": {
+      "Rita": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos"
+      ],
+      "2026-08-13": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+        "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos"
+      ]
+    },
+    "elegido": "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+    "disparador": "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+    "filasTrasFiltrar": 5,
+    "esperado": 5,
+    "muestra": [
+      " — Saldo inicial ₡0 ",
+      " 2026-09-24 Contra-entrega cobrado a los clientes de la tienda Cierre del día · 2026-09-24 · Rita Recorrido Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡32.500 ₡159.012,79 Ver",
+      " 2026-09-24 IVA del flete cobrado a la tienda Cierre del día · 2026-09-24 · Rita Recorrido Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡1.300 ₡157.712,79 Ver"
+    ]
+  },
+  {
+    "id": "08-tienda órdenes de un cierre",
+    "estado": "OK",
+    "boton": "Ver las órdenes que componen Contra-entrega cobrado a los clientes de la tienda del 2026-09-24",
+    "panel": "Cierre del día 2026-09-24 Mensajero: Rita Recorrido 5 de 14 órdenes del cierre aportan a este concepto Importe del movimiento: ₡32.500 Descargar Guía Destinatario Tienda Resultado Aporte 40520764 Cliente Recorrido 1 Tania Entregado ₡5.500 59144030 Cliente Recorrido 4 Tania Entregado ₡7.000 71377932 Cliente Recorrido 5 Tania Entregado ₡7.500 80975515 Cliente Recorrido 2 Tania Entregado ₡6.000 92987981 Cliente Recorrido 3 Tania Entregado ₡6.500 1-5 de 5 ‹ ›",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "9 descarga del estado de cuenta (filtrado por cierre)",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "filas": 7,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-09-24",
+        "Contra-entrega cobrado a los clientes de la tienda",
+        null,
+        "Cierre del día · 2026-09-24 · Rita Recorrido",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        null,
+        "32500.00",
+        "159012.79"
+      ],
+      [
+        "2026-09-24",
+        "IVA del flete cobrado a la tienda",
+        null,
+        "Cierre del día · 2026-09-24 · Rita Recorrido",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "1300.00",
+        null,
+        "157712.79"
+      ]
+    ],
+    "ultima": [
+      "2026-09-24",
+      "IVA de la comisión cobrado a la tienda",
+      null,
+      "Cierre del día · 2026-09-24 · Rita Recorrido",
+      null,
+      "Automático · Aprobación del cierre por Ana Admin",
+      "147.89",
+      null,
+      "146427.40"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  },
+  {
+    "id": "9 descarga completa: sin uuid, origen legible, saldo corrido; última fila = tarjeta",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-tania-tienda-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "filas": 49,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-08-12",
+        "Comisión de contra-entrega cobrada a la tienda",
+        null,
+        "Cierre del día · 2026-08-12 · Marco Mensajero",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "4343.50",
+        null,
+        "-4343.50"
+      ],
+      [
+        "2026-08-12",
+        "IVA del flete cobrado a la tienda",
+        null,
+        "Cierre del día · 2026-08-12 · Marco Mensajero",
+        null,
+        "Automático · Aprobación del cierre por Ana Admin",
+        "1560.00",
+        null,
+        "-5903.50"
+      ]
+    ],
+    "ultima": [
+      "2026-09-26",
+      "Cobro de Ordenex a la tienda anulado",
+      "Anulación · Cobro R458F-admin para dejarla en contra",
+      "Cobro de Ordenex a una tienda · Tania Tienda",
+      null,
+      "Ana Admin",
+      null,
+      "200000.00",
+      "117670.10",
+      "Anulación"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": [],
+    "tarjeta": "₡117.670,10"
+  },
+  {
+    "id": "9 descarga de pagos registrados de la tienda",
+    "estado": "FALLO",
+    "error": "page.waitForEvent: Timeout 120000ms exceeded while waiting for event \"download\"\n=========================== logs ===========================\nwaiting for event \"download\"\n=============================="
+  },
+  {
+    "id": "10 estado de cuenta de Marco",
+    "estado": "INFO",
+    "listado": "Marco Mensajero ₡21.700 ₡16.600 ₡5.100 Pendiente Ver estado de cuenta",
+    "tarjetas": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+    "acciones": "Se puede pagar ahora ₡5.100 La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor. Ordenex le paga al mensajero Para anular un pago, abrí su fila con «Ver»: es la misma anulación que la de Cierres; el pago vuelve a quedar por pagar.",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "10 «Ordenex le paga al mensajero» 1.000 (reparto)",
+    "estado": "OK",
+    "previsualizacion": "Registrar pago a Marco Mensajero El pago queda anotado como documento y no se puede editar: si algo sale mal, se anula y se registra de nuevo. Disponible: ₡5.100 Monto* Puedes registrar un pago parcial: escribe un monto menor. Cómo se reparte este pago Cierre del 2026-08-13 Pago parcial Ver el cierre del 2026-08-13 de Marco Mensajero Se aplica ₡1.000 Pendiente hoy: ₡3.400 · Queda pendiente: ₡2.400 Estos cierres no pueden recibir pago porque no están aprobados: 1 solicitados. Método* Efectivo Referencia Opcional en efectivo: número de recibo, si lo hay. Fecha del pago* El día en que se entregó el dinero. No puede ser posterior a hoy. Nota Opcional. Queda guardada junto al comprobante. Cancela",
+    "aviso": "Pago de ₡1.000 registrado. ×",
+    "antes": "₡5.100",
+    "tras": "₡4.100"
+  },
+  {
+    "id": "R7/R8 tras pagar al mensajero",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "160300.50",
+    "cifra": "13463932.72",
+    "ganancia": "13346262.62",
+    "de_tiendas": "117670.10",
+    "capital": "0",
+    "suma_saldos": "117670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "10 «Anular…» el pago desde la wallet",
+    "estado": "OK",
+    "panel": "Liquidación 2026-09-26 · Sale ₡1.000 A quién Marco Mensajero Por qué Efectivo De dónde sale Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Cómo Efectivo Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin Estado Vigente Cómo quedó Este movimiento no tiene línea en la caja: la caja no cambió con él. Lo que Ordenex le debe al mensajero ₡4.100 Anular… Cerrar",
+    "aviso": "Anulado. Se registró el movimiento contrario. ×",
+    "tarjetaTras": "₡5.100",
+    "inicial": "₡5.100"
+  },
+  {
+    "id": "R7/R8 tras anular el pago al mensajero",
+    "estado": "OK",
+    "entro": "13624233.22",
+    "salio": "160300.50",
+    "cifra": "13463932.72",
+    "ganancia": "13346262.62",
+    "de_tiendas": "117670.10",
+    "capital": "0",
+    "suma_saldos": "117670.10",
+    "diferencia_r8": "0.00",
+    "diferencia_r7": "0.00"
+  },
+  {
+    "id": "10 /cierres-admin sigue en pie",
+    "estado": "OK",
+    "status": 200,
+    "botonesAnular": 0,
+    "texto": "Cierres del día Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo 26/09/2026 Ayuda Claro Tema claro activado. 4 por hacer Salir Bodega Mensajero Filtros Pendientes (1) Resueltos (7) Descargar ORDENEX Cierre del día #FE596160 Solicitado Retiene 1 paquete reprograma"
+  },
+  {
+    "id": "08-mensajero filtro por cierre (buscar por nombre y por día; sin ID)",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "20",
+      "50",
+      "100",
+      "Todos los cierres",
+      "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+      "Cierre del 2026-08-13 · Marco Mensajero · 9 movimientos",
+      "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+    ],
+    "porBusqueda": {
+      "2026-08-13": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+        "Cierre del 2026-08-13 · Marco Mensajero · 9 movimientos"
+      ],
+      "Marco": [
+        "10",
+        "20",
+        "50",
+        "100",
+        "Todos los cierres",
+        "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+        "Cierre del 2026-08-13 · Marco Mensajero · 9 movimientos",
+        "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+      ]
+    },
+    "elegido": "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+    "disparador": "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+    "filasTrasFiltrar": 3,
+    "esperado": 3,
+    "muestra": [
+      " — Saldo inicial ₡0 ",
+      " 2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. ₡600 -₡4.000 Ver",
+      " 2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin ₡600 -₡3.400 Ver"
+    ]
+  },
+  {
+    "id": "08-mensajero órdenes de un cierre",
+    "estado": "FALLO",
+    "boton": "Ver las órdenes que componen Pago devengado del 2026-08-13",
+    "panel": "Este importe es el total que el cierre del día dejó anotado para pagarle al mensajero. No se acumula orden por orden, así que no se puede repartir entre ellas: para verlo en detalle, abrí el cierre en la pantalla de cierres.",
+    "barrido": {
+      "uuid": false,
+      "crudo": false,
+      "muestra": []
+    }
+  },
+  {
+    "id": "9 descarga del estado de cuenta del mensajero",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-marco-mensajero-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Marco Mens…"
+    ],
+    "filas": 5,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-08-13",
+        "Liquidación",
+        "Efectivo",
+        "Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo",
+        "Efectivo",
+        "Ana Admin",
+        "600.00",
+        null,
+        "-4000.00",
+        "Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero."
+      ],
+      [
+        "2026-08-13",
+        "Ajuste (devengo)",
+        "Anulación de pago · Efectivo",
+        "Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo",
+        null,
+        "Ana Admin",
+        null,
+        "600.00",
+        "-3400.00",
+        "Anulación"
+      ]
+    ],
+    "ultima": [
+      "2026-08-13",
+      "Pago devengado",
+      null,
+      "Cierre del día · 2026-08-13 · Marco Mensajero",
+      null,
+      "Automático · Aprobación del cierre por Ana Admin",
+      null,
+      "1700.00",
+      "5100.00"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  },
+  {
+    "id": "11 marcar recibido: el pendiente y la fila del listado cambian",
+    "estado": "OK",
+    "listadoAntes": "Quepos ₡19.000 hoy 26 sept · ₡24.000 de ₡25.000 Ver estado de cuenta",
+    "tarjetasAntes": "Por entregar hoy ₡19.000 Quepos tiene ₡19.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡24.000 Declarado en el periodo ₡43.000 Por entregar al final del periodo ₡19.000",
+    "dialogo": "Marcar recibido Consolidación de Quepos del 26 sept. Declarado por la bodega ₡18.000 Monto recibido* Viene con lo declarado. Cambialo solo si contaste una cantidad distinta. Nota Opcional. Por ejemplo: «faltaron ₡15.000, entran el lunes». Cancelar Marcar recibido",
+    "montoRecibido": "18000.00",
+    "tarjetasTras": "Por entregar hoy ₡1.000 Quepos tiene ₡1.000 por entregar Por entregar al inicio ₡0 Recibido en el periodo ₡42.000 Declarado en el periodo ₡43.000 Por entregar al final del periodo ₡1.000",
+    "listadoTras": "Quepos Recibido incompleto ₡1.000 al día 26 sept · ₡18.000 Ver estado de cuenta",
+    "sqlPendiente": {
+      "p": "1000.00",
+      "marcadas": 2
+    }
+  },
+  {
+    "id": "11 chips de la bodega (Todo · Declarado · Recibido)",
+    "estado": "INFO",
+    "Declarado": [
+      "— Saldo inicial ₡0 ",
+      "2026-09-26 Consolidación declarada Registró: Sara Satelite ₡25.000 ₡25.000 ",
+      "2026-09-26 Consolidación declarada Registró: Sara Satelite ₡18.000 ₡43.000 "
+    ],
+    "Recibido": [
+      "— Saldo inicial ₡0 ",
+      "2026-09-26 Recibido en la central Registró: Maestro QA ₡24.000 ₡19.000 ",
+      "2026-09-26 Recibido en la central Registró: Ana Admin ₡18.000 ₡1.000 "
+    ],
+    "Todo": [
+      "— Saldo inicial ₡0 ",
+      "2026-09-26 Consolidación declarada Registró: Sara Satelite ₡25.000 ₡25.000 ",
+      "2026-09-26 Consolidación declarada Registró: Sara Satelite ₡18.000 ₡43.000 ",
+      "2026-09-26 Recibido en la central Registró: Maestro QA ₡24.000 ₡19.000 ",
+      "2026-09-26 Recibido en la central Registró: Ana Admin ₡18.000 ₡1.000 "
+    ]
+  },
+  {
+    "id": "9 descarga del estado de cuenta de la bodega",
+    "estado": "OK",
+    "nombreArchivo": "estado-de-cuenta-de-quepos-2026-09-26.xlsx",
+    "uuidEnNombre": false,
+    "hojas": [
+      "Estado de cuenta de Quepos"
+    ],
+    "filas": 6,
+    "cabecera": [
+      "Fecha",
+      "Movimiento",
+      "Motivo",
+      "Origen",
+      "Cómo se pagó",
+      "Registró",
+      "Cargo",
+      "Abono",
+      "Saldo",
+      "Estado"
+    ],
+    "primeras": [
+      [
+        "Fecha",
+        "Movimiento",
+        "Motivo",
+        "Origen",
+        "Cómo se pagó",
+        "Registró",
+        "Cargo",
+        "Abono",
+        "Saldo",
+        "Estado"
+      ],
+      [
+        "",
+        "Saldo inicial",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "0.00"
+      ],
+      [
+        "2026-09-26",
+        "Consolidación declarada",
+        null,
+        null,
+        null,
+        "Sara Satelite",
+        "25000.00",
+        null,
+        "25000.00"
+      ],
+      [
+        "2026-09-26",
+        "Consolidación declarada",
+        null,
+        null,
+        null,
+        "Sara Satelite",
+        "18000.00",
+        null,
+        "43000.00"
+      ]
+    ],
+    "ultima": [
+      "2026-09-26",
+      "Recibido en la central",
+      null,
+      null,
+      null,
+      "Ana Admin",
+      null,
+      "18000.00",
+      "1000.00"
+    ],
+    "uuid": false,
+    "crudo": false,
+    "muestraCrudo": []
+  },
+  {
+    "id": "8 filtro por cierre / órdenes de un cierre en la bodega",
+    "estado": "N/A",
+    "motivo": "R10 pide el filtro por cierre solo en tienda y mensajero; la bodega tiene los chips «Todo · Declarado · Recibido» (R24) y sus filas son consolidaciones, no cierres"
+  },
+  {
+    "id": "12 árbol de accesibilidad de «Ver el cierre»: sin uuid",
+    "estado": "OK",
+    "lineasCierre": [
+      "    - 'row \"Ver las órdenes que componen Pago devengado del 2026-08-12 2026-08-12 Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡10.200 Ver Pago devengado del 2026-08-12 por ₡10.200\"':",
+      "      - 'cell \"Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin\"':",
+      "        - text: Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero",
+      "        - link \"Ver el cierre del 2026-08-12 de Marco Mensajero\":",
+      "          - /url: /cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29",
+      "        - text: \"Registró: Automático · Aprobación del cierre por Ana Admin\"",
+      "    - 'row \"Ver las órdenes que componen Pago del efectivo del 2026-08-12 2026-08-12 Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡0 Ver Pago del efectivo del 2026-08-12 por ₡10.200\"':",
+      "      - 'cell \"Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin\"':"
+    ],
+    "nombresConUuid": [],
+    "urlsConId": 4
+  },
+  {
+    "id": "12 árbol de accesibilidad del libro de la caja: sin uuid",
+    "estado": "OK",
+    "nombresConUuid": [],
+    "muestra": [
+      "        - button \"Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000\": Ver",
+      "        - button \"Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡200.000 · Anulado\": Ver",
+      "        - button \"Ver Ordenex paga un gasto de una tienda del 2026-09-26 por ₡10.000\": Ver",
+      "        - button \"Ver Ordenex le cobra a una tienda del 2026-09-26 por ₡5.000\": Ver"
+    ]
+  },
+  {
+    "id": "12 /analitica: el panel mensual dice «Movimiento neto del periodo»",
+    "estado": "N/A",
+    "status": 200,
+    "contieneMovimientoNeto": false,
+    "contieneRotuloViejo": false,
+    "inicio": "Analítica Panel de indicadores del negocio. Los paneles se irán activando por entregas. 26/09/2026 Ayuda Claro Tema claro activado. 4 por hacer Salir Filtros Actualizar Actualizado 20:18 Detalle - Movimiento de las órdenes EFECTIVIDAD DE ENTREGA de 85 órdenes cargadas 21,2% Entregado: 18 de las 85 órdenes que entraron Entregado 18 Otro desenlace 33 Todavía en proceso 34 35,3% de las 51 órdenes con"
+  }
+]

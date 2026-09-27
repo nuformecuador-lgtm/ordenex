@@ -1,0 +1,8 @@
+Estado	Mensajero	Fecha resuelta	Destino	Total general	Pago mensajero	Ingreso bodega	Motivo
+Aprobado	Rita Recorrido	2026-09-24	Bodega central · GAM	32500.00	8500.00	4000.00
+Aprobado	Marco Mensajero	2026-08-20	Bodega central · GAM	0.00	0.00	1000.00
+Aprobado	Marco Mensajero	2026-08-20	Bodega central · GAM	0.00	0.00	1000.00
+Aprobado	Marco Mensajero	2026-08-20	Bodega central · GAM	0.00	0.00	0.00
+Aprobado	Marco Mensajero	2026-08-13	Bodega central · GAM	12500.00	1700.00	0.00
+Aprobado	Marco Mensajero	2026-08-13	Bodega central · GAM	16300.00	3400.00	0.00
+Aprobado	Marco Mensajero	2026-08-20	Bodega central · GAM	124100.00	10200.00	0.00

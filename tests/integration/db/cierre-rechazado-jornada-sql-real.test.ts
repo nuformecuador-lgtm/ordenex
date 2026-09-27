@@ -118,7 +118,7 @@ describeSiHayBase("412/R11 · la jornada del cierre rechazado, contra Postgres r
       data: {
         ordenId: orden.id,
         mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId,
         createdAt: cuando,
         ...(anulada ? { anuladaAt: cuando } : {}),

@@ -1,0 +1,11 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+
+ Test Files  2 passed (2)
+      Tests  80 passed (80)
+   Start at  11:17:06
+   Duration  3.36s (transform 1.19s, setup 101ms, import 3.06s, tests 753ms, environment 0ms)
+
+(node:14904) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)

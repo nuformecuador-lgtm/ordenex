@@ -3,6 +3,14 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroService } from "@/lib/services/WalletMensajeroService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
+import {
+  origenEnItems,
+  origenEnPagina,
+  type ConOrigenEnPagina,
+} from "@/lib/services/origen-en-resultado";
+import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
@@ -42,7 +50,8 @@ export type ListarCuentasPorPagarActionResult =
   | { status: "unauthenticated" };
 
 export type ListarPagosDeMensajeroActionResult =
-  | ListarPagosDeMensajeroServiceResult
+  // Ficha 458-A (TA.2, R5–R8): cada fila baja con su origen legible (`origen`).
+  | ConOrigenEnPagina<ListarPagosDeMensajeroServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -74,6 +83,13 @@ function buildService(): IWalletMensajeroService {
 export interface WalletMensajeroDeps {
   service?: IWalletMensajeroService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 458-A (TA.2): el origen legible de las filas; en produccion, el real sobre Prisma. */
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 458-A (TA.2) — composition root del origen legible (una consulta por tipo presente). */
+function buildOrigenes(): IOrigenLegibleService {
+  return new OrigenLegibleService(new OrigenLegibleRepository(getPrismaClient()));
 }
 
 /**
@@ -146,6 +162,8 @@ export async function listarCuentasPorPagarCompletoAction(
  * `mensajeroId` (REQUERIDO por
  * `listarPagosDeMensajeroSchema`) viaja en el input y el service gatea a maestro. `mensajeroId`
  * faltante/vacio -> validation_error. Montos STRING.
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): el desglose por cierre de un mensajero. Su superficie era `DesglosePagosMensajero`, el desplegable de `/wallet/mensajeros`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `e2e/wallet-mensajeros.spec.ts`, `rutas-336-retiradas.guardia`, `tests/integration/db/pago-mensajero-liquidacion.test.ts` y `wallet-cierres-selector.test.ts` (contra Postgres), `wallet-mensajeros-page.test.tsx`, `CuentasPorPagarTable.test.tsx`, `paginacion-transversal.test.tsx`, `WalletMensajerosTabs.test.tsx` y sus tests de borde; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarPagosDeMensajeroAction(
   input: unknown,
@@ -156,7 +174,8 @@ export async function listarPagosDeMensajeroAction(
     if (!actor) throw new UnauthenticatedError();
     const data = listarPagosDeMensajeroSchema.parse(input); // mensajeroId REQUERIDO -> ZodError si falta
     const service = deps.service ?? buildService();
-    return service.listarPagosDeMensajero(data, actor);
+    const r = await service.listarPagosDeMensajero(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "mensajero", r, actor);
   });
   return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }
@@ -166,6 +185,8 @@ export async function listarPagosDeMensajeroAction(
  * la descarga. Calcado de `listarPagosDeMensajeroAction`: `mensajeroId` sigue siendo
  * REQUERIDO (ausente -> `validation_error` sin tocar la base) y el guard de acceso total lo
  * pone el service (R17). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): la descarga del desglose por cierre de un mensajero. Su superficie era la descarga de `DesglosePagosMensajero`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `e2e/wallet-mensajeros.spec.ts`, `rutas-336-retiradas.guardia`, `tests/integration/db/pago-mensajero-liquidacion.test.ts` y `wallet-cierres-selector.test.ts` (contra Postgres), `wallet-mensajeros-page.test.tsx`, `CuentasPorPagarTable.test.tsx`, `paginacion-transversal.test.tsx`, `WalletMensajerosTabs.test.tsx` y sus tests de borde; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarPagosDeMensajeroCompletoAction(
   input: unknown,
@@ -176,7 +197,8 @@ export async function listarPagosDeMensajeroCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
     const data = listarPagosDeMensajeroCompletoSchema.parse(input); // R18: mensajeroId REQUERIDO
     const service = deps.service ?? buildService();
-    return service.listarPagosDeMensajeroCompleto(data, actor);
+    const r = await service.listarPagosDeMensajeroCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "mensajero", r, actor);
   });
   return isAppErrorShape(r) ? toWalletMensajeroActionError(r) : r;
 }

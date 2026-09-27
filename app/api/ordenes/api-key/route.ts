@@ -22,7 +22,7 @@ import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteReposit
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { gestionConfig } from "@/lib/config/gestion";
-import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { ORDER_STATUS_SEED, esCodigoAnterior, mensajeCodigoAnterior } from "@/lib/types/order-status";
 import { extraerBearer, buildAutenticar } from "@/lib/api/api-key-request";
 import { esFechaCalendarioValida } from "@/lib/utils/fecha-cr";
 
@@ -59,7 +59,17 @@ const listadoQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
     offset: z.coerce.number().int().min(0).default(0),
-    estado: z.enum(ORDER_STATUS_SEED).optional(),
+    // FICHA 455 (R26, design §5.2): un codigo ANTERIOR sigue dando 422 (ya no es del catalogo), pero
+    // con un mensaje que nombra el codigo que lo sustituye. Sin alias: la ruptura es una
+    // instruccion, no una pagina vacia. Cualquier otro codigo desconocido conserva el mensaje de zod.
+    estado: z
+      .enum(ORDER_STATUS_SEED, {
+        error: (iss) =>
+          typeof iss.input === "string" && esCodigoAnterior(iss.input)
+            ? mensajeCodigoAnterior(iss.input)
+            : undefined,
+      })
+      .optional(),
     desde: z
       .string()
       .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." })

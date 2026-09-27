@@ -1,4 +1,22 @@
 import type { ImpactoZonaCentralDTO, ZonaDTO } from "@/lib/types/zona";
+
+/**
+ * ⭑ FICHA 429 — la fila de una bodega tal como la necesita la superficie del SINPE. NO es
+ * `ZonaDTO`: aquel arrastra el conteo de distritos y las tarifas del mensajero, que aqui no pinta
+ * nadie y que el `adminSatelite` no tiene por que ver.
+ *
+ * `sinpeRevisadoAt` viaja como `Date | null` —crudo— porque quien lo serializa a ISO es el
+ * SERVICIO, en la frontera del DTO. Un repositorio que devolviera la cadena ya formateada estaria
+ * decidiendo presentacion.
+ */
+export interface SinpeZonaRow {
+  id: string;
+  nombre: string;
+  esCentral: boolean;
+  sinpeNumero: string;
+  sinpeNombre: string;
+  sinpeRevisadoAt: Date | null;
+}
 import type { OpcionCatalogo } from "@/lib/types/filtros-ordenes";
 
 // Datos listos para persistir una fila de tarifa_zona_mensajero (numbers; el repo
@@ -16,6 +34,20 @@ export interface CreateZonaData {
   esCentral: boolean; // feature 54: flag de zona central (antes esGam)
   distritoIds: string[];
   tarifas: TarifaZonaMensajeroData[];
+  /**
+   * ⭑ FICHA 429 (R11) — OBLIGATORIOS AL CREAR, sin `?` y sin default. Una bodega nueva no puede
+   * nacer sin el numero al que sus clientes van a transferir: eso es la segunda capa de D3. El
+   * repositorio los escribe JUNTO CON `sinpe_revisado_at = now()` (R12), porque un SINPE tecleado
+   * por una persona en el acto de crear la bodega ya esta revisado — volver a pedirselo seria
+   * ruido.
+   *
+   * ⚠️ NO ESTAN EN `UpdateZonaData`, y es deliberado: el SINPE se edita por SU PROPIA accion, con
+   * su propio modelo de permisos. Si viajaran en el reemplazo completo de `actualizarZona`, un
+   * guardado de distritos hecho por el `maestro` pisaria en silencio la correccion que un
+   * `adminSatelite` acaba de hacer sobre su bodega.
+   */
+  sinpeNumero: string;
+  sinpeNombre: string;
 }
 
 /**
@@ -29,7 +61,10 @@ export interface CreateZonaData {
  * Prisma NO distingue las dos cosas, por eso R1 se mide contra Postgres real
  * (`tests/integration/db/zona-central-guarda-y-rastro.test.ts`).
  */
-export type UpdateZonaData = Omit<CreateZonaData, "esCentral"> & { esCentral?: boolean };
+export type UpdateZonaData = Omit<
+  CreateZonaData,
+  "esCentral" | "sinpeNumero" | "sinpeNombre"
+> & { esCentral?: boolean };
 
 export interface ListZonasParams {
   skip: number;
@@ -145,4 +180,38 @@ export interface IZonaRepository {
    * que poder decir «no afecta a ninguna» y eso no es lo mismo que «no lo sé».
    */
   contarOrdenesVivasPorZona(zonaIds: string[]): Promise<ImpactoZonaCentralDTO[]>;
+
+  /* ─── FICHA 429 · el SINPE por bodega ────────────────────────────────────────────────────── */
+
+  /** TODAS las bodegas con su SINPE y su marca de revision, por nombre asc. Solo lectura. */
+  listarSinpe(): Promise<SinpeZonaRow[]>;
+  /** Una bodega. `null` si no existe. */
+  findSinpeByZona(zonaId: string): Promise<SinpeZonaRow | null>;
+  /**
+   * ⭑ R20 — LA ZONA QUE LA BASE LE ASIGNA A ESA PERSONA, leida por `usuarioId`.
+   *
+   * Existe para que el permiso del `adminSatelite` NO se decida con un dato que venga en la
+   * peticion. `usuario.zona_id` es nullable: `null` = esa persona no tiene bodega (estado
+   * representable, y entonces no puede editar ninguna).
+   */
+  zonaIdDeUsuario(usuarioId: string): Promise<string | null>;
+  /**
+   * ⭑ R21/R24 — GUARDA EL PAR Y DEJA RASTRO, EN LA MISMA TRANSACCION.
+   *
+   * Marca la bodega como revisada SIEMPRE (quien guarda, mira), y escribe UNA fila de
+   * `zona_sinpe_cambiado` SOLO si alguno de los dos valores queda distinto (R25). `null` = la zona
+   * no existe.
+   */
+  guardarSinpe(
+    zonaId: string,
+    data: { numero: string; nombre: string },
+    actorUsuarioId: string | null,
+  ): Promise<SinpeZonaRow | null>;
+  /**
+   * ⭑ R25 — «ESTA BIEN»: marca la bodega como revisada y NO escribe ninguna fila de historial.
+   *
+   * NO ACEPTA VALORES, y eso es el punto: una confirmacion no puede cambiar nada por accidente.
+   * `null` = la zona no existe.
+   */
+  confirmarSinpe(zonaId: string): Promise<SinpeZonaRow | null>;
 }

@@ -121,6 +121,14 @@ const RESUMEN_OK = {
     periodoFiltrado: false,
     porcentajeTiendas: "0.00",
     modoComposicion: "sin_reparto" as const,
+    // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+    capital: "0.00",
+    signoCapital: "cero" as const,
+    deOrdenex: "0.00",
+    signoDeTerceros: "cero" as const,
+    deTercerosAbsoluto: "0.00",
+    estado: "flujo" as const,
+    flujoDesde: "2026-08-25",
   },
   composicion: {
     ingresos: {
@@ -131,12 +139,16 @@ const RESUMEN_OK = {
       ingreso_iva_flete_devolucion: "0.00",
       ingreso_iva_comision_cod: "0.00",
       ingreso_ajuste: "0.00",
+      ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
     },
     totalIngresos: "0.00",
     // Ficha 339 (T1.3): las dos cubetas nuevas y la bandera del servidor.
     egresos: {
       egreso_pago_mensajero: "0.00",
       egreso_ajuste: "0.00",
+      egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+      egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+      egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
     },
     otrosEgresos: "0.00",
     hayOtrosEgresos: false,

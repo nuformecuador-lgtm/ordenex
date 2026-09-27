@@ -165,7 +165,7 @@ describe("NovedadesPage — la superficie de AYUDA (236)", () => {
     // genera: eso estaría verde incluso con el texto mal escrito (es su propia fuente).
     expect(
       screen.getByText(
-        "Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en devolución y las que llegaron a rechazo por vencerse el plazo",
+        "Las órdenes en las que tus mensajeros piden ayuda, tus órdenes en Novedad y las que pasaron a Devolución a origen por rechazo por vencerse el plazo",
       ),
     ).toBeInTheDocument();
     // Y el de hasta el 2026-08-19, que era falso de las órdenes en ayuda —ni están en devolución ni

@@ -1,9 +1,10 @@
+import { ORIGEN_PAGO_LABEL } from "@/lib/constants/wallet-rotulos";
+import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import { money, moneyTope } from "@/lib/config/moneda";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type {
   CuentaPorPagarSigno,
   PagoMensajeroMovimientoCategoria,
-  PagoMensajeroMovimientoTipo,
 } from "@/lib/types/wallet-mensajero";
 
 // Feature 44 (T14) — etiquetas i18n-ready y helper de moneda de la vista del MAESTRO
@@ -47,40 +48,6 @@ export const CUENTA_COLOR: Record<CuentaPorPagarSigno, string> = {
   cero: "text-muted-foreground",
 };
 
-/**
- * Etiquetas del saldo del desglose (split devengado/pagado/pendiente de un mensajero). En la
- * vista del maestro el saldo refleja el CONJUNTO FILTRADO (R22): al aplicar filtros de
- * fecha/cierre estos tres montos se recalculan desde `result.data.cuenta`, no del agregado.
- *
- * Deuda 203 (cabo suelto) — cada pista lleva AHORA la salvedad de la limitación N1. Antes, el
- * desglose repetía el párrafo entero de la tabla (`CUENTAS_AVISO_BRUTOS`) con los rótulos
- * cambiados, y las dos copias se veían A LA VEZ: medido en la app el 2026-08-12 con la primera
- * fila desplegada, una en y=181 y la otra en y=457 de una ventana de 900 px. Como la tabla
- * admite varias filas abiertas a la vez, cada fila añadía otra copia del mismo párrafo.
- *
- * Lo que NO se podía hacer es borrarlo sin más y dejar que hablara el de la tabla:
- *
- *  - estos tres importes son los del CONJUNTO FILTRADO (R22), no los de la fila de la tabla:
- *    filtrar por fecha los cambia, y el párrafo de arriba habla de otras cifras y con otros
- *    rótulos («Pagado», no «Total pagado»);
- *  - para las filas de abajo, el párrafo de la tabla ni siquiera está en pantalla: con el
- *    tamaño de página por defecto (25) y filas de 42 px, desplegar la 19.ª deja el aviso de la
- *    cabecera a más de 900 px por encima del desglose.
- *
- * Así que la salvedad se queda donde estaba el importe que describe, en una línea y con las
- * MISMAS palabras que ya usan las cabeceras del archivo descargable (más abajo). Deja de ser un
- * párrafo repetido y pasa a ser lo que la cifra promete.
- */
-export const DESGLOSE_LABEL = {
-  devengado: "Total devengado",
-  devengadoHint:
-    "Lo que Ordenex le debe por sus entregas. Incluye la devolución de los pagos anulados.",
-  pagado: "Total pagado",
-  pagadoHint: "Lo ya entregado (del efectivo recaudado). Incluye los pagos anulados.",
-  cuentaPorPagar: "Cuenta por pagar",
-  cuentaPorPagarHint:
-    "Lo pendiente de pagar al mensajero. Es el número correcto: ya tiene descontado lo anulado.",
-} as const;
 
 /**
  * Feature 172 (T H.4) — el AVISO de la limitación N1, compuesto con los rótulos REALES de la
@@ -99,8 +66,8 @@ export const DESGLOSE_LABEL = {
  *
  * Deuda 203 — lo que cambió es la FORMA, no la regla: este párrafo se pinta UNA sola vez por
  * pantalla, en la cabecera de la tabla, porque es la única superficie que se ve sin desplegar
- * nada. La otra superficie con agregados —la cabecera del desglose— lleva la misma salvedad
- * pegada a cada importe (`DESGLOSE_LABEL`, arriba), que es donde no puede sobrar.
+ * nada. (La otra superficie con agregados —la cabecera del desglose, con la salvedad pegada a cada
+ * importe— se retiró en la 458-D: el estado de cuenta que la sustituye enseña cifras NETAS, D3.)
  *
  * Sin jerga: ni «contraasiento», ni «neteo», ni siglas.
  */
@@ -151,11 +118,6 @@ export const ENCABEZADOS_DESCARGA_MAESTRO = {
 
 // ── Desglose POR CIERRE del maestro (R18/R22) ──
 
-/** Etiqueta legible del tipo de movimiento (devengo = lo devengado / pago = lo entregado). */
-export const TIPO_PAGO_LABEL: Record<PagoMensajeroMovimientoTipo, string> = {
-  devengo: "Devengo",
-  pago: "Pago",
-};
 
 /** Etiqueta legible de cada categoria (concepto) del libro del pago al mensajero. */
 export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, string> = {
@@ -169,59 +131,14 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
   premio_ranking: "Premio del ranking",
 };
 
-/** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 44). */
-export const ORIGEN_PAGO_LABEL: Record<string, string> = {
-  cierre_dia: "Cierre del día",
-  pago_mensajero: "Liquidación",
-  manual: "Manual",
-  // Feature 293 (T1.6): origen de las filas de CAJA del premio. No aparece en este libro
-  // —aqui el premio va con `cierre_dia`—, pero el mapa es de `WalletOrigenTipo` y dejarlo fuera
-  // haria que un dia se pintara el valor crudo.
-  ranking_snapshot_fila: "Premio del ranking",
-};
+export { ORIGEN_PAGO_LABEL };
 
-/** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
-export function origenLabel(origenTipo: string): string {
-  return ORIGEN_PAGO_LABEL[origenTipo] ?? origenTipo;
+/** Origen legible (458-A: sin caida al valor tecnico; el `Record` es total). */
+export function origenLabel(origenTipo: WalletOrigenTipo): string {
+  return ORIGEN_PAGO_LABEL[origenTipo];
 }
 
-/** Cabeceras de la tabla del desglose por cierre (mas reciente primero). */
-export const DESGLOSE_COLUMNAS = {
-  fecha: "Fecha",
-  tipo: "Tipo",
-  concepto: "Concepto",
-  monto: "Monto",
-  origen: "Origen",
-} as const;
 
-/**
- * Etiquetas de los filtros server-side del desglose por cierre (fecha/cierre, R22).
- *
- * Deuda 203 (cabo suelto) — el campo del cierre decía «ID del cierre», o sea le pedía a una
- * persona que tecleara un uuid de 36 caracteres. Comprobado en la app el 2026-08-12: ese
- * identificador NO se ve en ninguna parte de la pantalla. En el enlace «Ver el cierre» viaja en
- * un `sr-only`, solo para lectores de pantalla (`CIERRE_ENLACE.identificacion`), así que la
- * única forma de conseguirlo es copiar la DIRECCIÓN de ese enlace —o leerla de la barra del
- * navegador tras abrirlo—, y eso es exactamente lo que la ayuda dice ahora.
- *
- * El filtro NO se quita: el `cierreId` va al WHERE server-side (R22), viaja también en la
- * descarga del desglose completo (`buildInputCompleto`) y lo fijan dos casos de
- * `tests/integration/wallet-mensajeros-page.test.tsx`. Lo que se arregla es lo que la pantalla
- * PROMETE: se pega, no se teclea, y dice de dónde sale.
- */
-export const DESGLOSE_FILTRO_LABEL = {
-  cierre: "Cierre",
-  cierrePlaceholder: "Pegá el identificador",
-  cierreAyuda:
-    "El identificador del cierre sale del enlace «Ver el cierre» de la tabla: copiá su dirección y pegala en «Cierre».",
-  desde: "Desde",
-  hasta: "Hasta",
-  aplicar: "Aplicar",
-  limpiar: "Limpiar",
-} as const;
-
-/** Mensaje cuando el desglose filtrado no tiene movimientos. */
-export const DESGLOSE_VACIO = "No hay movimientos que coincidan con los filtros.";
 
 // ── Feature 205 — pagar la cuenta por pagar del mensajero desde esta pantalla ──
 //
@@ -239,30 +156,38 @@ export const CIERRE_ENLACE = {
    */
   ver: "Ver el cierre",
   /**
-   * Lo que se añade al nombre accesible, solo para lectores de pantalla. Existe porque una
-   * pantalla puede tener veinte enlaces «Ver el cierre» y un lector de pantalla los leería
-   * todos igual; con el identificador detrás, cada uno se nombra solo. El texto visible sigue
-   * contenido en el nombre accesible, que es lo que exige «Label in Name».
+   * Lo que se añade al nombre accesible, solo para lectores de pantalla: una pantalla puede tener
+   * veinte enlaces «Ver el cierre» y sin esto sonarían todos igual. El texto visible sigue
+   * contenido en el nombre accesible («Label in Name»).
+   *
+   * Ficha 458-A (TA.5, R1): se nombra con lo que la persona SABE del cierre —su día de Costa Rica,
+   * su mensajero, lo que se le aplicó—, NUNCA con el identificador interno, que antes iba aquí.
    */
-  identificacion: (cierreId: string) => ` (${cierreId})`,
+  /** El cierre por su día (CR) y su mensajero: la previsualización del reparto. */
+  delDia: (dia: string, mensajero: string) => ` del ${dia} de ${mensajero}`,
+  /** El cierre de una fila del desglose: por la fecha y el concepto de ESA fila. */
+  deLaFila: (fecha: string, concepto: string, mensajero: string) =>
+    ` de ${mensajero}: ${concepto} del ${fecha}`,
+  /** El cierre del reparto ya aplicado: por lo que se le aplicó (la respuesta no trae el día). */
+  delPago: (monto: string, mensajero: string) =>
+    ` de ${mensajero} al que se aplicaron ${money(monto)}`,
 } as const;
 
-/** La cabecera de la columna del desglose que lleva el enlace (R43). */
-export const DESGLOSE_COLUMNA_CIERRE = "Cierre";
-
-/** Lo que se pinta en la celda de una fila que NO corresponde a ningún cierre (R43). */
-export const DESGLOSE_SIN_CIERRE = "—";
 
 /** Textos del bloque de pago del desglose (R3). */
 export const PAGO_MENSAJERO_WALLET = {
-  /** Nombre accesible del bloque entero, en la cabecera del desglose. */
+  /** Nombre accesible del bloque entero, en las acciones del estado de cuenta (458-D). */
   seccion: "Pago al mensajero",
   /** Rótulo del importe que este pago puede saldar AHORA (el imputable de la ventana). */
   disponible: "Se puede pagar ahora",
   disponibleHint:
     "La suma de los cierres aprobados que un solo pago puede saldar. Sale del servidor.",
-  /** Abre el formulario. */
-  abrir: "Registrar pago",
+  /**
+   * Abre el formulario. FICHA 458-D (T D.3, R29): la acción del estado de cuenta se nombra como todas
+   * las de la wallet desde la 461, desde Ordenex y diciendo quién le paga a quién (antes «Registrar
+   * pago»; el botón que CONFIRMA dentro del formulario sigue siendo «Registrar pago»).
+   */
+  abrir: "Ordenex le paga al mensajero",
   /** R15 — sin cierres aprobados con saldo no hay nada que pagar, y se dice con texto. */
   sinImputable:
     "Este mensajero no tiene cierres aprobados con saldo pendiente: no hay nada que pagar desde acá.",
@@ -434,9 +359,9 @@ export const PREMIOS_RANKING = {
    * una raya.
    */
   entregadasAsignadas: (entregadas: number, asignadas: number) =>
-    `${entregadas} / ${asignadas} entregadas`,
+    `${entregadas} / ${asignadas} entregados`,
   entregadasAyuda:
-    "Entregadas de asignadas ese día. Quien no entregó nada no ocupa podio ni cobra premio.",
+    "Entregados de asignados ese día. Quien no entregó nada no ocupa podio ni cobra premio.",
   /** R7/R9 — la fila no tenía premio congelado ese día. */
   sinPremio: "Sin premio asignado ese día.",
   /**

@@ -105,11 +105,11 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     fks = encontradas;
 
     const estatus = await prisma.orderStatus.findMany({
-      where: { value: { in: ["en_reparto", "ayuda_tienda", "sin_gestionar"] } },
+      where: { value: { in: ["en_reparto", "ayuda_tienda", "novedad_interna"] } },
       select: { id: true, value: true },
     });
     const porValue = new Map(estatus.map((e) => [e.value, e.id]));
-    for (const v of ["en_reparto", "ayuda_tienda", "sin_gestionar"]) {
+    for (const v of ["en_reparto", "ayuda_tienda", "novedad_interna"]) {
       if (!porValue.has(v)) {
         throw new Error(
           `falta el estatus «${v}» en el catalogo \`order_status\`. Corre \`pnpm run db:seed\`: ` +
@@ -120,7 +120,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     catalogo = {
       enReparto: porValue.get("en_reparto") as string,
       ayuda: porValue.get("ayuda_tienda") as string,
-      sinGestionar: porValue.get("sin_gestionar") as string,
+      sinGestionar: porValue.get("novedad_interna") as string,
     };
 
     const central = await prisma.zona.findFirst({
@@ -224,7 +224,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
       data: {
         ordenId: await sembrarOrden(tx, `g-${marca}`),
         mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId: opts.cierreId ?? null,
         ...(opts.anulada ? { anuladaAt: new Date("2026-08-21T23:59:00.000Z") } : {}),
         ...(opts.cuando ? { createdAt: opts.cuando } : {}),
@@ -586,7 +586,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
   // CASO 3 — EL BARRIDO Y LA VINCULACION SIGUEN SIENDO LOS DE SIEMPRE (R23, R24).
   // ===============================================================================================
 
-  it("R23/R24 · el barrido a `sin_gestionar`, la vinculacion y la idempotencia de la 2.ª corrida", async () => {
+  it("R23/R24 · el barrido a `novedad_interna`, la vinculacion y la idempotencia de la 2.ª corrida", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
 
@@ -595,17 +595,30 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
       const cuarentena = await sembrarCierre(tx, uno, "aprobado");
       await ponerLaBaseEnCero(tx, cuarentena);
 
-      // MENSAJERO UNO: una guia en reparto, otra en ayuda_tienda, una gestion suelta, una gestion
-      // ANULADA (no es trabajo que cobrar) y una orden RESERVADA para mañana (246: protegida).
+      // MENSAJERO UNO: una guia en reparto, otra con la AYUDA ABIERTA, una gestion suelta, una
+      // gestion ANULADA (no es trabajo que cobrar) y una orden RESERVADA para mañana (246).
+      //
+      // ⏳ 2026-09-23 (FICHA 454, R27): la ayuda deja de ser el estado `ayuda_tienda`; la orden con
+      // ayuda abierta esta `en_reparto` con su evento `ayuda_solicitada`, y el corte la barre igual,
+      // con el origen REAL (`en_reparto`) en `cierre_sin_gestion`. Antes: sembrada en `ayuda_tienda`.
       const enReparto = await sembrarOrden(tx, "c3a-rep", {
         estatusId: catalogo.enReparto,
         mensajeroAsignadoId: uno,
         fechaReparto: null,
       });
       const enAyuda = await sembrarOrden(tx, "c3a-ayu", {
-        estatusId: catalogo.ayuda,
+        estatusId: catalogo.enReparto,
         mensajeroAsignadoId: uno,
         fechaReparto: null,
+      });
+      await tx.ordenEvento.create({
+        data: {
+          ordenId: enAyuda,
+          tipo: "ayuda_solicitada",
+          mensajeroId: uno,
+          actorUsuarioId: uno,
+          actorRol: "mensajero",
+        },
       });
       const reservada = await sembrarOrden(tx, "c3a-res", {
         estatusId: catalogo.enReparto,
@@ -715,8 +728,8 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     expect(medido.cierreDos).not.toBeNull();
     expect(medido.cierreUno).not.toBe(medido.cierreDos);
 
-    // ⭑ EL BARRIDO: `en_reparto` y `ayuda_tienda` van a `sin_gestionar`; la RESERVADA para mañana
-    // se queda donde esta (246/R11, y sigue vigente tras la 271).
+    // ⭑ EL BARRIDO: la de `en_reparto` y la de la ayuda abierta van a `sin_gestionar`; la
+    // RESERVADA para mañana se queda donde esta (246/R11, y sigue vigente tras la 271).
     expect(medido.ordenesTras1[medido.ids.enReparto]).toBe(catalogo.sinGestionar);
     expect(medido.ordenesTras1[medido.ids.enAyuda]).toBe(catalogo.sinGestionar);
     expect(medido.ordenesTras1[medido.ids.reservada]).toBe(catalogo.enReparto);
@@ -725,7 +738,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     expect(medido.registrosTras1).toEqual(
       [
         `${medido.ids.enReparto}|${catalogo.enReparto}`,
-        `${medido.ids.enAyuda}|${catalogo.ayuda}`,
+        `${medido.ids.enAyuda}|${catalogo.enReparto}`, // 454: su origen REAL es `en_reparto`
       ].sort(),
     );
 

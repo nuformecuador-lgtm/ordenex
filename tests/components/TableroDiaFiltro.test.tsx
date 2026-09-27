@@ -324,7 +324,7 @@ describe("Feature 258 · R44/R45 — la densidad es presentación PURA", () => {
     const chip = contadorDe(tarjeta, "entregadas");
 
     // Sigue en el DOM (en `sr-only`), así que quien escucha oye «Entregadas 11».
-    expect(within(chip).getByText("Entregadas")).toBeInTheDocument();
+    expect(within(chip).getByText("Entregado")).toBeInTheDocument();
     expect(chip).toHaveTextContent("11");
   });
 });

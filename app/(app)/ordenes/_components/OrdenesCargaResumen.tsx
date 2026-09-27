@@ -113,7 +113,7 @@ export function OrdenesCargaResumen({
       // `—` de `estatusLabel`: manda la tabla en la que vive la celda).
       render: (row) =>
         row.estatusValue ? (
-          <EstatusBadge value={row.estatusValue} zonaNombre={row.zonaNombre} />
+          <EstatusBadge value={row.estatusValue} />
         ) : (
           "-"
         ),

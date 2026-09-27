@@ -62,6 +62,7 @@ import type {
   CohorteDesenlace,
   ResultadoCohorteCarga,
 } from "@/lib/types/cohorte-carga";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 import { ESTADOS_TERMINALES } from "@/lib/types/order-status-transiciones";
 
 import {
@@ -138,11 +139,15 @@ const CUBOS: readonly CohorteDesenlace[] = [...ESTADOS_TERMINALES, "viva"];
  * objeto incompleto y **no compila** hasta que alguien escriba su etiqueta. Es deliberado —
  * derivar el texto de `value` daria «Devuelta_a_tiendas», y una etiqueta automatica mala se
  * queda en pantalla para siempre porque nadie la revisa.
+ *
+ * FICHA 455 (2026-09-24, R5): los tres cubos de estado llevan el nombre EXACTO de su estado
+ * (`NOMBRE_ESTADO`, la fuente única). Antes eran plurales escritos a mano, y «Devueltas» rotulaba
+ * `devuelta_a_tienda` con una palabra que ya no es el nombre de ningún estado. `viva` es un grupo.
  */
 const ETIQUETA_CUBO: Record<CohorteDesenlace, string> = {
-  entregada: "Entregadas",
-  devuelta_a_tienda: "Devueltas",
-  incidente: "Incidentes",
+  entregado: NOMBRE_ESTADO.entregado,
+  devuelta_a_tienda: NOMBRE_ESTADO.devuelta_a_tienda,
+  incidente: NOMBRE_ESTADO.incidente,
   /** R32 — columna, no nota al pie: es la medida exacta de lo que la cohorte aun no sabe. */
   viva: "Vivas",
 };
@@ -153,7 +158,7 @@ const ETIQUETA_CUBO: Record<CohorteDesenlace, string> = {
  * Tipado como `CohorteDesenlace`, asi que si el dominio dejara de tener este estado terminal
  * esto no compilaria en vez de quedarse buscando un cubo que ya no llega.
  */
-const CUBO_DEL_RELOJ: CohorteDesenlace = "entregada";
+const CUBO_DEL_RELOJ: CohorteDesenlace = "entregado";
 
 /* -------------------------------------------------------------------------- */
 /* Formato                                                                     */

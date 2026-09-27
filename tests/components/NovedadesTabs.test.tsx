@@ -64,7 +64,7 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
   return {
     numGuia: 12345,
     numRemision: "REM-001",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     intentosContacto: 0,
     mensajeroNombre: "Marta Mensajera",
     destinatario: "Ana Cliente",
@@ -81,6 +81,8 @@ function novedad(over: Partial<NovedadDTO> & { id: string }): NovedadDTO {
     provinciaNombre: "San José",
     cantonNombre: "Escazú",
     distritoNombre: "San Rafael",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     secuenciaRuta: null,
     causa: "not_found",
     intentosEntrega: 2,
@@ -118,6 +120,8 @@ afterEach(() => {
   cleanup();
 });
 
+// ⏳ 2026-09-23 (FICHA 454, T2.5): las filas del grupo AYUDA llevan `estatusValue: "en_reparto"` —la ayuda dejo
+// de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
   it("R1/R13: hay TRES pestañas, con sus rótulos en español y sin jerga", () => {
     renderTabs();
@@ -129,8 +133,8 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
         .map((t) => t.textContent),
     ).toEqual([
       "Ayuda solicitada",
-      "En devolución",
-      "Rechazadas por plazo vencido",
+      "Novedad",
+      "Devolución a origen por plazo vencido",
     ]);
   });
 
@@ -171,14 +175,14 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
     ).toBeNull();
     // Tampoco hereda el vacío del vecino, que afirma algo que no es cierto de esta población
     // («cuando una de tus órdenes vuelva a la tienda»: estas nunca volvieron, siguen en la calle).
-    expect(within(panel).queryByText("No tenés órdenes en devolución")).toBeNull();
+    expect(within(panel).queryByText("No tenés órdenes en novedad")).toBeNull();
 
     // CONTROL POSITIVO de las dos ausencias: con órdenes, ese mismo panel SÍ monta su lista y el
     // texto del vacío desaparece. Sin este par, las negativas pasarían con el panel sin montar.
     cleanup();
     renderTabs({
       ayuda: {
-        items: [novedad({ id: "a1", estatusValue: "ayuda_tienda" })],
+        items: [novedad({ id: "a1", estatusValue: "en_reparto" })],
         total: 1,
         page: 1,
         pageSize: 10,
@@ -196,7 +200,7 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
     const user = userEvent.setup();
     renderTabs({
       ayuda: {
-        items: [novedad({ id: "a1", estatusValue: "ayuda_tienda" })],
+        items: [novedad({ id: "a1", estatusValue: "en_reparto" })],
         total: 1,
         page: 1,
         pageSize: 10,
@@ -218,7 +222,7 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
       within(ayuda).getByRole("button", { name: "Descargar Ayuda solicitada" }),
     ).toBeInTheDocument();
     // Y NINGUNO de los del vecino.
-    expect(within(ayuda).queryByRole("list", { name: "Órdenes en devolución" })).toBeNull();
+    expect(within(ayuda).queryByRole("list", { name: "Órdenes en novedad" })).toBeNull();
     expect(
       within(ayuda).queryByRole("navigation", { name: "Paginación de novedades" }),
     ).toBeNull();
@@ -226,11 +230,11 @@ describe("NovedadesTabs — las tres superficies (236/R1/R13)", () => {
 
     // Pestaña de DEVOLUCIÓN: el espejo exacto, que es lo que convierte las cuatro ausencias de
     // arriba en una afirmación y no en «no había nada montado».
-    await user.click(screen.getByRole("tab", { name: "En devolución" }));
+    await user.click(screen.getByRole("tab", { name: "Novedad" }));
     const devolucion = await waitFor(() => {
       const p = screen
         .getAllByRole("tabpanel")
-        .find((n) => within(n).queryByRole("list", { name: "Órdenes en devolución" }));
+        .find((n) => within(n).queryByRole("list", { name: "Órdenes en novedad" }));
       if (!p) throw new Error("el panel de devoluciones no está visible");
       return p;
     });
@@ -263,7 +267,7 @@ describe("NovedadesTabs — R12: la paginación sobrevive al cambio de pestaña"
       devolucion: { items: [novedad({ id: "o1" })], total: 25, page: 1, pageSize: 10 },
     });
 
-    await user.click(screen.getByRole("tab", { name: "En devolución" }));
+    await user.click(screen.getByRole("tab", { name: "Novedad" }));
     const paginacion = await screen.findByRole("navigation", {
       name: "Paginación de novedades",
     });
@@ -276,7 +280,7 @@ describe("NovedadesTabs — R12: la paginación sobrevive al cambio de pestaña"
 
     // Ida y vuelta por la pestaña de ayuda.
     await user.click(screen.getByRole("tab", { name: "Ayuda solicitada" }));
-    await user.click(screen.getByRole("tab", { name: "En devolución" }));
+    await user.click(screen.getByRole("tab", { name: "Novedad" }));
 
     // Sigue en la 2. Con el panel desmontado esto diría «1-10 de 25».
     expect(
@@ -300,8 +304,8 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     renderTabs({
       ayuda: {
         items: [
-          novedad({ id: "a1", estatusValue: "ayuda_tienda", destinatario: "Ana Cliente" }),
-          novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
+          novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
+          novedad({ id: "o9", estatusValue: "novedad", destinatario: "Beto Cliente" }),
         ],
         total: 2,
         page: 1,
@@ -359,8 +363,8 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     renderTabs({
       ayuda: {
         items: [
-          novedad({ id: "a1", estatusValue: "ayuda_tienda", destinatario: "Ana Cliente" }),
-          novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
+          novedad({ id: "a1", estatusValue: "en_reparto", destinatario: "Ana Cliente" }),
+          novedad({ id: "o9", estatusValue: "novedad", destinatario: "Beto Cliente" }),
         ],
         total: 2,
         page: 1,
@@ -397,7 +401,7 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
 // ⚠️ FICHA 409 (T6.5 — R7): LA SUPERFICIE QUE PIDE LA URL
 // ---------------------------------------------------------------------------
 describe("NovedadesTabs — la superficie inicial (409/R7)", () => {
-  it("R7: con `superficieInicial=\"devolucion\"` la pestaña activa es «En devolución»", () => {
+  it("R7: con `superficieInicial=\"devolucion\"` la pestaña activa es «Novedad»", () => {
     // El atajo del aviso «N novedades esperan tu decisión» apunta a la SEGUNDA pestaña. Que la
     // prop llegue no basta: lo que se afirma es que la pestaña QUEDA seleccionada, porque
     // `TabsGroup` podría ignorarla y la prop seguiría estando ahí.
@@ -407,7 +411,7 @@ describe("NovedadesTabs — la superficie inicial (409/R7)", () => {
       screen.getByRole("tablist", { name: "Vistas de novedades" }),
     ).getAllByRole("tab");
     const activa = tabs.find((t) => t.getAttribute("aria-selected") === "true");
-    expect(activa).toHaveTextContent("En devolución");
+    expect(activa).toHaveTextContent("Novedad");
     // Y la de entrada DEJA de estarlo: sin esta mitad, dos pestañas seleccionadas pasarían.
     expect(tabs[0]).toHaveAttribute("aria-selected", "false");
   });
@@ -433,7 +437,22 @@ describe("NovedadesTabs — la superficie inicial (409/R7)", () => {
     });
 
     expect(
-      await screen.findByRole("list", { name: "Órdenes en devolución" }),
+      await screen.findByRole("list", { name: "Órdenes en novedad" }),
     ).toBeInTheDocument();
+  });
+});
+
+// FICHA 456 (T3.15, design §5.2; R16) — las pestañas de `/novedades` («Novedad», «Ayuda solicitada»)
+// son rótulos de recuento y controles: no llevan botón de información (cada tarjeta de dentro, sí).
+describe("456 — las pestañas de novedades no llevan botón de información", () => {
+  it("0 botones «Qué significa» en la barra de pestañas", () => {
+    renderTabs();
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas.length).toBeGreaterThan(0);
+    for (const t of pestanas) {
+      expect(within(t).queryAllByRole("button", { name: /^Qué significa «/ })).toHaveLength(0);
+    }
+    const lista = screen.getByRole("tablist");
+    expect(within(lista).queryAllByRole("button", { name: /^Qué significa «/ })).toHaveLength(0);
   });
 });

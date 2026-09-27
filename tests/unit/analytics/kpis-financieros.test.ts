@@ -30,6 +30,16 @@ const RESUMEN = {
   signoGanancia: "positivo",
   deTerceros: "300.00",
   periodoFiltrado: false,
+  // Ficha 459 (T A.9): los campos nuevos del contrato; estado «flujo», sin saldo inicial.
+  porcentajeTiendas: "50.00",
+  modoComposicion: "dos_bolsillos",
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "300.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "300.00",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 function todoOk() {
@@ -194,5 +204,70 @@ describe("El atajo de los roles sin acceso total", () => {
     expect(kpisDenegados().map((k) => k.id)).toEqual(
       (await cargarKpisFinancieros()).map((k) => k.id),
     );
+  });
+});
+
+// ── Ficha 459 (T A.9) — la cifra de caja se LLAMA como en la tarjeta del wallet ──
+describe("Ficha 459 · el rótulo de la cifra principal de la caja (T A.9)", () => {
+  it("sin saldo inicial es «Flujo de dinero registrado», con su «desde», y nunca «Dinero en caja»", async () => {
+    todoOk();
+
+    const kpi = kpiDe(await cargarKpisFinancieros(), "enCaja");
+
+    // Literales: son el contrato (design §3.3). Compararlos contra la función que los genera
+    // sería una aserción contra su propia fuente.
+    expect(kpi).toMatchObject({
+      estado: "ok",
+      etiqueta: "Flujo de dinero registrado",
+      pista:
+        "Lo que entró menos lo que salió desde el 25 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex.",
+      monto: RESUMEN.enCaja,
+    });
+    expect(JSON.stringify(kpi)).not.toMatch(/dinero en caja/i);
+  });
+
+  it("con un saldo inicial vigente es «Dinero en caja», con la pista del saldo", async () => {
+    todoOk();
+    cajaMock.mockResolvedValue({ status: "ok", resumen: { ...RESUMEN, estado: "saldo" } } as never);
+
+    const kpi = kpiDe(await cargarKpisFinancieros(), "enCaja");
+
+    expect(kpi).toMatchObject({
+      etiqueta: "Dinero en caja",
+      pista:
+        "El saldo inicial registrado más todo lo que entró menos todo lo que salió desde entonces, incluido el dinero de las tiendas.",
+    });
+  });
+
+  it("el rótulo sale de la MISMA función que usa la tarjeta del wallet", async () => {
+    // La fuente de `cargar-kpis.ts` importa `rotuloCifraPrincipal` y ya no escribe el rótulo a
+    // mano: la misma cifra con dos nombres en dos pantallas se lee como dos cifras.
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync(
+      "app/(app)/analitica/_components/finanzas/cargar-kpis.ts",
+      "utf8",
+    );
+    expect(fuente).toMatch(/rotuloCifraPrincipal\(resumen\)/);
+    expect(fuente).toMatch(/pistaCifraPrincipal\(resumen\)/);
+    expect(fuente).not.toContain('"Dinero en caja"');
+  });
+
+  it("sin resumen (denegado) no afirma «Dinero en caja»: no sabe si hay saldo inicial", async () => {
+    todoOk();
+    cajaMock.mockResolvedValue({ status: "forbidden" } as never);
+
+    const kpi = kpiDe(await cargarKpisFinancieros(), "enCaja");
+
+    expect(kpi).toMatchObject({ estado: "denegado", etiqueta: "Flujo de dinero registrado" });
+    for (const k of kpisDenegados()) expect(k.etiqueta).not.toMatch(/dinero en caja/i);
+  });
+
+  it("la pista de «Por pagar a tiendas» no dice que el wallet enseña el contra-entrega bruto", async () => {
+    todoOk();
+
+    const kpi = kpiDe(await cargarKpisFinancieros(), "porPagarTiendas") as { pista?: string };
+
+    expect(kpi.pista).toBe("Suma del saldo de cada tienda, ya descontado lo de Ordenex");
+    expect(kpi.pista ?? "").not.toMatch(/bruto|contra-entrega|COD/i);
   });
 });

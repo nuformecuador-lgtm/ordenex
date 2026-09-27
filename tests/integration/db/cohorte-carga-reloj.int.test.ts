@@ -64,7 +64,7 @@ describeSiHayBase("411/T4.5 — el reloj de la cohorte", () => {
       });
       await agregarTransicion(tx, base, dosDias, {
         at: instanteCR("2001-06-17", "08:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       const cuatroDias = await crearOrden(tx, base, {
@@ -82,7 +82,7 @@ describeSiHayBase("411/T4.5 — el reloj de la cohorte", () => {
       });
       await agregarTransicion(tx, base, cuatroDias, {
         at: instanteCR("2001-06-19", "08:00"),
-        destino: "entregada",
+        destino: "entregado",
       });
 
       // Y una que sigue VIVA: sin transicion terminal, no tiene reloj que parar.
@@ -106,7 +106,7 @@ describeSiHayBase("411/T4.5 — el reloj de la cohorte", () => {
 
     expect(filas.length, "el fixture no produjo ni una cohorte").toBeGreaterThan(0);
 
-    const entregadas = cubosDelDia(filas, D).get("entregada");
+    const entregadas = cubosDelDia(filas, D).get("entregado");
     expect(entregadas, "el cubo `entregada` no salio").toBeDefined();
     expect(entregadas?.n).toBe(2);
     // 2 dias + 4 dias = 6 dias exactos. Ni redondeo, ni promedio: la suma cruda.
@@ -120,7 +120,7 @@ describeSiHayBase("411/T4.5 — el reloj de la cohorte", () => {
 
     // La orden de 4 dias tiene su `en_reparto` doce horas despues de nacer. Con el reloj mal
     // anclado, la suma seria `6 dias - 12 h`.
-    const entregadas = cubosDelDia(filas, D).get("entregada");
+    const entregadas = cubosDelDia(filas, D).get("entregado");
     expect(entregadas?.segundosAcum).toBe(6 * UN_DIA_S);
     expect(entregadas?.segundosAcum).not.toBe(6 * UN_DIA_S - 12 * 3600);
   });

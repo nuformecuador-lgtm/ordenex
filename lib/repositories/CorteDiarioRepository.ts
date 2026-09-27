@@ -1,3 +1,4 @@
+import { whereOrdenSinGestionPendiente } from "@/lib/repositories/gestion-pendiente";
 import { type PrismaClient } from "@prisma/client";
 import type {
   ICorteDiarioRepository,
@@ -56,7 +57,12 @@ import type {
 // estados solo arrastra a su mensajero al bucle si su `fecha_reparto` NO es posterior al dia que la
 // corrida cierra (o si no tiene ninguna). El predicado de dia esta abajo, en el `where` de la rama
 // (b), y es EL MISMO que aplica `CierreDiaRepository.crearCierre` al escribir (R16).
-const ESTADOS_A_BARRER = ["en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.10, R43/R27): `ayuda_tienda` SALE de la lista —la ayuda deja de ser estado y una
+// orden con ayuda abierta sigue `en_reparto`— y la rama (b) excluye ademas las ordenes con gestion
+// PENDIENTE de confirmar (predicado unico): un mensajero cuyo unico trabajo del dia esta gestionado
+// no recibe `vencido` POR PENDIENTES, aunque si por sus gestiones sin cierre, igual que hoy.
+const ESTADOS_A_BARRER = ["en_reparto"];
 
 type CortePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia">;
 
@@ -119,6 +125,7 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
         // eso `fechaReparto: null` entra POR LA PRIMERA RAMA y se barre igual que siempre (R19/R20).
         // `NULL` significa una sola cosa aqui, y es «no reservada».
         OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }],
+        ...whereOrdenSinGestionPendiente(), // ficha 454/R43
       },
       distinct: ["mensajeroAsignadoId"],
       select: { mensajeroAsignadoId: true, mensajeroAsignado: { select: { zonaId: true } } },

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 
@@ -15,9 +16,8 @@ import {
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
-import { DesgloseMovimientosTienda } from "./DesgloseMovimientosTienda";
-import { PagoTiendaAcciones } from "./PagoTiendaAcciones";
-import { DESGLOSE_TIENDA_NOMBRE } from "./desglose-tienda-labels";
+import { ENLACE_ESTADO_CUENTA_TIENDA } from "./estado-cuenta-tienda-labels";
+import { claveSaldosTiendas } from "./saldos-tiendas-clave";
 import {
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
   filaDescargaSaldoTienda,
@@ -71,6 +71,22 @@ const COLUMNS: Column<SaldoTiendaResumenDTO>[] = [
       return <Badge variant={badge.variant}>{badge.label}</Badge>;
     },
   },
+  {
+    // FICHA 458-D (T D.2, R17, D14) — la fila ENLAZA al estado de cuenta de su tienda y deja de
+    // desplegar el desglose: una sola lectura del dinero de cada tienda. El identificador va SOLO en
+    // el `href` (D1); el nombre accesible empieza por el texto visible y dice de qué tienda es.
+    id: "estadoCuenta",
+    value: ENLACE_ESTADO_CUENTA_TIENDA.columna,
+    render: (t) => (
+      <Link
+        href={`/wallet/tiendas/${t.tiendaId}`}
+        aria-label={ENLACE_ESTADO_CUENTA_TIENDA.nombre(t.tiendaNombre)}
+        className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        {ENLACE_ESTADO_CUENTA_TIENDA.visible}
+      </Link>
+    ),
+  },
 ];
 
 /** Nombre visible del listado: hoja, base del archivo y nombre del control (R12/R13). */
@@ -97,17 +113,6 @@ export interface SaldosTiendasTableProps {
    * conjunto. Alimenta el `fallbackData` de SWR.
    */
   initialData: SaldosTiendasPagina;
-  /**
-   * Feature 172 (T D.3, R4): si el actor puede registrar pagos. Lo decide el SERVIDOR —la
-   * página lo resuelve con `esAccesoTotal`, el mismo predicado que el servicio usa para
-   * responder `forbidden`— y baja por props: el cliente no deduce permisos.
-   *
-   * **Por defecto `false`, y es deliberado.** Falla cerrado: quien monte esta tabla sin
-   * decidir el permiso no ofrece pagar. Es además lo que mantiene intactos los tests de la
-   * 171 (R34), que montan la tabla sin esta prop y afirman que la pantalla NO ofrece
-   * registrar ningún pago.
-   */
-  puedeRegistrarPago?: boolean;
 }
 
 async function leerPagina(
@@ -119,15 +124,14 @@ async function leerPagina(
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
 
-export function SaldosTiendasTable({
-  initialData,
-  puedeRegistrarPago = false,
-}: SaldosTiendasTableProps) {
+export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
 
+  // Ficha 461 (auditoría P1): la clave sale del módulo compartido para que el bloque de pago del
+  // desglose pueda refrescar ESTA tabla tras pagar o anular, sin importar este archivo.
   const { data, error } = useSWR(
-    ["wallet-tiendas:saldos", page, pageSize],
+    claveSaldosTiendas(page, pageSize),
     () => leerPagina(page, pageSize),
     {
       fallbackData:
@@ -175,44 +179,6 @@ export function SaldosTiendasTable({
               filaDescargaSaldoTienda,
             ),
         }}
-        /**
-         * Feature 171 (T2.4, R1/R2/R32/R33) — cada fila despliega el DESGLOSE de SU tienda.
-         *
-         * `renderExpanded` se INVOCA en cada render, pero el `DataTable` solo MONTA el
-         * elemento cuando la fila está abierta; como el `useSWR` vive dentro de
-         * `DesgloseMovimientosTienda`, listar N tiendas no dispara ninguna lectura de
-         * desglose y abrir una fila dispara exactamente una, solo la de esa tienda.
-         *
-         * El nombre baja por props dentro de `resumen` (R35): esta fila ya lo tiene, y
-         * pedírselo al servidor costaría una consulta por apertura para un dato conocido.
-         *
-         * Lo demás de la tabla no se toca: mismas columnas, mismos datos, mismo estado
-         * vacío y la MISMA descarga sobre las props (R6).
-         */
-        /**
-         * Feature 172 (T D.3, R4/R29/R50) — el pago a la tienda entra por el hueco
-         * `acciones` que la 171 dejó preparado, así que `DesgloseMovimientosTienda` no se
-         * toca (R34). Sin permiso NO se pasa el nodo: la prop es opcional en el desglose y
-         * sin ella no se renderiza ni contenedor, así que quien no puede pagar ve
-         * exactamente la pantalla de la 171.
-         *
-         * T F.5 (R81) — `puedeAnular` sale del MISMO valor: pagar y anular los deciden los
-         * mismos roles (`esAccesoTotal`, resuelto en el servidor). Se pasa explícito y no se
-         * deduce de que alguien haya montado el bloque, porque el default de la tabla es
-         * `false` y el permiso debe viajar, no adivinarse.
-         */
-        renderExpanded={(t) => (
-          <DesgloseMovimientosTienda
-            resumen={t}
-            id={`desglose-tienda-${t.tiendaId}`}
-            acciones={
-              puedeRegistrarPago ? (
-                <PagoTiendaAcciones resumen={t} puedeAnular={puedeRegistrarPago} />
-              ) : undefined
-            }
-          />
-        )}
-        expandAriaLabel={(t) => DESGLOSE_TIENDA_NOMBRE.expandir(t.tiendaNombre)}
       />
 
       <Pagination

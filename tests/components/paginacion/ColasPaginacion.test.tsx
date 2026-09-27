@@ -192,6 +192,7 @@ vi.mock("@/hooks/useToast", () => ({
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
 import { ConsolidacionBodegaModule } from "@/app/(app)/cierres-admin/_components/ConsolidacionBodegaModule";
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   IncidentesAdminModule,
   MONTO_LABEL,
@@ -255,6 +256,8 @@ function cierreBodega(i: number): CierreBodegaResumen {
     // efectivo (0.00) cubre unos descuentos que tambien son cero.
     paraLaCentral: "0.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("0.00"),
   };
 }
 

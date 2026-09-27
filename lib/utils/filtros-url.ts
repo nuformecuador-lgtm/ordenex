@@ -17,6 +17,7 @@
 // introducir un esquema de escapado que hoy no necesita nadie.
 
 import { BOOLEAN_MARCADO } from "@/components/shared/FilterComponent";
+import { codigoVigente } from "@/lib/types/order-status";
 import type {
   FilterDef,
   FilterSelection,
@@ -134,13 +135,17 @@ export function valoresValidos(filtro: FilterDef, crudos: string[]): string[] {
   if (!KINDS_CON_REGLA.has(filtro.kind)) return [];
 
   switch (filtro.kind) {
+    // FICHA 455 (T1.12, R22): un enlace guardado ANTES del cambio de nombres puede traer un codigo de
+    // estado ANTERIOR (`?estado=<anterior>`). Se traduce al vigente ANTES de validar: el enlace abre el
+    // listado de siempre, no uno vacio ni uno sin filtro. Solo cambia esos siete valores exactos, que
+    // ya no pueden ser la opcion de ningun filtro (G1 los prohibe como codigo).
     case "multi": {
       const declarados = valoresDeOpciones(filtro);
-      return crudos.filter((valor) => declarados.has(valor));
+      return crudos.map(codigoVigente).filter((valor) => declarados.has(valor));
     }
     case "single": {
       const declarados = valoresDeOpciones(filtro);
-      const primero = crudos.find((valor) => declarados.has(valor));
+      const primero = crudos.map(codigoVigente).find((valor) => declarados.has(valor));
       return primero === undefined ? [] : [primero];
     }
     case "boolean":

@@ -1,0 +1,59 @@
+Historial de la orden 111117
+
+Cambios de estado y correcciones del día de reparto, en orden cronológico.
+
+Creación
+·
+En fulfillment (estado retirado)
+
+24 jul 2026, 4:40 p. m.
+
+Por Tania Tienda
+
+En fulfillment (estado retirado)
+→
+En preparación
+
+29 jul 2026, 10:41 a. m.
+
+Por Sistema
+
+Motivo: migracion 155: retiro de en_fulfillment
+
+En reparto
+→
+Ayuda solicitada a la tienda (estado retirado)
+
+19 ago 2026, 2:31 p. m.
+
+Por Marco Mensajero
+
+Ayuda solicitada a la tienda (estado retirado)
+→
+En reparto
+
+19 ago 2026, 2:32 p. m.
+
+Por Marco Mensajero
+
+Ayuda solicitada a la tienda
+
+24 sept 2026, 1:05 a. m.
+
+Por Marco Mensajero (Mensajero)
+
+Ayuda cerrada: la orden vuelve a gestionarse
+
+24 sept 2026, 1:06 a. m.
+
+Por Tania Tienda (Admin de tienda)
+
+En reparto
+→
+Novedad interna
+
+24 sept 2026, 1:16 a. m.
+
+Por Sistema
+
+Close

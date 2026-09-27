@@ -198,10 +198,10 @@ describe("Feature 158 (T2.7 · satélite) — el adminSatelite SÍ tiene desde d
     })).toBeInTheDocument();
   });
 
-  it("una orden `por_recoger` también la ofrece", () => {
+  it("una orden `mensajero_recogiendo_en_bodega` también la ofrece", () => {
     renderModule({
       asignadas: [
-        makeOrden({ id: ORDEN_ID, estatusValue: "por_recoger", numRemision: "REM-A1" }),
+        makeOrden({ id: ORDEN_ID, estatusValue: "mensajero_recogiendo_en_bodega", numRemision: "REM-A1" }),
       ],
     });
     const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
@@ -234,10 +234,10 @@ describe("Feature 158 (T2.7 · satélite) — el adminSatelite SÍ tiene desde d
 });
 
 describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son orígenes válidos", () => {
-  it("una orden `por_devolver` NO ofrece la acción", () => {
+  it("una orden `por_devolver_a_bodega_central` NO ofrece la acción", () => {
     renderModule({
       porDevolver: [
-        makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver", numRemision: "REM-D1" }),
+        makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver_a_bodega_central", numRemision: "REM-D1" }),
       ],
     });
     const tabla = screen.getByRole("table", { name: TABLA_BODEGA });
@@ -275,7 +275,7 @@ describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son 
       porDevolver: [
         makeOrden({
           id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
-          estatusValue: "por_devolver",
+          estatusValue: "por_devolver_a_bodega_central",
           numRemision: "REM-D1",
         }),
       ],
@@ -306,7 +306,7 @@ describe("Feature 158 (T2.7 · satélite) — R41: sólo en los estados que son 
     // La decisión la toma el ESTADO de cada fila: si el servidor mandara al grupo de las
     // recibidas una orden en otro estado, no se ofrece.
     renderModule({
-      recibidas: [makeOrden({ id: ORDEN_ID, estatusValue: "entregada" })],
+      recibidas: [makeOrden({ id: ORDEN_ID, estatusValue: "entregado" })],
     });
     expect(disparador()).toBeNull();
   });
@@ -353,7 +353,7 @@ describe("Feature 158 (T2.7 · satélite) — el predicado, en aislado", () => {
     },
   );
 
-  it.each(["en_reparto", "por_devolver", "devuelta", "entregada", "incidente"])(
+  it.each(["en_reparto", "por_devolver_a_bodega_central", "novedad", "entregado", "incidente"])(
     "rechaza el estado `%s`, que no es origen",
     (estatusValue) => {
       expect(
@@ -404,7 +404,7 @@ describe("Ficha 367 — historial en la bodega satélite", () => {
     // pero el historial es de solo lectura y no depende de esa regla.
     renderModule({
       porDevolver: [
-        makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver", numRemision: "REM-H2" }),
+        makeOrden({ id: ORDEN_ID, estatusValue: "por_devolver_a_bodega_central", numRemision: "REM-H2" }),
       ],
     });
     const tabla = screen.getByRole("table", { name: TABLA_BODEGA });

@@ -51,7 +51,7 @@ describe("PUT /api/ordenes/api-key/[numGuia]/cancelar — cancelacion (R19/R20/R
   it("R19: 200 transiciona a devolviendo_a_tienda", async () => {
     const service = fakeService({
       status: "ok",
-      data: { numGuia: 10234, estadoAnterior: "en_bodega_central", estado: "devolviendo_a_tienda" },
+      data: { numGuia: 10234, estadoAnterior: "en_bodega_central", estadoAnteriorNombre: "En bodega central", estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda" },
     });
     const res = await handleCancelarApi(
       req(SECRETO),
@@ -62,8 +62,8 @@ describe("PUT /api/ordenes/api-key/[numGuia]/cancelar — cancelacion (R19/R20/R
     const json = await res.json();
     expect(json).toEqual({
       numGuia: 10234,
-      estadoAnterior: "en_bodega_central",
-      estado: "devolviendo_a_tienda",
+      estadoAnterior: "en_bodega_central", estadoAnteriorNombre: "En bodega central",
+      estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda",
     });
     expect(service.cancelar).toHaveBeenCalledWith(ACTOR, 10234);
   });

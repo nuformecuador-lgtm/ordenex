@@ -120,7 +120,7 @@ describeSiHayBase("⭑ 374/R48 — guardar una zona conserva sus distritos RETIR
       await serializarEscriturasReales(tx);
 
       const nombreZona = `374 Z ${unico()}`;
-      const zona = await tx.zona.create({ data: { nombre: nombreZona }, select: { id: true } });
+      const zona = await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombreZona }, select: { id: true } });
 
       // Un distrito DISPONIBLE y otro RETIRADO, los dos dentro de la zona. Con uno solo, «no se
       // pierde ninguno» pasaria en verde con un selector que los filtrase todos menos el primero.
@@ -208,7 +208,7 @@ describeSiHayBase("⭑ 374/R48 — guardar una zona conserva sus distritos RETIR
       await serializarEscriturasReales(tx);
 
       const nombreZona = `374 Z ${unico()}`;
-      const zona = await tx.zona.create({ data: { nombre: nombreZona }, select: { id: true } });
+      const zona = await tx.zona.create({ data: { sinpeNumero: "80000000", sinpeNombre: "Titular de Prueba", nombre: nombreZona }, select: { id: true } });
       const activo = await tx.distrito.create({
         data: { nombre: `374 D activo ${unico()}`, cantonId: FKS.cantonId, activo: true },
         select: { id: true },

@@ -33,7 +33,8 @@ describe("La derivación del dinero por día", () => {
     expect(dias).toEqual([
       {
         fecha: "2026-08-15",
-        ingresos: "1000.00",
+        // Ficha 459 (R13, reescrito): solo el EFECTIVO; el flete (100) es un cargo a la tienda.
+        ingresos: "900.00",
         egresos: "540.00",
         ganancia: "60.00", // 100 propios − 40 propios: el COD y el pago a tienda no entran
         pagoMensajeros: "0.00",
@@ -41,6 +42,22 @@ describe("La derivación del dinero por día", () => {
         // terceros saliendo de la caja, así que suma a `egresos` y no a `ganancia`.
         pagoTiendas: "500.00",
       },
+    ]);
+  });
+
+  // Ficha 457 (R19/R39, design §10): el pago de una tienda a Ordenex es EFECTIVO de terceros: cuenta
+  // en los `ingresos` de su dia y su anulacion en los `egresos` del dia en que se anula; la ganancia
+  // del dia no se mueve con ninguno de los dos (los fletes que la tienda debia ya se contaron al
+  // aprobar el cierre). El cobro que la dejo en contra es un CARGO: sube la ganancia y no los ingresos.
+  it("el pago de una tienda a Ordenex entra en los ingresos del dia y su anulacion en los egresos; la ganancia no cambia", () => {
+    const dias = derivarFinanzasDiarias([
+      fila("2026-09-20", "ingreso_cobro_tienda", "ingreso", "10000.00"), // cargo: no es efectivo
+      fila("2026-09-20", "ingreso_abono_tienda", "ingreso", "4000.00"), // efectivo de terceros
+      fila("2026-09-21", "egreso_reverso_abono_tienda", "egreso", "4000.00"), // efectivo de terceros
+    ]);
+    expect(dias).toEqual([
+      { fecha: "2026-09-20", ingresos: "4000.00", egresos: "0.00", ganancia: "10000.00", pagoMensajeros: "0.00", pagoTiendas: "0.00" },
+      { fecha: "2026-09-21", ingresos: "0.00", egresos: "4000.00", ganancia: "0.00", pagoMensajeros: "0.00", pagoTiendas: "0.00" },
     ]);
   });
 
@@ -112,9 +129,55 @@ describe("La derivación del dinero por día", () => {
   });
 
   // Money-safe: con `number`, sumar cien veces 0.10 no da 10.00.
+  it("459/R13: un dia solo con cargos a la tienda no tiene ingresos de efectivo, pero SI ganancia", () => {
+    const [dia] = derivarFinanzasDiarias([
+      fila("2026-08-18", "ingreso_flete", "ingreso", "2500.00"),
+      fila("2026-08-18", "ingreso_iva_flete", "ingreso", "325.00"),
+    ]);
+    expect(dia).toEqual({
+      fecha: "2026-08-18",
+      ingresos: "0.00",
+      egresos: "0.00",
+      ganancia: "2825.00",
+      pagoMensajeros: "0.00",
+      pagoTiendas: "0.00",
+    });
+  });
+
+  it("⭑ 461/R30: el cobro de Ordenex a una tienda y su reverso NO son efectivo del dia, pero SI cuentan en la ganancia", () => {
+    // Un cobro de 2 500,50 el dia 18 y su anulacion el 19: ni «ingresos» ni «egresos» se mueven
+    // (no entro ni salio dinero: se tomo del saldo de la tienda y se le devolvio), y la ganancia
+    // sube y baja exactamente en el monto.
+    const dias = derivarFinanzasDiarias([
+      fila("2026-09-18", "ingreso_cobro_tienda", "ingreso", "2500.50"),
+      fila("2026-09-18", "ingreso_ajuste", "ingreso", "100.00"),
+      fila("2026-09-19", "egreso_reverso_cobro_tienda", "egreso", "2500.50"),
+      fila("2026-09-19", "egreso_gasto_variable", "egreso", "40.00"),
+    ]);
+    expect(dias).toEqual([
+      {
+        fecha: "2026-09-18",
+        ingresos: "100.00", // solo el ajuste, que es efectivo
+        egresos: "0.00",
+        ganancia: "2600.50", // 2 500,50 del cobro + 100,00 del ajuste
+        pagoMensajeros: "0.00",
+        pagoTiendas: "0.00",
+      },
+      {
+        fecha: "2026-09-19",
+        ingresos: "0.00",
+        egresos: "40.00", // solo el gasto, que es efectivo; el reverso del cobro no sale de la caja
+        ganancia: "-2540.50", // −2 500,50 del reverso − 40,00 del gasto
+        pagoMensajeros: "0.00",
+        pagoTiendas: "0.00",
+      },
+    ]);
+  });
+
   it("suma con decimales exactos", () => {
     const filas = Array.from({ length: 100 }, () =>
-      fila("2026-08-16", "ingreso_flete", "ingreso", "0.10"),
+      // Ficha 459: con un ingreso EFECTIVO (el flete ya no suma a los ingresos del dia).
+      fila("2026-08-16", "ingreso_ajuste", "ingreso", "0.10"),
     );
 
     expect(derivarFinanzasDiarias(filas)[0]?.ingresos).toBe("10.00");

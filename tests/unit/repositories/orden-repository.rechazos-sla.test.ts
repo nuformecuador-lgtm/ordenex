@@ -14,7 +14,7 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 const RECHAZO_SLA_WHERE = {
   tiendaId: "tienda-1",
   deletedAt: null, // R15: excluye borradas
-  estatus: { value: "rechazada" }, // R12/R15: solo mientras REPOSE en `rechazada`
+  estatus: { value: "devolucion_a_origen_por_rechazo" }, // R12/R15: solo mientras REPOSE en `rechazada`
   historialEstados: { some: { origenTipo: "escalado_devuelta_sla" } }, // R12: alcanzada por el cron SLA
 };
 
@@ -42,7 +42,7 @@ describe("OrdenRepository.countRechazadasSlaByTienda (R12/R13/R15)", () => {
     // R13: acotada a la tienda; R15: nunca cuenta borradas ni fuera de `rechazada`.
     expect(where.tiendaId).toBe("tienda-1");
     expect(where.deletedAt).toBeNull();
-    expect(where.estatus).toEqual({ value: "rechazada" });
+    expect(where.estatus).toEqual({ value: "devolucion_a_origen_por_rechazo" });
   });
 });
 

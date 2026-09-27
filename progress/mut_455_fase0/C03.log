@@ -1,0 +1,26 @@
+=== MUTACION C03 — 2026-09-24T04:50:45-05:00
+archivo: lib/repositories/DevolucionSlaRepository.ts
+perl: s/const ESTATUS_DEVUELTA = "devuelta";/const ESTATUS_DEVUELTA = "rechazada";/
+--- diff aplicado:
+diff --git a/lib/repositories/DevolucionSlaRepository.ts b/lib/repositories/DevolucionSlaRepository.ts
+index fd7b69a5..fc36e600 100644
+--- a/lib/repositories/DevolucionSlaRepository.ts
++++ b/lib/repositories/DevolucionSlaRepository.ts
+@@ -13 +13 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+-const ESTATUS_DEVUELTA = "devuelta";
++const ESTATUS_DEVUELTA = "rechazada";
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts
+ × tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > las candidatas del escenario son A (anclada en la aprobacion) y B (legada, anclada en su gestion) 7ms
+   → expected [] to deeply equal [ { orden: 'A', …(3) }, …(1) ]
+ × tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > el cron pasada la ventana escala A y B a rechazo y no toca N1, N2 ni N3 1ms
+   → expected { A: 'novedad', B: 'novedad', …(3) } to deeply equal { A: 'rechazo', B: 'rechazo', …(3) }
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > las candidatas del escenario son A (anclada en la aprobacion) y B (legada, anclada en su gestion)
+AssertionError: expected [] to deeply equal [ { orden: 'A', …(3) }, …(1) ]
+ FAIL  tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > el cron pasada la ventana escala A y B a rechazo y no toca N1, N2 ni N3
+AssertionError: expected { A: 'novedad', B: 'novedad', …(3) } to deeply equal { A: 'rechazo', B: 'rechazo', …(3) }
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

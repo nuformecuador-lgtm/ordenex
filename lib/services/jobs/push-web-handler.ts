@@ -13,6 +13,8 @@ import { PushSuscripcionRepository } from "@/lib/repositories/PushSuscripcionRep
 import { AvisoAgregadoRepository } from "@/lib/repositories/AvisoAgregadoRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { VigenciaAvisoAgregadoService } from "@/lib/services/VigenciaAvisoAgregadoService";
+// FICHA 462: el conteo UNICO de las reprogramadas retenidas, mismo ensamblaje que el cron y la campana.
+import { buildReprogramadasRetenidasService } from "@/lib/services/reprogramadas-retenidas-composicion";
 import { WebPushSender } from "@/lib/push/web-push-sender";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { avisosDiariosConfig } from "@/lib/config/avisos-diarios";
@@ -51,6 +53,15 @@ export function buildPushWebService(now: () => Date = () => new Date()): IPushWe
       // con otro, el numero del telefono y el de la pantalla dirian cosas distintas.
       avisosDiariosConfig.DIAS_REPRESAMIENTO,
       now,
+      // El reparto de mañana no se pushea por aqui con cifra (su fila es de usuario y la resuelve
+      // el mismo resolutor); se deja `undefined` como hasta hoy: el push de ese evento sale con el
+      // titulo persistido si el resolutor lanza.
+      undefined,
+      // ⚠️ FICHA 462 (T2.8, R23) — EL CUERPO DEL PUSH ES LA PRESENTACION DEL AVISO, con la cifra
+      // del instante de la emision. Sin esta linea el resolutor lanza para
+      // `reprogramadas_esperan_cierre` y el push saldria SIN numero: nada visible se rompe y por
+      // eso el fallo seria MUDO. Mismo ensamblaje que el cron y la campana (R7).
+      buildReprogramadasRetenidasService(prisma),
     ),
     now,
     piezasAusentes: piezasVapidAusentes,

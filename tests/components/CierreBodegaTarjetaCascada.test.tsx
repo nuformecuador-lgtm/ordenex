@@ -65,6 +65,7 @@ import {
 import { CierresBodegaSolicitadosLista } from "@/app/(app)/cierres-admin/_components/CierresBodegaSolicitadosLista";
 import { CierresBodegaResueltosLista } from "@/app/(app)/cierres-admin/_components/CierresBodegaResueltosLista";
 
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 // ---------------------------------------------------------------------------
 // EL PARSEADOR: lee una cadena PINTADA y devuelve céntimos. Deshace exactamente lo que hace el
 // formateador y nada más, para que una cadena mal formada dé un número distinto en vez de
@@ -138,6 +139,8 @@ function cierreBodega(over: Partial<CierreBodegaResumen> = {}): CierreBodegaResu
     motivoRechazo: null,
     paraLaCentral: "111838.37",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("100000.17"),
     ...over,
   };
 }

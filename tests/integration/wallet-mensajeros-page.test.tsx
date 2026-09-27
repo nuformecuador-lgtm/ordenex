@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactElement } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CIERRES_C1 } from "@/tests/fixtures/selector-buscable";
 
 // Feature 57: el PageHeader del topbar monta el LogoutButton (client:
 // useRouter/useToast). Se stubbea para aislar el pre-fetch/props de la página.
@@ -13,7 +14,6 @@ import {
   cleanup,
   within,
   waitFor,
-  fireEvent,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RolValue } from "@prisma/client";
@@ -21,12 +21,17 @@ import type { RolValue } from "@prisma/client";
 import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 import type { CuentasPorPagarTableProps } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
 import type {
-  CuentaPorPagarResumenDTO,
-  ListarPagosDeMensajeroResult,
+  ListarPagosDeMensajeroResult as ListarPagosDeMensajeroResultBase,
+  PagoMensajeroMovimientoDTO,
 } from "@/lib/types/wallet-mensajero";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
+
+// Ficha 458-A (TA.2): el borde adjunta el origen legible a cada fila del desglose.
+type ListarPagosDeMensajeroResult = Omit<ListarPagosDeMensajeroResultBase, "movimientos"> & {
+  movimientos: ConOrigen<PagoMensajeroMovimientoDTO>[];
+};
 
 // Feature 44 (T14, R18/R19/R21) — la pagina `/wallet/mensajeros` resuelve el rol SOLO
 // server-side; rol != maestro (o sin sesion) → `notFound` (R19). La tabla cliente se stubbea
@@ -60,6 +65,15 @@ class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+// Ficha 458-A (TA.3/TA.4): los filtros leen del servidor los conceptos con movimientos y los cierres
+// de la cuenta. Aqui, un cierre (`c1`) y los conceptos que el caso necesita.
+const conceptosFiltroMock = vi.fn();
+const cierresFiltroMock = vi.fn();
+vi.mock("@/lib/actions/wallet-filtros", () => ({
+  conceptosConMovimientosAction: (...a: unknown[]) => conceptosFiltroMock(...a),
+  cierresDeLaCuentaAction: (...a: unknown[]) => cierresFiltroMock(...a),
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new NotFoundError();
@@ -120,16 +134,6 @@ const CUENTAS_OK = {
   ],
 };
 
-// Resumen agregado (saldo inicial antes de la primera carga del desglose).
-const RESUMEN: CuentaPorPagarResumenDTO = {
-  mensajeroId: "u1",
-  mensajeroNombre: "Ana Mensajera",
-  devengado: "5000.00",
-  pagado: "3000.00",
-  cuentaPorPagar: "2000.00",
-  signo: "positivo",
-};
-
 // Desglose por cierre SIN filtros (carga inicial). Dos movimientos, mas reciente primero (el
 // backend ya los devuelve ordenados desc; la UI preserva ese orden).
 const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
@@ -147,6 +151,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c2", // feature 205/R43: en un origen `cierre_dia`, el origen ES el cierre
       descripcion: null,
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
     {
       id: "m1",
@@ -159,6 +164,7 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
       cierreId: "c1",
       descripcion: null,
       fechaMovimiento: "2026-07-05T10:00:00.000Z",
+      origen: { texto: "Cierre del día", enlace: null }, // ficha 458-A (TA.2)
     },
   ],
   total: 2,
@@ -168,35 +174,6 @@ const DESGLOSE_DATA: ListarPagosDeMensajeroResult = {
     devengado: "5000.00",
     pagado: "3000.00",
     cuentaPorPagar: "2000.00",
-    signo: "positivo",
-  },
-};
-
-// Desglose CON filtros aplicados: subconjunto + saldo del conjunto filtrado (R22).
-const DESGLOSE_FILTRADO: ListarPagosDeMensajeroResult = {
-  mensajeroId: "u1",
-  mensajeroNombre: "Ana Mensajera",
-  movimientos: [
-    {
-      id: "m1",
-      mensajeroId: "u1",
-      tipo: "devengo",
-      categoria: "pago_devengado",
-      monto: "2500.00",
-      origenTipo: "cierre_dia",
-      origenId: "c1",
-      cierreId: "c1",
-      descripcion: null,
-      fechaMovimiento: "2026-07-05T10:00:00.000Z",
-    },
-  ],
-  total: 1,
-  page: 1,
-  pageSize: 20,
-  cuenta: {
-    devengado: "2500.00",
-    pagado: "1000.00",
-    cuentaPorPagar: "1500.00",
     signo: "positivo",
   },
 };
@@ -231,6 +208,20 @@ async function renderPagina(pagina: ReactElement) {
 
 afterEach(() => {
   cleanup();
+});
+
+
+beforeEach(() => {
+  conceptosFiltroMock.mockResolvedValue({
+    status: "ok",
+    conceptos: [
+      { categoria: "cod_recaudado", movimientos: 4 },
+      { categoria: "iva_comision_cod", movimientos: 2 },
+      { categoria: "cobro_manual", movimientos: 1 },
+      { categoria: "pago_tienda", movimientos: 1 },
+    ],
+  });
+  cierresFiltroMock.mockResolvedValue(CIERRES_C1);
 });
 
 describe("WalletMensajerosPage — control de acceso por rol (R19)", () => {
@@ -479,117 +470,8 @@ describe("WalletMensajerosPage — el panel de premios del ranking (R1)", () => 
   });
 });
 
-// El desglose por cierre del maestro (R18/R22) se monta al EXPANDIR una fila. Aqui se prueba el
-// componente real que aparece en esa expansion (`DesglosePagosMensajero`), envuelto en un
-// `SWRConfig` con cache aislada (provider nuevo + sin dedup) para que cada test observe sus
-// propias llamadas a la Server Action del maestro (mockeada).
-//
-// Feature 170 (T C.4): el desglose monta el control de descarga del `DataTable`, que usa
-// `useToast`. En la app el proveedor está en `app/(app)/layout.tsx`, encima de esta pantalla;
-// aquí se envuelve por la misma razón que ya hace `OrdenesDescarga.test.tsx` (151). Cambio
-// del ARNÉS: ninguna aserción se toca.
-function renderDesglose(resumen: CuentaPorPagarResumenDTO = RESUMEN) {
-  return render(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <ToastProvider>
-        <DesglosePagosMensajero resumen={resumen} id="desglose-u1" />
-      </ToastProvider>
-    </SWRConfig>,
-  );
-}
-
-describe("DesglosePagosMensajero — desglose por cierre del maestro (R18)", () => {
-  it("al expandir carga el desglose por cierre paginado, mas reciente primero", async () => {
-    renderDesglose();
-
-    // R18: carga client-side al montar (= al expandir), acotada al mensajeroId, pagina 1.
-    await waitFor(() => expect(desgloseMock).toHaveBeenCalledTimes(1));
-    expect(desgloseMock).toHaveBeenCalledWith({
-      mensajeroId: "u1",
-      page: 1,
-      pageSize: 20,
-    });
-
-    const tabla = await screen.findByRole("table", {
-      name: "Desglose por cierre de Ana Mensajera",
-    });
-
-    // Espera a que los movimientos se rendericen (sale del estado "Cargando…").
-    await within(tabla).findByText("2026-07-12");
-
-    // R18: los movimientos aparecen en el orden que devuelve el backend (mas reciente primero):
-    // la fila del cierre del 2026-07-12 precede a la del 2026-07-05.
-    const filas = within(tabla).getAllByRole("row");
-    // filas[0] = cabecera; filas[1] = mas reciente; filas[2] = mas antiguo.
-    expect(within(filas[1]).getByText("2026-07-12")).toBeInTheDocument();
-    expect(within(filas[2]).getByText("2026-07-05")).toBeInTheDocument();
-
-    // Money-safe (R21/R27): los montos salen del STRING del servidor, por el formateador
-    // compartido y sin recalcular nada (feature 230: sin la cola de centimos).
-    expect(within(tabla).getByText("₡3.000")).toBeInTheDocument();
-    expect(within(tabla).getByText("₡5.000")).toBeInTheDocument();
-  });
-});
-
-describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", () => {
-  it("aplica los filtros invocando la action con cierreId/desde/hasta y vuelve a la pagina 1", async () => {
-    renderDesglose();
-
-    // Espera la carga inicial (sin filtros) y que el desglose ya este renderizado.
-    await screen.findByText("2026-07-12");
-    expect(desgloseMock).toHaveBeenCalledTimes(1);
-
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
-    fireEvent.change(screen.getByLabelText("Desde"), {
-      target: { value: "2026-07-01" },
-    });
-    fireEvent.change(screen.getByLabelText("Hasta"), {
-      target: { value: "2026-07-31" },
-    });
-
-    const form = screen.getByRole("form", {
-      name: "Filtros del desglose de Ana Mensajera",
-    });
-    fireEvent.submit(form);
-
-    // R22: la action se invoca con los filtros de fecha/cierre en el WHERE server-side.
-    await waitFor(() => expect(desgloseMock).toHaveBeenCalledTimes(2));
-    expect(desgloseMock).toHaveBeenLastCalledWith({
-      mensajeroId: "u1",
-      page: 1, // nuevos filtros -> vuelve a la primera pagina
-      pageSize: 20,
-      cierreId: "c1",
-      desde: "2026-07-01",
-      hasta: "2026-07-31",
-    });
-  });
-
-  it("el saldo mostrado refleja el CONJUNTO FILTRADO (result.data.cuenta), no el agregado", async () => {
-    renderDesglose();
-
-    // Espera a que la carga inicial (sin filtros) resuelva y renderice sus movimientos.
-    await screen.findByText("2026-07-12");
-    const saldo = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    // Carga inicial: el saldo muestra el agregado (cuentaPorPagar ₡2.000).
-    expect(within(saldo).getByText("₡2.000")).toBeInTheDocument();
-
-    // La siguiente carga (al filtrar) devuelve el saldo del conjunto filtrado.
-    desgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
-
-    fireEvent.change(screen.getByLabelText("Cierre"), {
-      target: { value: "c1" },
-    });
-    fireEvent.submit(
-      screen.getByRole("form", { name: "Filtros del desglose de Ana Mensajera" }),
-    );
-
-    // R22: el saldo se recalcula desde result.data.cuenta (cuentaPorPagar ₡1.500), y ya no
-    // muestra el agregado (₡2.000).
-    await waitFor(() =>
-      expect(within(saldo).getByText("₡1.500")).toBeInTheDocument(),
-    );
-    expect(within(saldo).queryByText("₡2.000")).not.toBeInTheDocument();
-  });
-});
+// FICHA 458-D (T D.8, D14): aquí vivían «DesglosePagosMensajero — desglose por cierre del maestro
+// (R18)» y «— filtros server-side fecha/cierre (R22)», sobre el desplegable que se retiró. Sus
+// sustitutos: el estado de cuenta del mensajero (`tests/components/EstadoCuenta.test.tsx`: extracto
+// paginado, periodo, chips, tarjetas del SERVIDOR; `wallet-mensajeros-estado-page.test.tsx`: la página).
+// El filtro por CIERRE del estado de cuenta queda pendiente de servidor (`progress/impl_458-D.md`).

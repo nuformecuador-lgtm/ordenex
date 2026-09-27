@@ -1,0 +1,11 @@
+Asistente
+
+Responde sobre cómo usar Ordenex
+
+Leer la ayuda de esta pantalla
+
+Preguntá lo que no te cuadre de esta pantalla. Respondo sobre cómo se usa Ordenex; no veo tus órdenes ni tu dinero.
+
+Adjuntar una captura
+
+Lo que escribís y las imágenes que adjuntás se envían a un proveedor externo de inteligencia artificial para poder responderte. Evitá enviar datos de clientes si no hace falta.

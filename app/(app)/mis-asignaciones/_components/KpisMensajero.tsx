@@ -1,6 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import type { MisAsignacionesKpis } from "@/lib/interfaces/services/IMisAsignacionesService";
 
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
+
 import { KpiValorAnimado } from "./KpiValorAnimado";
 
 // Feature 61 — fila de KPIs del portal del mensajero, sobre la lista de sus
@@ -27,7 +29,8 @@ const TILES: Tile[] = [
     render: (k) => <KpiValorAnimado value={k.pendientes} />,
   },
   {
-    label: "Entregadas",
+    // FICHA 455 (2026-09-24, R5): el KPI cuenta UN resultado, así que lleva su nombre exacto.
+    label: NOMBRE_ESTADO.entregado,
     icon: "/icons/icono_entregadas.png",
     render: (k) => <KpiValorAnimado value={k.entregadas} />,
   },

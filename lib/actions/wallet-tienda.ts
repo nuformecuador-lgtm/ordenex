@@ -2,33 +2,41 @@
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepository";
+import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
+import { CajaCobroTiendaFeedService } from "@/lib/services/CajaCobroTiendaFeedService";
 import { CobroTiendaService } from "@/lib/services/CobroTiendaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { WalletTiendaService } from "@/lib/services/WalletTiendaService";
+import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
+import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
+import {
+  origenEnItems,
+  origenEnPagina,
+  type ConOrigenEnPagina,
+} from "@/lib/services/origen-en-resultado";
+import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IWalletTiendaService,
   ListarMisCierresServiceResult,
-  ListarMisMovimientosServiceResult,
   ListarSaldosTiendasPaginadoServiceResult,
   ListarMovimientosDeTiendaServiceResult,
   ListarSaldosTiendasServiceResult,
-  VerMiSaldoServiceResult,
 } from "@/lib/interfaces/services/IWalletTiendaService";
 import {
+  anularCobroTiendaSchema,
   listarMovimientosDeTiendaCompletoSchema,
   listarMovimientosDeTiendaSchema,
-  listarMovimientosTiendaCompletoSchema,
-  listarMovimientosTiendaSchema,
   listarSaldosTiendasCompletoSchema,
   listarSaldosTiendasPaginadoSchema,
   registrarCobroTiendaSchema,
+  type AnularCobroTiendaResult,
   type ListarMovimientosDeTiendaCompletoResult,
-  type ListarMovimientosTiendaCompletoResult,
   type ListarSaldosTiendasCompletoResult,
 } from "@/lib/types/wallet-tienda";
 import type {
@@ -44,6 +52,8 @@ import {
   verDetalleDeMovimientoCompletoSchema,
   verDetalleDeMovimientoSchema,
 } from "@/lib/types/detalle-movimiento";
+import { separarComprobante } from "@/lib/types/wallet-laterales";
+import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -54,14 +64,15 @@ import type { AppErrorShape } from "@/lib/errors";
 // devuelve el service como resultado de dominio. Money-safe: los DTOs exponen montos como
 // STRING (R21/R27); el cliente nunca recibe Prisma.Decimal.
 
-export type VerMiSaldoActionResult =
-  | VerMiSaldoServiceResult
-  | { status: "unauthenticated" };
-
-export type ListarMisMovimientosActionResult =
-  | ListarMisMovimientosServiceResult
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+// FICHA 458-D (cierre) — `verMiSaldoAction`, `listarMisMovimientosAction` y
+// `listarMisMovimientosCompletoAction` se RETIRARON: `/mi-wallet` lee su saldo, su libro, su resumen de
+// tres cifras y su descarga por `verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction`
+// (`lib/actions/estado-cuenta.ts`). No tenian llamadores fuera de los tests (ni API publica, ni asistente,
+// ni scripts, ni crons, medido); sus redes de borde se movieron, en los MISMOS archivos, a las actions
+// nuevas: `tests/unit/actions/wallet-tienda-actions.test.ts`, `wallet-tienda-descarga-action.test.ts` y
+// `tests/unit/types/wallet-tienda-schemas.test.ts`. Los metodos del SERVICIO
+// (`WalletTiendaService.verMiSaldo` / `listarMisMovimientos{,Completo}`) se quedan: los usan las redes de
+// servicio de la 43/170/172/344/458-A y la medida R22 de la 458-D contra Postgres.
 
 export type ListarSaldosTiendasActionResult =
   | ListarSaldosTiendasServiceResult
@@ -88,7 +99,7 @@ export type ListarSaldosTiendasPaginadoActionResult =
 // Feature 171 — desglose de UNA tienda elegida. `forbidden` lo decide el servicio (dominio);
 // `unauthenticated` y `validation_error` los decide este borde, antes de llamarlo.
 export type ListarMovimientosDeTiendaActionResult =
-  | ListarMovimientosDeTiendaServiceResult
+  | ConOrigenEnPagina<ListarMovimientosDeTiendaServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -128,35 +139,51 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletMovimientoRepository(prisma),
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
+    new EstadoCuentaRepository(prisma), // 458-D (servidor, R19): la fila del mensajero; este borde no la usa
   );
 }
 
 /**
- * FICHA 381 (T F.2) — COMPOSITION ROOT del cobro manual a una tienda.
+ * FICHA 381 → 461 (T F.2 / T B.9) — COMPOSITION ROOT del cobro de Ordenex a una tienda.
  *
- * Cablea el servicio con SUS TRES dependencias y con ninguna mas:
+ * Cablea el servicio con SUS CINCO dependencias:
  *
- *  - el repositorio del ledger de la tienda, que escribe el asiento Y su fila de historial;
- *  - el repositorio de usuarios, del que solo se usa `obtenerCuentaTienda` (R17);
- *  - el ejecutor de transacciones interactivo, que es lo que hace ATOMICOS el asiento y su rastro
- *    (R25/R42).
+ *  - el repositorio del ledger de la tienda, que escribe el debito Y su fila de historial;
+ *  - el repositorio de usuarios, del que solo se usa `obtenerCuentaTienda` (R6);
+ *  - el puerto de caja REAL (`CajaCobroTiendaFeedService` sobre `WalletMovimientoRepository`), que
+ *    escribe el cargo del cobro y el reverso de su anulacion;
+ *  - el repositorio de anulaciones (constancia + historial);
+ *  - el ejecutor de transacciones interactivo, que es lo que hace ATOMICAS las escrituras (R1/R10).
  *
- * ⚠️ Y LO QUE NO SE INYECTA ES PARTE DEL CONTRATO (R24, D1): aqui NO se construye ningun
- * `WalletMovimientoRepository` ni ningun puerto de caja. Un cobro no puede escribir en la caja de
- * Ordenex porque el servicio no tiene con que.
+ * ⚠️ AHORA LO QUE SI SE INYECTA ES EL CONTRATO (R9, HD1 de la 461). La 381 decia lo contrario («lo
+ * que NO se inyecta es parte del contrato: ningun puerto de caja») y ese fue el error de diseño que
+ * dejo los cobros sin rastro en la caja. Un test de integracion pasa POR ESTA ACTION, sin
+ * `deps.service`, y encuentra en Postgres el debito, el cargo y el historial (leccion «el composition
+ * root que no inyecta»).
  */
 function buildCobroTiendaService(): ICobroTiendaService {
   const prisma = getPrismaClient();
   return new CobroTiendaService(
     new WalletTiendaMovimientoRepository(prisma),
     new UserRepository(prisma),
+    new CajaCobroTiendaFeedService(new WalletMovimientoRepository(prisma)),
+    new CobroTiendaAnulacionRepository(prisma),
     (fn) => prisma.$transaction((tx) => fn(tx)),
+    undefined, // el reloj por defecto
+    buildComprobantes(prisma), // FICHA 458-B (R74): el comprobante del cobro
   );
 }
 
 export interface WalletTiendaDeps {
   service?: IWalletTiendaService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 458-A (TA.2): el origen legible de las filas; en produccion, el real sobre Prisma. */
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 458-A (TA.2) — composition root del origen legible (una consulta por tipo presente). */
+function buildOrigenes(): IOrigenLegibleService {
+  return new OrigenLegibleService(new OrigenLegibleRepository(getPrismaClient()));
 }
 
 /** Las dependencias del cobro, inyectables en test igual que las del ledger. */
@@ -175,6 +202,11 @@ export interface CobroTiendaDeps {
 export type RegistrarCobroTiendaActionResult =
   | RegistrarCobroTiendaServiceResult
   | { status: "unauthenticated" };
+
+/** FICHA 458-B (R74): con un `FormData` (458-C) se suma la rama `comprobante_no_guardado`. */
+export type RegistrarCobroTiendaConComprobanteActionResult =
+  | RegistrarCobroTiendaActionResult
+  | { status: "comprobante_no_guardado" };
 
 /** Las dependencias del detalle, inyectables en test igual que las del ledger. */
 export interface DetalleMiMovimientoDeps {
@@ -196,55 +228,6 @@ export type VerDetalleDeMiMovimientoCompletoActionResult =
   | VerDetalleMovimientoCompletoServiceResult
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
-
-/** R17/R19: saldo total del adminTienda (STRING+signo), acotado a su tienda_id. Forbidden/unauthenticated sin exponer datos. */
-export async function verMiSaldoAction(
-  deps: WalletTiendaDeps = {},
-): Promise<VerMiSaldoActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R19: antes de tocar el service
-    const service = deps.service ?? buildService();
-    return service.verMiSaldo(actor);
-  });
-  // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
-}
-
-/** R19/R22/R27: movimientos paginados + filtros del adminTienda, acotados a su tienda_id en el WHERE. */
-export async function listarMisMovimientosAction(
-  input: unknown,
-  deps: WalletTiendaDeps = {},
-): Promise<ListarMisMovimientosActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = listarMovimientosTiendaSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    return service.listarMisMovimientos(data, actor);
-  });
-  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
-}
-
-/**
- * Feature 170 (T C.2, design §4) — ledger COMPLETO de la tienda del actor, sin paginacion,
- * para la descarga. Calcado de `listarMisMovimientosAction`: mismo borde, mismo actor, mismo
- * schema (menos `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que acota a su
- * `tienda_id` (R14/R15). Ninguna rama devuelve filas junto a un error (R16/R17/R18).
- */
-export async function listarMisMovimientosCompletoAction(
-  input: unknown,
-  deps: WalletTiendaDeps = {},
-): Promise<ListarMovimientosTiendaCompletoResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
-    const data = listarMovimientosTiendaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    return service.listarMisMovimientosCompleto(data, actor);
-  });
-  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
-}
 
 /**
  * R20/R27: saldo de TODAS las tiendas (solo maestro). Forbidden/unauthenticated sin exponer datos.
@@ -365,6 +348,8 @@ export async function listarSaldosTiendasCompletoAction(
  * Mismo esqueleto que las cuatro de arriba, y el ORDEN importa: sin sesion se corta ANTES de
  * validar y antes de llamar al servicio (R29), y un `tiendaId` ausente o vacio se corta en
  * `schema.parse` (R25) — en ninguno de los dos casos se llega a consultar la base.
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): el desglose de una tienda. Su superficie era `DesgloseMovimientosTienda`, el desplegable de `/wallet/tiendas`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/wallet-cierres-selector.test.ts` y `wallet-origen-legible.test.ts` (redes de la 458-A contra Postgres), `tests/integration/wallet-tiendas-page.test.tsx`, `BajoRiesgoPaginacion.test.tsx`, `saldos-tiendas-table.negativo.test.tsx`, `wallet-tienda-schemas.test.ts` y `wallet-tienda-desglose-action.test.ts`; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarMovimientosDeTiendaAction(
   input: unknown,
@@ -375,7 +360,8 @@ export async function listarMovimientosDeTiendaAction(
     if (!actor) throw new UnauthenticatedError(); // R29: antes del schema y del service
     const data = listarMovimientosDeTiendaSchema.parse(input); // R25: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarMovimientosDeTienda(data, actor);
+    const r = await service.listarMovimientosDeTienda(data, actor);
+    return origenEnPagina(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
@@ -385,6 +371,8 @@ export async function listarMovimientosDeTiendaAction(
  * borde, mismo actor, mismo `tiendaId` requerido y el mismo servicio; el schema `.strict()`
  * rechaza `page`/`pageSize` porque este modo no pagina. Ninguna rama devuelve filas junto a un
  * error.
+ *
+ * @sin-superficie FICHA 458-D (T D.8, D14): la descarga del desglose de una tienda. Su superficie era la descarga de `DesgloseMovimientosTienda`, retirado; lo sustituye el estado de cuenta (`verEstadoCuentaAction`). NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/wallet-cierres-selector.test.ts` y `wallet-origen-legible.test.ts` (redes de la 458-A contra Postgres), `tests/integration/wallet-tiendas-page.test.tsx`, `BajoRiesgoPaginacion.test.tsx`, `saldos-tiendas-table.negativo.test.tsx`, `wallet-tienda-schemas.test.ts` y `wallet-tienda-desglose-action.test.ts`; retirarla exige mover antes esas redes al estado de cuenta.
  */
 export async function listarMovimientosDeTiendaCompletoAction(
   input: unknown,
@@ -395,7 +383,8 @@ export async function listarMovimientosDeTiendaCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // R29: antes de tocar el service
     const data = listarMovimientosDeTiendaCompletoSchema.parse(input); // R25
     const service = deps.service ?? buildService();
-    return service.listarMovimientosDeTiendaCompleto(data, actor);
+    const r = await service.listarMovimientosDeTiendaCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "tienda", r, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }
@@ -472,15 +461,54 @@ export async function verDetalleDeMiMovimientoCompletoAction(
  * sobrevive a su motivo pone roja la guardia de superficie igual que su ausencia.
  */
 export async function registrarCobroTiendaAction(
+  input: FormData,
+  deps?: CobroTiendaDeps,
+): Promise<RegistrarCobroTiendaConComprobanteActionResult>;
+export async function registrarCobroTiendaAction(
+  input: unknown,
+  deps?: CobroTiendaDeps,
+): Promise<RegistrarCobroTiendaActionResult>;
+export async function registrarCobroTiendaAction(
   input: unknown,
   deps: CobroTiendaDeps = {},
-): Promise<RegistrarCobroTiendaActionResult> {
+): Promise<RegistrarCobroTiendaConComprobanteActionResult> {
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R13: antes del schema y del service
-    const data = registrarCobroTiendaSchema.parse(input); // R14/R15/R16: ZodError -> VALIDATION_ERROR
+    // FICHA 458-B (R74): el objeto de hoy o un FormData con `comprobante` (molde 459); el `.strict()`
+    // se conserva: el archivo se separa ANTES y cualquier otra clave no prevista sigue muriendo aqui.
+    const { crudo, comprobante } = separarComprobante(input);
+    const data = registrarCobroTiendaSchema.parse(crudo); // R14/R15/R16: ZodError -> VALIDATION_ERROR
+    const archivo = await leerComprobanteOpcional(comprobante);
     const service = deps.service ?? buildCobroTiendaService();
-    return service.registrarCobro(data, actor);
+    return archivo === null ? service.registrarCobro(data, actor) : service.registrarCobro(data, actor, archivo);
+  });
+  return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
+}
+
+/**
+ * FICHA 461 (T B.9, R10–R18; design §6, P8) — ANULAR UN COBRO de Ordenex a una tienda, con motivo.
+ *
+ * Vive aqui, junto a `registrarCobroTiendaAction`, y comparte su composition root: son las dos
+ * unicas escrituras del cobro y el mismo servicio las hace. Mismo orden que su hermana y por los
+ * mismos motivos: sin sesion se corta ANTES de validar y de construir el servicio (`unauthenticated`,
+ * R18); `anularCobroTiendaSchema` —`.strict()`, SIN monto— mata en el BORDE un motivo vacio o
+ * cualquier clave colada (R13/R14: el monto de los contra-asientos se lee del cobro en el servidor);
+ * el ROL, el cobro, su estado y los contra-asientos los decide el SERVICIO.
+ *
+ * SUPERFICIE: la dispara «Anular…» del panel «Ver» sobre la linea original de cada cobro vigente del
+ * libro de la caja, a traves de `anularMovimientoAction` (458-C; antes `DocumentoCajaAcciones`, R20).
+ */
+export async function anularCobroTiendaAction(
+  input: unknown,
+  deps: CobroTiendaDeps = {},
+): Promise<AnularCobroTiendaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R18: antes del schema y del service
+    const data = anularCobroTiendaSchema.parse(input); // R13/R14: ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCobroTiendaService();
+    return service.anular(data, actor);
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

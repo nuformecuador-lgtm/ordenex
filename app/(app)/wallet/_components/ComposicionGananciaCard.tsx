@@ -5,6 +5,7 @@ import {
   HandCoins,
   Percent,
   Scale,
+  Store,
   Truck,
   Wallet,
   type LucideIcon,
@@ -102,6 +103,11 @@ const INGRESO_ICONO: Record<WalletIngresoPropio, LucideIcon> = {
   ingreso_iva_flete_devolucion: Percent,
   ingreso_iva_comision_cod: Percent,
   ingreso_ajuste: Scale,
+  // Ficha 461 (design §4, R27): el cobro de Ordenex a una tienda, octavo ingreso propio. `Store`
+  // —la tienda— porque es lo que lo distingue de los seis cargos del cierre: no nace de una
+  // entrega ni de una tarifa, sino de algo que Ordenex le cobra a esa tienda a mano. Decoracion
+  // (`aria-hidden`); el rotulo «Ordenex le cobra a una tienda» ya lo dice.
+  ingreso_cobro_tienda: Store,
 };
 
 /** Insignia del signo de la ganancia. Las mismas variantes semánticas que la tarjeta de la caja. */
@@ -124,7 +130,7 @@ const SIGNO_COLOR: Record<WalletBalanceSigno, string> = {
  * Rótulo VISIBLE de una de las dos columnas. No es un encabezado del documento: la tarjeta vive
  * dentro de una página cuyo único `h1` es el título, y colgar aquí un `h3` sin `h2` por encima
  * rompería el orden por el que navega un lector de pantalla. El nombre accesible de cada columna
- * lo da el `aria-label` de su `<dl role="group">`, que dice lo mismo con más palabras.
+ * lo da el `aria-label` del grupo que envuelve su `<dl>` (458, O5), que dice lo mismo con más palabras.
  */
 function TituloColumna({ children }: { children: string }) {
   return <span className="px-4 text-sm font-medium text-foreground">{children}</span>;
@@ -170,34 +176,35 @@ export function ComposicionGananciaCard({
       <CardContent className="grid grid-cols-1 items-start gap-6 px-0 md:grid-cols-2">
         <div className="flex flex-col gap-2">
           <TituloColumna>{INGRESOS_TITULO}</TituloColumna>
-          <dl
-            role="group"
-            aria-label={INGRESOS_GRUPO_ARIA}
-            className="flex flex-col gap-0.5"
-          >
-            {/* Ficha 339 (Q1, decisión cerrada): «cada fila se puede abrir» es CADA fila. Las
-                siete de ingreso también, y por el mismo mecanismo: una asimetría nueva entre
-                las dos columnas sería exactamente el defecto que la 343 vino a cerrar. */}
-            {WALLET_INGRESO_PROPIO_SEED.map((categoria) => (
-              <FilaComposicion
-                key={categoria}
-                fila={categoria}
-                // R25: la etiqueta legible que ya existe, nunca el valor del enum.
-                label={CATEGORIA_LABEL[categoria]}
-                valor={composicion.ingresos[categoria]}
-                icono={INGRESO_ICONO[categoria]}
-                tono="ingreso"
-                filtros={filtros}
-              />
-            ))}
+          {/* 458 (O5 del recorrido final) — el `role="group"` va en un envoltorio y NO en la `<dl>`:
+              sobre la lista le quitaba su semántica y axe marcaba los `<dt>/<dd>` huérfanos
+              («dlitem»). El grupo conserva su nombre accesible; la lista, su estructura. */}
+          <div role="group" aria-label={INGRESOS_GRUPO_ARIA}>
+            <dl className="flex flex-col gap-0.5">
+              {/* Ficha 339 (Q1, decisión cerrada): «cada fila se puede abrir» es CADA fila. Las
+                  siete de ingreso también, y por el mismo mecanismo: una asimetría nueva entre
+                  las dos columnas sería exactamente el defecto que la 343 vino a cerrar. */}
+              {WALLET_INGRESO_PROPIO_SEED.map((categoria) => (
+                <FilaComposicion
+                  key={categoria}
+                  fila={categoria}
+                  // R25: la etiqueta legible que ya existe, nunca el valor del enum.
+                  label={CATEGORIA_LABEL[categoria]}
+                  valor={composicion.ingresos[categoria]}
+                  icono={INGRESO_ICONO[categoria]}
+                  tono="ingreso"
+                  filtros={filtros}
+                />
+              ))}
 
-            <div className="mt-3 flex items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3">
-              <dt className="text-sm font-medium">{INGRESOS_TOTAL_LABEL}</dt>
-              <dd className="text-base font-semibold tabular-nums text-success-strong">
-                {money(composicion.totalIngresos)}
-              </dd>
-            </div>
-          </dl>
+              <div className="mt-3 flex items-center justify-between gap-4 border-t bg-muted/50 px-4 py-3">
+                <dt className="text-sm font-medium">{INGRESOS_TOTAL_LABEL}</dt>
+                <dd className="text-base font-semibold tabular-nums text-success-strong">
+                  {money(composicion.totalIngresos)}
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">

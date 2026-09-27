@@ -85,10 +85,14 @@ describe("formato de cada tipo de dato", () => {
     expect(valorDeCampo("monto_crudo", DATOS)).toBe("25900");
   });
 
-  it("el estatus se traduce al vocabulario PUBLICO, nunca el value interno", () => {
+  // ⏳ 2026-09-24 (FICHA 455, R35): el estatus se traduce a su NOMBRE VISIBLE (el mismo de la oficina),
+  // ya no al hito publico del rastreo: `novedad_interna` se lee «Novedad interna», no «En reparto».
+  it("R35: el estatus se traduce a su nombre visible, nunca el value interno", () => {
     expect(valorDeCampo("estatus", DATOS)).toBe("En reparto");
-    const interno = datosPlantillaFixture({ orden: { estatusValue: "sin_gestionar" } });
-    expect(valorDeCampo("estatus", interno)).toBe("En reparto");
+    const interno = datosPlantillaFixture({ orden: { estatusValue: "novedad_interna" } });
+    expect(valorDeCampo("estatus", interno)).toBe("Novedad interna");
+    const desconocido = datosPlantillaFixture({ orden: { estatusValue: "codigo_que_no_existe" } });
+    expect(valorDeCampo("estatus", desconocido)).toBe("Estado no reconocido");
     expect(valorDeCampo("estatus", interno)).not.toContain("_");
   });
 

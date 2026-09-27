@@ -73,7 +73,7 @@ type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 /** Una gestion que la orden acumula ANTES del cierre que se descarga. */
 interface Intento {
   /** `devuelta` cuenta; `entregada` no (lista de INCLUSION de la 215). */
-  resultado: "devuelta" | "entregada";
+  resultado: "novedad" | "entregado";
   /** `aprobado` cuenta; `solicitado` no (el corte no suma, la aprobacion si). */
   estadoCierre: "aprobado" | "solicitado";
   /** Una gestion deshecha NO cuenta (filtro de LECTURA, R5). */
@@ -93,7 +93,7 @@ interface Semilla {
   intentos: Intento[];
 }
 
-const VIGENTE: Intento = { resultado: "devuelta", estadoCierre: "aprobado", conVisitaReal: true };
+const VIGENTE: Intento = { resultado: "novedad", estadoCierre: "aprobado", conVisitaReal: true };
 
 const SEMILLAS: Semilla[] = [
   {
@@ -115,10 +115,10 @@ const SEMILLAS: Semilla[] = [
     intentos: [{ ...VIGENTE, estadoCierre: "solicitado" }],
   },
   {
-    clave: "entregada",
+    clave: "entregado",
     intentosContactoTienda: 3,
     esperado: 0,
-    intentos: [{ ...VIGENTE, resultado: "entregada" }],
+    intentos: [{ ...VIGENTE, resultado: "entregado" }],
   },
   {
     clave: "sin-visita",
@@ -251,7 +251,7 @@ describeSiHayBase("descarga detallada — los intentos de entrega vigentes (fich
           data: {
             ordenId: orden.id,
             mensajeroId: mensajeroHoja,
-            resultado: "entregada",
+            resultado: "entregado",
             cierreId: cierreHoja.id,
           },
           select: { id: true },
@@ -382,7 +382,7 @@ describeSiHayBase("descarga detallada — los intentos de entrega vigentes (fich
     const { filas, remisionPorClave } = await filasDeLaDescarga();
 
     const abierto = filas.find((f) => f.numRemision === remisionPorClave.get("cierre-abierto"))!;
-    const entregada = filas.find((f) => f.numRemision === remisionPorClave.get("entregada"))!;
+    const entregada = filas.find((f) => f.numRemision === remisionPorClave.get("entregado"))!;
     const sinVisita = filas.find((f) => f.numRemision === remisionPorClave.get("sin-visita"))!;
 
     expect(abierto.intentosEntrega).toBe(0);

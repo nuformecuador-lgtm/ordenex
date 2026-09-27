@@ -48,6 +48,14 @@ const REPOS = {
 // Hueco vigente: el #2 (`OrdenRepository.create`, `creacion_manual`), retirado el 2026-08-07
 // al borrarse el alta manual individual por quedarse sin superficie. Ver
 // `FAMILIAS_CON_PRODUCTOR_RETIRADO` mas abajo.
+//
+// ⏳ 2026-09-23 (FICHA 454) — TRES huecos mas: #29 (`solicitud_ayuda_tienda`), #30
+// (`rescate_ayuda_tienda`) y #33 (`habilitacion_api`). La ayuda deja de ser un estado: pedirla,
+// rescatarla y habilitarla por API ya NO transicionan la orden (escriben eventos `orden_evento`), asi
+// que sus tres familias se quedan SIN productor —con filas historicas, por eso siguen en el enum—.
+// Y los puntos de GESTION (#9 `gestion`, #24 `incidente`, #31 `gestion_tienda_ayuda`) cambian de
+// simbolo: la transicion ya no la escribe el registro de la gestion sino la APLICACION al aprobar el
+// cierre (`CierresAdminRepository.resolverCierre`), con la familia que el registro dejo en su evento.
 const PUNTOS_DE_ESCRITURA = [
   { n: 1, repo: "OrdenRepository", simbolo: "createManyOrdenes", origenTipo: "carga_masiva" },
   { n: 3, repo: "OrdenRepository", simbolo: "generarGuiaLote", origenTipo: "generacion_guia" },
@@ -61,7 +69,9 @@ const PUNTOS_DE_ESCRITURA = [
   // tx un SEGUIMIENTO automatico (actor=null/sistema) hacia la bodega responsable
   // (en_bodega_central/en_bodega_satelite, reintento) o hacia rechazada (escalado). Reutiliza el mismo
   // `origen_tipo=gestion` (sin enum nuevo, sin migracion, R14/R21): sigue siendo UN punto.
-  { n: 9, repo: "GestionOrdenRepository", simbolo: "crearGestionYTransicionar", origenTipo: "gestion" },
+  // ⏳ FICHA 454 (T1.7): el productor pasa de `GestionOrdenRepository.crearGestionYTransicionar`
+  // (retirado) a la APLICACION al aprobar el cierre.
+  { n: 9, repo: "CierresAdminRepository", simbolo: "resolverCierre", origenTipo: "gestion" },
   {
     n: 10,
     repo: "LiberacionReprogramadaRepository",
@@ -218,10 +228,11 @@ const PUNTOS_DE_ESCRITURA = [
   // NO enlaza gestion aparte (la fila nace con `gestion_orden_id` poblado) y su destino
   // (`incidente`) NO es `devuelta` ni `reprogramada`, asi que queda fuera de las dos ramas del
   // criterio de intento (160/R1) y no adelanta el escalado del cron SLA.
+  // ⏳ FICHA 454 (T1.7): mismo cambio de simbolo que el #9 (la aplicacion al aprobar).
   {
     n: 24,
-    repo: "GestionOrdenRepository",
-    simbolo: "crearGestionYTransicionar",
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
     origenTipo: "incidente",
   },
   // #25/#26: feature 158, PR 2 (camino del ADMIN). `IncidenteAdminRepository.reportar`
@@ -286,18 +297,7 @@ const PUNTOS_DE_ESCRITURA = [
   // ⚠️ La VUELTA (`rescate_ayuda_tienda`) es ademas la clave de la excepcion de webhook firmada en
   // P4: es la unica familia que NO emite evento publico pese a que su estado destino (`en_reparto`)
   // si lo es. Ver `lib/types/webhook-eventos.ts`.
-  {
-    n: 29,
-    repo: "OrdenRepository",
-    simbolo: "transicionarAyuda",
-    origenTipo: "solicitud_ayuda_tienda",
-  },
-  {
-    n: 30,
-    repo: "OrdenRepository",
-    simbolo: "transicionarAyuda",
-    origenTipo: "rescate_ayuda_tienda",
-  },
+  // ⏳ 2026-09-23 (FICHA 454): #29 y #30 JUBILADOS — ver `FAMILIAS_CON_PRODUCTOR_RETIRADO`.
   // Feature 237 (T5.1) — EL DESENLACE de la ayuda: `ayuda_tienda -> reprogramada | rechazada`,
   // registrado por el adminTienda dueño desde la pestaña de ayuda y ATRIBUIDO al mensajero de la
   // orden. Familia propia (`gestion_tienda_ayuda`) porque quien registra y quien queda atribuido
@@ -306,10 +306,12 @@ const PUNTOS_DE_ESCRITURA = [
   //
   // UN solo punto para los DOS destinos: el destino lo decide el mapa `ESTATUS_POR_RESULTADO`
   // (239) dentro del mismo metodo, no una familia por resultado.
+  // ⏳ FICHA 454 (T1.7/T1.15): la gestion de la tienda ya no transiciona al registrarse; la
+  // aplicacion al aprobar el cierre del mensajero escribe la transicion con ESTA familia (R8).
   {
     n: 31,
-    repo: "GestionOrdenRepository",
-    simbolo: "crearGestionDesdeAyuda",
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
     origenTipo: "gestion_tienda_ayuda",
   },
   // 💰 Feature 240 (T2.2) — EL RECHAZO MANUAL DE LA TIENDA: `devuelta -> rechazada`, decidido por
@@ -346,12 +348,7 @@ const PUNTOS_DE_ESCRITURA = [
   // 💰 NO enlaza gestion (su fila nace con `gestion_orden_id` nulo) y NO es VISITA REAL (266/R26):
   // habilitar no es un intento de entrega —nadie fue a ninguna puerta—, asi que no sube el conteo,
   // no adelanta el escalado del cron SLA (99) y no cobra el rechazo (56) antes de tiempo.
-  {
-    n: 33,
-    repo: "OrdenRepository",
-    simbolo: "transicionarAyuda",
-    origenTipo: "habilitacion_api",
-  },
+  // ⏳ 2026-09-23 (FICHA 454): #33 JUBILADO — ver `FAMILIAS_CON_PRODUCTOR_RETIRADO`.
   // #34: FEATURE 276 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
   //
   // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
@@ -438,6 +435,24 @@ const FAMILIAS_CON_PRODUCTOR_RETIRADO = [
       "manual individual: nacio sin pantalla y nunca tuvo consumidor. Hoy TODAS las ordenes " +
       "nacen por lote (`carga_masiva` / `carga_api`).",
   },
+  // FICHA 454 (2026-09-23, design §1.4): las tres familias del viaje de la ayuda. Se quedan en el
+  // enum porque hay filas historicas; su productor era `OrdenRepository.transicionarAyuda`, que la
+  // 454 sustituye por eventos (`registrarAyudaSolicitada` / `registrarAyudaResuelta`).
+  {
+    origenTipo: "solicitud_ayuda_tienda",
+    productorRetirado: "OrdenRepository.transicionarAyuda (punto #29), retirado por la ficha 454: " +
+      "pedir ayuda ya no cambia el estado (evento `ayuda_solicitada`).",
+  },
+  {
+    origenTipo: "rescate_ayuda_tienda",
+    productorRetirado: "OrdenRepository.transicionarAyuda (punto #30), retirado por la ficha 454: " +
+      "Recuperar/Habilitar escriben el evento `ayuda_rescatada`, sin transicion.",
+  },
+  {
+    origenTipo: "habilitacion_api",
+    productorRetirado: "OrdenRepository.transicionarAyuda (punto #33), retirado por la ficha 454: " +
+      "la habilitacion por API escribe el evento `ayuda_habilitada_api`, sin transicion.",
+  },
 ] as const;
 
 // Metodos que NO escriben `orden.estatus_id` (documentados para el reviewer, design §2):
@@ -461,13 +476,14 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
   it("son EXACTAMENTE 34 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
     // 30 - 1: el #2 se retiro el 2026-08-07. Feature 235 (2026-08-19): +2 (#29/#30, las dos
     // familias del viaje de la ayuda, con UN solo simbolo — el punto unico que R8 exige).
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(34); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-23 (266): +#33 · 2026-08-24 (276): +#34 · 2026-09-08 (398): +#35
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(31); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-23 (266): +#33 · 2026-08-24 (276): +#34 · 2026-09-08 (398): +#35 · 2026-09-23 (454): -#29 -#30 -#33
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.
+    // FICHA 454: jubilados #29, #30 y #33 (las tres familias de la ayuda como transicion).
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+      26, 27, 28, 31, 32, 34, 35,
     ]);
   });
 
@@ -521,19 +537,22 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
       "incidente",
     );
     const p24 = PUNTOS_DE_ESCRITURA.find((p) => p.n === 24);
+    // ⏳ 2026-09-23 (FICHA 454, R8): el productor es la APLICACION al aprobar el cierre, que copia
+    // la familia del evento de registro. Antes: `GestionOrdenRepository.crearGestionYTransicionar`,
+    // que servia `gestion` e `incidente`.
     expect(p24).toMatchObject({
-      repo: "GestionOrdenRepository",
-      simbolo: "crearGestionYTransicionar",
+      repo: "CierresAdminRepository",
+      simbolo: "resolverCierre",
       origenTipo: "incidente",
     });
-    expect(typeof REPOS.GestionOrdenRepository.crearGestionYTransicionar).toBe("function");
-    // El MISMO simbolo sirve DOS familias (`gestion` para los 4 resultados previos e
-    // `incidente` para el quinto). Es deliberado y tiene precedente: el #20 y el #22 son los
-    // dos `CierresAdminRepository.resolverCierre`.
-    const puntosDelSimbolo = PUNTOS_DE_ESCRITURA.filter(
-      (p) => p.simbolo === "crearGestionYTransicionar",
+    expect(typeof REPOS.CierresAdminRepository.resolverCierre).toBe("function");
+    // Y el metodo viejo YA NO EXISTE: registrar una gestion no transiciona (R1).
+    expect(REPOS.GestionOrdenRepository.crearGestionYTransicionar).toBeUndefined();
+    // Las TRES familias de gestion que aplica el mismo simbolo.
+    const deGestion = PUNTOS_DE_ESCRITURA.filter(
+      (p) => p.simbolo === "resolverCierre" && [9, 24, 31].includes(p.n),
     ).map((p) => p.origenTipo);
-    expect([...puntosDelSimbolo].sort()).toEqual(["gestion", "incidente"]);
+    expect([...deGestion].sort()).toEqual(["gestion", "gestion_tienda_ayuda", "incidente"]);
   });
 
   // Feature 158/PR2 — el camino del ADMIN escribe estado en DOS puntos mas, los dos con la

@@ -1,0 +1,68 @@
+# MUTACION R20-sin-comprobacion
+archivo: scripts/seed-catalogos.ts
+linea: 57
+- "  if (anterior !== null) {"
++ "  if (false && anterior !== null) {"
+tests: tests/integration/db/455/seed.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  2 failed | 2 passed (4)
+FAIL  tests/integration/db/455/seed.test.ts > 455/R20 — el sembrado falla ante un codigo anterior, sin insertar > falla con un mensaje que NOMBRA el codigo anterior y manda a migrar
+FAIL  tests/integration/db/455/seed.test.ts > 455/R20 — el sembrado falla ante un codigo anterior, sin insertar > NO inserta ninguna fila (no nace una segunda fila para el mismo estado)
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/seed.test.ts (4 tests | 2 failed) 349ms
+     × falla con un mensaje que NOMBRA el codigo anterior y manda a migrar 4ms
+     × NO inserta ninguna fila (no nace una segunda fila para el mismo estado) 2ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  05:45:16
+   Duration  873ms (transform 78ms, setup 53ms, import 256ms, tests 349ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/seed.test.ts > 455/R20 — el sembrado falla ante un codigo anterior, sin insertar > falla con un mensaje que NOMBRA el codigo anterior y manda a migrar
+AssertionError: expected 'sin error' to match /^order_status: la base tiene el códig…/
+
+- Expected:
+/^order_status: la base tiene el código anterior '([a-z_]+)'; aplica la migración 455 antes de sembrar$/
+
++ Received:
+"sin error"
+
+ ❯ tests/integration/db/455/seed.test.ts:68:21
+     66|
+     67|   it("falla con un mensaje que NOMBRA el codigo anterior y manda a mig…
+     68|     expect(r.error).toMatch(/^order_status: la base tiene el código an…
+       |                     ^
+     69|     const nombrado = /'([a-z_]+)'/.exec(r.error)![1];
+     70|     expect(ANTERIORES).toContain(nombrado);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/integration/db/455/seed.test.ts > 455/R20 — el sembrado falla ante un codigo anterior, sin insertar > NO inserta ninguna fila (no nace una segunda fila para el mismo estado)
+AssertionError: expected 30 to be 23 // Object.is equality
+
+- Expected
++ Received
+
+- 23
++ 30
+
+ ❯ tests/integration/db/455/seed.test.ts:74:23
+     72|
+     73|   it("NO inserta ninguna fila (no nace una segunda fila para el mismo …
+     74|     expect(r.despues).toBe(r.antes);
+       |                       ^
+     75|   });
+     76|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

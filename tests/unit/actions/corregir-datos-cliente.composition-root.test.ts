@@ -79,6 +79,9 @@ vi.mock("@/lib/db/prisma-client", () => ({
     orden: { findFirst: vi.fn(async () => filaOrden) },
     distrito: { findFirst: vi.fn(async () => filaDistrito) },
     tarifa: { findMany: tarifaFindMany },
+    // FICHA 454 (R64): `findParaCorreccion` deriva tambien la ayuda ABIERTA (`ayuda-abierta.ts`,
+    // SQL crudo). Aqui la orden no tiene ninguna: la consulta devuelve cero filas.
+    $queryRaw: vi.fn(async () => []),
   }),
   // `PRISMA_OMIT` lo importa `_postgres-real`, no este camino; se declara por si el modulo
   // completo se resuelve.

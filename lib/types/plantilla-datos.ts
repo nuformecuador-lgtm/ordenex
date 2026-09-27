@@ -18,7 +18,7 @@
 // cabecera que es tipos puros justamente para poder cruzar esa frontera).
 
 import { formatMonto } from "@/lib/config/moneda";
-import { ETIQUETA_POR_HITO, hitoDeEstatus } from "@/lib/types/rastreo-publico";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import { PARAM_GUIA } from "@/app/_landing/guia-en-url";
 
 /* -------------------------------------------------------------------------- */
@@ -91,9 +91,14 @@ export interface DatosPlantilla {
   orden: OrdenPlantillaDatos;
   mensajero: MensajeroPlantillaDatos;
   /**
-   * Datos del NEGOCIO, no de la orden: hoy el SINPE al que el cliente transfiere. Vienen de
-   * `NEXT_PUBLIC_SINPE_*` y se resuelven en el borde (server o cliente) en vez de leerse aqui,
-   * para que este modulo siga siendo puro y testeable sin tocar `process.env`.
+   * Datos del NEGOCIO, no de la orden: el SINPE al que el cliente transfiere.
+   *
+   * ⭑ FICHA 429 — DEJARON DE SER CONFIGURACION. Hasta esa ficha salian de dos variables de
+   * entorno con prefijo publico, o sea horneadas en el bundle del navegador en tiempo de build y
+   * UNA sola para toda la operacion. Ahora salen de la BODEGA que cobra esa orden
+   * (`zona.sinpe_numero` / `zona.sinpe_nombre`, resueltas con `resolverSinpeBodega`) y se
+   * resuelven en el borde —server o dispositivo— en vez de leerse aqui, para que este modulo siga
+   * siendo puro y testeable sin tocar `process.env`.
    */
   negocio: {
     sinpeNumero: string;
@@ -180,7 +185,7 @@ export interface CampoPlantilla {
   clave: string;
   /**
    * De DONDE sale el dato, con el nombre exacto que trae: `orden.montoCobrar`,
-   * `mensajero.placa`, `env NEXT_PUBLIC_SINPE_NUMERO`. Es documentacion —lo que se cotejaria
+   * `mensajero.placa`, `zona.sinpe_numero`. Es documentacion —lo que se cotejaria
    * contra `schema.prisma`—; el acceso real lo hace `leer`.
    */
   campo: string;
@@ -483,11 +488,13 @@ const CATALOGO_DECLARADO: CampoPlantilla[] = [
     clave: "estatus",
     campo: "orden.estatusValue",
     nombre: "Estado del envío",
+    // FICHA 455 (T1.11, R35): el NOMBRE VISIBLE del estado, el mismo que ve la oficina (antes: el hito
+    // publico del rastreo, un vocabulario paralelo que la 455 retira).
     descripcion:
-      "Estado en el vocabulario PÚBLICO del rastreo («En reparto»), nunca el value interno de la base.",
+      "El nombre del estado, el mismo que ve la oficina («Mensajero recogiendo en la bodega»), nunca el código interno de la base.",
     ejemplo: "En reparto",
     leer: (d) => d.orden.estatusValue,
-    transform: (v) => (v === null ? VACIO : ETIQUETA_POR_HITO[hitoDeEstatus(v)]),
+    transform: (v) => (v === null ? VACIO : nombreDeEstado(v)),
   }),
   definir({
     clave: "fecha_reparto",
@@ -652,18 +659,20 @@ const CATALOGO_DECLARADO: CampoPlantilla[] = [
   /* --- Negocio ------------------------------------------------------------- */
   definir({
     clave: "sinpe",
-    campo: "env NEXT_PUBLIC_SINPE_NUMERO",
-    nombre: "SINPE del negocio",
-    descripcion: "Número SINPE al que el cliente transfiere. Es configuración, no un dato de la orden.",
+    campo: "zona.sinpe_numero (bodega del mensajero)",
+    nombre: "SINPE de la bodega",
+    descripcion:
+      "Número SINPE al que el cliente transfiere. Es el de la bodega del mensajero asignado; si no tiene, el de la bodega de la orden.",
     ejemplo: "88881111",
     leer: (d) => d.negocio.sinpeNumero,
     transform: texto,
   }),
   definir({
     clave: "sinpe_nombre",
-    campo: "env NEXT_PUBLIC_SINPE_NOMBRE",
+    campo: "zona.sinpe_nombre (bodega del mensajero)",
     nombre: "Titular del SINPE",
-    descripcion: "Nombre a cuyo favor está el SINPE, para que el cliente confirme antes de pagar.",
+    descripcion:
+      "Nombre a cuyo favor está el SINPE de esa bodega, para que el cliente confirme antes de pagar.",
     ejemplo: "Ordenex S.A.",
     leer: (d) => d.negocio.sinpeNombre,
     transform: texto,

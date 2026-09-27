@@ -433,11 +433,11 @@ describe("(f) R48 · el vocabulario visual del estatus se importa, no se reescri
     expect(declaraColoresDeEstatus(badge)).toBe(true); // ORDER_STATUS_VARIANT + _CLASS
     // Y no marcan lo que NO es ni etiqueta ni color: el mapa estatus -> bucket (R43) y el
     // mapa resultado -> contador del repositorio siguen siendo legitimos.
-    expect(declaraEtiquetasDeEstatus('{ por_recoger: "sinRecoger" }')).toBe(false);
-    expect(declaraColoresDeEstatus('{ por_recoger: "sinRecoger" }')).toBe(false);
+    expect(declaraEtiquetasDeEstatus('{ mensajero_recogiendo_en_bodega: "sinRecoger" }')).toBe(false);
+    expect(declaraColoresDeEstatus('{ mensajero_recogiendo_en_bodega: "sinRecoger" }')).toBe(false);
     expect(declaraEtiquetasDeEstatus('{ en_reparto: "En reparto" }')).toBe(true);
-    expect(declaraColoresDeEstatus('{ entregada: "bg-green-500" }')).toBe(true);
-    expect(declaraColoresDeEstatus('{ entregada: "success" }')).toBe(true);
+    expect(declaraColoresDeEstatus('{ entregado: "bg-green-500" }')).toBe(true);
+    expect(declaraColoresDeEstatus('{ entregado: "success" }')).toBe(true);
     expect(VALUES_DE_ESTATUS.length).toBeGreaterThan(10);
   });
 });

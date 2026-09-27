@@ -38,8 +38,8 @@ import type { GestionResultado } from "@prisma/client";
  *                    sigue visible en el panel del mensajero.
  */
 export const RESULTADOS_PERMITIDOS_EN_EL_TOPE = [
-  "entregada",
-  "rechazada",
+  "entregado",
+  "devolucion_a_origen_por_rechazo",
   "incidente",
 ] as const satisfies readonly GestionResultado[];
 

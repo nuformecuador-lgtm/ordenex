@@ -1,0 +1,39 @@
+[
+  {
+    "id": "teclado: «Registrar un movimiento» abre con Enter, el foco entra y Escape lo devuelve",
+    "estado": "OK",
+    "focoDentro": true,
+    "focoTrasEscape": "Registrar un movimiento"
+  },
+  {
+    "id": "axe del diálogo de registrar (Sueldo)",
+    "estado": "FALLO",
+    "violaciones": [
+      {
+        "id": "color-contrast",
+        "impacto": "serious",
+        "ayuda": "Elements must meet minimum color contrast ratio thresholds",
+        "nodos": 1,
+        "ejemplo": [
+          ".justify-end.flex-wrap > .hover\\:bg-primary\\/80.bg-primary.text-primary-foreground :: Fix any of the following: Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "teclado: panel «Ver» con nombre, Escape devuelve el foco a su «Ver»",
+    "estado": "OK",
+    "boton": "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000",
+    "anilloDeFoco": {
+      "outline": "none 2px",
+      "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(212, 83, 13, 0.03) 0px 0px 0px 0.0983932px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+    },
+    "nombrePanel": "Cobro a una tienda anulado",
+    "focoTrasEscape": "Ver Cobro a una tienda anulado del 2026-09-26 por ₡200.000"
+  },
+  {
+    "id": "axe del panel «Ver»",
+    "estado": "OK",
+    "violaciones": []
+  }
+]

@@ -24,6 +24,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IReprogramadasRetenidasService } from "@/lib/interfaces/services/IReprogramadasRetenidasService";
 import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   ActualizarPagosGestionInput,
@@ -50,6 +51,9 @@ import type {
 } from "@/lib/interfaces/services/ICierresAdminService";
 import { descargaConfig } from "@/lib/config/descarga";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
+// FICHA 462: `startOfDayCR` y NO `inicioDelDiaCREnUtc` — `fecha_reprogramacion` es `@db.Date` y el
+// conteo de retenidas compara en la convencion del reloj de liberacion (medianoche UTC del dia CR).
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { excesoIndemnizacion } from "@/lib/utils/tope-indemnizacion";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
@@ -66,10 +70,7 @@ import {
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
 // FICHA 398: el destino de la orden corregida sale del PUNTO UNICO de la regla `resultado ->
 // estado` (239/R3), no de un literal escrito en el servicio.
-import {
-  ESTATUS_DEVOLUCION_POR_CONFIRMAR,
-  ESTATUS_POR_RESULTADO,
-} from "@/lib/types/gestion-destino";
+import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
@@ -156,21 +157,20 @@ const MSG_CATALOGO_ANCLAJE =
 
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
-const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+const ESTADO_SIN_GESTIONAR = "novedad_interna";
 const ESTADO_EN_BODEGA = "en_bodega_central";
 const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
 
 // Feature 139 (T1.2, R5): estados del catalogo que consume el DISPARO de la devolucion de
 // RECHAZADAS al aprobar. Origen `rechazada`; destinos por zona de la orden: bodega satelite ->
 // `por_devolver`, bodega central -> `por_devolver_a_tienda` (misma regla `resolverDestinoCierre`).
-const ESTADO_RECHAZADA = "rechazada";
-const ESTADO_POR_DEVOLVER = "por_devolver";
+const ESTADO_RECHAZADA = "devolucion_a_origen_por_rechazo";
+const ESTADO_POR_DEVOLVER = "por_devolver_a_bodega_central";
 const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
 
-// Feature 239 (T2.1, R4/R9): los DOS estados del ANCLAJE de la devolucion. Origen = el
-// pre-estado en el que el mensajero deja la orden al gestionar (`ESTATUS_POR_RESULTADO` de
-// `lib/types/gestion-destino.ts`, punto unico de esa regla); destino = `devuelta`.
-const ESTADO_DEVUELTA = "devuelta";
+// FICHA 454 (T1.7): AQUI VIVIAN los dos estados del ANCLAJE de la 239. La aplicacion al aprobar se
+// generaliza a los cinco resultados: origen `en_reparto`, destino del mapa `ESTATUS_POR_RESULTADO`.
+const ESTADO_EN_REPARTO_APLICACION = "en_reparto";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -264,6 +264,22 @@ export class CierresAdminService implements ICierresAdminService {
      */
     private readonly premiosRepo: PremiosLecturaRepo,
     /**
+     * FICHA 462 (T2.9, design §5.1, R26/R51) — el CONTEO UNICO de las reprogramadas de hoy que
+     * cada cierre retiene, para la marca «Retiene N reprogramadas de hoy» de la cola, el historico
+     * y el detalle. Solo se le pide `contarPorCierre` (`Pick`): esta pantalla no puede leer nada mas
+     * del conteo, y desde luego no puede escribir.
+     *
+     * OBLIGATORIA, SIN DEFAULT, y es la decision mas discutida de la ficha: un default no-op que
+     * devolviera un `Map` vacio seria el fallo mudo exacto de este repo —la marca no saldria NUNCA
+     * con la suite entera en verde—, y uno que lanzara rompe el detalle entero por un dato
+     * accesorio. Sin default, las suites que instancian este servicio pasan un doble
+     * (`tests/fixtures/retenidas-doble.ts`, una linea cada una) y una guardia afirma que
+     * `lib/actions/cierres-admin.ts` lo PASA con el MISMO ensamblaje que la campana y el cron (R7).
+     * Va DESPUES de `premiosRepo` y ANTES de los notificadores opcionales: sin el, el constructor no
+     * compila; no hay forma de cablearlo «casi bien».
+     */
+    private readonly retenidas: Pick<IReprogramadasRetenidasService, "contarPorCierre">,
+    /**
      * FEATURE 271 (T6.6, R42/R47) — notificador de «quedaste BLOQUEADO», con DEFAULT NO-OP. Lo
      * dispara el RECHAZO, que es la UNICA via por la que un mensajero llega a tener DOS cierres
      * re-solicitables (solicita el dia 1, solicita el dia 2, el admin rechaza los dos): sin este
@@ -302,6 +318,13 @@ export class CierresAdminService implements ICierresAdminService {
      * (`tests/unit/services/notificacion-notificadores-reales.test.ts`).
      */
     private readonly notificarRechazo: CierreRechazadoNotificador = notificadorNoOp,
+    /**
+     * FICHA 462 (T2.9) — el reloj, inyectable para los tests de la marca. Fija el «hoy CR» con el
+     * que se cuenta cuantas reprogramadas retiene cada cierre (`startOfDayCR(now())`, la misma
+     * convencion `@db.Date` del reloj de liberacion). Va al FINAL, con default, porque ninguno de
+     * los otros caminos del servicio lee el reloj (el `resueltoAt` lo escribe la base).
+     */
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   /**
@@ -757,10 +780,10 @@ export class CierresAdminService implements ICierresAdminService {
     // R6: agrupa por resultado (4 claves siempre presentes) con el mapper reuso 37.
     // Feature 158/R18: 5 claves — el `incidente` es un grupo PROPIO del detalle del admin.
     const grupos: CierreGrupos = {
-      entregada: [],
-      reprogramada: [],
-      devuelta: [],
-      rechazada: [],
+      entregado: [],
+      reprogramado: [],
+      novedad: [],
+      devolucion_a_origen_por_rechazo: [],
       incidente: [],
     };
     for (const g of found.gestiones) {
@@ -956,8 +979,11 @@ export class CierresAdminService implements ICierresAdminService {
       porDevolverId,
       porDevolverATiendaId,
       centralZonaId,
-      preEstadoId,
+      enRepartoId,
+      entregadaId,
+      reprogramadaId,
       devueltaId,
+      incidenteId,
     ] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
@@ -966,9 +992,13 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER),
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER_A_TIENDA),
       this.zonaRepo.findCentralZonaId(),
-      // Feature 239 (T2.1, R4/R9): los dos ids del ANCLAJE.
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
-      this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
+      // FICHA 454 (T1.7, design §7.2): los ids de la APLICACION DE GESTIONES — el origen
+      // `en_reparto` y el destino de cada resultado, del mapa UNICO `ESTATUS_POR_RESULTADO`.
+      this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO_APLICACION),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.reprogramado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.novedad),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.incidente),
     ]);
     // 💰 FEATURE 276 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
     // resuelve AQUI, en el servicio, y viaja como numero: el repositorio no lee configuracion.
@@ -1005,7 +1035,17 @@ export class CierresAdminService implements ICierresAdminService {
     // congelada para siempre: invisible para la tienda, sin reloj y sin que nadie se entere.
     // Es exactamente el estado del que esta feature viene a sacarnos, asi que no se acepta ni
     // una vez. Sin efectos parciales: se devuelve ANTES de tocar el repo.
-    if (preEstadoId === null || devueltaId === null) {
+    //
+    // FICHA 454 (T1.7): el MISMO fallo cerrado, ampliado a los seis ids de la aplicacion. Aprobar sin
+    // poder aplicar dejaria gestiones pendientes para siempre en ordenes `en_reparto`.
+    if (
+      enRepartoId === null ||
+      entregadaId === null ||
+      reprogramadaId === null ||
+      rechazadaId === null ||
+      devueltaId === null ||
+      incidenteId === null
+    ) {
       return {
         status: "validation_error",
         fieldErrors: { estatus: [MSG_CATALOGO_ANCLAJE] },
@@ -1021,10 +1061,18 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
       devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
-      // Feature 239/R4: ANCLA las devoluciones de este cierre en la MISMA tx. OBLIGATORIO (no
-      // opcional como las dos de arriba): sin el, la orden se queda en el pre-estado para
-      // siempre. Ver `AnclajeDevolucionConfig`.
-      anclajeDevolucion: { preEstadoId, devueltaId },
+      // FICHA 454 (T1.7): APLICA el estado real de las gestiones de calle de este cierre en la
+      // MISMA tx. OBLIGATORIO (sustituye al anclaje de la 239). Ver `AplicacionGestionesConfig`.
+      aplicacionGestiones: {
+        enRepartoId,
+        destinoPorResultado: {
+          entregado: entregadaId,
+          reprogramado: reprogramadaId,
+          devolucion_a_origen_por_rechazo: rechazadaId,
+          novedad: devueltaId,
+          incidente: incidenteId,
+        },
+      },
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,
@@ -1097,6 +1145,18 @@ export class CierresAdminService implements ICierresAdminService {
       .filter((r) => r.estado === "aprobado")
       .map((r) => r.cierreId);
 
+    // FICHA 462 (S3, R26/R27/R28/R51) — LA MARCA «Retiene N reprogramadas de hoy», con UNA sola
+    // lectura por pagina para TODOS los cierres de la pagina (los `aprobado` incluidos: por
+    // construccion no retienen y salen `0`, y asi el numero de consultas no depende del estado).
+    // Los que no retienen no vienen en el `Map` y quedan en `0` (`?? 0`). MUTACION OBLIGATORIA
+    // (design §8.2-12): pedirlo por fila => el test de llamadas cuenta N en vez de 1 => ROJO.
+    // El «hoy» es el del reloj del servicio en convencion `@db.Date` (`startOfDayCR`), el mismo
+    // con el que cuentan el cron, la campana y la franja (R7).
+    const retenidas = await this.retenidas.contarPorCierre(
+      startOfDayCR(this.now()),
+      resumenes.map((r) => r.cierreId),
+    );
+
     // UNA sola llamada, siempre: tambien con la lista vacia, para que el conteo de consultas de
     // este listado sea el mismo se pinte lo que se pinte.
     const pagados = await this.liquidacionRepo.sumarVigentesPorCierre(idsAprobados);
@@ -1125,10 +1185,13 @@ export class CierresAdminService implements ICierresAdminService {
         cierresAbiertos: c.n,
         cierresPorReenviar: c.v,
       };
+      // FICHA 462 (R27/R28): el aprobado retiene 0 por construccion; los demas, lo que diga el conteo.
+      const reprogramadasRetenidasHoy = retenidas.get(r.cierreId) ?? 0;
       return r.estado === "aprobado"
         ? {
             ...r,
             bloqueoMensajero,
+            reprogramadasRetenidasHoy,
             pendientePagoMensajero: derivarPendienteCierre({
               pagoDebido: r.totalPagoMensajero, // P — snapshot de la 39, NUNCA reescrito (293/R13)
               efectivo: r.totales.efectivo, // E — snapshot de la 37
@@ -1136,7 +1199,7 @@ export class CierresAdminService implements ICierresAdminService {
               pagadoVigente: pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
             }),
           }
-        : { ...r, bloqueoMensajero }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
+        : { ...r, bloqueoMensajero, reprogramadasRetenidasHoy }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
     });
   }
 
@@ -1360,7 +1423,7 @@ export class CierresAdminService implements ICierresAdminService {
 
     // Solo una ENTREGA reparte dinero; los otros cuatro resultados no cobran nada (R8/R25), así
     // que no hay desglose que corregir y aceptar uno inventaría un cobro.
-    if (gestion.resultado !== "entregada") {
+    if (gestion.resultado !== "entregado") {
       return {
         status: "validation_error",
         fieldErrors: { lineas: [MSG_PAGOS_SOLO_ENTREGA] },
@@ -1448,7 +1511,7 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "conflict" }; // guardia 3 (R3)
     }
 
-    if (gestion.resultado !== "entregada") {
+    if (gestion.resultado !== "entregado") {
       // guardia 4 (R4)
       return {
         status: "validation_error",
@@ -1467,8 +1530,8 @@ export class CierresAdminService implements ICierresAdminService {
     // sale de `ESTATUS_POR_RESULTADO`, el punto UNICO de la regla «que estado le toca a este
     // resultado» (239/R3), y no de un literal escrito aqui.
     const [estatusEntregadaId, estatusRechazadaId] = await Promise.all([
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregada),
-      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.rechazada),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.entregado),
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_POR_RESULTADO.devolucion_a_origen_por_rechazo),
     ]);
     // FALLO CERRADO: sin los dos ids no se puede escribir la transicion, y un catalogo incompleto
     // no es «sigue adelante sin mover la orden» — eso dejaria la gestion rechazada con la orden

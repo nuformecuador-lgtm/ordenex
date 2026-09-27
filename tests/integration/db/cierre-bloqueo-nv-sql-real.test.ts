@@ -126,7 +126,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
       data: {
         ordenId: orden.id,
         mensajeroId,
-        resultado: "entregada",
+        resultado: "entregado",
         cierreId,
         createdAt: cuando,
       },
@@ -677,7 +677,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
           data: {
             ordenId: orden.id,
             mensajeroId: m.id,
-            resultado: "entregada",
+            resultado: "entregado",
             cierreId: cierre.id,
             createdAt: cuando,
           },
@@ -735,7 +735,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
           data: {
             ordenId: orden.id,
             mensajeroId: m.id,
-            resultado: "entregada",
+            resultado: "entregado",
             cierreId: cierre.id,
             createdAt: cuando,
           },
@@ -776,7 +776,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
         data: {
           ordenId: orden.id,
           mensajeroId: m.id,
-          resultado: "entregada",
+          resultado: "entregado",
           cierreId: cierre.id,
           createdAt: CR_20_1400,
           anuladaAt: new Date("2026-08-20T21:00:00Z"),

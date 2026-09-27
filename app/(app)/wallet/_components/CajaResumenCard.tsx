@@ -21,8 +21,12 @@ import {
   CAJA_RESUMEN_AVISO_TERCEROS,
   CAJA_RESUMEN_LABEL,
   CAJA_RESUMEN_NOTA_DIFERENCIA,
+  CAJA_RESUMEN_TIENDAS_DEBEN,
   CAJA_TIENDAS_HREF,
+  avisoCifraNegativa,
   money,
+  pistaCifraPrincipal,
+  rotuloCifraPrincipal,
 } from "./wallet-labels";
 
 // Feature 173 (T G.1, design §8) — la tarjeta de la caja. Sustituye a la tarjeta de una sola
@@ -34,37 +38,43 @@ import {
 // y se ven A LA VEZ (R58). Nada de pestanas ni de desplegables — el punto entero de la feature es
 // que nadie confunda el dinero que pasa por la caja con lo que Ordenex gana.
 //
-// Money-safe (R64 de la 173 / R12 de la 231): los importes llegan ya derivados y serializados por
-// el SERVIDOR y se pintan TAL CUAL con `money`. Aqui no se suma, no se resta y no se convierte a
-// numero; los dos signos tambien los da el servidor. El rotulo condicional `[P7]` se decide con
-// la bandera `periodoFiltrado` del DTO, no deduciendo nada en el cliente.
+// Money-safe (R64 de la 173 / R12 de la 231 / R28 de la 459): los importes llegan ya derivados y
+// serializados por el SERVIDOR y se pintan TAL CUAL con `money`. Aqui no se suma, no se resta y no
+// se convierte a numero; los signos, el valor absoluto de «De las tiendas», el estado de la caja y
+// el hecho de los filtros tambien los da el servidor.
 //
 // ── Feature 231 (T4.3, design §4.1) — LA CAJA PARTIDA EN DOS BOLSILLOS ──
 //
-// La grilla de tiles hermanos de la 200 se refunde en UNA tarjeta con tres bloques seguidos,
-// porque lo que se venia a contar no era «tres numeros» sino UNA cifra y de quien es cada trozo:
-//
-//   1. la cifra grande de la caja, con «Entro», «Salio» y el conteo como datos SECUNDARIOS
-//      debajo (R6: ninguno desaparece de la pantalla);
-//   2. la barra de composicion, inmediatamente debajo (R2);
-//   3. los DOS bolsillos, hermanos: el de las tiendas —que conserva entero el aviso y el enlace
-//      de la 173— y el de Ordenex (R3/R4).
+// UNA tarjeta con tres bloques seguidos: la cifra grande (con «Entro», «Salio» y el conteo como
+// datos SECUNDARIOS), la barra de composicion y los DOS bolsillos, hermanos.
 //
 // Tres detalles del arbol que NO son esteticos y que sostienen las aserciones vivas de la 173:
 //
-//  - las dos regiones son DISJUNTAS: la de «Dinero en caja» no envuelve a la de «Ganancia de
+//  - las regiones son DISJUNTAS: la de la cifra principal no envuelve a la de «Ganancia de
 //    Ordenex», asi que ningun importe puede leerse bajo el rotulo del vecino;
-//  - cada region tiene un PADRE ACOTADO que contiene su propio desglose y no el del otro (el
-//    caso de la 173 busca por `parentElement` con `getByText`, que revienta con dos
-//    coincidencias — y en su conjunto de prueba «Salio» y «Gastos de Ordenex» valen lo mismo);
+//  - cada region tiene un PADRE ACOTADO que contiene su propio desglose y no el del otro;
 //  - CERO elementos interactivos (R8): ni un `<button>`, ni `details/summary`, ni tooltip. La
 //    barra es `role="img"`, no un `Progress` de Radix.
+//
+// ── Ficha 459 (T A.8, design §3.1) — LA TARJETA DICE LO QUE LA APP SABE ──
+//
+//  - La cifra principal se llama segun el ESTADO que decide el servidor (R14): «Flujo de dinero
+//    registrado» sin saldo inicial (R15), «Dinero en caja» con uno vigente (R18) y «Movimiento
+//    neto del periodo» con filtros (R20). En «flujo», «Dinero en caja» no aparece en ningun texto
+//    ni nombre accesible de la tarjeta (R16).
+//  - Si la cifra es negativa y no hay filtros, una linea lo explica (R17/R19).
+//  - La barra y sus mensajes solo se pintan en «saldo» (R22): repartir «el dinero en caja» entre
+//    dos bolsillos no tiene sentido cuando la app no sabe cuanto dinero hay.
+//  - «De las tiendas» ES lo que Ordenex les debe (R23); si es negativo se dice en palabras quien
+//    le debe a quien y cuanto, con el ABSOLUTO que manda el servidor.
+//  - El bolsillo de Ordenex gana una region propia, «Saldo inicial y aportes» (R25). La ganancia
+//    no cambia ni de rotulo ni de valor.
+//  - La tarjeta NUNCA propone ni calcula un saldo inicial (R27): no hay control para eso aqui.
 
 /**
  * Feature 200 (tanda 2) — las insignias de signo usan las variantes SEMANTICAS de la
  * primitiva. «Positivo» venia con `default`, que es el naranja de marca, y DESIGN.md lo
- * reserva para accion primaria y seleccion: un estado pintado con el color de la accion
- * compite con los botones de la pantalla y deja de leerse como estado.
+ * reserva para accion primaria y seleccion.
  */
 const SIGNO_BADGE: Record<
   WalletBalanceSigno,
@@ -86,48 +96,29 @@ const SIGNO_COLOR: Record<WalletBalanceSigno, string> = {
 const BOLSILLO = "flex flex-col gap-2 rounded-xl border p-4";
 
 /**
- * R5/R16 — de que color va el bloque de ORDENEX en cada modo. `Record` TOTAL sobre los cuatro:
- * un modo nuevo rompe el build en vez de heredar en silencio el color de otro caso.
+ * R5/R16 de la 231 — de que color va el bloque de ORDENEX en cada modo. `Record` TOTAL sobre los
+ * cuatro: un modo nuevo rompe el build en vez de heredar en silencio el color de otro caso.
  *
- * Neutro salvo en el caso limite. `DESIGN.md` reserva el acento para accion y estado: una
- * ganancia normal no es ninguna de las dos cosas, y pintarla de color la convertiria en una
- * alarma permanente. Cuando el modo es `solo_tiendas` SI hay un estado que avisar —Ordenex esta
- * en perdida y ese saldo lo cubre dinero ajeno—, y ahi entra `danger` con sus tres roles: la
- * base en el borde, `-soft` de fondo y `dark:bg-danger/15` para que el token que gira (el texto)
- * no se quede sobre una superficie fija.
+ * Neutro salvo en el caso limite (`solo_tiendas`), que SI es un estado que avisar. Ficha 459: el
+ * modo pertenece a la barra, asi que en estado «flujo» —sin barra— el bloque va siempre neutro.
  */
 const SUPERFICIE_NEUTRA = "border-border bg-muted/40";
 
-/**
- * El TONO del mensaje del modo. Va emparejado con la superficie por la misma razon:
- * `solo_tiendas` es el unico de los tres modos con mensaje que describe un ESTADO —Ordenex en
- * perdida, con dinero ajeno cubriendo el saldo—; los otros dos solo EXPLICAN por que la barra
- * no se parte. Pintarlos tambien en rojo gasta la senal: un rojo que sale en un estado normal
- * deja de leerse como alarma el dia que la alarma existe (`DESIGN.md`, «restrained»).
- */
 const TONO_INFORMATIVO = "text-muted-foreground";
 const TONO_PELIGRO = "font-medium text-danger-strong";
 
-const BOLSILLO_ORDENEX: Record<
-  ModoComposicionCaja,
-  { superficie: "neutra" | "peligro"; clase: string; tonoMensaje: string }
-> = {
-  dos_bolsillos: {
-    superficie: "neutra",
-    clase: SUPERFICIE_NEUTRA,
-    // Sin mensaje que pintar; el tono va igualmente para que el `Record` sea TOTAL.
-    tonoMensaje: TONO_INFORMATIVO,
-  },
-  solo_ordenex: {
-    superficie: "neutra",
-    clase: SUPERFICIE_NEUTRA,
-    tonoMensaje: TONO_INFORMATIVO,
-  },
-  sin_reparto: {
-    superficie: "neutra",
-    clase: SUPERFICIE_NEUTRA,
-    tonoMensaje: TONO_INFORMATIVO,
-  },
+type SuperficieOrdenex = { superficie: "neutra" | "peligro"; clase: string; tonoMensaje: string };
+
+const ORDENEX_NEUTRO: SuperficieOrdenex = {
+  superficie: "neutra",
+  clase: SUPERFICIE_NEUTRA,
+  tonoMensaje: TONO_INFORMATIVO,
+};
+
+const BOLSILLO_ORDENEX: Record<ModoComposicionCaja, SuperficieOrdenex> = {
+  dos_bolsillos: ORDENEX_NEUTRO,
+  solo_ordenex: ORDENEX_NEUTRO,
+  sin_reparto: ORDENEX_NEUTRO,
   solo_tiendas: {
     superficie: "peligro",
     clase: "border-danger/30 bg-danger-soft dark:bg-danger/15",
@@ -143,8 +134,7 @@ const CIFRA_BOLSILLO = "text-2xl font-semibold tracking-tight tabular-nums";
 
 /**
  * Un dato SECUNDARIO de la cifra grande (R6): rotulo pequeno, valor en rejilla y —si la tiene—
- * su pista. Sirve para dinero y para el conteo, que no es dinero y por eso llega ya convertido
- * en texto por quien lo pinta.
+ * su pista.
  */
 function DatoSecundario({
   rotulo,
@@ -167,7 +157,7 @@ function DatoSecundario({
 }
 
 export interface CajaResumenCardProps {
-  /** Las dos cifras (y el reparto) ya derivadas en el servidor, montos STRING. */
+  /** Las cifras (y el reparto y el estado) ya derivadas en el servidor, montos STRING. */
   resumen: CajaResumenDTO;
   /**
    * Feature 200: cuantos registros tiene el conjunto que se esta mirando. Es el `total` del
@@ -177,37 +167,54 @@ export interface CajaResumenCardProps {
 }
 
 export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) {
-  // `[P7]`: el HECHO lo da el servidor; aqui solo se elige el rotulo que no miente.
-  const rotuloEnCaja = resumen.periodoFiltrado
-    ? CAJA_RESUMEN_LABEL.enCajaPeriodo
-    : CAJA_RESUMEN_LABEL.enCaja;
+  // R14/R15/R18/R20 (y `[P7]` de la 173): los HECHOS los da el servidor; la MISMA funcion que
+  // usan los KPIs de la analitica elige el nombre que no miente.
+  const rotuloPrincipal = rotuloCifraPrincipal(resumen);
+  const pistaPrincipal = pistaCifraPrincipal(resumen);
+  const avisoNegativo = avisoCifraNegativa(resumen);
+  // R22: la barra y sus mensajes existen SOLO con un saldo inicial vigente.
+  const conBarra = resumen.estado === "saldo";
 
-  const badgeEnCaja = SIGNO_BADGE[resumen.signoEnCaja];
+  const badgePrincipal = SIGNO_BADGE[resumen.signoEnCaja];
   const badgeGanancia = SIGNO_BADGE[resumen.signoGanancia];
-  const ordenex = BOLSILLO_ORDENEX[resumen.modoComposicion];
-  // R16/R17/R18: lo que hay que decir cuando la barra no se puede partir. En el caso normal no
-  // hay nada que anadir y el bloque se explica con su importe y su pista.
-  const mensajeModo = CAJA_COMPOSICION_MENSAJE[resumen.modoComposicion];
+  const badgeCapital = SIGNO_BADGE[resumen.signoCapital];
+  const ordenex = conBarra ? BOLSILLO_ORDENEX[resumen.modoComposicion] : ORDENEX_NEUTRO;
+  // R16/R17/R18 de la 231: lo que hay que decir cuando la barra no se puede partir. Solo con barra.
+  const mensajeModo = conBarra ? CAJA_COMPOSICION_MENSAJE[resumen.modoComposicion] : null;
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
         {/* 1 — la cifra grande y, HERMANOS suyos, sus datos secundarios (R6). */}
         <div className="flex flex-col gap-3">
-          <section aria-label={rotuloEnCaja} className="flex flex-col gap-2">
+          <section aria-label={rotuloPrincipal} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center justify-center rounded-md bg-muted p-2 text-muted-foreground">
                 <Landmark className="size-4" aria-hidden="true" />
               </span>
-              <span className="text-sm font-medium text-muted-foreground">{rotuloEnCaja}</span>
-              <Badge variant={badgeEnCaja.variant}>{badgeEnCaja.label}</Badge>
+              <span className="text-sm font-medium text-muted-foreground">{rotuloPrincipal}</span>
+              <Badge variant={badgePrincipal.variant}>{badgePrincipal.label}</Badge>
             </div>
             <span className={cn(CIFRA_GRANDE, SIGNO_COLOR[resumen.signoEnCaja])}>
               {money(resumen.enCaja)}
             </span>
-            <span className="text-xs text-muted-foreground">
-              {CAJA_RESUMEN_LABEL.enCajaPista}
-            </span>
+            {pistaPrincipal === null ? null : (
+              <span className="text-xs text-muted-foreground">{pistaPrincipal}</span>
+            )}
+            {/* R17/R19: por que sale negativa. En «saldo» es una alarma (no puede serlo); en
+                «flujo» es una explicacion. */}
+            {avisoNegativo === null ? null : (
+              <p
+                role="note"
+                data-aviso="negativo"
+                className={cn(
+                  "text-xs",
+                  resumen.estado === "saldo" ? TONO_PELIGRO : TONO_INFORMATIVO,
+                )}
+              >
+                {avisoNegativo}
+              </p>
+            )}
           </section>
 
           <div className="grid grid-cols-2 gap-4 border-t pt-3 sm:grid-cols-3">
@@ -233,13 +240,11 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
           </div>
         </div>
 
-        {/* 2 — la barra (R2), inmediatamente debajo de la cifra que reparte. */}
-        <BarraComposicionCaja resumen={resumen} />
+        {/* 2 — la barra (R2 de la 231), SOLO en estado «saldo» (R22 de la 459). */}
+        {conBarra ? <BarraComposicionCaja resumen={resumen} /> : null}
 
         {/* 3 — los DOS bolsillos, hermanos y a la vez (R3). */}
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-          {/* R4: la advertencia y el enlace no son decorado, son la unica defensa contra leer
-              esta cifra como la deuda con las tiendas. */}
           <section
             aria-label={CAJA_RESUMEN_LABEL.deTerceros}
             data-bolsillo="tiendas"
@@ -253,15 +258,20 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
                 {CAJA_COMPOSICION_LABEL.tiendas}
               </span>
             </div>
-            {/* Feature 208/210 — LA CIFRA va en `text-foreground`, no en el color de aviso: el
-                aviso lo dan el icono, el rotulo, el borde y el fondo, y el numero es dinero,
-                que necesita margen de contraste y no el aprobado justo (14.22:1 en claro). */}
+            {/* Feature 208/210 — LA CIFRA va en `text-foreground`, no en el color de aviso. */}
             <span className={cn(CIFRA_BOLSILLO, "text-foreground")}>
               {money(resumen.deTerceros)}
             </span>
             <span className="text-sm font-medium text-warning-strong">
               {CAJA_RESUMEN_LABEL.deTerceros}
             </span>
+            {/* R23: negativo = las tiendas le deben a Ordenex, y cuanto. El ABSOLUTO lo manda
+                el servidor: el navegador no le quita el signo a nada (R28). */}
+            {resumen.signoDeTerceros === "negativo" ? (
+              <p data-frase="tiendas-deben" className="text-sm font-medium text-foreground">
+                {CAJA_RESUMEN_TIENDAS_DEBEN(money(resumen.deTercerosAbsoluto))}
+              </p>
+            ) : null}
             <p role="note" className="text-xs text-muted-foreground">
               {CAJA_RESUMEN_AVISO_TERCEROS}
             </p>
@@ -273,8 +283,8 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
             </Link>
           </section>
 
-          {/* El bolsillo de Ordenex: la region de la ganancia y su desglose, hermanos dentro de
-              un padre ACOTADO que no contiene ni un importe de la columna de al lado. */}
+          {/* El bolsillo de Ordenex: la ganancia (sin cambios) y, HERMANA suya dentro del mismo
+              padre acotado, la region del capital (R25). */}
           <div
             data-bolsillo="ordenex"
             data-superficie={ordenex.superficie}
@@ -311,6 +321,25 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
               />
             </div>
 
+            {/* R25 (ficha 459): el capital de Ordenex, cifra PROPIA junto a la ganancia. */}
+            <section
+              aria-label={CAJA_RESUMEN_LABEL.capital}
+              className="flex flex-col gap-1 border-t pt-3"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-foreground">
+                  {CAJA_RESUMEN_LABEL.capital}
+                </span>
+                <Badge variant={badgeCapital.variant}>{badgeCapital.label}</Badge>
+              </div>
+              <span className={cn("text-lg font-medium tabular-nums", SIGNO_COLOR[resumen.signoCapital])}>
+                {money(resumen.capital)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {CAJA_RESUMEN_LABEL.capitalPista}
+              </span>
+            </section>
+
             {mensajeModo === null ? null : (
               <p role="note" className={cn("text-xs", ordenex.tonoMensaje)}>
                 {mensajeModo}
@@ -319,14 +348,14 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
           </div>
         </div>
 
-        {/* R60: en que se diferencian, junto a las dos cifras y no en otra pantalla. */}
+        {/* R60 de la 173: en que se diferencian, junto a las cifras y no en otra pantalla. Se
+            compone con el rotulo VIGENTE de la cifra principal (R16). */}
         <div className="flex flex-col gap-2">
           <p role="note" className="text-xs text-muted-foreground">
-            {CAJA_RESUMEN_NOTA_DIFERENCIA}
+            {CAJA_RESUMEN_NOTA_DIFERENCIA(rotuloPrincipal)}
           </p>
 
-          {/* `[P7]`: solo cuando hay un periodo elegido, que es cuando el nombre de siempre
-              mentiria. */}
+          {/* `[P7]`: solo cuando hay un periodo elegido. */}
           {resumen.periodoFiltrado ? (
             <p role="note" className="text-xs text-muted-foreground">
               {CAJA_RESUMEN_AVISO_PERIODO}

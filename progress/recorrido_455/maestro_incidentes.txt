@@ -1,0 +1,71 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Incidentes
+
+Revisá los paquetes reportados como dañados, perdidos o robados y decidí si se indemnizan
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Pendientes de decisión (0)
+Descargar
+Nº Remisión	Nº Guía	Destinatario	Zona	Causa	Reportado por	Fecha	Acciones
+
+
+No hay incidentes pendientes de decisión.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50
+Histórico
+Descargar
+Estado	Nº Remisión	Destinatario	Causa	Indemnización	Resuelto por	Fecha resuelta	Motivo	Acciones
+
+
+Aún no hay incidentes resueltos.
+
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50
+Confirmá el SINPE de GAM
+
+Hasta ahora tu bodega cobraba en el número de la central. Confirmá el tuyo para que la plata de tus clientes llegue a donde tiene que llegar.
+
+Número SINPE*
+
+8 dígitos, empieza por 6, 7 u 8.
+
+A nombre de*
+
+Tal como aparece en SINPE Móvil al teclear el número.
+
+Ahora no
+Confirmar

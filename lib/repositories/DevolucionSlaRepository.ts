@@ -10,8 +10,8 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 // Estatus de ORIGEN del cron (una orden en `devuelta`) y `resultado` de la gestion que ancla la
 // ventana. Valores de catalogo ya sembrados (ORDER_STATUS_SEED / gestion_resultado); esta
 // feature NO agrega estados.
-const ESTATUS_DEVUELTA = "devuelta";
-const RESULTADO_DEVUELTA = "devuelta";
+const ESTATUS_DEVUELTA = "novedad";
+const RESULTADO_DEVUELTA = "novedad";
 
 // Feature 239 (T3.3, R12) — la familia de historial que MARCA el instante en que la orden entro
 // en `devuelta`: la transicion `devolucion_por_confirmar -> devuelta` que escribe la APROBACION
@@ -219,7 +219,7 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
         data: {
           ordenId: input.ordenId,
           mensajeroId: input.mensajeroId, // R22
-          resultado: "rechazada", // R20: dispara el snapshot 56 + el feed de wallet 42/69
+          resultado: "devolucion_a_origen_por_rechazo", // R20: dispara el snapshot 56 + el feed de wallet 42/69
           motivo: input.motivo,
           cierreId: null, // entra al proximo cierre (sin descuadrar cierres cerrados)
           // sin evidencia ni causa: es un escalado del sistema, no una gestion del mensajero.

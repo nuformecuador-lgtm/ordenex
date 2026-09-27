@@ -146,7 +146,7 @@ describe("R5 — `entregadas / asignadas` está SIEMPRE, también cuando vale ce
 
     const fila = await waitFor(() => filaDe("Kevin Rojas"));
     // El caso del 26/08: el podio lo decidió el orden alfabético y el premio se ofrece igual.
-    expect(within(fila).getByText("0 / 21 entregadas")).toBeInTheDocument();
+    expect(within(fila).getByText("0 / 21 entregados")).toBeInTheDocument();
     // Y NO se sustituye por el marcador de «sin dato» de esta pantalla.
     expect(within(fila).queryByText("—")).not.toBeInTheDocument();
     // El dato está en la MISMA fila que el premio y que el botón: no en otra pestaña ni en un
@@ -161,16 +161,16 @@ describe("R5 — `entregadas / asignadas` está SIEMPRE, también cuando vale ce
     montar();
 
     await waitFor(() => filaDe("Kevin Rojas"));
-    expect(within(filaDe("Kevin Rojas")).getByText("0 / 21 entregadas")).toBeInTheDocument();
-    expect(within(filaDe("Ana Mora")).getByText("14 / 20 entregadas")).toBeInTheDocument();
-    expect(within(filaDe("Luis Vargas")).getByText("11 / 19 entregadas")).toBeInTheDocument();
+    expect(within(filaDe("Kevin Rojas")).getByText("0 / 21 entregados")).toBeInTheDocument();
+    expect(within(filaDe("Ana Mora")).getByText("14 / 20 entregados")).toBeInTheDocument();
+    expect(within(filaDe("Luis Vargas")).getByText("11 / 19 entregados")).toBeInTheDocument();
   });
 
   it("una fila SIN premio también lo lleva: el par no depende de que haya premio", async () => {
     montar();
 
     const fila = await waitFor(() => filaDe("Ana Mora"));
-    expect(within(fila).getByText("14 / 20 entregadas")).toBeInTheDocument();
+    expect(within(fila).getByText("14 / 20 entregados")).toBeInTheDocument();
     expect(within(fila).getByText(/sin premio/i)).toBeInTheDocument();
   });
 });
@@ -485,12 +485,17 @@ describe("el refresco dirigido apunta a claves que EXISTEN", () => {
   it.each([
     ["wallet-mensajeros:premios", RUTA_PANEL],
     [
+      // Ficha 461 (auditoría P1): la clave de la tabla de cuentas por pagar vive en un módulo puro
+      // compartido, para que el desglose la refresque tras un pago sin importar la tabla. El dueño
+      // del literal es ese módulo; que la tabla lo use se afirma en el caso de abajo.
       "wallet-mensajeros:cuentas",
-      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+      "app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-clave.ts",
     ],
     [
-      "wallet-mensajeros:desglose",
-      "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+      // FICHA 458-D (T D.8): el desplegable del desglose se retiró; lo que el premio deja desfasado
+      // ahora es el ESTADO DE CUENTA del mensajero, y el dueño de ese prefijo es su módulo de claves.
+      "estado-cuenta",
+      "components/shared/estado-cuenta/estado-cuenta-clave.ts",
     ],
     [
       "liquidacion:reparto-previsualizacion",
@@ -499,6 +504,17 @@ describe("el refresco dirigido apunta a claves que EXISTEN", () => {
   ])("«%s» la usa como clave %s, y el panel la refresca", (prefijo, duenio) => {
     expect(codigoSinComentarios(duenio)).toContain(`"${prefijo}"`);
     expect(codigoSinComentarios(RUTA_PANEL)).toContain(`"${prefijo}"`);
+  });
+
+  it("la tabla de cuentas por pagar toma su clave del módulo compartido, y solo de ahí (461/P1)", () => {
+    // Sin esto, el caso de arriba quedaría verde con la clave definida en el módulo y la tabla
+    // usando otra escrita a mano: el panel refrescaría un prefijo que ninguna lectura usa.
+    const tabla = codigoSinComentarios(
+      "app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx",
+    );
+    expect(tabla).toMatch(/import \{ claveCuentasPorPagar \} from "\.\/cuentas-por-pagar-clave"/);
+    expect(tabla).toMatch(/useSWR\(\s*claveCuentasPorPagar\(page, pageSize, aplicada\)/);
+    expect(tabla).not.toContain('"wallet-mensajeros:cuentas"');
   });
 });
 

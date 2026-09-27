@@ -67,7 +67,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 100,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -79,7 +79,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 100,
       metodoPago: "efectivo",
     });
@@ -90,7 +90,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 0,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -102,7 +102,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: -1,
       metodoPago: "efectivo",
       evidencias: [evidenciaValida()],
@@ -114,7 +114,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 100,
       metodoPago: "tarjeta",
       evidencias: [evidenciaValida()],
@@ -126,7 +126,7 @@ describe("gestionarSchema — ENTREGADA (R22/R24)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: 100,
       metodoPago: "SINPE",
       evidencias: [{ type: "application/pdf", size: 10 }],
@@ -140,7 +140,7 @@ describe("gestionarSchema — REPROGRAMAR (R25)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: FUTURA,
       motivo: "cliente no estaba",
     });
@@ -151,7 +151,7 @@ describe("gestionarSchema — REPROGRAMAR (R25)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: PASADA,
       motivo: "cliente no estaba",
     });
@@ -162,7 +162,7 @@ describe("gestionarSchema — REPROGRAMAR (R25)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       fechaReprogramacion: FUTURA,
       motivo: "   ",
     });
@@ -182,7 +182,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
       evidencias: [evidenciaValida()],
@@ -194,7 +194,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "wrong_address",
       motivo: "",
       evidencias: [evidenciaValida()],
@@ -206,7 +206,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
     });
@@ -222,7 +222,7 @@ describe("gestionarSchema — DEVOLUCION (R27, + causa de la 73/R6, + evidencia 
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "devuelta",
+      resultado: "novedad",
       causaDevolucion: "wrong_address",
       motivo: "direccion inexistente",
       evidencias: [{ type: "application/pdf", size: 10 }],
@@ -236,7 +236,7 @@ describe("gestionarSchema — RECHAZO (R29)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "cliente rechazo",
       evidencias: [evidenciaValida()],
     });
@@ -247,7 +247,7 @@ describe("gestionarSchema — RECHAZO (R29)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "cliente rechazo",
     });
     expect(r.success).toBe(false);
@@ -257,7 +257,7 @@ describe("gestionarSchema — RECHAZO (R29)", () => {
     const r = gestionarSchema.safeParse({
       ordenId: "o1",
       ubicacion: UBICACION_193,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: "",
       evidencias: [evidenciaValida()],
     });

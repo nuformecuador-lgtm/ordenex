@@ -1,0 +1,35 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-abcae9f1af1b22f27
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (9 tests | 1 failed) 57ms
+     × ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  11:16:36
+   Duration  2.55s (transform 147ms, setup 56ms, import 2.23s, tests 57ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+AssertionError: un nombre de estado RETIRADO (requirements 455 §0.3) volvio como texto visible. Usa el nombre de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accion, un texto propio (R6).: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts:104 Entregada",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:351:7
+    349|       "un nombre de estado RETIRADO (requirements 455 §0.3) volvio com…
+    350|         "de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accio…
+    351|     ).toEqual([]);
+       |       ^
+    352|   });
+    353|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

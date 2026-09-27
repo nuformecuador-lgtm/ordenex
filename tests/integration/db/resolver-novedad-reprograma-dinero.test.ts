@@ -57,7 +57,7 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "T",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: null,
     metodoPago: null,
     motivo: null,
@@ -80,31 +80,31 @@ function gestion(overrides: Partial<CierreGestionPendienteRow>): CierreGestionPe
 // resultado=reprogramada, con fecha, SIN montoRecibido/metodoPago (no hubo recaudo).
 const GESTION_REPROGRAMADA_SINTETICA = gestion({
   gestionId: "g-reprogramada",
-  resultado: "reprogramada",
+  resultado: "reprogramado",
   fechaReprogramacion: "2026-07-25", // ISO date (YYYY-MM-DD), como lo lee el snapshot del cierre
   motivo: "cliente pidio otra fecha",
 });
 
 describe("Feature 100 [💰] T5.3 — la gestion sintetica `reprogramada` aporta $0.00 por concepto (R10)", () => {
-  it("pago al mensajero: reprogramada -> 0.00 (solo `entregada` paga)", () => {
-    expect(pagoPorResultado("reprogramada", TARIFA_MENSAJERO)).toBe("0.00");
+  it("pago al mensajero: reprogramado -> 0.00 (solo `entregada` paga)", () => {
+    expect(pagoPorResultado("reprogramado", TARIFA_MENSAJERO)).toBe("0.00");
   });
 
-  it("ingreso de bodega por rechazo: reprogramada -> 0.00 (solo `rechazada` cobra)", () => {
+  it("ingreso de bodega por rechazo: reprogramado -> 0.00 (solo `rechazada` cobra)", () => {
     // El hint literal de la tarea: ingresoBodegaPorResultado("reprogramada", ...) -> "0.00".
-    expect(ingresoBodegaPorResultado("reprogramada", TARIFA_MENSAJERO)).toBe("0.00");
+    expect(ingresoBodegaPorResultado("reprogramado", TARIFA_MENSAJERO)).toBe("0.00");
   });
 
   it("ingreso de Ordenex (feed de wallet 42/69): reprogramada NO aporta a ningun concepto -> 0 movimientos", () => {
     // derivarIngresoOrden devuelve {} para reprogramada (u otro en transito): ningun concepto.
     const derivado = derivarIngresoOrden(
-      { resultado: "reprogramada", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true },
+      { resultado: "reprogramado", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true },
       TARIFA_ORDENEX,
     );
     expect(derivado).toEqual({});
     // Y el agregado que emite los movimientos de wallet OMITE los conceptos 0.00 (R10): 0 movimientos.
     const movimientos = agregarIngresosPorConcepto([
-      { input: { resultado: "reprogramada", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true }, tarifa: TARIFA_ORDENEX },
+      { input: { resultado: "reprogramado", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true }, tarifa: TARIFA_ORDENEX },
     ]);
     expect(movimientos).toEqual([]);
   });
@@ -126,11 +126,11 @@ describe("Feature 100 [💰] T5.3 — cerrar un dia CON la reprogramada da los M
   const diaSinReprogramada: CierreGestionPendienteRow[] = [
     gestion({
       gestionId: "g-entregada",
-      resultado: "entregada",
+      resultado: "entregado",
       montoRecibido: "10000.00",
       metodoPago: "efectivo",
     }),
-    gestion({ gestionId: "g-rechazada", resultado: "rechazada", motivo: "rechazo" }),
+    gestion({ gestionId: "g-rechazada", resultado: "devolucion_a_origen_por_rechazo", motivo: "rechazo" }),
   ];
   const diaConReprogramada: CierreGestionPendienteRow[] = [
     ...diaSinReprogramada,

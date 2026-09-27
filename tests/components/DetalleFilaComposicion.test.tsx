@@ -57,11 +57,15 @@ const COMPOSICION: ComposicionGananciaDTO = {
     ingreso_iva_flete_devolucion: "520.00",
     ingreso_iva_comision_cod: "30.25",
     ingreso_ajuste: "90.00",
+    ingreso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
   },
   totalIngresos: "5709.75",
   egresos: {
     egreso_pago_mensajero: "700.00",
     egreso_ajuste: "45.75",
+    egreso_reverso_cobro_tienda: "0.00", // ficha 461: la exige el `Record` total
+    egreso_reverso_flete_devolucion: "0.00", // ficha 458-B: la exige el `Record` total
+    egreso_reverso_iva_flete_devolucion: "0.00", // ficha 458-B
   },
   otrosEgresos: "194.25",
   hayOtrosEgresos: true,
@@ -81,17 +85,25 @@ const RESUMEN: CajaResumenDTO = {
   periodoFiltrado: false,
   porcentajeTiendas: "77.74",
   modoComposicion: "dos_bolsillos",
+  // Ficha 459 (T A.1): los campos nuevos del contrato; capital 0, sin saldo inicial.
+  capital: "0.00",
+  signoCapital: "cero",
+  deOrdenex: "3519.00",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "12290.25",
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
 /** Nombres accesibles de los controles que abren cada fila (R24). */
-const ABRIR_MENSAJEROS = "Ver los movimientos de Pagos a mensajeros";
-const ABRIR_AJUSTES = "Ver los movimientos de Ajustes (egreso)";
+const ABRIR_MENSAJEROS = "Ver los movimientos de Pagos de Ordenex a mensajeros";
+const ABRIR_AJUSTES = "Ver los movimientos de Correcciones de caja (resta)";
 const ABRIR_OTROS = "Ver los movimientos de Otros gastos de Ordenex";
-const ABRIR_FLETE = "Ver los movimientos de Flete";
+const ABRIR_FLETE = "Ver los movimientos de Flete cobrado a la tienda";
 
 /** Nombres accesibles de los paneles desplegados. */
-const PANEL_MENSAJEROS = "Movimientos de Pagos a mensajeros";
-const PANEL_AJUSTES = "Movimientos de Ajustes (egreso)";
+const PANEL_MENSAJEROS = "Movimientos de Pagos de Ordenex a mensajeros";
+const PANEL_AJUSTES = "Movimientos de Correcciones de caja (resta)";
 const PANEL_OTROS = "Movimientos de Otros gastos de Ordenex";
 
 function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
@@ -107,6 +119,7 @@ function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDT
     registradoPor: null,
     fechaMovimiento: "2026-08-14T10:00:00.000Z",
     dueno: "propio",
+    documento: null, // ficha 459 (design §7.3): fila sin documento
     ...over,
   };
 }
@@ -279,7 +292,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
 
     expect(await dentro.findByText("2026-08-14")).toBeInTheDocument();
     // R5 también aquí: la etiqueta legible del catálogo, nunca el valor del enum.
-    expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
+    expect(dentro.getByText("Corrección de caja (resta)")).toBeInTheDocument();
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();
     expect(dentro.getByText("₡45,75")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
@@ -300,7 +313,7 @@ describe("Ficha 339 — lo que enseña cada movimiento (R16/R17/R36)", () => {
     const celdas = await dentro.findAllByRole("cell");
     const textos = celdas.map((c) => (c.textContent ?? "").trim());
     // Ninguna celda muda, y la del detalle dice de dónde viene el movimiento.
-    expect(textos).toContain("Pago a mensajero");
+    expect(textos).toContain("Pago de Ordenex a un mensajero");
     expect(textos.filter((t) => t === "")).toEqual([]);
   });
 
@@ -337,11 +350,13 @@ describe("Ficha 339 — el nombre de cada control y sus estados (R24/R25/R26)", 
     pintar();
 
     const controles = screen.getAllByRole("button", { name: /^Ver los movimientos de / });
-    // Las catorce filas del catálogo: 7 de ingreso + 6 de egreso + «Otros», que aquí se pinta.
-    expect(controles).toHaveLength(14);
+    // Las dieciséis filas del catálogo: 8 de ingreso + 7 de egreso + «Otros», que aquí se pinta.
+    // (Ficha 461, R27: + «Ordenex le cobra a una tienda» y + «Cobros a una tienda anulados».)
+    // (Ficha 458-B: + las dos filas de la anulacion de un cobro por rechazo: 18.)
+    expect(controles).toHaveLength(18);
 
     const nombres = controles.map((b) => b.getAttribute("aria-label") ?? "");
-    expect(new Set(nombres).size).toBe(14);
+    expect(new Set(nombres).size).toBe(18);
     // Y cada nombre CONTIENE el rótulo visible de su fila («Label in Name»).
     expect(nombres).toContain(ABRIR_MENSAJEROS);
     expect(nombres).toContain(ABRIR_AJUSTES);
@@ -509,6 +524,16 @@ describe("Ficha 339 — el cliente manda un TOKEN, nunca categorías (design §1
     // plural) NO: ése lo deriva el servidor con la misma definición que produce el importe.
     expect(Object.keys(input)).not.toContain("categorias");
   });
+
+  it("458-E R59: «A quién» también baja al detalle de la fila, tal cual", async () => {
+    const aQuien = { tipo: "tienda" as const, id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d" };
+    pintar({ ...FILTROS_VACIOS, aQuien });
+
+    await abrir(ABRIR_MENSAJEROS);
+    await screen.findByRole("region", { name: PANEL_MENSAJEROS });
+
+    expect(inputDeLlamada(0)).toEqual({ aQuien, fila: "egreso_pago_mensajero", page: 1 });
+  });
 });
 
 describe("Ficha 339 — money-safe en el navegador (R35)", () => {
@@ -653,7 +678,7 @@ describe("Ficha 339 — el detalle en un teléfono (arreglo móvil)", () => {
     // Fecha, concepto y detalle siguen en pantalla: viajan juntos, no desaparecen.
     expect(await dentro.findByText("2026-08-14")).toBeInTheDocument();
     // R5: la etiqueta legible del catálogo, nunca el valor del enum.
-    expect(dentro.getByText("Ajuste (egreso)")).toBeInTheDocument();
+    expect(dentro.getByText("Corrección de caja (resta)")).toBeInTheDocument();
     expect(dentro.queryByText("egreso_ajuste")).toBeNull();
     // R17: el origen legible y su descripción.
     expect(dentro.getByText(/Faltante al cuadrar la caja/)).toBeInTheDocument();

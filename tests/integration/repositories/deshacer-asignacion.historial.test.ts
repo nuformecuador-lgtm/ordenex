@@ -81,7 +81,7 @@ describe("R23/R31 — EXACTAMENTE una fila de historial por orden, con motivo", 
 
     await repo.deshacerAsignacionLote(
       [{ ordenId: "o1", destinoEstatusId: idEstado("en_bodega_central") }],
-      new Map([["o1", idEstado("por_recoger")]]),
+      new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]),
       HIST,
       null,
     );
@@ -91,7 +91,7 @@ describe("R23/R31 — EXACTAMENTE una fila de historial por orden, con motivo", 
     expect(data).toHaveLength(1);
     expect(data[0]).toEqual({
       ordenId: "o1",
-      estatusOrigenId: idEstado("por_recoger"),
+      estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
       estatusDestinoId: idEstado("en_bodega_central"),
       actorUsuarioId: "u-maestro",
       origenTipo: "deshacer_asignacion",
@@ -108,7 +108,7 @@ describe("R32 — el webhook de estado se encola en la MISMA transaccion", () =>
 
     await repo.deshacerAsignacionLote(
       [{ ordenId: "o1", destinoEstatusId: idEstado("en_bodega_central") }],
-      new Map([["o1", idEstado("por_recoger")]]),
+      new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]),
       HIST,
       null,
     );
@@ -125,7 +125,7 @@ describe("R32 — el webhook de estado se encola en la MISMA transaccion", () =>
     await expect(
       repo.deshacerAsignacionLote(
         [{ ordenId: "o1", destinoEstatusId: idEstado("en_bodega_central") }],
-        new Map([["o1", idEstado("por_recoger")]]),
+        new Map([["o1", idEstado("mensajero_recogiendo_en_bodega")]]),
         HIST,
         null,
       ),
@@ -147,8 +147,8 @@ describe("R32 — el webhook de estado se encola en la MISMA transaccion", () =>
           { ordenId: "o2", destinoEstatusId: idEstado("en_bodega_central") },
         ],
         new Map([
-          ["o1", idEstado("por_recoger")],
-          ["o2", idEstado("por_recoger")],
+          ["o1", idEstado("mensajero_recogiendo_en_bodega")],
+          ["o2", idEstado("mensajero_recogiendo_en_bodega")],
         ]),
         HIST,
         null,
@@ -161,8 +161,8 @@ describe("R32 — el webhook de estado se encola en la MISMA transaccion", () =>
 
 describe("T5.2/R27 — la guardia REAL de la 140 acepta las TRES aristas nuevas", () => {
   it.each([
-    ["#43", "por_recoger", "en_bodega_central"],
-    ["#44", "por_recoger", "en_bodega_satelite"],
+    ["#43", "mensajero_recogiendo_en_bodega", "en_bodega_central"],
+    ["#44", "mensajero_recogiendo_en_bodega", "en_bodega_satelite"],
     ["#45", "en_ruta_bodega_satelite", "en_bodega_central"],
   ] as const)(
     "%s %s -> %s pasa por appendCambioEstado sin TransicionIlegalError",
@@ -184,13 +184,13 @@ describe("T5.2/R27 — la guardia REAL de la 140 acepta las TRES aristas nuevas"
     },
   );
 
-  it("R28: un destino NO declarado (por_recoger -> en_preparacion) sigue siendo ilegal", async () => {
+  it("R28: un destino NO declarado (mensajero_recogiendo_en_bodega -> en_preparacion) sigue siendo ilegal", async () => {
     const { tx, createMany } = buildPrisma();
     await expect(
       appendCambioEstado(tx as never, [
         {
           ordenId: "o1",
-          estatusOrigenId: idEstado("por_recoger"),
+          estatusOrigenId: idEstado("mensajero_recogiendo_en_bodega"),
           estatusDestinoId: idEstado("en_preparacion"),
           actorUsuarioId: "u-maestro",
           origenTipo: "deshacer_asignacion",

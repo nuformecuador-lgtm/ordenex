@@ -78,7 +78,7 @@ type FilaCaja = {
  * EL LIBRO DE LA CAJA tal y como estaria un dia cualquiera despues de la Tanda B: contra-entrega
  * recaudado (de las TIENDAS), flete e IVA (de ORDENEX) y dos salidas propias.
  *
- *   enCaja   = 20 000 + 3 000 + 390 − 500 − 1 200 = 21 690,00
+ *   enCaja   = 20 000 − 500 − 1 200 = 18 300,00  (ficha 459: flete e IVA son CARGOS, no efectivo)
  *   ganancia =           3 000 + 390 − 500 − 1 200 =  1 690,00
  *
  * Las dos cifras son DISTINTAS a proposito: si la semilla no tuviera dinero de terceros, un
@@ -302,7 +302,7 @@ describe("R30 — pagar y anular deja el dinero en caja donde estaba y la gananc
     const d = makeStore("100000.00");
 
     const antes = d.cifras();
-    expect(antes.enCaja).toBe("21690.00");
+    expect(antes.enCaja).toBe("18300.00");
     expect(antes.ganancia).toBe("1690.00");
 
     // ── momento 2: el dinero SALE ────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ describe("R30 — pagar y anular deja el dinero en caja donde estaba y la gananc
 
     const trasPagar = d.cifras();
     // R18: el «dinero en caja» baja EXACTAMENTE el importe del pago…
-    expect(trasPagar.enCaja).toBe("6690.00");
+    expect(trasPagar.enCaja).toBe("3300.00");
     // …y la ganancia NO se mueve ni un centimo: ese dinero nunca fue de Ordenex.
     expect(trasPagar.ganancia).toBe("1690.00");
 
@@ -388,7 +388,7 @@ describe("R21/R28/R48 — la misma clave dos veces no mueve el dinero dos veces"
     // UNA fila de egreso en la caja, y el dinero baja UNA vez.
     const egresos = d.caja.filter((f) => f.categoria === "egreso_pago_tienda");
     expect(egresos).toHaveLength(1);
-    expect(d.cifras().enCaja).toBe("6690.00");
+    expect(d.cifras().enCaja).toBe("3300.00");
   });
 
   it("R28: anular dos veces deja UN solo reverso, y la caja no sube dos veces", async () => {
@@ -403,7 +403,7 @@ describe("R21/R28/R48 — la misma clave dos veces no mueve el dinero dos veces"
     expect(segunda.status).toBe("ya_anulado");
     const reversos = d.caja.filter((f) => f.categoria === "ingreso_reverso_pago_tienda");
     expect(reversos).toHaveLength(1);
-    expect(d.cifras().enCaja).toBe("21690.00"); // exactamente el importe previo al pago
+    expect(d.cifras().enCaja).toBe("18300.00"); // exactamente el importe previo al pago
   });
 
   it("R48: la idempotencia es por PAGO — dos pagos distintos SI mueven el dinero dos veces", async () => {
@@ -421,7 +421,7 @@ describe("R21/R28/R48 — la misma clave dos veces no mueve el dinero dos veces"
     expect(primero.status).toBe("ok");
     expect(otro.status).toBe("ok");
     expect(d.caja.filter((f) => f.categoria === "egreso_pago_tienda")).toHaveLength(2);
-    expect(d.cifras().enCaja).toBe("-8310.00"); // 21 690 − 15 000 − 15 000
+    expect(d.cifras().enCaja).toBe("-11700.00"); // 18 300 − 15 000 − 15 000
   });
 
   it("R48: el mismo egreso emitido dos veces por el PUERTO inserta una sola fila", async () => {
@@ -435,7 +435,7 @@ describe("R21/R28/R48 — la misma clave dos veces no mueve el dinero dos veces"
 
     expect(insertadas).toBe(0); // ON CONFLICT DO NOTHING, sin error y sin fila
     expect(d.caja.filter((f) => f.categoria === "egreso_pago_tienda")).toHaveLength(1);
-    expect(d.cifras().enCaja).toBe("6690.00");
+    expect(d.cifras().enCaja).toBe("3300.00");
   });
 });
 

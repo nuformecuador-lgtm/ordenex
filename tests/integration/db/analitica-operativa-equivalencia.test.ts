@@ -162,7 +162,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         // --- Siembra: un dia con las cinco medidas y sus trampas ---------------------------
         // (a) Orden creada el dia D, entregada por el mensajero A al primer intento.
         const entregada = await crearOrden(tx, base, {
-          clave: "entregada",
+          clave: "entregado",
           zonaId: base.zonaA,
           tiendaId: base.tienda1,
           mensajeroId: base.mensajero1,
@@ -175,12 +175,12 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         const gEntrega = await crearGestion(tx, {
           ordenId: entregada,
           mensajeroId: base.mensajero1,
-          resultado: "entregada",
+          resultado: "entregado",
           at: instanteCR(FECHA_D, "12:00"),
         });
         await agregarTransicion(tx, base, entregada, {
           at: instanteCR(FECHA_D, "12:00"),
-          destino: "entregada",
+          destino: "entregado",
           origenTipo: "gestion",
           gestionOrdenId: gEntrega,
         });
@@ -188,7 +188,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         // (b) Orden VIEJA (dia D-1) devuelta hoy con causa: entra en el cubo de la causa y
         //     NO en `ordenes_creadas`. Ademas cierra ciclo hoy.
         const devuelta = await crearOrden(tx, base, {
-          clave: "devuelta",
+          clave: "novedad",
           zonaId: base.zonaA,
           tiendaId: base.tienda1,
           mensajeroId: base.mensajero2,
@@ -201,13 +201,13 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         const gDev = await crearGestion(tx, {
           ordenId: devuelta,
           mensajeroId: base.mensajero2,
-          resultado: "devuelta",
+          resultado: "novedad",
           causaDevolucion: "not_found",
           at: instanteCR(FECHA_D, "14:00"),
         });
         await agregarTransicion(tx, base, devuelta, {
           at: instanteCR(FECHA_D, "14:00"),
-          destino: "devuelta",
+          destino: "novedad",
           origenTipo: "gestion",
           gestionOrdenId: gDev,
         });
@@ -229,7 +229,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         await crearGestion(tx, {
           ordenId: anulada,
           mensajeroId: base.mensajero1,
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           at: instanteCR(FECHA_D, "15:00"),
           anuladaAt: instanteCR(FECHA_D, "16:00"),
         });
@@ -251,7 +251,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         await crearGestion(tx, {
           ordenId: cruzada,
           mensajeroId: base.mensajero2,
-          resultado: "reprogramada",
+          resultado: "reprogramado",
           at: instanteCR(FECHA_D, "17:00"),
         });
 
@@ -266,7 +266,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         });
         await agregarTransicion(tx, base, sinAsignar, {
           at: instanteCR(FECHA_D, "05:05"),
-          destino: "sin_gestionar",
+          destino: "novedad_interna",
         });
 
         // --- Camino 1: el job de la 124 escribe el rollup ----------------------------------
@@ -308,7 +308,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("R33 · equivalencia intradia ↔ rollup", (
         const intradia = delIntradia(await caminoIntradia(cliente, tx as unknown as PrismaClient, FECHA_D), base);
         expect(rollup).toEqual([]);
         expect(intradia).toEqual([]);
-        expect(estatusId(base, "entregada")).toBeTruthy();
+        expect(estatusId(base, "entregado")).toBeTruthy();
       });
     } finally {
       await prisma.$disconnect();

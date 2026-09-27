@@ -101,7 +101,7 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   id: ORDEN_ID,
   numGuia: 12345,
   numRemision: "REM-90210",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
   destinatario: DESTINATARIO,
@@ -119,6 +119,8 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   provinciaNombre: "San José",
   cantonNombre: "Escazú",
   distritoNombre: "San Rafael",
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
   secuenciaRuta: null,
   ...over,
 });
@@ -250,9 +252,11 @@ afterEach(cleanup);
 // R23 — LA ACCION ESTA EN LOS DOS GRUPOS
 // =================================================================================================
 
+// ⏳ 2026-09-23 (FICHA 454, T2.5): las filas del grupo AYUDA llevan `estatusValue: "en_reparto"` —la ayuda dejo
+// de ser el estado `ayuda_tienda`— y su grupo lo pone la lista que las trajo (`grupoDeFila`).
 describe("312/R23 — «Corregir datos» se ofrece en las dos pestañas de `/novedades`", () => {
   it("en una card del grupo DEVOLUCIÓN", () => {
-    montar("devolucion", { estatusValue: "devuelta" });
+    montar("devolucion", { estatusValue: "novedad" });
     expect(screen.getByRole("button", { name: CORREGIR_BOTON })).toBeInTheDocument();
   });
 
@@ -260,7 +264,7 @@ describe("312/R23 — «Corregir datos» se ofrece en las dos pestañas de `/nov
     // La mitad que la decisión del humano añadió. Si alguien quitara la celda de `ayuda` de
     // `ACCIONES_POR_GRUPO`, el caso de arriba seguiría verde y esta pantalla perdería la mitad de
     // su alcance sin que nada lo dijera.
-    montar("ayuda", { estatusValue: "ayuda_tienda" });
+    montar("ayuda", { estatusValue: "en_reparto" });
     expect(screen.getByRole("button", { name: CORREGIR_BOTON })).toBeInTheDocument();
   });
 
@@ -283,7 +287,7 @@ describe("312/R26 — la ventana abre precargada con los datos de esa orden", ()
     "desde el grupo %s, con los cuatro valores dentro",
     async (grupo) => {
       const user = userEvent.setup();
-      montar(grupo, { estatusValue: grupo === "ayuda" ? "ayuda_tienda" : "devuelta" });
+      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "novedad" });
 
       expect(screen.queryByText(CORREGIR_TITULO)).toBeNull();
       await user.click(screen.getByRole("button", { name: CORREGIR_BOTON }));
@@ -387,13 +391,13 @@ describe("312/R29 — al guardar, la lista se relee del servidor", () => {
     // siempre la de la devolución, la tienda vería su lista de ayuda sustituida por la otra.
     listarAyudaMock.mockResolvedValue({
       status: "ok",
-      items: [novedad({ estatusValue: "ayuda_tienda" })],
+      items: [novedad({ estatusValue: "en_reparto" })],
       total: 1,
       page: 1,
       pageSize: 10,
     });
     const user = userEvent.setup();
-    montar("ayuda", { estatusValue: "ayuda_tienda" });
+    montar("ayuda", { estatusValue: "en_reparto" });
 
     await user.click(screen.getByRole("button", { name: CORREGIR_BOTON }));
     await screen.findByText(CORREGIR_TITULO);
@@ -439,7 +443,7 @@ describe("327/R32 — los nueve campos, iguales en los dos grupos", () => {
     "desde el grupo %s la ventana ofrece dirección, provincia, cantón, distrito y peso",
     async (grupo) => {
       const user = userEvent.setup();
-      montar(grupo, { estatusValue: grupo === "ayuda" ? "ayuda_tienda" : "devuelta" });
+      montar(grupo, { estatusValue: grupo === "ayuda" ? "en_reparto" : "novedad" });
       await user.click(screen.getByRole("button", { name: CORREGIR_BOTON }));
       await screen.findByText(CORREGIR_TITULO);
       await esperarPrecarga();

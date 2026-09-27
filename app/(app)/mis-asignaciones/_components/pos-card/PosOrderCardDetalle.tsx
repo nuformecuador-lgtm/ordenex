@@ -11,10 +11,11 @@ import {
 
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
-import { estadoBadgeClass, estadoPorDefecto, textoParada } from "./pos-estado";
+import { CLASE_NOTA_AYUDA, claseChipEstado, marcasDeTarjeta, textoParada } from "./pos-estado";
 import { textoMensajero } from "./pos-mensajero";
 import { posSeleccionHandlers } from "./pos-seleccion";
 import { seccionesVisibles } from "./pos-secciones";
+import { EstadoConInfo, NotaAyudaConInfo } from "@/components/shared/EstadoInfo";
 import type { PosOrderCardProps } from "./PosOrderCard";
 
 // POS card · vista DETALLE en FILA (rama ux, pedido humano): una línea por orden con la
@@ -34,13 +35,15 @@ export function PosOrderCardDetalle({
   esDetalle = false,
   bloqueado = false,
   onGestionar,
-  estado: estadoProp,
+  nota,
+  notaAyuda = false,
   mostrarRuta = true,
   secciones,
   acciones,
   mensajero,
 }: PosOrderCardProps) {
-  const estado = estadoProp ?? estadoPorDefecto(esActiva, esDetalle);
+  // FICHA 455 (R7/R8): el chip es el estado de la orden; activa/detalle/nota van en marcas aparte.
+  const marcas = marcasDeTarjeta(esActiva, esDetalle, nota);
   // Feature 196: las mismas compuertas que las otras dos vistas, con el mismo default.
   // `detalle` no tiene nada que apagar AQUÍ: esta vista es una fila y nunca llevó el
   // desplegable "Ver detalle completo" (lo dice el encabezado del componente).
@@ -108,11 +111,22 @@ export function PosOrderCardDetalle({
           <span className="font-mono text-[11px] font-bold text-foreground">
             {orden.numRemision}
           </span>
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${estadoBadgeClass(estado)}`}
-          >
-            {estado}
-          </span>
+          {/* FICHA 456 (T3.6, R9): el chip con su botón de información (nombre calculado dentro). */}
+          <EstadoConInfo
+            botonFlotante
+            codigo={orden.estatusValue}
+            chipClassName={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${claseChipEstado(orden.estatusValue)}`}
+          />
+          {marcas.map((m) => (
+            <span key={m.texto} className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${m.clase}`}>
+              {m.texto}
+            </span>
+          ))}
+          {notaAyuda ? (
+            <NotaAyudaConInfo
+              chipClassName={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${CLASE_NOTA_AYUDA}`}
+            />
+          ) : null}
           {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18 / feature 246/R22), solo si aplican. */}
           {mostrarRuta && orden.secuenciaRuta === null ? (
             <Badge variant="outline">Pendiente de optimizar</Badge>

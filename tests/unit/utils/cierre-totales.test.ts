@@ -35,7 +35,7 @@ function g(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGestionPen
     // Ficha 396: la clave por la que el cierre se parte por tienda (el nombre es solo para mostrar).
     tiendaId: "tienda-1",
     tiendaNombre: "T",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "10.00",
     metodoPago: "efectivo",
     motivo: null,
@@ -60,7 +60,7 @@ describe("computeTotales (R8) — money-safe por metodo de pago", () => {
       g({ gestionId: "a", montoRecibido: "10.50", metodoPago: "efectivo" }),
       g({ gestionId: "b", montoRecibido: "4.50", metodoPago: "SINPE" }),
       g({ gestionId: "c", montoRecibido: "2.00", metodoPago: "transferencia" }),
-      g({ gestionId: "d", resultado: "rechazada", montoRecibido: "99.00", metodoPago: "efectivo" }),
+      g({ gestionId: "d", resultado: "devolucion_a_origen_por_rechazo", montoRecibido: "99.00", metodoPago: "efectivo" }),
     ]);
     expect(totales).toEqual({
       efectivo: "10.50", // la rechazada NO suma (R8)
@@ -76,8 +76,8 @@ describe("derivarPagos (R8) — pago al mensajero snapshot", () => {
   it("solo entregada paga cobroEntregado; resto 0.00; total STRING", () => {
     const { pagoByGestionId, total } = derivarPagos(
       [
-        g({ gestionId: "a", resultado: "entregada" }),
-        g({ gestionId: "b", resultado: "rechazada" }),
+        g({ gestionId: "a", resultado: "entregado" }),
+        g({ gestionId: "b", resultado: "devolucion_a_origen_por_rechazo" }),
       ],
       TARIFA,
     );
@@ -86,7 +86,7 @@ describe("derivarPagos (R8) — pago al mensajero snapshot", () => {
   });
 
   it("tarifa null -> pago 0.00 no bloqueante", () => {
-    const { total } = derivarPagos([g({ resultado: "entregada" })], null);
+    const { total } = derivarPagos([g({ resultado: "entregado" })], null);
     expect(total).toBe("0.00");
   });
 });
@@ -95,8 +95,8 @@ describe("derivarIngresoBodega (R8) — ingreso de bodega por rechazo snapshot",
   it("solo rechazada con tarifa genera cobroRechazado; resto 0.00", () => {
     const { ingresoByGestionId, total } = derivarIngresoBodega(
       [
-        g({ gestionId: "a", resultado: "rechazada" }),
-        g({ gestionId: "b", resultado: "entregada" }),
+        g({ gestionId: "a", resultado: "devolucion_a_origen_por_rechazo" }),
+        g({ gestionId: "b", resultado: "entregado" }),
       ],
       TARIFA,
     );

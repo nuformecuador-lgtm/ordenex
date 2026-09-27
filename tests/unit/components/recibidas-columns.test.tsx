@@ -361,7 +361,7 @@ describe("recibidasColumns — «Liberada el» no entra (y su premisa CAMBIÓ co
     // en silencio junto con la decisión que sostenía. Si «Liberada el» debe montarse ahora es
     // una pregunta de PANTALLA —el dato (`fechaReprogramacion`) ya viaja en la fila desde la
     // 349— y le toca a quien rehaga la tabla, no a la capa de datos.
-    expect([...ESTADOS_BODEGA_SATELITE]).toContain("reprogramada");
+    expect([...ESTADOS_BODEGA_SATELITE]).toContain("reprogramado");
   });
 
   it("la cláusula NO es vacía: la variante del listado SÍ la trae", async () => {

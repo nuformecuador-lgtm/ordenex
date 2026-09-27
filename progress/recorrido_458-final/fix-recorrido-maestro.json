@@ -1,0 +1,190 @@
+{
+  "avisoSinpeCerrado": 1,
+  "rutas": {
+    "tienda": "/wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0",
+    "mensajero": "/wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+    "satelite": "/wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0"
+  },
+  "estados": {
+    "tienda": {
+      "ruta": "/wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0",
+      "botonesAyuda": 1,
+      "slug": "oficina/wallet-tiendas",
+      "volverTexto": "Volver a los saldos por tienda",
+      "volverColor": {
+        "color": "rgb(154, 52, 18)",
+        "fondo": "rgb(247, 248, 252)",
+        "fontSize": "14px"
+      },
+      "verOrigenColor": {
+        "color": "rgb(154, 52, 18)",
+        "fondo": "rgb(247, 248, 252)",
+        "fontSize": "12px"
+      },
+      "axeColorContrast": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodos": [
+            {
+              "target": ".bg-sidebar-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<div aria-hidden=\"true\" class=\"flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreg"
+            },
+            {
+              "target": ".font-semibold.whitespace-nowrap.text-xs",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<span class=\"text-xs font-semibold whitespace-nowrap\">4 por hacer</span>"
+            },
+            {
+              "target": ".gap-2.flex-wrap > .hover\\:bg-primary\\/80.border-transparent.bg-primary:nth-child(1)",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".hover\\:bg-primary\\/80.border-transparent.bg-primary:nth-child(2)",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".items-stretch > .hover\\:bg-primary\\/80.border-transparent.bg-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-pressed=\"true\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".gap-6.flex-col > .overflow-x-auto > .max-w-full.relative.w-full > .mb-2.items-start.justify-end > .relative.gap-1.inline-flex > .border-brand.hover\\:bg-brand-soft.hover\\:text-brand-dark",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-label=\"Descargar Estado de ...\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": "section:nth-child(7) > .overflow-x-auto > .max-w-full.relative.w-full > .mb-2.items-start.justify-end > .relative.gap-1.inline-flex > .border-brand.hover\\:bg-brand-soft.hover\\:text-brand-dark",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-label=\"Descargar Pagos regi...\" class=\"group/button inline-...\">"
+            }
+          ]
+        }
+      ],
+      "axeOtras": [],
+      "panelLeerHref": "/ayuda/oficina/wallet-tiendas"
+    },
+    "mensajero": {
+      "ruta": "/wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558",
+      "botonesAyuda": 1,
+      "slug": "oficina/wallet-mensajeros",
+      "volverTexto": "Volver a las cuentas por pagar",
+      "volverColor": {
+        "color": "rgb(154, 52, 18)",
+        "fondo": "rgb(247, 248, 252)",
+        "fontSize": "14px"
+      },
+      "verOrigenColor": {
+        "color": "rgb(154, 52, 18)",
+        "fondo": "rgb(247, 248, 252)",
+        "fontSize": "12px"
+      },
+      "axeColorContrast": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodos": [
+            {
+              "target": ".bg-sidebar-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<div aria-hidden=\"true\" class=\"flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreg"
+            },
+            {
+              "target": ".font-semibold.whitespace-nowrap.text-xs",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<span class=\"text-xs font-semibold whitespace-nowrap\">4 por hacer</span>"
+            },
+            {
+              "target": ".items-end.justify-between.gap-3 > .hover\\:bg-primary\\/80.border-transparent.bg-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".items-stretch > .hover\\:bg-primary\\/80.border-transparent.bg-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-pressed=\"true\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".border-brand",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-label=\"Descargar Estado de ...\" class=\"group/button inline-...\">"
+            }
+          ]
+        }
+      ],
+      "axeOtras": []
+    },
+    "satelite": {
+      "ruta": "/wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0",
+      "botonesAyuda": 1,
+      "slug": "oficina/wallet-satelites",
+      "volverTexto": "Volver a las bodegas satélite",
+      "volverColor": {
+        "color": "rgb(154, 52, 18)",
+        "fondo": "rgb(247, 248, 252)",
+        "fontSize": "14px"
+      },
+      "verOrigenColor": null,
+      "axeColorContrast": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "nodos": [
+            {
+              "target": ".bg-sidebar-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<div aria-hidden=\"true\" class=\"flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreg"
+            },
+            {
+              "target": ".font-semibold.whitespace-nowrap.text-xs",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<span class=\"text-xs font-semibold whitespace-nowrap\">4 por hacer</span>"
+            },
+            {
+              "target": ".lg\\:flex-wrap > .items-stretch.\\*\\:focus-visible\\:relative.\\*\\:focus-visible\\:z-10 > .hover\\:bg-primary\\/80.border-transparent.bg-primary",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-pressed=\"true\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": ".gap-6.flex-col.flex > .overflow-x-auto > .max-w-full.relative.w-full > .mb-2.items-start.justify-end > .gap-1.inline-flex.relative > .border-brand.hover\\:bg-brand-soft.hover\\:text-brand-dark",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-label=\"Descargar Estado de ...\" class=\"group/button inline-...\">"
+            },
+            {
+              "target": "section[aria-label=\"Conciliación de Quepos\"] > .overflow-x-auto > .max-w-full.relative.w-full > .mb-2.items-start.justify-end > .gap-1.inline-flex.relative > .border-brand.hover\\:bg-brand-soft.hover\\:text-brand-dark",
+              "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.99 (foreground color: #f26419, background color: #f7f8fc, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
+              "html": "<button type=\"button\" tabindex=\"0\" data-slot=\"button\" aria-label=\"Descargar Conciliaci...\" class=\"group/button inline-...\">"
+            }
+          ]
+        }
+      ],
+      "axeOtras": []
+    }
+  },
+  "f4": {
+    "estadoCuentaFila": null,
+    "cajaFila": "\t2026-09-26\t\nOrdenex le cobra a una tienda\nCobro de Ordenex a una tienda · Tania Tienda · R458Z material\n\tTania Tienda\t\nEntra\n₡150\nOrdenex\n\tMaestro QA\t\nVer"
+  },
+  "walletAxe": [
+    {
+      "id": "color-contrast",
+      "n": 49,
+      "nodos": [
+        {
+          "target": ".bg-sidebar-primary",
+          "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 3.17 (foreground color: #ffffff, background color: #f26419, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+          "html": "<div aria-hidden=\"true\" class=\"flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreg"
+        },
+        {
+          "target": ".font-semibold.whitespace-nowrap.text-xs",
+          "resumen": "Fix any of the following:\n  Element has insufficient color contrast of 2.46 (foreground color: #f26419, background color: #ece0dd, font size: 9.0pt (12px), font weight: normal). Expected contrast ratio of 4.5:1",
+          "html": "<span class=\"text-xs font-semibold whitespace-nowrap\">4 por hacer</span>"
+        }
+      ]
+    }
+  ],
+  "f2Maestro": "Cobros de gasto fijo por aprobar\nNadie los cobró todavía: el dinero sigue en la caja y esperan tu decisión.\n1 por aprobar\nConcepto\tPeríodo\tMonto\tGenerado el\tAcciones\nR458Z- Alquiler de bodega\tseptiembre de 2026\t₡7.000\t26 de septiembre de 2026\t\nAprobar\nRechazar"
+}

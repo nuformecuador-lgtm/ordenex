@@ -10,7 +10,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import {
-  ANCLAJE_DEVOLUCION,
+  APLICACION_GESTIONES,
   gestionOrdenSinDevoluciones,
 } from "@/tests/fixtures/anclaje-devolucion";
 
@@ -24,8 +24,8 @@ import {
 const ALCANCE_MAESTRO = { destinoTipo: "bodega_central" as const, destinoZonaId: null };
 
 const DEVOLUCION: DevolucionRechazadasConfig = {
-  rechazadaId: idEstado("rechazada"),
-  porDevolverId: idEstado("por_devolver"), // destino satelite
+  rechazadaId: idEstado("devolucion_a_origen_por_rechazo"),
+  porDevolverId: idEstado("por_devolver_a_bodega_central"), // destino satelite
   porDevolverATiendaId: idEstado("por_devolver_a_tienda"), // destino central
   centralZonaId: "z-central",
 };
@@ -40,6 +40,8 @@ function buildWalletDeps() {
     obtenerPorId: vi.fn(),
     agregarPorCategoria: vi.fn(),
     obtenerPorOrigen: vi.fn(),
+    primerDiaDeLaCaja: vi.fn(async () => null), // ficha 459: este camino no lo usa
+    obtenerPorClave: vi.fn(async () => null), // ficha 461 (R68): la relectura por clave; este camino no la usa
     crearMovimientoRegistrado: vi.fn().mockResolvedValue(1), // ficha 362: solo lo decidido por un humano // ficha 333: lectura por la clave del libro; este camino no la usa
   };
   const walletFeedService: IWalletFeedService = {
@@ -58,6 +60,8 @@ function buildWalletDeps() {
     // Ficha 344: la lectura por id acotada a la tienda. Este doble no la ejercita.
     obtenerPorIdDeTienda: vi.fn(async () => null),
     registrarCobroEnHistorial: vi.fn(async () => undefined), // exigido por IWalletTiendaMovimientoRepository (ficha 381); no ejercitado aqui
+    obtenerCobroPorId: vi.fn(async () => null), // ficha 461; no ejercitado aqui
+    nombreDeTienda: vi.fn(async () => ""), obtenerCobroPorClave: vi.fn(async () => null), // ficha 461; no ejercitado aqui
   };
   const walletTiendaFeedService: IWalletTiendaFeedService = {
     construirMovimientosPorTienda: vi.fn().mockResolvedValue([]),
@@ -182,7 +186,7 @@ function aprobar(repo: CierresAdminRepository) {
     cierreId: "c1",
     alcance: ALCANCE_MAESTRO,
     nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // ficha 454 (T1.7): obligatorio al aprobar (sustituye al anclaje 239)
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
@@ -195,7 +199,7 @@ beforeEach(async () => {
 });
 
 describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (feature 139/R5-R11)", () => {
-  it("R5: rutea por ZONA (central->por_devolver_a_tienda / satelite->por_devolver) con guarda estatus_id=rechazada", async () => {
+  it("R5: rutea por ZONA (central->por_devolver_a_tienda / satelite->por_devolver_a_bodega_central) con guarda estatus_id=rechazada", async () => {
     const prisma = buildDevolucionPrisma([
       { id: "o1", zonaId: "z-central" }, // -> por_devolver_a_tienda
       { id: "o2", zonaId: "z-sat" }, // -> por_devolver
@@ -208,15 +212,15 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // R5: pre-SELECT de las `rechazada` del mensajero del cierre.
     expect(prisma.orden.findMany.mock.calls[0][0].where).toEqual({
       mensajeroAsignadoId: "m1",
-      estatusId: idEstado("rechazada"),
+      estatusId: idEstado("devolucion_a_origen_por_rechazo"),
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=rechazada.
     const calls = updateManyDeOrden(prisma);
     const central = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_tienda"));
-    const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver"));
-    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
-    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_bodega_central"));
+    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("devolucion_a_origen_por_rechazo"), deletedAt: null });
+    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("devolucion_a_origen_por_rechazo"), deletedAt: null });
   });
 
   it("R8: money-neutral — el updateMany SOLO cambia estatus_id (NO mensajero/asignado_at/prioridad)", async () => {
@@ -226,7 +230,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     await aprobar(repo);
 
     const data = updateManyDeOrden(prisma)[0].data;
-    expect(data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(data).toEqual({ estatusId: idEstado("por_devolver_a_bodega_central") });
     expect(data).not.toHaveProperty("mensajeroAsignadoId");
     expect(data).not.toHaveProperty("asignadoAt");
     expect(data).not.toHaveProperty("prioridad");
@@ -242,8 +246,8 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     expect(entradas).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("rechazada"),
-        estatusDestinoId: idEstado("por_devolver"),
+        estatusOrigenId: idEstado("devolucion_a_origen_por_rechazo"),
+        estatusDestinoId: idEstado("por_devolver_a_bodega_central"),
         actorUsuarioId: "adm-maestro", // R11: el admin que aprobo
         origenTipo: "devolucion_rechazada", // R11
         motivo: null,
@@ -264,7 +268,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // o de escalado SLA) entra igual (elegibilidad por estado, agnostica del camino).
     expect(prisma.orden.findMany.mock.calls[0][0].where.mensajeroAsignadoId).toBe("m-sla");
     expect(updateManyDeOrden(prisma)).toHaveLength(1);
-    expect(updateManyDeOrden(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(updateManyDeOrden(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver_a_bodega_central") });
   });
 
   it("R7/no-op: cierre sin rechazadas (0 filas) -> no updateMany de orden ni append", async () => {
@@ -305,7 +309,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
-      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      aplicacionGestiones: APLICACION_GESTIONES, // ficha 454 (T1.7): obligatorio al aprobar (sustituye al anclaje 239)
       confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,

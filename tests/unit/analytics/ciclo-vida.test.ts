@@ -37,7 +37,7 @@ describe("El reloj: de la creación al último terminal", () => {
   it("los terminales salen del dominio, no de una lista escrita en el repositorio", () => {
     // Los tres que el humano nombró son exactamente `ESTADOS_TERMINALES`.
     expect([...ESTADOS_TERMINALES].sort()).toEqual(
-      ["devuelta_a_tienda", "entregada", "incidente"].sort(),
+      ["devuelta_a_tienda", "entregado", "incidente"].sort(),
     );
   });
 });

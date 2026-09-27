@@ -1,4 +1,20 @@
 import {
+  SELECT_REGISTRO_DE_CALLE,
+  whereOrdenConGestionPendiente,
+  whereOrdenSinGestionPendiente,
+} from "@/lib/repositories/gestion-pendiente";
+import {
+  conAyudaAbiertaDe,
+  fechasSolicitudAyuda,
+  idsConAyudaAbierta,
+  senalesGestionDe,
+  SIN_SENALES_GESTION,
+  sqlAyudaAbierta,
+  type ClienteSqlAyuda,
+} from "@/lib/repositories/ayuda-abierta";
+import { sqlExisteGestionPendiente } from "@/lib/repositories/gestion-pendiente";
+import { encolarWebhookEvento } from "@/lib/services/jobs/webhook-evento-encolado";
+import {
   Prisma,
   type PrismaClient,
   // ⏳ 2026-09-10 (feature 405): los enums nativos de las dos causas y el de resultado, para tipar
@@ -37,7 +53,12 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // resolver del cierre de dia: el listado no puede tener una regla propia (R18/R21).
 import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
 import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
-import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
+import type {
+  OrdenDTO,
+  OrdenListItemDTO,
+  OrdenListItemRelaciones,
+  SenalesGestionDTO,
+} from "@/lib/types/orden";
 // FICHA 349 — el recorte por alcance del listado de ordenes, en su modulo SIN dependencias.
 // La bodega satelite proyecta con `toListItemDTO` (la misma que `/ordenes`) y por tanto tiene
 // que retirar lo que un alcance de zona no puede ver, con la UNICA declaracion que existe de
@@ -51,6 +72,28 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { zonaUnicaDeDistrito } from "@/lib/repositories/_shared/zona-colapso";
+import { resolverSinpeBodega, type SinpeBodega } from "@/lib/utils/sinpe-bodega";
+
+/**
+ * FICHA 429 (R13/R15) — el par del SINPE de una orden, con la regla UNICA del repo.
+ *
+ * Se escribe una vez y se usa desde la proyeccion de novedades. `zonaDelMensajero` llega en
+ * `snake`-menos —las dos columnas tal cual las trae Prisma— y puede ser `null` por partida doble:
+ * la orden puede no tener mensajero y el mensajero puede no tener zona.
+ */
+function sinpeDeLaOrden(
+  zonaDelMensajero: { sinpeNumero: string; sinpeNombre: string } | null,
+  zonaDeLaOrden: SinpeBodega,
+): { sinpeNumero: string; sinpeNombre: string } {
+  const par = resolverSinpeBodega({
+    zonaDelMensajero:
+      zonaDelMensajero === null
+        ? null
+        : { numero: zonaDelMensajero.sinpeNumero, nombre: zonaDelMensajero.sinpeNombre },
+    zonaDeLaOrden,
+  });
+  return { sinpeNumero: par.numero, sinpeNombre: par.nombre };
+}
 // FICHA 374: el predicado de la disponibilidad geografica vive en UN solo sitio; aqui solo se
 // PROYECTA (R31). Y `ESTADOS_TERMINALES` se importa de su fuente unica para el conteo de R61.
 import {
@@ -160,7 +203,6 @@ import type {
   OrdenParaEliminacionApi,
   OrdenParaHabilitacionApi,
   ParadaRutaRow,
-  TransicionAyudaInput,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 // Feature 260 (B3): el recorte de alcance del tablero del dia, como TIPO. La union de dos
 // variantes viaja hasta el `WHERE` sin pasar por un `string | undefined` que convertiria
@@ -447,7 +489,7 @@ function apiOrdenDetalleSelect(ownerId: string) {
       OR: [
         {
           // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO. INTACTO.
-          resultado: { in: ["entregada", "rechazada", "incidente"] },
+          resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
           evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
         },
         // 405/R11: las gestiones VIGENTES, sea cual sea su resultado y lleven foto o no. Es el
@@ -471,6 +513,9 @@ function apiOrdenDetalleSelect(ownerId: string) {
       causaDevolucion: true, // 405/R8: la causa TIPIFICADA de la devolucion (73)
       causaIncidente: true, // 405/R8: la causa TIPIFICADA del incidente (158)
       mensajero: { select: { id: true, ...NOMBRE_USUARIO_SELECT } }, // 405/R9
+      // FICHA 454 (T1.20, R32): el evento de registro (si lo hay) — de uso interno, para derivar
+      // `pendienteConfirmacion`. No se publica nada de el.
+      ...SELECT_REGISTRO_DE_CALLE,
     },
     // ⏳ 2026-09-10 (feature 405, R10): el `createdAt asc` de siempre, MAS `id asc` para que dos
     // gestiones del mismo instante no puedan salir en distinto orden entre dos lecturas. El orden
@@ -566,6 +611,8 @@ type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
       primerApellido: string | null;
       segundoApellido: string | null;
     };
+    // FICHA 454 (T1.20): el evento de registro, 0 o 1 (unico parcial).
+    eventos: { id: string; familiaAplicacion: string | null; actorUsuarioId: string }[];
   }[];
   // ⏳ 2026-09-10 (feature 405, R6): las transiciones de ESTA orden causadas por una gestion, ya
   // ordenadas ascendentemente. `gestionOrdenId` es `string | null` en el modelo aunque el `where`
@@ -672,7 +719,7 @@ export function causaTipificadaDeGestion(gestion: {
   causaDevolucion: GestionCausaDevolucion | null;
   causaIncidente: GestionCausaIncidente | null;
 }): GestionCausaDevolucion | GestionCausaIncidente | null {
-  if (gestion.resultado === "devuelta") return gestion.causaDevolucion;
+  if (gestion.resultado === "novedad") return gestion.causaDevolucion;
   if (gestion.resultado === "incidente") return gestion.causaIncidente;
   return null;
 }
@@ -716,12 +763,12 @@ function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow
     // 405: el predicado ORIGINAL de la 106/268, palabra por palabra, sobre el superconjunto.
     .filter(
       (g) =>
-        ["entregada", "rechazada", "incidente"].includes(g.resultado) &&
+        ["entregado", "devolucion_a_origen_por_rechazo", "incidente"].includes(g.resultado) &&
         g.evidenciaStoragePath !== null,
     )
     .map((g) => ({
       // `resultado` esta acotado por el filtro de arriba a estos tres valores.
-      resultado: g.resultado as "entregada" | "rechazada" | "incidente",
+      resultado: g.resultado as "entregado" | "devolucion_a_origen_por_rechazo" | "incidente",
       // El filtro exige `evidencia_storage_path` no nulo; el `!` es seguro.
       storagePath: g.evidenciaStoragePath!,
       contentType: g.evidenciaContentType,
@@ -753,8 +800,12 @@ function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow
       createdAt: g.createdAt,
       resultado: g.resultado as GestionResultado,
       // R6/R7: el destino de la PRIMERA transicion que origino, o `null` si no hay ninguna
-      // (gestion legada anterior al historial de la 49).
+      // (gestion legada anterior al historial de la 49, o —FICHA 454— gestion PENDIENTE de
+      // confirmar, que aun no transiciono).
       estadoResultante: estadoPorGestion.get(g.id) ?? null,
+      // FICHA 454 (T1.20, R32): gestion de calle del modelo nuevo que TODAVIA no se aplico (su
+      // cierre no se aprobo). Tras aprobar tiene su primera transicion enlazada y pasa a `false`.
+      pendienteConfirmacion: (g.eventos ?? []).length > 0 && !estadoPorGestion.has(g.id),
       motivo: causaTipificadaDeGestion({
         resultado: g.resultado as GestionResultado,
         causaDevolucion: g.causaDevolucion,
@@ -989,7 +1040,7 @@ const TARIFA_SELECT = {
 
 // `gestion_orden.resultado` de una reprogramacion (espejo de
 // `LiberacionReprogramadaRepository`, el cron que consume la misma fecha).
-const RESULTADO_REPROGRAMADA = "reprogramada";
+const RESULTADO_REPROGRAMADA = "reprogramado";
 
 // Origen UNICO de las dos decisiones de despacho del maestro —asignar mensajero y rutear a
 // una bodega satelite—, y por tanto el estado del filtro REASIGNABLES.
@@ -998,20 +1049,17 @@ const ESTATUS_EN_BODEGA_CENTRAL = "en_bodega_central";
 // Feature 87 (T2/R6): `gestion_orden.resultado` de una DEVOLUCION. Mismo valor del enum
 // `GestionResultado` que ya usa el historial; la vigencia se filtra por `anuladaAt: null`
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
-const RESULTADO_DEVUELTA = "devuelta";
+const RESULTADO_DEVUELTA = "novedad";
 
 // ⚰️ FEATURE 236 (T2.1) — y aqui, `ESTATUS_DEVUELTA = "devuelta"`, la primera rama de aquel `OR`.
 // Mismo destino y mismo motivo que su hermana de arriba: hoy es `ESTATUS_POR_GRUPO.devolucion`.
 
 // Feature 102 (T7): `order_status.value` de una orden rechazada. La superficie de rechazos por
 // SLA de la tienda se ancla a este estado real (mientras la orden REPOSE en `rechazada`, R15).
-const ESTATUS_RECHAZADA = "rechazada";
+const ESTATUS_RECHAZADA = "devolucion_a_origen_por_rechazo";
 
-// Feature 236 (T2.5, D7): familia de origen de LA IDA de la ayuda (`en_reparto -> ayuda_tienda`,
-// feature 235/P2). Es de donde sale la fecha con la que se ordena la pestaña de ayuda: la que lleva
-// mas esperando, primero. La VUELTA (`rescate_ayuda_tienda`) no se lee aqui — describe el final de
-// una espera, no su comienzo.
-const ORIGEN_TIPO_SOLICITUD_AYUDA = "solicitud_ayuda_tienda";
+// FICHA 454 (T1.16): aqui vivia `ORIGEN_TIPO_SOLICITUD_AYUDA` (236/D7). La fecha de la solicitud
+// sale ahora del evento `ayuda_solicitada` (`fechasSolicitudAyuda`, `ayuda-abierta.ts`).
 
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
@@ -1761,6 +1809,43 @@ function toBodegaSateliteRow(row: OrdenListRow): RecepcionSateliteRow {
   };
 }
 
+/**
+ * FICHA 454 (R29, BLOQUEO-1 de la fase 2, 2026-09-24) — anota en cada fila de un listado YA
+ * ACOTADO su gestion pendiente de confirmar y su ayuda abierta.
+ *
+ * UNA consulta por pagina (`senalesGestionDe`), sea de 1 fila o de 50: la misma disciplina que la
+ * tarifa de la 274. No decide nada ni reescribe ningun predicado: los dos salen de sus modulos
+ * unicos (`gestion-pendiente.ts`, `ayuda-abierta.ts`), y la guardia
+ * `gestion-pendiente-unica-fuente` vigila que siga asi.
+ *
+ * NO ACOTA: recibe filas que el `where` de quien llama ya recorto (tienda, zona, mensajero), y solo
+ * pregunta por esos ids. Una fila sin respuesta (imposible salvo carrera con un borrado) sale con
+ * las señales en reposo, nunca con las de otra orden.
+ */
+async function anotarSenalesGestion<T extends { id: string }>(
+  cliente: ClienteSqlAyuda,
+  filas: readonly T[],
+): Promise<(T & SenalesGestionDTO)[]> {
+  const senales = await senalesGestionDe(
+    cliente,
+    filas.map((f) => f.id),
+  );
+  return filas.map((f) => {
+    const s = senales.get(f.id) ?? SIN_SENALES_GESTION;
+    return {
+      ...f,
+      gestionPendiente:
+        s.gestionPendiente === null
+          ? null
+          : {
+              resultado: s.gestionPendiente.resultado,
+              registradaAt: s.gestionPendiente.registradaAt.toISOString(),
+            },
+      ayudaAbierta: s.ayudaAbierta,
+    };
+  });
+}
+
 export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 91: `jobRepo` se inyecta para el encolado TRANSACTIONAL OUTBOX de la
@@ -1972,8 +2057,13 @@ export class OrdenRepository implements IOrdenRepository {
     // tres consultas y solo DOS de datos, sea la pagina de 1 fila o de 50.
     const tarifas = await this.resolverTarifasDePagina(items);
 
+    // FICHA 454 (R29): y UNA mas, las señales de la gestion pendiente y la ayuda abierta, sobre las
+    // filas que el `where` de arriba (con el acotamiento por rol) ya dejo pasar.
     return {
-      items: items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      items: await anotarSenalesGestion(
+        this.prisma,
+        items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      ),
       total,
     };
   }
@@ -2710,6 +2800,8 @@ export class OrdenRepository implements IOrdenRepository {
       // especial. Una orden sin distrito (el unico FK nullable) entra como `false`.
       esZonaEspecial: row.distrito?.zonaEspecial === true,
       yaEnUnCierre: row.cierreDetalles.length > 0,
+      // FICHA 454 (R64): la ayuda deja de ser estado; se deriva (punto unico, `ayuda-abierta.ts`).
+      ayudaAbierta: (await conAyudaAbiertaDe(this.prisma, [row.id])).has(row.id),
     };
   }
 
@@ -3205,16 +3297,35 @@ export class OrdenRepository implements IOrdenRepository {
    * `createdAt asc` NO es cosmetico: es el criterio con el que R38 recorta al tope de
    * paradas, y hacerlo en la DB evita reordenar en memoria.
    */
+  async findIdsConGestionPendiente(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const filas = await this.prisma.orden.findMany({
+      where: { id: { in: ids }, ...whereOrdenConGestionPendiente() },
+      select: { id: true },
+    });
+    return new Set(filas.map((f) => f.id));
+  }
+
   async findParadasEnReparto(mensajeroId: string): Promise<ParadaRutaRow[]> {
-    const rows = await this.prisma.orden.findMany({
+    const todas = await this.prisma.orden.findMany({
       where: {
         mensajeroAsignadoId: mensajeroId,
         deletedAt: null,
         estatus: { value: ESTATUS_EN_REPARTO },
+        // FICHA 454 (R6): una orden ya gestionada sigue `en_reparto` hasta que se aprueba su
+        // cierre, pero YA NO ES PARADA. Predicado unico (`gestion-pendiente.ts`).
+        ...whereOrdenSinGestionPendiente(),
       },
       select: { id: true, latitud: true, longitud: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
+    // FICHA 454 (R22): la orden con ayuda abierta espera a la tienda: no es parada (misma regla que
+    // tenia `ayuda_tienda`, que ya quedaba fuera por estado).
+    const conAyuda = await conAyudaAbiertaDe(
+      this.prisma,
+      todas.map((r) => r.id),
+    );
+    const rows = todas.filter((r) => !conAyuda.has(r.id));
     return rows.map((r) => ({
       ordenId: r.id,
       latitud: r.latitud !== null ? r.latitud.toNumber() : null,
@@ -3978,7 +4089,8 @@ export class OrdenRepository implements IOrdenRepository {
       // FICHA 349: la MISMA proyeccion que `/ordenes`, no una segunda.
       ...WITH_ESTATUS_Y_TIENDA,
     });
-    return rows.map(toBodegaSateliteRow);
+    // FICHA 454 (R29): las señales de la gestion pendiente y la ayuda, en una consulta mas.
+    return anotarSenalesGestion(this.prisma, rows.map(toBodegaSateliteRow));
   }
 
   /**
@@ -4129,10 +4241,15 @@ export class OrdenRepository implements IOrdenRepository {
       ...WITH_ESTATUS_Y_TIENDA,
     });
     const porId = new Map(filas.map((fila) => [fila.id, fila]));
-    return ids.flatMap((id) => {
-      const fila = porId.get(id);
-      return fila === undefined ? [] : [toBodegaSateliteRow(fila)];
-    });
+    // FICHA 454 (R29): las señales de la gestion pendiente y la ayuda, en UNA consulta por pagina
+    // (la comparten la pagina y la descarga, como el resto de la hidratacion).
+    return anotarSenalesGestion(
+      this.prisma,
+      ids.flatMap((id) => {
+        const fila = porId.get(id);
+        return fila === undefined ? [] : [toBodegaSateliteRow(fila)];
+      }),
+    );
   }
 
   async recibirEnSatelite(
@@ -4585,6 +4702,17 @@ export class OrdenRepository implements IOrdenRepository {
         FOR UPDATE`;
       const anteriorPorOrden = new Map(previas.map((p) => [p.id, p.fecha_reparto] as const));
 
+      // 1-bis. FICHA 454 (T1.17, R55) — RE-LECTURA BAJO EL CANDADO (design §5): el dia de reparto de
+      //    una orden con gestion PENDIENTE de confirmar ya no decide nada y no se cambia. Aborta el
+      //    lote entero, sin rastro.
+      const conPendiente = await tx.orden.findMany({
+        where: { id: { in: ids }, ...whereOrdenConGestionPendiente() },
+        select: { id: true },
+      });
+      if (conPendiente.length > 0) {
+        throw new CorreccionDiaConflictoError(conPendiente.map((o) => o.id));
+      }
+
       // 2. LA CORRECCION, GUARDADA. El `RETURNING` trae lo que el AVISO necesita (§15.5): la fila
       //    del `SET` no cambia por ello, y el censo de la guardia corta al primer `WHERE` —que va
       //    antes—, asi que la huella de columnas sigue siendo `{fecha_reparto, updated_at}`.
@@ -4751,6 +4879,18 @@ export class OrdenRepository implements IOrdenRepository {
         if (previa.estatus_id !== esperadoPorOrden.get(ordenId)) noMovidas.push(ordenId);
       }
       if (noMovidas.length > 0) throw new TraspasoMensajeroConflictoError(noMovidas);
+
+      // 2-bis. FICHA 454 (T1.17, R54) — RE-LECTURA BAJO EL CANDADO, en una sentencia POSTERIOR al
+      //    `FOR UPDATE` (design §5): una orden con gestion PENDIENTE de confirmar no se traspasa —su
+      //    gestion y su cierre son del mensajero de origen—. Un registro concurrente que confirmo
+      //    mientras esperabamos el candado se ve aqui y aborta el lote entero, sin efectos.
+      const conPendiente = await tx.orden.findMany({
+        where: { id: { in: ids }, ...whereOrdenConGestionPendiente() },
+        select: { id: true },
+      });
+      if (conPendiente.length > 0) {
+        throw new TraspasoMensajeroConflictoError(conPendiente.map((o) => o.id));
+      }
 
       // 3. EL `UPDATE` GUARDADO, UNO POR ORDEN (patron `deshacerAsignacionLote`): el dia de reparto
       //    se CONSERVA POR ORDEN y no es un valor comun al lote, asi que no cabe un solo `IN`.
@@ -5041,6 +5181,9 @@ export class OrdenRepository implements IOrdenRepository {
         mensajeroAsignadoId: { in: ids },
         deletedAt: null,
         estatus: { value: { in: estados } },
+        // FICHA 454 (T1.18, R56): una orden gestionada y pendiente de confirmar ya no es carga
+        // pendiente del mensajero. Solo puede haberlas en `en_reparto`; en el resto es un no-op.
+        ...whereOrdenSinGestionPendiente(),
       },
       select: { mensajeroAsignadoId: true },
       distinct: ["mensajeroAsignadoId"],
@@ -5090,8 +5233,36 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * `bloqueada` = SOLO la causa (ii): su propio CierreBodega hacia la central en `solicitado`. Es
-   * el cierre de la BODEGA, no el de un mensajero, y nadie lo ha tocado.
+   * ⭑ FICHA 431 — `bloqueada` ES `false` SIEMPRE. HOY NINGUNA CAUSA BLOQUEA A LA BODEGA.
+   *
+   * Hasta esta ficha, `bloqueada` era la causa (ii): mientras su propia consolidacion hacia la
+   * central estuviera `solicitado`, la bodega satelite NO PODIA ASIGNAR NI UNA ORDEN MAS. Esa era,
+   * medido, la unica consecuencia real de la aprobacion de nivel 2 —no mueve dinero ni notifica— y
+   * por tanto lo unico que desatascaba a una satelite era que la central mirara una pantalla:
+   * mediana 34 minutos, maximo 14,15 h, y 3 de 32 por encima de 12 h (produccion, 2026-09-15). La
+   * aprobacion pasa a ser una MARCA DE CONCILIACION que registra que el efectivo llego, y una marca
+   * que ocurre cuando el bulto viaja no puede ser ademas la puerta que deja trabajar.
+   *
+   * `porCierreBodega` SE SIGUE CALCULANDO Y VIAJA IGUAL, como AVISO —el mismo trato que
+   * `porMensajeros` desde la 241—, ahora con su NUMERO (`consolidacionesSinConciliar`) para que el
+   * aviso pueda contar (R2). No viaja dinero por este contrato: el importe vive en la pantalla
+   * propia de la satelite, y meter un `Decimal` en un DTO de bloqueo abriria una superficie de
+   * dinero donde no hace falta.
+   *
+   * ⚠️ `bloqueada` SE CONSERVA EN `BodegaBloqueoResult` aunque hoy sea constante, y con el la rama
+   * `bodega_bloqueada` de `AsignacionSateliteService.asignar`. Es la lectura literal de D4 —«se
+   * quita en UN solo sitio»— y deja el punto de entrada por si vuelve una causa. Para que un campo
+   * constante no se convierta en un mentiroso mudo, lo ancla un test que afirma que NINGUNA
+   * combinacion de causas produce hoy `bloqueada: true`
+   * (`tests/unit/repositories/orden-repository.bloqueo.test.ts`). El destino final de esa rama es
+   * la Q4 de la ficha.
+   *
+   * ⚠️ LO QUE **NO** SE TOCA, y es facil de confundir con lo de arriba: el gate de NIVEL 1 —una
+   * satelite no puede CONSOLIDAR mientras tenga cierres del dia de sus mensajeros sin resolver—
+   * sigue vivo en `CierreBodegaService.solicitarCierreBodega` (R5). Ese si es un cuadre, y sigue
+   * siendo puerta.
+   *
+   * --- historia previa del metodo, que sigue explicando la causa (i) ---
    *
    * La causa (i) —«algun mensajero de la zona tiene un cierre abierto»— SIGUE RETIRADA, y la
    * FEATURE 271 la deja retirada A PROPOSITO aunque revierta lo de recibir trabajo nuevo (R34):
@@ -5113,8 +5284,14 @@ export class OrdenRepository implements IOrdenRepository {
         where: { rol: { value: "mensajero" }, zonaId },
         select: { id: true },
       }),
-      // (ii) mismo criterio que la guardia de unicidad de la feature 40 (indice unico
-      // parcial WHERE estado='solicitado'): a lo sumo uno por zona.
+      // (ii) las consolidaciones de la zona PENDIENTES DE CONCILIAR.
+      //
+      // ⭑ FICHA 431 — YA NO ES «a lo sumo una». El indice unico parcial de la feature 40
+      // (`cierre_bodega_zona_solicitado_uq`) se BORRO en `20260919120100_cierre_bodega_conciliacion`
+      // precisamente para que la satelite pueda volver a consolidar sin esperar a que la central
+      // marque. Por eso esto es un `count` que ahora puede valer 2, 3 o 7, y por eso su numero
+      // VIAJA al borde: el aviso dice «tenes N consolidaciones que la central todavia no marco
+      // como recibidas» (R2), y N ya no es siempre 1.
       this.prisma.cierreBodega.count({
         where: { zonaId, estado: ESTADO_CIERRE_BODEGA_PENDIENTE },
       }),
@@ -5134,9 +5311,15 @@ export class OrdenRepository implements IOrdenRepository {
     return {
       // La causa (i) NO entra (R34). `porMensajeros` viaja al borde como AVISO, no como veto: la
       // bodega sigue asignando a sus companeros libres.
-      bloqueada: porCierreBodega,
+      //
+      // ⭑ FICHA 431 (D4/R1/R4) — Y LA CAUSA (ii) TAMPOCO ENTRA YA. `porCierreBodega` viaja igual,
+      // como AVISO, con el mismo trato que `porMensajeros`. El valor es CONSTANTE a proposito y lo
+      // ancla un test: ninguna combinacion de causas produce hoy `true`. Ver la cabecera.
+      bloqueada: false,
       porMensajeros,
       porCierreBodega,
+      // ⭑ FICHA 431 (R2/R3) — CUANTAS son, no solo «hay». Lo que el aviso necesita para contar.
+      consolidacionesSinConciliar: countCierreBodega,
       cierresAbiertos,
       totalMensajeros,
       mensajerosConCierreIds: conCierreAbierto,
@@ -5181,68 +5364,117 @@ export class OrdenRepository implements IOrdenRepository {
    * una razon que no es la suya. Lo que esa guardia SI vigila ahora es que este cuerpo no contenga
    * ningun literal de estatus: su unico origen admisible es el mapa (design §2.4).
    */
-  private novedadWhere(tiendaId: string, grupo: GrupoNovedad): Prisma.OrdenWhereInput {
+  private novedadWhere(
+    tiendaId: string,
+    grupo: GrupoNovedad,
+    // FICHA 454 (T1.16, design §4.3; R22): los ids con ayuda ABIERTA de esta tienda. La ayuda deja
+    // de ser estado: el discriminante del grupo `ayuda` pasa a ser la DERIVACION de
+    // `ayuda-abierta.ts` (la letra de la D1 de la 236 se revisa; su principio —nada que apagar— se
+    // respeta: `orden_evento` es append-only y cualquier transicion cierra la ayuda). La migracion
+    // M3 lleva a `en_reparto` + evento abierto toda orden que estuviera en `ayuda_tienda`, asi que
+    // no queda poblacion legada que listar por estado. `devolucion` sigue siendo `estatus = devuelta`.
+    idsAyudaAbierta: readonly string[] = [],
+  ): Prisma.OrdenWhereInput {
     return {
       tiendaId, // R10: acotada a la tienda del actor
       deletedAt: null, // R10: excluye borradas
-      estatus: { value: ESTATUS_POR_GRUPO[grupo] },
+      ...(grupo === "ayuda"
+        ? { id: { in: [...idsAyudaAbierta] } }
+        : { estatus: { value: ESTATUS_POR_GRUPO[grupo] } }),
     };
   }
 
+  /** FICHA 454 (T1.16): los ids con ayuda abierta de la tienda (vacio para la devolucion). */
+  private async idsAyudaDeTienda(tiendaId: string, grupo: GrupoNovedad): Promise<string[]> {
+    if (grupo !== "ayuda") return [];
+    return idsConAyudaAbierta(
+      this.prisma,
+      Prisma.sql`"o"."tienda_id" = ${tiendaId} AND "o"."deleted_at" IS NULL`,
+    );
+  }
+
   /**
-   * Feature 235 (T2.2, R8/R9/R10/R13) — EL PUNTO UNICO DE ESCRITURA DE LAS DOS TRANSICIONES DE LA
-   * AYUDA. Sustituye a los TRES metodos que vivian aqui hasta el 2026-08-19 y que escribian la
-   * bandera `orden.ayuda` con un `update` ciego:
+   * FICHA 454 (T1.15, design §4.2; R21) — LA IDA DE LA AYUDA, COMO HECHO. Sustituye a la mitad de
+   * ida de `transicionarAyuda` (235): la orden YA NO cambia de estado — sigue `en_reparto`, con su
+   * mensajero — y la ayuda queda ABIERTA por la derivacion de `ayuda-abierta.ts`.
    *
-   *   `marcarAyuda`      (encendedor, «Solicitar ayuda»)  ─┐
-   *   `desmarcarAyuda`   (apagador 1, «Recuperar»)         ├─ colapsan AQUI
-   *   `habilitarNovedad` (apagador 2, «Habilitar»)        ─┘
+   * Protocolo de §5: candado de la fila de `orden` y re-lectura en una sentencia posterior. Solo se
+   * registra si la orden sigue siendo gestionable por quien pide: `en_reparto`, asignada a el, no
+   * borrada, sin gestion pendiente y sin ayuda ya abierta. El evento y su webhook, en la misma tx.
    *
-   * QUE CAMBIA RESPECTO DE AQUELLO, y por que importa: eran `update` CIEGOS por `id`, sin guarda
-   * de estado y sin rastro. Este es un `updateMany` GUARDADO POR EL ESTATUS DE ORIGEN, con su
-   * append por el CHOKE POINT en la MISMA transaccion. La guarda va EN EL WHERE y no en un `if`
-   * previo: si la orden ya no esta donde se creia —el corte la barrio, otra pestaña la movio— el
-   * update afecta a 0 filas, NO se hace el append y no queda ningun efecto parcial (R9).
-   *
-   * DOS APAGADORES EN UNO (R8): el rescate lo llaman `SolicitudAyudaService.recuperar` (el
-   * mensajero) y `HabilitarNovedadService.habilitar` (la tienda). Sus puertas son distintas —cada
-   * una la ventana de su rol— pero la ESCRITURA es esta y solo esta. La guarda de estado vive
-   * aqui, en el punto unico, y no en los llamadores: moverla a uno dejaria al otro sin ella.
-   *
-   * MONEY-SAFE (R13): el `data` toca UNICAMENTE `estatusId`. Ni montos, ni `prioridad`, ni
-   * `mensajeroAsignadoId` (R6: pedir ayuda NO desasigna al mensajero — el paquete sigue con el).
-   * Ningun movimiento de dinero, ninguna conversion a coma flotante.
-   *
-   * Sin autorizacion propia a proposito: la puerta la ponen los services, reusando la del hilo de
-   * notas (feature 227). El repo solo ejecuta la query.
-   *
-   * @returns `true` si la orden transiciono (1 fila), `false` si no estaba en el origen esperado.
+   * @returns `true` si registro la solicitud; `false` si la orden ya no admitia pedir ayuda.
    */
-  async transicionarAyuda(input: TransicionAyudaInput): Promise<boolean> {
+  async registrarAyudaSolicitada(input: {
+    ordenId: string;
+    mensajeroId: string;
+    actorRol: RolValue;
+  }): Promise<boolean> {
+    const { ordenId, mensajeroId, actorRol } = input;
     return this.prisma.$transaction(async (tx) => {
-      const result = await tx.orden.updateMany({
-        where: {
-          id: input.ordenId,
-          estatusId: input.estatusOrigenId, // LA GUARDA: origen exacto, no "cualquier estado"
-          deletedAt: null,
+      await tx.$queryRaw`SELECT "id" FROM "orden" WHERE "id" = ${ordenId} FOR UPDATE`;
+      const admite = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "o"."id"
+          FROM "orden" "o"
+          JOIN "order_status" "s" ON "s"."id" = "o"."estatus_id"
+         WHERE "o"."id" = ${ordenId}
+           AND "s"."value" = ${ESTATUS_EN_REPARTO}
+           AND "o"."mensajero_asignado_id" = ${mensajeroId}
+           AND "o"."deleted_at" IS NULL
+           AND NOT ${sqlExisteGestionPendiente()}
+           AND NOT ${sqlAyudaAbierta("o")}`;
+      if (admite.length === 0) return false;
+      const evento = await tx.ordenEvento.create({
+        data: {
+          ordenId,
+          tipo: "ayuda_solicitada",
+          mensajeroId,
+          actorUsuarioId: mensajeroId,
+          actorRol,
         },
-        // Money-safe (R13): SOLO el estatus.
-        data: { estatusId: input.estatusDestinoId },
+        select: { id: true },
       });
-      // R10: el append SOLO de lo que efectivamente transiciono. La guarda del WHERE garantiza
-      // que el origen registrado es el REAL, no uno supuesto.
-      if (result.count > 0) {
-        await appendCambioEstado(tx, [
-          {
-            ordenId: input.ordenId,
-            estatusOrigenId: input.estatusOrigenId,
-            estatusDestinoId: input.estatusDestinoId,
-            actorUsuarioId: input.actorUsuarioId, // el usuario que la provoco (R10)
-            origenTipo: input.origenTipo, // `solicitud_ayuda_tienda` | `rescate_ayuda_tienda`
-          },
-        ]);
-      }
-      return result.count > 0;
+      await encolarWebhookEvento(tx as unknown as JobTxClient, { ordenEventoId: evento.id, ordenId });
+      return true;
+    });
+  }
+
+  /**
+   * FICHA 454 (T1.15, design §4.2; R23, R24) — LA VUELTA DE LA AYUDA, COMO HECHO. «Recuperar» del
+   * mensajero y «Habilitar» de la tienda escriben `ayuda_rescatada` (quien lo hizo lo dice
+   * `actor_rol`); la habilitacion por API key escribe `ayuda_habilitada_api`. Sin transicion: la
+   * orden ya estaba `en_reparto` y vuelve a ser gestionable porque la ayuda deja de estar abierta.
+   *
+   * Guardado por «ayuda ABIERTA» bajo candado de la fila: si el corte, la tienda gestionando desde
+   * la ayuda u otra pestaña ya la cerraron, `false` sin efectos.
+   */
+  async registrarAyudaResuelta(input: {
+    ordenId: string;
+    tipo: "ayuda_rescatada" | "ayuda_habilitada_api";
+    actorUsuarioId: string;
+    actorRol: RolValue;
+  }): Promise<boolean> {
+    const { ordenId, tipo, actorUsuarioId, actorRol } = input;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orden" WHERE "id" = ${ordenId} FOR UPDATE`;
+      const abierta = await tx.$queryRaw<{ mensajero_asignado_id: string | null }[]>`
+        SELECT "o"."mensajero_asignado_id"
+          FROM "orden" "o"
+         WHERE "o"."id" = ${ordenId}
+           AND "o"."deleted_at" IS NULL
+           AND ${sqlAyudaAbierta("o")}`;
+      if (abierta.length === 0) return false;
+      const evento = await tx.ordenEvento.create({
+        data: {
+          ordenId,
+          tipo,
+          mensajeroId: abierta[0].mensajero_asignado_id,
+          actorUsuarioId,
+          actorRol,
+        },
+        select: { id: true },
+      });
+      await encolarWebhookEvento(tx as unknown as JobTxClient, { ordenEventoId: evento.id, ordenId });
+      return true;
     });
   }
 
@@ -5274,10 +5506,12 @@ export class OrdenRepository implements IOrdenRepository {
       },
     });
     if (!orden) return null;
+    const abiertas = await conAyudaAbiertaDe(this.prisma, [orden.id]);
     return {
       id: orden.id,
       estatusValue: orden.estatus.value,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
+      ayudaAbierta: abiertas.has(orden.id), // ficha 454 (R24)
     };
   }
 
@@ -5399,7 +5633,7 @@ export class OrdenRepository implements IOrdenRepository {
    */
   async countNovedadesByTienda(tiendaId: string, grupo: GrupoNovedad): Promise<number> {
     return this.prisma.orden.count({
-      where: this.novedadWhere(tiendaId, grupo),
+      where: this.novedadWhere(tiendaId, grupo, await this.idsAyudaDeTienda(tiendaId, grupo)),
     });
   }
 
@@ -5424,7 +5658,7 @@ export class OrdenRepository implements IOrdenRepository {
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]> {
     const rows = await this.prisma.orden.findMany({
-      where: this.novedadWhere(tiendaId, grupo),
+      where: this.novedadWhere(tiendaId, grupo, await this.idsAyudaDeTienda(tiendaId, grupo)),
       orderBy: { createdAt: "desc" },
       skip: pagination.skip,
       take: pagination.take,
@@ -5449,7 +5683,8 @@ export class OrdenRepository implements IOrdenRepository {
         // `GestionOrdenRepository`). `distrito` es el unico opcional -> `?.nombre ?? null`.
         estatus: { select: { value: true } },
         tienda: { select: { nombre: true } },
-        zona: { select: { nombre: true } },
+        // FICHA 429 (R13/R15): dos columnas mas en el `select` de zona QUE YA EXISTIA.
+        zona: { select: { nombre: true, sinpeNumero: true, sinpeNombre: true } },
         provincia: { select: { nombre: true } },
         canton: { select: { nombre: true } },
         distrito: { select: { nombre: true } },
@@ -5458,7 +5693,17 @@ export class OrdenRepository implements IOrdenRepository {
         // El `select` acotado a la IDENTIDAD (nombre y apellidos) NO es cosmetico: la fila de
         // `usuario` lleva `email`, `telefono`, `cedula` y `password_hash`, y esta fila viaja al
         // navegador de la TIENDA.
-        mensajeroAsignado: { select: NOMBRE_USUARIO_SELECT },
+        //
+        // FICHA 429 (R13): + la ZONA del mensajero, acotada a las dos columnas del SINPE. NO se
+        // ensancha `NOMBRE_USUARIO_SELECT` —que es la identidad y la comparten otras lecturas—:
+        // se añade la relacion aparte, para que nadie acabe filtrando un SINPE a una pantalla que
+        // solo pedia un nombre.
+        mensajeroAsignado: {
+          select: {
+            ...NOMBRE_USUARIO_SELECT,
+            zona: { select: { sinpeNumero: true, sinpeNombre: true } },
+          },
+        },
       },
     });
     return rows.map((row) => ({
@@ -5487,6 +5732,13 @@ export class OrdenRepository implements IOrdenRepository {
       // vacia se pinta como una etiqueta sin valor y la tienda no sabria si es que no hay nadie
       // o si el nombre se perdio por el camino.
       mensajeroNombre: row.mensajeroAsignado ? nombreCompletoUsuario(row.mensajeroAsignado) : null,
+      // FICHA 429 (R13/R15/R16): la MISMA funcion pura que usan el envio por servidor y el portal
+      // del mensajero. `/novedades` pinta las mismas cards POS y compone en modo `wa.me`, asi que
+      // un numero distinto aqui llegaria al cliente igual que uno mandado por el servidor.
+      ...sinpeDeLaOrden(
+        row.mensajeroAsignado?.zona ?? null,
+        { numero: row.zona.sinpeNumero, nombre: row.zona.sinpeNombre },
+      ),
       createdAt: row.createdAt,
     }));
   }
@@ -5541,19 +5793,12 @@ export class OrdenRepository implements IOrdenRepository {
    * del despliegue lo desmintiera el arreglo es un indice, no un rediseño (design §1.2).
    */
   async findFechaSolicitudAyuda(ordenIds: string[]): Promise<Map<string, Date>> {
-    if (ordenIds.length === 0) return new Map();
-    const rows = await this.prisma.ordenHistorialEstado.findMany({
-      where: { ordenId: { in: ordenIds }, origenTipo: ORIGEN_TIPO_SOLICITUD_AYUDA },
-      orderBy: { createdAt: "desc" },
-      select: { ordenId: true, createdAt: true },
-    });
-    const map = new Map<string, Date>();
-    for (const row of rows) {
-      // Vienen desc: la PRIMERA por `ordenId` es la solicitud VIVA. Las anteriores son ciclos de
-      // ayuda ya cerrados con su rescate, y no describen la espera de hoy.
-      if (!map.has(row.ordenId)) map.set(row.ordenId, row.createdAt);
-    }
-    return map;
+    // ⏳ 2026-09-23 (FICHA 454, T1.16): la IDA de la ayuda ya no es una transicion de historial
+    // (`solicitud_ayuda_tienda`) sino un HECHO (`orden_evento` `ayuda_solicitada`). La fecha sale
+    // de ahi, por el modulo unico de la ayuda. Precio declarado: una orden que la migracion M3 paso
+    // de `ayuda_tienda` a ayuda abierta lleva como fecha la de la migracion (el motivo del evento
+    // conserva la original).
+    return fechasSolicitudAyuda(this.prisma, ordenIds);
   }
 
   // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---

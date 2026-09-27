@@ -157,6 +157,7 @@ describe("ApiOrdenLecturaService.listar — `mensajero` en el DTO (feature 404)"
       "destinatario",
       "direccion",
       "estado",
+      "estadoNombre",
       "mensajero",
       "montoCobrar",
       "numGuia",

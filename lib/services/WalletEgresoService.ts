@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
+  CrearMovimientoInput,
   IWalletMovimientoRepository,
+  LateralesDelRegistro,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { ComprobanteRecibido, IWalletComprobanteService } from "@/lib/interfaces/services/IWalletComprobanteService";
+import { lateralesDeCaja, registrarConComprobante } from "@/lib/services/registro-con-comprobante";
+import type { CamposLateralesCaja } from "@/lib/types/wallet-laterales";
 import type {
   IWalletEgresoService,
   RegistrarEgresoServiceResult,
@@ -19,6 +24,7 @@ import {
 } from "@/lib/types/wallet";
 import { instanteDelMovimientoManual } from "@/lib/utils/fecha-movimiento-manual";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { CATEGORIA_LABEL } from "@/lib/constants/wallet-rotulos";
 
 // Roles autorizados (R17): acceso total (maestro/admin, dueños de la caja central), espejo de
 // WalletService.
@@ -36,14 +42,29 @@ export class WalletEgresoService implements IWalletEgresoService {
     // Cliente de escritura para el egreso/reverso (fuera de una tx de cierre): el repo
     // acepta cualquier WalletTxClient; aqui inyectamos el PrismaClient completo.
     private readonly writeClient: WalletTxClient,
+    /** FICHA 458-B (R74) — el comprobante del sueldo/gasto. Sin el, registrar CON comprobante lanza. */
+    private readonly comprobantes?: IWalletComprobanteService,
   ) {}
 
   async registrarEgreso(
-    input: RegistrarEgresoAdministrativoInput,
+    input: RegistrarEgresoAdministrativoInput & Partial<CamposLateralesCaja>,
     actor: Actor,
+    comprobante: ComprobanteRecibido | null = null,
   ): Promise<RegistrarEgresoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
+    // FICHA 458-B (R42/R74–R76): «a quien», referencia y comprobante, en la MISMA transaccion que el
+    // asiento. Sin ninguno de los tres, lo de abajo es exactamente el registro de antes.
+    return registrarConComprobante(this.comprobantes, "wallet_movimiento", comprobante, async (guardado) => {
+      const r = await this.escribirEgreso(input, actor, lateralesDeCaja(input, guardado, actor.usuarioId));
+      return { quedo: r.status === "ok", resultado: r };
+    });
+  }
 
+  private async escribirEgreso(
+    input: RegistrarEgresoAdministrativoInput,
+    actor: Actor,
+    laterales: LateralesDelRegistro | undefined,
+  ): Promise<Extract<RegistrarEgresoServiceResult, { status: "ok" | "ya_registrado" }>> {
     // R2: mapeo tipo de egreso manual -> categoria del libro (gasto_variable /
     // egreso_gasto_variable, sueldo / egreso_sueldo). El gasto FIJO no llega aqui (rechazado
     // en el borde por zod, R19). R1/R3/R7: fila inmutable, origen_tipo=gasto, origen_id=NULL
@@ -57,29 +78,42 @@ export class WalletEgresoService implements IWalletEgresoService {
     const fechaMovimiento = instanteDelMovimientoManual(input.fecha);
     // FICHA 362 (R6/R9) — `egreso_administrativo_registrado`, en la MISMA transaccion que el
     // asiento. La abre el repositorio: el servicio no conoce Prisma.
-    await this.repo.crearMovimientoRegistrado(
-      {
-        id,
-        tipo: "egreso",
-        categoria,
-        monto: input.monto,
-        origenTipo: "gasto",
-        origenId: null,
-        descripcion: input.descripcion,
-        registradoPor: actor.usuarioId,
-        ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
-      },
-      { accion: "egreso_administrativo_registrado", actorUsuarioId: actor.usuarioId },
-    );
+    const mov: CrearMovimientoInput & { id: string } = {
+      id,
+      tipo: "egreso",
+      categoria,
+      monto: input.monto,
+      origenTipo: "gasto",
+      origenId: null,
+      descripcion: input.descripcion,
+      registradoPor: actor.usuarioId,
+      ...(fechaMovimiento !== undefined ? { fechaMovimiento } : {}),
+      claveIdempotencia: input.claveIdempotencia, // ficha 461 (R66/R67)
+    };
+    const registro = { accion: "egreso_administrativo_registrado" as const, actorUsuarioId: actor.usuarioId };
+    // FICHA 458-B: sin laterales, la llamada es EXACTAMENTE la de antes (dos argumentos).
+    const escritas =
+      laterales === undefined
+        ? await this.repo.crearMovimientoRegistrado(mov, registro)
+        : await this.repo.crearMovimientoRegistrado(mov, registro, laterales);
+    // Ficha 461 (R68, auditoria D2): `0` = la clave YA tenia su fila (doble clic, reintento). No se
+    // escribio nada —ni asiento ni historial— y se responde con el egreso ORIGINAL, releido por la
+    // clave. Antes, dos envios iguales eran dos sueldos o dos gastos y nada lo notaba.
+    if (escritas === 0) {
+      const original = await this.repo.obtenerPorClave(input.claveIdempotencia);
+      if (original === null) {
+        throw new Error("wallet: clave de idempotencia repetida sin egreso que releer");
+      }
+      return { status: "ya_registrado", movimiento: original };
+    }
 
     // Ficha 334 (R28): se relee POR ID, no «el mas reciente de esta categoria». Aquella
     // relectura funcionaba por ACCIDENTE (todo se fechaba con `now()`); registrado un gasto
     // variable con fecha de la semana pasada devolveria OTRO gasto variable.
     const movimiento = await this.repo.obtenerPorId(id);
     if (movimiento === null) {
-      // Imposible por construccion: el egreso manual lleva `origen_id NULL`, queda fuera del
-      // indice unico parcial y nunca se deduplica. Se propaga con contexto antes que devolver
-      // una fila ajena.
+      // Imposible por construccion: `escritas` fue 1, asi que la fila con ESTE id existe. Se propaga
+      // con contexto antes que devolver una fila ajena.
       throw new Error(`wallet: el egreso manual ${id} no se pudo releer tras insertarlo`);
     }
     return { status: "ok", movimiento };
@@ -120,7 +154,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         monto: original.monto,
         origenTipo: "gasto",
         origenId: original.id,
-        descripcion: `Reverso de: ${original.descripcion ?? original.id}`,
+        // Ficha 458-A (TA.6, R4): sin descripcion, el texto cae al NOMBRE del concepto, nunca al id.
+        descripcion: `Reverso de: ${original.descripcion ?? CATEGORIA_LABEL[original.categoria]}`,
         registradoPor: actor.usuarioId,
       },
       { accion: "egreso_administrativo_reversado", actorUsuarioId: actor.usuarioId },
@@ -143,6 +178,8 @@ export class WalletEgresoService implements IWalletEgresoService {
         categoria: input.categoria,
         desde: input.desde,
         hasta: input.hasta,
+        // Ficha 458-E (TE.2, R59): el desglose del MISMO conjunto que el libro con «A quién».
+        ...(input.aQuien !== undefined ? { aQuien: input.aQuien } : {}),
       });
     // Feature 158/R32: la indemnizacion entra en el total. Suma con Prisma.Decimal (nunca
     // number/parseFloat) y sale como STRING escala 2, igual que los otros tres conceptos.

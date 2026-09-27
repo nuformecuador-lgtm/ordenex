@@ -1,0 +1,94 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a98f21a206367eba0
+
+(node:11020) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la correccion escribe UNA fila de bitacora entregado -> rechazo 3ms
+ ✓ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > invariantes > la pantalla del historico de acciones la lee con los mismos valores 0ms
+ ✓ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts > 455/C16 — snapshot de la correccion de resultado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R23) > la columna pinta hoy el codigo crudo 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los contadores por RESULTADO del dia: dos de cada, y 16 asignadas 2ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > invariantes > los buckets sin resultado: 2 sin recoger, 3 en reparto, 1 en otros 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts > 455/C04 — tablero del dia (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de los ocho contadores, hoy 1ms
+(node:19236) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > aviso de novedades: la tienda tiene 3 en novedad (N1 con su causa, N2 y P3 sin gestion) y X no cuenta 3ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > represadas de la zona: solo P1 (anclada antes del umbral) 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts > 455/C06 — aviso agregado y corte nocturno (Postgres real) > el corte crea UN vencido y barre solo E1 a novedadInterna, vinculada con origen enReparto 0ms
+(node:12276) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > un evento por transicion publica, con la dedupe determinista, y ninguno para la devolucion a tienda 2ms
+ ✓ tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > cada entrega lleva el eventoId de su job y el estado de su destino 1ms
+ ✓ tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > R28: renombrado el catalogo tras encolar, el mismo job entrega el valor nuevo con el mismo eventoId 0ms
+ ✓ tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > las claves del data entregado, hoy 0ms
+(node:5328) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > filtrar el listado por cada uno de los 7 codigos devuelve 200 y SOLO su orden, con ese estado 2ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > un codigo que no existe responde 422 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > detalle: la gestion de novedad aprobada lleva su resultado y su estado resultante 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > detalle: la gestion pendiente (454) no tiene estado resultante y va marcada 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > invariantes > carga: la remision existente vuelve como duplicada con el estado de la orden que la ocupa 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > el item del listado no lleva estadoNombre 1ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > gestiones[] no lleva resultadoNombre ni estadoResultanteNombre 0ms
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts > 455/C12 — API por API key: listado, detalle y carga (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R24, R27) > la fila de la carga lleva `estatus` (no `estado`) 0ms
+(node:28212) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > los totales congelados al solicitar 2ms
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > los movimientos de los feeds de la aprobacion, con importes exactos 1ms
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > re-aprobar no emite nada mas 0ms
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts > 455/C08 — dinero de la aprobacion con los cinco resultados (Postgres real) > el estado final de cada orden tras aprobar 0ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > 24 filas de historial se publican como 21 entradas 2ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > cada entrada lleva la fecha de la PRIMERA fila de su racha, y la vigente es la ultima 1ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > con una gestion pendiente (454), la ultima entrada es la pendiente 0ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > los textos de la linea, hoy (hitos) 0ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > el nombre del resultado pendiente, hoy 0ms
+(node:1832) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > solo cuentan novedad, reprogramado y rechazo de visita real aprobada: T = umbral, B = umbral - 1 3ms
+ ✓ tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > T en el tope: rechazo con UNA gestion sintetica y sale a devolucion a la tienda (orden central) 1ms
+ ✓ tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts > 455/C09 — intentos de entrega y tope 276 (Postgres real) > B bajo el umbral: vuelve a bodega central, sin mensajero y con prioridad 0ms
+(node:32712) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > precondicion: las tres ayudas se piden, A2 se recupera y la tienda gestiona A3 2ms
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > la pestaña de devolucion de la tienda lista D1 y D2 (ni X1, ni X2, ni la ajena) 0ms
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > invariantes > la pestaña de ayuda lista solo la ayuda abierta (A1) 0ms
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts > 455/C14 — pestañas de novedades y ayuda de la tienda (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R5/R6) > los rotulos de las dos pestañas, hoy 0ms
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > ninguna arista nombra un codigo que el interruptor no conozca 2ms
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual al inventario de la 140 1ms
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > el grafo es igual a la lista literal de aristas en claves 1ms
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts > 455/C10 — el grafo de transiciones leido en claves > los estados de creacion y los terminales, en claves 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > las filas del rollup de D, cubo a cubo y medida a medida 2ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el intradia de D reproduce el rollup 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > la cohorte de carga de D por desenlace 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > invariantes > el ranking: una entrega vigente de mensajero1 en D 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts > 455/C05 — numeros de la analitica (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R3) > la etiqueta de estatus del rollup operativo es el codigo 0ms
+(node:22700) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > para los 20 estados el lector entrega el codigo y la variable se resuelve sin fallar 3ms
+ ✓ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > invariantes > el texto nunca es vacio ni el codigo 0ms
+ ✓ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts > 455/C15 — variable {{estatus}} de las plantillas (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R35) > el texto de cada estado, hoy (hito publico) 0ms
+(node:15168) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > precondicion: sin filtro de estado salen las 16 ordenes del escenario 3ms
+ ✓ tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > filtrar por el id de cada uno de los 7 estados renombrados devuelve SUS dos ordenes 1ms
+ ✓ tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts > 455/C01 — filtro por estado de /ordenes y vista guardada (Postgres real) > una vista guardada con dos estados devuelve exactamente sus cuatro ordenes 0ms
+ ✓ tests/integration/db/455/interruptor-codigos.test.ts > 455/T0.1 — el interruptor coincide con el catalogo del codigo > los 20 valores de C, en orden, son ORDER_STATUS_SEED 2ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > las candidatas del escenario son A (anclada en la aprobacion) y B (legada, anclada en su gestion) 3ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts > 455/C03 — candidatas del cron de devoluciones (Postgres real) > el cron pasada la ventana escala A y B a rechazo y no toca N1, N2 ni N3 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el desglose por status de la cohorte 2ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el plegado en desenlaces (con el cubo `otros`) 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > las devoluciones por causa 0ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts > 455/C07 — conteos de entregas, devoluciones y ciclo de vida (Postgres real) > el ciclo de vida acumulado de las cerradas en D 0ms
+ ✓ tests/integration/db/455/interruptor-codigos.test.ts > 455/T0.1 — humo del interruptor contra Postgres real > los 5 valores de R son las etiquetas del enum `gestion_resultado` 1ms
+ ✓ tests/integration/db/455/interruptor-codigos.test.ts > 455/T0.1 — humo del interruptor contra Postgres real > se siembra y se relee una orden en cada uno de los 20 estados de C 0ms
+(node:10956) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > precondicion: sin filtro de estado el adminSatelite ve las 6 de su bodega y ninguna ajena 2ms
+ ✓ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > invariantes > la seleccion [porDevolverCentral, rechazo] devuelve exactamente sus cuatro ordenes 0ms
+ ✓ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts > 455/C02 — filtro por codigo del listado satelite (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R22) > la URL con los dos codigos de hoy se lee como esa seleccion y devuelve las mismas cuatro 0ms
+
+ Test Files  17 passed (17)
+      Tests  64 passed (64)
+   Start at  04:52:40
+   Duration  9.87s (transform 6.32s, setup 504ms, import 30.59s, tests 30.91s, environment 2ms)
+
+INIT_EXIT=0

@@ -216,7 +216,7 @@ describeSiHayBase("396/B3 — el desglose por tienda agrupa por lo CONGELADO, co
           tiendaCongelada: string;
           tiendaViva: string;
           montoCobrar: string;
-          resultado: "entregada" | "rechazada";
+          resultado: "entregado" | "devolucion_a_origen_por_rechazo";
           pago: { metodo: "efectivo" | "SINPE"; monto: string } | null;
         }) => {
           const numRemision = `R-${SUFIJO}-${opciones.clave}`;
@@ -319,7 +319,7 @@ describeSiHayBase("396/B3 — el desglose por tienda agrupa por lo CONGELADO, co
           tiendaCongelada: tiendaA,
           tiendaViva: tiendaB,
           montoCobrar: "100000.00",
-          resultado: "entregada",
+          resultado: "entregado",
           pago: { metodo: "efectivo", monto: "100000.00" },
         });
         const remisionA2 = await sembrar({
@@ -328,7 +328,7 @@ describeSiHayBase("396/B3 — el desglose por tienda agrupa por lo CONGELADO, co
           tiendaCongelada: tiendaA,
           tiendaViva: tiendaB,
           montoCobrar: "20000.00",
-          resultado: "rechazada",
+          resultado: "devolucion_a_origen_por_rechazo",
           pago: null,
         });
         const remisionB1 = await sembrar({
@@ -337,7 +337,7 @@ describeSiHayBase("396/B3 — el desglose por tienda agrupa por lo CONGELADO, co
           tiendaCongelada: tiendaB,
           tiendaViva: tiendaA,
           montoCobrar: "40000.00",
-          resultado: "entregada",
+          resultado: "entregado",
           pago: { metodo: "SINPE", monto: "40000.00" },
         });
 

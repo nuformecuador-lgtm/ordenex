@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import {
   CierreFacturaDetalle,
@@ -75,7 +76,7 @@ const ENTREGA: CierreDetalleGestion = {
   distritoNombre: "Carmen",
   producto: "Caja mediana",
   tiendaNombre: "Tienda X",
-  resultado: "entregada",
+  resultado: "entregado",
   montoRecibido: "8000.00",
   metodoPago: null,
   pagos: [],
@@ -93,10 +94,10 @@ const ENTREGA: CierreDetalleGestion = {
 
 function grupos(): CierreGrupos {
   return {
-    entregada: [ENTREGA],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [ENTREGA],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
 }
@@ -125,6 +126,9 @@ const TRES: CierreOrdenSinGestion[] = [
     destinatario: "Carla Vega",
     producto: "Bulto",
     tiendaNombre: "Tienda Z",
+    // FICHA 454 (2026-09-23, R40): `ayuda_tienda` salio del catalogo, pero una barrida HISTORICA
+    // conserva ese origen en `cierre_sin_gestion` y se sigue leyendo «Ayuda de la tienda» (el
+    // tipo lo admite como `OrderStatusRetirado`).
     estatusOrigen: "ayuda_tienda",
   }),
   sinGestion({
@@ -185,7 +189,7 @@ function pintar(
 
 /** La sección nueva, localizada por su NOMBRE ACCESIBLE (nunca por una clase). */
 function seccion(): HTMLElement {
-  return screen.getByRole("region", { name: "Órdenes sin gestionar" });
+  return screen.getByRole("region", { name: "Pasaron a Novedad interna" });
 }
 
 /**
@@ -309,7 +313,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
   it("R15: registrado y sin ninguna orden ⇒ la sección NO está en el DOM", () => {
     pintar([], true);
     expect(
-      screen.queryByRole("region", { name: "Órdenes sin gestionar" }),
+      screen.queryByRole("region", { name: "Pasaron a Novedad interna" }),
       "con la marca en `true` y cero órdenes, la lectura correcta es «no hubo ninguna» y eso se " +
         "dice callando: la sección no se pinta",
     ).toBeNull();
@@ -320,7 +324,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
   });
@@ -350,7 +354,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
 
     pintar([], true);
     const sinSeccion = screen.queryByRole("region", {
-      name: "Órdenes sin gestionar",
+      name: "Pasaron a Novedad interna",
     });
 
     expect(
@@ -365,7 +369,7 @@ describe("feature 264 — «ninguna» y «no lo sabemos» no se pintan igual (R1
     const s = seccion();
     expect(
       within(s).getByText(
-        "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.",
+        "Este cierre es anterior al registro de las órdenes que pasan a Novedad interna: no se conserva la lista.",
       ),
     ).toBeInTheDocument();
     expect(within(s).queryAllByRole("listitem")).toHaveLength(0);
@@ -378,11 +382,16 @@ describe("feature 264 — la sección es de consulta y no rellena lo que no sabe
   it("R31: ni un botón, ni un enlace, ni un desplegable dentro de la sección", () => {
     pintar();
     const s = seccion();
-    expect(within(s).queryAllByRole("button")).toHaveLength(0);
+    // ⏳ 2026-09-24 (FICHA 456, T3.4/R9): el estado de origen lleva su botón de información («Qué
+    // significa «…»»), que solo abre la explicación. Ese botón se descuenta; cualquier OTRO control
+    // sigue prohibido. Y el de información tiene que estar (no es un verde por vacío).
+    const esInfo = (b: Element) => (b.getAttribute("aria-label") ?? "").startsWith("Qué significa «");
+    expect(within(s).queryAllByRole("button").filter((b) => !esInfo(b))).toHaveLength(0);
+    expect(within(s).queryAllByRole("button").filter(esInfo).length).toBeGreaterThan(0);
     expect(within(s).queryAllByRole("link")).toHaveLength(0);
     expect(s.querySelectorAll("a")).toHaveLength(0);
-    expect(s.querySelectorAll("[aria-expanded]")).toHaveLength(0);
-    expect(s.querySelectorAll("button")).toHaveLength(0);
+    expect([...s.querySelectorAll("[aria-expanded]")].filter((b) => !esInfo(b))).toHaveLength(0);
+    expect([...s.querySelectorAll("button")].filter((b) => !esInfo(b))).toHaveLength(0);
   });
 
   it("R32: el estado de origen se pinta traducido cuando consta", () => {
@@ -396,8 +405,10 @@ describe("feature 264 — la sección es de consulta y no rellena lo que no sabe
       .closest('[role="listitem"]');
 
     expect((desdeReparto as HTMLElement).textContent).toContain("En reparto");
+    // ⏳ 2026-09-24 (FICHA 455, R11): el origen retirado se lee con su nombre histórico MARCADO,
+    // el mismo de la línea de tiempo (antes, «Ayuda de la tienda», un nombre que nunca tuvo).
     expect((desdeAyuda as HTMLElement).textContent).toContain(
-      "Ayuda de la tienda",
+      "Ayuda solicitada a la tienda (estado retirado)",
     );
   });
 
@@ -533,11 +544,37 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
     // «Entregadas 1» y las otras cuatro en cero. Concatenar las órdenes sin gestionar a
     // `grupos.entregada` —la otra mitad de M4— movería la primera.
     expect(pestanas.map((t) => t.textContent)).toEqual([
-      "Entregadas1",
-      "Reprogramadas0",
-      "Devueltas0",
-      "Rechazadas0",
-      "Incidentes0",
+      "Entregado1",
+      "Reprogramado0",
+      "Novedad0",
+      "Devolución a origen por rechazo0",
+      "Incidente0",
     ]);
+  });
+});
+
+// ── FICHA 456 (T3.4, design §5.1 fila 6 y §5.2; R9, R15, R16, R30) ─────────────────────────────
+
+describe("456 — botón de información en el comprobante", () => {
+  it("R9/R15 — el origen de una barrida lleva su botón; un origen retirado, no", async () => {
+    const user = userEvent.setup();
+    pintar();
+    const s = seccion();
+    const desdeReparto = within(s).getByText("Beto Mora").closest('[role="listitem"]') as HTMLElement;
+    const desdeAyuda = within(s).getByText("Carla Vega").closest('[role="listitem"]') as HTMLElement;
+    expect(within(desdeAyuda).queryByRole("button")).toBeNull();
+    await user.click(within(desdeReparto).getByRole("button", { name: "Qué significa «En reparto»" }));
+    expect(await screen.findByRole("dialog")).toHaveAccessibleName("En reparto");
+  });
+
+  it("R16/R30 — las pestañas con cifra no llevan botón, y abrir una explicación no cambia la pestaña", async () => {
+    const user = userEvent.setup();
+    pintar();
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas.length).toBeGreaterThan(0);
+    for (const t of pestanas) expect(within(t).queryByRole("button")).toBeNull();
+    const activa = pestanas.find((t) => t.getAttribute("aria-selected") === "true");
+    await user.click(within(seccion()).getByRole("button", { name: "Qué significa «En reparto»" }));
+    expect(screen.getAllByRole("tab").find((t) => t.getAttribute("aria-selected") === "true")).toBe(activa);
   });
 });

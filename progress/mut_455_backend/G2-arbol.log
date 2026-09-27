@@ -1,0 +1,49 @@
+# MUTACION G2-arbol
+archivo: lib/types/gestion-resultado.ts
+linea: 16
+- "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;"
++ "export const RESULTADO_ES_ESTADO: ResultadoEsEstado = true;\nexport const MUTACION_G2 = \"Entregada\";"
+tests: tests/unit/guards/nombres-estado-retirados.guardia.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 5 passed (6)
+FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (6 tests | 1 failed) 53ms
+     × ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  06:28:55
+   Duration  2.42s (transform 141ms, setup 58ms, import 2.10s, tests 53ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+AssertionError: un nombre de estado RETIRADO (requirements 455 §0.3) volvio como texto visible. Usa el nombre de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accion, un texto propio (R6).: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lib/types/gestion-resultado.ts:17 Entregada",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:219:7
+    217|       "un nombre de estado RETIRADO (requirements 455 §0.3) volvio com…
+    218|         "de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accio…
+    219|     ).toEqual([]);
+       |       ^
+    220|   });
+    221|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

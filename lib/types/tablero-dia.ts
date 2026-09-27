@@ -68,7 +68,7 @@ export type BucketSinResultado = "sinRecoger" | "enReparto" | "otros";
  * compile (R46); que no falte ni sobre ningun value lo comprueba el guardia.
  */
 export const BUCKET_POR_ESTATUS = {
-  por_recoger: "sinRecoger",
+  mensajero_recogiendo_en_bodega: "sinRecoger",
   recolectando: "sinRecoger",
   en_reparto: "enReparto",
 } as const satisfies Partial<Record<OrderStatusValue, BucketSinResultado>>;

@@ -149,7 +149,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
     // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
-    transicionarAyuda: vi.fn().mockResolvedValue(true),
+    registrarAyudaSolicitada: vi.fn().mockResolvedValue(true), // ficha 454
+    registrarAyudaResuelta: vi.fn().mockResolvedValue(true), // ficha 454
     findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     // Ficha 320: el par lectura/escritura del BORRADO por API key, tambien scoped por owner.
     findParaEliminacionApi: vi.fn().mockResolvedValue(null),
@@ -159,6 +160,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),
     findNovedadesByTienda: vi.fn().mockResolvedValue([]),
     findFechaSolicitudAyuda: vi.fn().mockResolvedValue(new Map()),
+    findIdsConGestionPendiente: vi.fn(async () => new Set<string>()), // ficha 454
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),
@@ -485,7 +487,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
     repo = buildRepo({
       list: vi.fn().mockResolvedValue({
         items: [
-          listItem({ id: "o-rech", estatusValue: "rechazada", tiendaId: "store1" }),
+          listItem({ id: "o-rech", estatusValue: "devolucion_a_origen_por_rechazo", tiendaId: "store1" }),
           listItem({ id: "o-dev", estatusValue: "devolviendo_a_tienda", tiendaId: "store1" }),
         ],
         total: 2,
@@ -500,7 +502,7 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
-      expect(r.items.map((i) => i.estatusValue)).toEqual(["rechazada", "devolviendo_a_tienda"]);
+      expect(r.items.map((i) => i.estatusValue)).toEqual(["devolucion_a_origen_por_rechazo", "devolviendo_a_tienda"]);
     }
     // R12: el alcance server-side es la propia tienda (no un parametro del cliente).
     const arg = (repo.list as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -581,7 +583,7 @@ describe("listar / eliminable (eliminar orden)", () => {
   });
 
   it("orden en un estado que ya no admite borrado -> eliminable false", async () => {
-    const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregada" })]);
+    const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregado" })]);
 
     const r = await service.listar(PAGINA, MAESTRO);
 

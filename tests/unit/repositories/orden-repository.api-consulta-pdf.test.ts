@@ -43,7 +43,7 @@ function ordenDetalleRow(overrides: Record<string, unknown> = {}) {
     direccion: "Calle 1",
     montoCobrar: new Prisma.Decimal(25.9),
     createdAt: new Date("2026-07-22T14:03:11.000Z"),
-    estatus: { value: "entregada" },
+    estatus: { value: "entregado" },
     // ⏳ 2026-09-10 (feature 415): lo que el `select` del canal anade a la fila cruda.
     ...FILA_PRISMA_415,
     gestiones: [],
@@ -62,7 +62,7 @@ function ordenDetalleRow(overrides: Record<string, unknown> = {}) {
 function gestionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "g-1",
-    resultado: "entregada",
+    resultado: "entregado",
     evidenciaStoragePath: null,
     evidenciaContentType: null,
     createdAt: new Date("2026-09-01T10:00:00.000Z"),
@@ -207,7 +207,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
       ordenDetalleRow({
         gestiones: [
           {
-            resultado: "entregada",
+            resultado: "entregado",
             evidenciaStoragePath: "ordenes/o1/evidencia.jpg",
             evidenciaContentType: "image/jpeg",
             createdAt: new Date("2026-07-23T10:00:00.000Z"),
@@ -220,11 +220,11 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
 
     expect(res).not.toBeNull();
     expect(res!.numGuia).toBe(100234);
-    expect(res!.estatusValue).toBe("entregada");
+    expect(res!.estatusValue).toBe("entregado");
     expect(res!.montoCobrar).toBe(25.9);
     expect(res!.evidencias).toEqual([
       {
-        resultado: "entregada",
+        resultado: "entregado",
         storagePath: "ordenes/o1/evidencia.jpg",
         contentType: "image/jpeg",
       },
@@ -279,7 +279,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     // `evidenciaStoragePath`, ampliar el `in`— esto se pone rojo igual que antes.
     const gestiones = (prisma.orden.findFirst as Mock).mock.calls[0][0].select.gestiones;
     expect(gestiones.where.OR[0]).toEqual({
-      resultado: { in: ["entregada", "rechazada", "incidente"] },
+      resultado: { in: ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] },
       evidenciaStoragePath: { not: null },
     });
     expect(gestiones.where.OR[1]).toEqual({ anuladaAt: null }); // 405/R11
@@ -301,7 +301,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
       ordenDetalleRow({
         gestiones: [
           gestionRow({
-            resultado: "entregada",
+            resultado: "entregado",
             evidenciaStoragePath: "ordenes/o1/anulada.jpg",
             evidenciaContentType: "image/jpeg",
             anuladaAt: new Date("2026-09-01T12:00:00.000Z"),
@@ -316,7 +316,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     // ficha declara que NO lo toca.
     expect(res!.evidencias).toEqual([
       {
-        resultado: "entregada",
+        resultado: "entregado",
         storagePath: "ordenes/o1/anulada.jpg",
         contentType: "image/jpeg",
       },
@@ -331,7 +331,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
       ordenDetalleRow({
         gestiones: [
           gestionRow({
-            resultado: "reprogramada",
+            resultado: "reprogramado",
             evidenciaStoragePath: null,
             evidenciaContentType: null,
           }),
@@ -345,7 +345,7 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     // `storagePath: null` y el service intentaria firmarla.
     expect(res!.evidencias).toEqual([]);
     expect(res!.gestiones).toHaveLength(1);
-    expect(res!.gestiones[0].resultado).toBe("reprogramada");
+    expect(res!.gestiones[0].resultado).toBe("reprogramado");
   });
 
   it("268/R27: la variante por id trae tambien la evidencia del incidente del ADMIN", async () => {

@@ -36,12 +36,12 @@ const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
 const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
 const ESTATUS_ID_BY_VALUE: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_reparto: "os-reparto",
-  entregada: "os-entregada",
-  reprogramada: "os-reprogramada",
+  entregado: "os-entregada",
+  reprogramado: "os-reprogramada",
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
-  rechazada: "os-rechazada",
+  devolucion_a_origen_por_rechazo: "os-rechazada",
   incidente: "os-incidente",
   ayuda_tienda: "os-ayuda-tienda",
 };
@@ -70,7 +70,10 @@ function fakeRepo(over: Partial<IGestionOrdenRepository> = {}): IGestionOrdenRep
     setOrdenEnGestion: vi.fn(async () => true),
     liberarOrdenEnGestion: vi.fn(async () => true),
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
-    crearGestionYTransicionar: vi.fn(async () => "g1"),
+    registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev-g1" })),
+    // FICHA 454: la guarda de gestionabilidad pregunta por gestion pendiente / ayuda abierta.
+    findBloqueoDeGestion: vi.fn(async () => null),
+    findPendientesYAyudas: vi.fn(async () => ({ conGestionPendiente: new Set<string>(), conAyudaAbierta: new Set<string>() })),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
     crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
     rechazarDesdeDevuelta: vi.fn(async () => true),
@@ -135,30 +138,30 @@ const FOTO = { contentType: "image/jpeg" as const, bytes: new Uint8Array([1]) };
  * que es justo lo que la union existe para impedir.
  */
 const ENTRADA = {
-  reprogramada: (): GestionarInput => ({
+  reprogramado: (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "reprogramada",
+    resultado: "reprogramado",
     fechaReprogramacion: "2026-09-01",
     motivo: "el cliente pidio otro dia",
   }),
-  devuelta: (): GestionarInput => ({
+  novedad: (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "devuelta",
+    resultado: "novedad",
     causaDevolucion: "not_found",
     motivo: "nadie en el domicilio",
     evidencias: [FOTO],
   }),
-  entregada: (): GestionarInput => ({
+  entregado: (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: 100,
     metodoPago: "efectivo",
     pagos: [{ metodo: "efectivo", monto: 100 }],
     evidencias: [FOTO],
   }),
-  rechazada: (): GestionarInput => ({
+  devolucion_a_origen_por_rechazo: (): GestionarInput => ({
     ordenId: "o1",
-    resultado: "rechazada",
+    resultado: "devolucion_a_origen_por_rechazo",
     motivo: "no la quiso",
     evidencias: [FOTO],
   }),
@@ -179,23 +182,23 @@ describe("276/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`"
   it("1. `reprogramada` con `intentos = umbral - 1` -> conflict con el motivo compartido", async () => {
     const { service, repo } = montar(UMBRAL - 1);
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") return;
     // R6: el motivo sale del SIMBOLO compartido, no de un literal gemelo escrito aqui. Si el
     // servicio reescribiera la frase, este caso cae.
     expect(r.motivo).toBe(MSG_TOPE_INTENTOS_GESTION);
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("2. `devuelta` con `intentos = umbral - 1` -> el MISMO conflict", async () => {
     const { service, repo } = montar(UMBRAL - 1);
 
-    const r = await service.gestionar(ENTRADA.devuelta(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.novedad(), MENSAJERO);
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -207,7 +210,7 @@ describe("276/T4 · R2 — en el tope, los tres permitidos llegan al repositorio
   // El de `incidente` es el que blinda la DECISION 3 DEL HUMANO (2026-08-24): reportar un
   // incidente NO es un desenlace de entrega, asi que el tope no lo toca. Si alguien "limpiara" la
   // lista de permitidos dejando solo `entregada` y `rechazada`, este caso cae.
-  const PERMITIDOS = ["entregada", "rechazada", "incidente"] as const;
+  const PERMITIDOS = ["entregado", "devolucion_a_origen_por_rechazo", "incidente"] as const;
 
   for (const resultado of PERMITIDOS) {
     it(`3.${resultado} — pasa con intentos = umbral - 1`, async () => {
@@ -216,7 +219,7 @@ describe("276/T4 · R2 — en el tope, los tres permitidos llegan al repositorio
       const r = await service.gestionar(ENTRADA[resultado](), MENSAJERO);
 
       expect(r.status).toBe("ok");
-      expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+      expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
     });
   }
 
@@ -226,7 +229,7 @@ describe("276/T4 · R2 — en el tope, los tres permitidos llegan al repositorio
     // contador se consultara siempre, una caida de esa lectura romperia una entrega.
     const { service, historial } = montar(UMBRAL + 5);
 
-    await service.gestionar(ENTRADA.entregada(), MENSAJERO);
+    await service.gestionar(ENTRADA.entregado(), MENSAJERO);
 
     expect(historial.contarIntentos).not.toHaveBeenCalled();
   });
@@ -240,10 +243,10 @@ describe("276/T4 · R1 — por debajo del tope nada cambia", () => {
   it("4. `reprogramada` con `intentos = umbral - 2` pasa", async () => {
     const { service, repo } = montar(UMBRAL - 2);
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("4.bis — y con `intentos` POR ENCIMA del umbral sigue bloqueada (`>=`, no `===`)", async () => {
@@ -251,10 +254,10 @@ describe("276/T4 · R1 — por debajo del tope nada cambia", () => {
     // seguia circulando. Con `===` en `alcanzaElTope` este caso se escaparia por el hueco.
     const { service, repo } = montar(UMBRAL + 4);
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -272,7 +275,7 @@ describe("276/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => 
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "devuelta",
+        resultado: "novedad",
         causaDevolucion: "wrong_address",
         motivo: "direccion equivocada",
         evidencias: [FOTO, FOTO],
@@ -283,7 +286,7 @@ describe("276/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => 
     expect(r.status).toBe("conflict");
     expect(storage.upload).not.toHaveBeenCalled();
     expect(storage.remove).not.toHaveBeenCalled(); // ni siquiera hubo que compensar
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
     expect(repo.liberarOrdenEnGestion).not.toHaveBeenCalled();
   });
@@ -291,7 +294,7 @@ describe("276/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => 
   it("5.bis — tampoco toca el puntero de «orden activa»: la guarda va ANTES", async () => {
     const { service, repo } = montar(UMBRAL - 1);
 
-    await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     // `getOrdenEnGestion` es la guarda SIGUIENTE. Que no se haya llamado demuestra que el corte
     // ocurrio antes, no que el resultado coincidiera por casualidad.
@@ -342,19 +345,19 @@ describe("276/T4 · R7 — el umbral es configurable de verdad", () => {
     // prueba de que el numero salio de la configuracion.
     const { service, repo } = await montarConUmbral5(3);
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r.status).toBe("ok");
-    expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
+    expect(repo.registrarGestionPendiente).toHaveBeenCalledTimes(1);
   });
 
   it("6b. con umbral 5 e `intentos = 4`, reprogramar NO pasa", async () => {
     const { service, repo } = await montarConUmbral5(4);
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 });
 
@@ -372,7 +375,7 @@ describe("276/T4 · R11 — la decision no depende de lo que mande el cliente", 
     const r = await service.gestionar(
       {
         ordenId: "o1",
-        resultado: "reprogramada",
+        resultado: "reprogramado",
         fechaReprogramacion: "2026-12-31",
         motivo: "el cliente pidio otro dia",
       },
@@ -381,7 +384,7 @@ describe("276/T4 · R11 — la decision no depende de lo que mande el cliente", 
 
     expect(r).toEqual({ status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION });
     expect(storage.upload).not.toHaveBeenCalled();
-    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+    expect(repo.registrarGestionPendiente).not.toHaveBeenCalled();
   });
 
   it("7.bis — el orden de guardas NO se invierte: el bloqueo por cierres gana al tope", async () => {
@@ -414,7 +417,7 @@ describe("276/T4 · R11 — la decision no depende de lo que mande el cliente", 
       fakeIntentosEnLote({ o1: UMBRAL - 1 }),
     );
 
-    const r = await service.gestionar(ENTRADA.reprogramada(), MENSAJERO);
+    const r = await service.gestionar(ENTRADA.reprogramado(), MENSAJERO);
 
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") return;

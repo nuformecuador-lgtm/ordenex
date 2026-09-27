@@ -122,7 +122,7 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
     distritoNombre: "Carmen",
     producto: "Caja",
     tiendaNombre: "Tienda X",
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "8000.00",
     metodoPago: null,
     pagos: [{ metodo: "efectivo", monto: "8000.00" }],
@@ -142,10 +142,10 @@ function gestion(over: Partial<CierreDetalleGestion> = {}): CierreDetalleGestion
 
 function grupos(g: CierreDetalleGestion): CierreGrupos {
   const vacios: Record<CierreResultado, CierreDetalleGestion[]> = {
-    entregada: [],
-    reprogramada: [],
-    devuelta: [],
-    rechazada: [],
+    entregado: [],
+    reprogramado: [],
+    novedad: [],
+    devolucion_a_origen_por_rechazo: [],
     incidente: [],
   };
   return { ...vacios, [g.resultado]: [g] };
@@ -227,7 +227,7 @@ describe("R16 — la corrección se ofrece sobre una gestión `entregada`, y só
   it("sobre una gestión YA rechazada NO se ofrece: no hay entrega que corregir", async () => {
     await abrirRenglon(
       gestion({
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         montoRecibido: null,
         pagos: [],
         motivo: "Cliente ausente",
@@ -240,7 +240,7 @@ describe("R16 — la corrección se ofrece sobre una gestión `entregada`, y só
   });
 
   it("sobre una devuelta, una reprogramada o un incidente tampoco", async () => {
-    for (const resultado of ["devuelta", "reprogramada", "incidente"] as const) {
+    for (const resultado of ["novedad", "reprogramado", "incidente"] as const) {
       await abrirRenglon(
         gestion({ resultado, montoRecibido: null, pagos: [], motivo: "Nadie" }),
         vi.fn(),
@@ -500,6 +500,16 @@ describe("el diálogo de la corrección", () => {
     expect(aviso).toHaveTextContent("El pago al mensajero por esa entrega pasa a cero.");
     expect(aviso).toHaveTextContent(
       "El paquete se tratará como una devolución al aprobar el cierre.",
+    );
+  });
+
+  // FICHA 454 (T2.7, R18/R19): la corrección sella el resultado y el estado se aplica al APROBAR.
+  // Literal a mano (no desde `estatusLabel`): es el texto que el humano lee.
+  it("454: dice que el estado de la orden se aplica al aprobar el cierre, no ahora", () => {
+    renderDialogo(gestion());
+    const aviso = screen.getByRole("region", { name: "Al corregir:" });
+    expect(aviso).toHaveTextContent(
+      "La orden sigue «En reparto» hasta entonces: su estado pasa a «Devolución a origen por rechazo» al aprobar el cierre.",
     );
   });
 

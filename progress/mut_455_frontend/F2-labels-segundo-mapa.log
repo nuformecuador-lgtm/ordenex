@@ -1,0 +1,53 @@
+MUTACION F2-labels-segundo-mapa
+archivo: app/(app)/ordenes/_components/EstatusBadge.tsx
+cambio (numstat): 1	1	app/(app)/ordenes/_components/EstatusBadge.tsx
+- export const ORDER_STATUS_LABELS: Readonly<Record<OrderStatusValue, string>> = NOMBRE_ESTADO;
++ export const ORDER_STATUS_LABELS: Readonly<Record<OrderStatusValue, string>> = { ...NOMBRE_ESTADO, entregado: "Entregada" };
+tests: ['tests/unit/components/estatus-badge.test.tsx', 'tests/components/EstatusBadgeCatalogoV2.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/components/estatus-badge.test.tsx (26 tests | 1 failed) 54ms
+     × R42: `ORDER_STATUS_LABELS` es la fuente única reexportada, no un segundo mapa 7ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 36 passed (37)
+   Start at  08:11:49
+   Duration  2.07s (transform 188ms, setup 351ms, import 699ms, tests 110ms, environment 2.50s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/components/estatus-badge.test.tsx > 455/R2 — el chip pinta el nombre exacto de los 20, sin zona > R42: `ORDER_STATUS_LABELS` es la fuente única reexportada, no un segundo mapa
+AssertionError: expected { entregado: 'Entregada', …(19) } to be { entregado: 'Entregado', …(19) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -7,11 +7,11 @@
+    "en_bodega_satelite": "En bodega satélite",
+    "en_preparacion": "En preparación",
+    "en_reparto": "En reparto",
+    "en_ruta_bodega_central": "En ruta a bodega central",
+    "en_ruta_bodega_satelite": "En ruta a bodega satélite",
+-   "entregado": "Entregado",
++   "entregado": "Entregada",
+    "incidente": "Incidente",
+    "mensajero_recogiendo_en_bodega": "Mensajero recogiendo en la bodega",
+    "novedad": "Novedad",
+    "novedad_interna": "Novedad interna",
+    "por_devolver_a_bodega_central": "Por devolver a bodega central",
+
+ ❯ tests/unit/components/estatus-badge.test.tsx:63:33
+     61|     // Sus consumidores (tests, descargas, satélite) lo leen por nombr…
+     62|     // propio podría divergir en una sola clave sin que el chip —que l…
+     63|     expect(ORDER_STATUS_LABELS).toBe(NOMBRE_ESTADO);
+       |                                 ^
+     64|   });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+RESTAURADO_LIMPIO=True

@@ -87,10 +87,10 @@ function relativo(absoluto: string): string {
 export function declaraSuPropiaLista(fuente: string): boolean {
   for (const literal of fuente.match(/\[[^\][]{0,400}\]/g) ?? []) {
     if (
-      literal.includes("devuelta") &&
-      literal.includes("rechazada") &&
-      literal.includes("reprogramada") &&
-      !literal.includes("entregada") &&
+      literal.includes("novedad") &&
+      literal.includes("devolucion_a_origen_por_rechazo") &&
+      literal.includes("reprogramado") &&
+      !literal.includes("entregado") &&
       !literal.includes("incidente")
     ) {
       return true;
@@ -144,22 +144,22 @@ describe("Feature 238 (R3/R5) — «lo que vuelve a bodega» se declara UNA sola
 
 describe("Feature 238 — AUTOCOMPROBACION: el detector se sabe romper", () => {
   it("se pone ROJO ante la lista plantada en otro archivo", () => {
-    expect(declaraSuPropiaLista(`const VUELVEN = ["devuelta", "rechazada", "reprogramada"];`)).toBe(
+    expect(declaraSuPropiaLista(`const VUELVEN = ["novedad", "devolucion_a_origen_por_rechazo", "reprogramado"];`)).toBe(
       true,
     );
     // Y en las formas que de verdad aparecerian: multilinea, con `as const`, o dentro de un WHERE.
     expect(
       declaraSuPropiaLista(`
         const RETORNABLES = [
-          "devuelta",
-          "rechazada",
-          "reprogramada",
+          "novedad",
+          "devolucion_a_origen_por_rechazo",
+          "reprogramado",
         ] as const;
       `),
     ).toBe(true);
     expect(
       declaraSuPropiaLista(
-        `where: { cierreId, resultado: { in: ["devuelta", "rechazada", "reprogramada"] } },`,
+        `where: { cierreId, resultado: { in: ["novedad", "devolucion_a_origen_por_rechazo", "reprogramado"] } },`,
       ),
     ).toBe(true);
   });
@@ -168,7 +168,7 @@ describe("Feature 238 — AUTOCOMPROBACION: el detector se sabe romper", () => {
     // Eso no es una copia de la regla: no decide nada sobre los incidentes, los nombra.
     expect(
       declaraSuPropiaLista(
-        `const TODOS = ["entregada", "reprogramada", "devuelta", "rechazada", "incidente"];`,
+        `const TODOS = ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"];`,
       ),
     ).toBe(false);
   });

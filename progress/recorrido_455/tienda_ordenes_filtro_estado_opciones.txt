@@ -1,0 +1,17 @@
+Todos
+Devolución a origen por rechazo
+Devolviendo a bodega central
+Devolviendo a tienda
+Devuelta a tienda
+En preparación
+En reparto
+En ruta a bodega central
+Entregado
+Incidente
+Mensajero recogiendo en la bodega
+Novedad interna
+Por devolver a bodega central
+Por devolver a tienda
+Por recolectar en tienda
+Recolectando
+Reprogramado

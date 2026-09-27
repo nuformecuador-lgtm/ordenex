@@ -1,0 +1,17 @@
+Asistente
+
+Responde sobre cómo usar Ordenex
+
+Leer la ayuda de esta pantalla
+Novedades
+
+¿Qué estados puede tener mi orden después de que el mensajero la gestiona? Nombralos todos.
+
+No lo sé con exactitud cuáles son todos los estados posibles. La documentación que tengo menciona algunos, como Novedad (cuando el mensajero no pudo entregar), pero no trae una lista completa y cerrada de todos los estados por los que puede pasar una orden.
+
+Lo que sí podés hacer es ir a Órdenes y mirar el estado de cada una ahí directamente, o usar el filtro de Filtros > estado para ver qué opciones te muestra el sistema — esa lista del filtro te va a dar los estados reales que maneja tu cuenta. Si necesitás el detalle de qué significa cada uno, te recomiendo preguntarle a la oficina.
+Órdenes
+Novedades
+Adjuntar una captura
+
+Lo que escribís y las imágenes que adjuntás se envían a un proveedor externo de inteligencia artificial para poder responderte. Evitá enviar datos de clientes si no hace falta.

@@ -59,7 +59,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
     const sinMensajero: ApiOrdenListItemDTO = {
       numGuia: 10234,
       numRemision: "REM-1",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       destinatario: "Ana",
       telefonoDest: "0991234567",
       producto: "Caja",
@@ -75,7 +75,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
     const item: ApiOrdenListItemDTO = {
       numGuia: 10234,
       numRemision: "REM-1",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       destinatario: "Ana",
       telefonoDest: "0991234567",
       producto: "Caja",
@@ -94,7 +94,7 @@ describe("404/R2+R5 — la convencion de ausencia y la herencia del detalle", ()
     const detalle: ApiOrdenDetalleDTO = {
       numGuia: 10234,
       numRemision: "REM-1",
-      estado: "en_reparto",
+      estado: "en_reparto", estadoNombre: "En reparto",
       destinatario: "Ana",
       telefonoDest: "0991234567",
       producto: "Caja",

@@ -1,0 +1,58 @@
+# MUTACION M2-sin-rechazo
+archivo: db/migrations/20260924120100_gestion_resultado_nombre_unico/migration.sql
+linea: 31
+- "      ('rechazada', 'devolucion_a_origen_por_rechazo')"
++ "      ('x_no_existe', 'x_tampoco')"
+tests: tests/integration/db/455/migracion.test.ts
+exit vitest: 1
+Test Files  1 failed (1)
+Tests  1 failed | 15 passed (16)
+FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R15: gestiones y eventos intactos (mismas filas, mismo numero) salvo la etiqueta
+git diff --stat tras revertir: (vacio)
+VEREDICTO: ROJO (la mutacion muere)
+
+---- salida completa ----
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a078bed391689a5b0
+
+ ❯ tests/integration/db/455/migracion.test.ts (16 tests | 1 failed) 674ms
+     × R15: gestiones y eventos intactos (mismas filas, mismo numero) salvo la etiqueta 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  05:43:55
+   Duration  3.20s (transform 900ms, setup 51ms, import 2.27s, tests 674ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/db/455/migracion.test.ts > 455/T1.3 — M1-M3 contra Postgres real (up → up → down → up) > R15: gestiones y eventos intactos (mismas filas, mismo numero) salvo la etiqueta
+AssertionError: expected [ { …(2) }, { …(2) }, { …(2) }, …(1) ] to deeply equal [ { …(2) }, { …(2) }, { …(2) }, …(1) ]
+
+- Expected
++ Received
+
+@@ -3,11 +3,11 @@
+      "id": "6d04880f-6862-4e2c-a4b3-9d7ab4ddfec3",
+      "resultado": "novedad",
+    },
+    {
+      "id": "ba84a2bc-d565-4a17-a129-4758a42f2040",
+-     "resultado": "devolucion_a_origen_por_rechazo",
++     "resultado": "rechazada",
+    },
+    {
+      "id": "c4678c20-efe9-4f7f-a3b3-5ac43b24e449",
+      "resultado": "entregado",
+    },
+
+ ❯ tests/integration/db/455/migracion.test.ts:386:28
+    384|   it("R15: gestiones y eventos intactos (mismas filas, mismo numero) s…
+    385|     expect(r.f1.filas).toEqual(r.f0.filas);
+    386|     expect(r.f1.gestiones).toEqual(r.f0.gestiones.map((g) => ({ ...g, …
+       |                            ^
+    387|     expect(r.f1.eventos).toEqual(
+    388|       r.f0.eventos.map((x) => ({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

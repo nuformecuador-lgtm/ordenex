@@ -1,4 +1,7 @@
+import { createElement, type ReactNode } from "react";
+
 import type { Column } from "@/components/shared/DataTable";
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import { money } from "@/lib/config/moneda";
 import {
@@ -6,6 +9,7 @@ import {
   ENTIDAD_LABELS,
   type HistorialAccionDTO,
 } from "@/lib/types/historial-accion";
+import { nombreDeEstado } from "@/lib/types/order-status";
 
 // FICHA 362 / T5.4 (design §5.3, R34–R37) — las DIEZ columnas de la tabla del registro.
 //
@@ -40,6 +44,37 @@ const FECHA_HORA = new Intl.DateTimeFormat("es-CR", {
 
 /** Lo que se pinta cuando una celda no tiene valor. La raya larga de las tablas de dinero. */
 export const SIN_DATO = "—";
+
+/**
+ * FICHA 455 (2026-09-24, T1.12/T2.7; R3, R23) — las acciones cuyo `valor_*` es el CODIGO de un
+ * resultado de gestion (snapshot). El servidor ya lo entrega con el codigo VIGENTE
+ * (`HistorialAccionService`, `codigoVigente` al leer: la fila no se reescribe); aqui solo se PINTA
+ * con su nombre visible. Es la misma lista que la del servicio (`ACCIONES_CON_SNAPSHOT_DE_RESULTADO`),
+ * y solo esas: el `valor_*` de las demas acciones es otra cosa (un rol, una fecha, un nombre).
+ */
+const ACCIONES_CON_RESULTADO_EN_VALOR: ReadonlySet<string> = new Set(["cierre_dia_gestion_corregida"]);
+
+/**
+ * R23 — el valor anterior/nuevo tal como se lee: el nombre visible del resultado si la accion guarda
+ * un codigo de resultado, el texto tal cual si no; `null` se queda `null` (cada superficie pone su
+ * marca de vacio). La pantalla y la descarga lo leen de aqui: no pueden decir cosas distintas.
+ */
+export function valorLegible(accion: string, valor: string | null): string | null {
+  if (valor === null) return null;
+  return ACCIONES_CON_RESULTADO_EN_VALOR.has(accion) ? nombreDeEstado(valor) : valor;
+}
+
+/**
+ * FICHA 456 (T3.13, R10): la CELDA del valor. Si la accion guarda el codigo de un resultado, se pinta
+ * con `EstadoConInfo` (su nombre visible, el mismo de `valorLegible`, y su boton de informacion); si
+ * no, el texto de siempre. La descarga sigue leyendo `valorLegible` (R17: sin columnas nuevas).
+ */
+function celdaValor(accion: string, valor: string | null): ReactNode {
+  if (valor !== null && ACCIONES_CON_RESULTADO_EN_VALOR.has(accion)) {
+    return createElement(EstadoConInfo, { codigo: valor });
+  }
+  return valorLegible(accion, valor) ?? SIN_DATO;
+}
 
 /**
  * R36 — la accion sin actor es del SISTEMA. Se escribe con todas sus letras y no con un
@@ -146,12 +181,12 @@ export const columnasHistorialAcciones: Column<HistorialAccionDTO>[] = [
     id: "anterior",
     value: "Valor anterior",
     minWidth: "10rem",
-    render: (fila) => fila.valorAnterior ?? SIN_DATO,
+    render: (fila) => celdaValor(fila.accion, fila.valorAnterior),
   },
   {
     id: "nuevo",
     value: "Valor nuevo",
     minWidth: "10rem",
-    render: (fila) => fila.valorNuevo ?? SIN_DATO,
+    render: (fila) => celdaValor(fila.accion, fila.valorNuevo),
   },
 ];

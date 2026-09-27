@@ -896,3 +896,84 @@ describe("413/R41 - una consulta para quien tiene el aviso vivo, NINGUNA para qu
     expect(r.items).toHaveLength(2);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// FICHA 462 (T2.8, R14/R15) — el CUARTO agregado en la campana: se apaga con 0, reaparece al subir,
+// y cuando la cifra no se puede resolver SALE sin numero y el fallo queda registrado.
+// ---------------------------------------------------------------------------------------------
+
+describe("462/R15 — `reprogramadas_esperan_cierre` se apaga y se enciende SOLO, sin escribir nada", () => {
+  // FASE 3 (2026-09-25, decision del leader): del PAQUETE en masculino, sin «reprogramadas».
+  const TEXTO =
+    "No se pueden asignar hasta que se apruebe el cierre del mensajero que los visitó. " +
+    "Revisa los cierres marcados «Retiene paquetes reprogramados para hoy» y apruébalos antes de asignar.";
+
+  function filaRetenidas(id = "agg-ret"): FilaFake {
+    return fila(id, {
+      tipo: "warning",
+      evento: "reprogramadas_esperan_cierre",
+      descripcion: TEXTO,
+      visiblePara: ["admin-1"],
+    });
+  }
+
+  it("cifra 0 -> ni se ve ni cuenta, y NO se crea fila de lectura ni de descarte", async () => {
+    const repo = new RepoFake([filaRetenidas()]);
+
+    const r = await servicioCon(repo, vigenciaFake({ reprogramadas_esperan_cierre: 0 })).listar(ADMIN_1);
+
+    expect(r.items).toHaveLength(0);
+    expect(r.porHacer).toBe(0);
+    expect(repo.lecturas).toHaveLength(0);
+  });
+
+  it("⭑ la MISMA fila vuelve a salir cuando la cifra sube el mismo dia, sin crear una segunda, con el titulo vivo y el atajo", async () => {
+    const repo = new RepoFake([filaRetenidas()]);
+
+    const apagada = await servicioCon(repo, vigenciaFake({ reprogramadas_esperan_cierre: 0 })).listar(ADMIN_1);
+    const encendida = await servicioCon(repo, vigenciaFake({ reprogramadas_esperan_cierre: 4 })).listar(ADMIN_1);
+
+    expect(apagada.items).toHaveLength(0);
+    expect(encendida.items.map((i) => i.id)).toEqual(["agg-ret"]);
+    expect(encendida.porHacer).toBe(1);
+    expect(repo.crear).not.toHaveBeenCalled(); // R11: la fila del dia ya existe
+    // Literales ESCRITOS A MANO (R13/R16/R17).
+    expect(encendida.items[0].titulo).toBe("Reprogramado para hoy: 4 paquetes esperan la aprobación de su cierre");
+    expect(encendida.items[0].detalle).toBe(TEXTO);
+    expect(encendida.items[0].atajo).toEqual({ href: "/cierres-admin", etiqueta: "Revisar cierres" });
+    expect(encendida.items[0].accionable).toBe(true);
+  });
+
+  it("⭑ R14: si la cifra NO se puede resolver, el aviso SALE sin numero y el fallo queda REGISTRADO con su causa", async () => {
+    // Con el resolutor REAL y SIN el servicio de retenidas inyectado (la familia «el composition
+    // root que no inyecta»): lanza -> `cifrasVivas` lo registra -> la fila se muestra con el texto
+    // persistido, nunca con un `0` que la apagaria en silencio.
+    const repoAgregado: IAvisoAgregadoRepository = {
+      resumenNovedadesPorTienda: vi.fn(async () => []),
+      contarNovedadesDeTienda: vi.fn(async () => 5),
+      resumenRepresadasPorZona: vi.fn(async () => []),
+      resumenRepresadasGlobal: vi.fn(async () => ({ total: 0, masAntiguaAt: null })),
+      contarRepresadas: vi.fn(async () => 7),
+    };
+    const repo = new RepoFake([filaRetenidas()]);
+    const logger = { logError: vi.fn() };
+    const servicio = new NotificacionService(
+      repo,
+      now,
+      new VigenciaAvisoAgregadoService(repoAgregado, 3, now),
+      logger,
+    );
+
+    const r = await servicio.listar(ADMIN_1);
+
+    expect(r.items.map((i) => i.id)).toEqual(["agg-ret"]);
+    expect(r.items[0].titulo).toBe(TEXTO); // sin numero
+    expect(r.items[0].titulo).not.toMatch(/\d/);
+    expect(logger.logError).toHaveBeenCalledTimes(1);
+    const registrado = logger.logError.mock.calls[0][0] as Error;
+    expect(registrado.message).toMatch(/vigencia del aviso agregado "reprogramadas_esperan_cierre"/);
+    expect((registrado.cause as Error).message).toMatch(/necesita el servicio de retenidas y nadie lo inyecto/);
+    // Y no se consulto ningun otro ambito por cortesia.
+    expect(repoAgregado.contarRepresadas).not.toHaveBeenCalled();
+  });
+});

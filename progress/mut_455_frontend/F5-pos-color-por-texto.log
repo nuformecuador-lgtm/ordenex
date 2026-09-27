@@ -1,0 +1,56 @@
+MUTACION F5-pos-color-por-texto
+archivo: app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts
+cambio (numstat): 1	1	app/(app)/mis-asignaciones/_components/pos-card/pos-estado.ts
+-   mensajero_recogiendo_en_bodega: "bg-secondary text-secondary-foreground",
++   "Mensajero recogiendo en la bodega": "bg-secondary text-secondary-foreground",
+tests: ['tests/components/PosOrderCard.estado-455.test.tsx']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx (23 tests | 2 failed) 357ms
+     × R12: el color del chip lo decide el CÓDIGO (dos estados, dos colores; el desconocido, el de defecto) 5ms
+     × R12: en la vista de mosaico el chip lleva la clase de su código 11ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 21 passed (23)
+   Start at  08:09:57
+   Duration  2.76s (transform 244ms, setup 159ms, import 934ms, tests 357ms, environment 1.10s)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R12 · R8 — presentación indexada por código y marcas que no son nombres de estado > R12: el color del chip lo decide el CÓDIGO (dos estados, dos colores; el desconocido, el de defecto)
+AssertionError: expected 'bg-warning text-navy' to be 'bg-secondary text-secondary-foreground' // Object.is equality
+
+Expected: "bg-secondary text-secondary-foreground"
+Received: "bg-warning text-navy"
+
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:122:63
+    120|   it("R12: el color del chip lo decide el CÓDIGO (dos estados, dos col…
+    121|     expect(claseChipEstado("en_reparto")).toBe("bg-warning text-navy");
+    122|     expect(claseChipEstado("mensajero_recogiendo_en_bodega")).toBe("bg…
+       |                                                               ^
+    123|     expect(claseChipEstado("otro_codigo")).toBe("bg-warning text-navy"…
+    124|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/components/PosOrderCard.estado-455.test.tsx > 455/R12 · R8 — presentación indexada por código y marcas que no son nombres de estado > R12: en la vista de mosaico el chip lleva la clase de su código
+AssertionError: expected 'rounded-full px-2 py-0.5 text-[10px] …' to contain 'bg-secondary'
+
+Expected: "bg-secondary"
+Received: "rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide bg-warning text-navy"
+
+ ❯ tests/components/PosOrderCard.estado-455.test.tsx:128:77
+    126|   it("R12: en la vista de mosaico el chip lleva la clase de su código"…
+    127|     render(<PosOrderCardMosaico orden={makeOrden({ estatusValue: "mens…
+    128|     expect(screen.getByText("Mensajero recogiendo en la bodega").class…
+       |                                                                             ^
+    129|   });
+    130|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+RESTAURADO_LIMPIO=True

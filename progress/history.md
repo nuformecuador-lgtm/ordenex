@@ -5352,3 +5352,321 @@ y `progress/review_428.md`.
 **Lo que el verde no cubre:** los píxeles. La suite corre en jsdom, sin CSS; la comprobación visual
 la hizo el humano abriendo la pantalla. Y la red contra «ponerlo en global» es UNA sola
 (`segmented-toggle-solo-icono.test.tsx`): las demás pantallas no se enterarían.
+
+---
+
+## 429 — el SINPE por bodega (2026-09-15) · SF-001 punto 2
+
+Hasta hoy había **un solo SINPE para toda la operación**, en variables de entorno. Cambiarlo obligaba a
+redesplegar: el prefijo `NEXT_PUBLIC_` lo hornea en el bundle del cliente en tiempo de *build*.
+
+**Son DOS campos, y el documento firmado se equivocaba** diciendo «solo el SINPE», en singular. La
+plantilla real empareja «al número `{{sinpe}}` a nombre de `{{sinpe_nombre}}`»: separarlos le da al
+cliente un número de una persona bajo el nombre de otra, y SINPE Móvil le enseña el titular al teclear.
+
+**La pieza central de la pantalla es la vista previa del mensaje real.** Un SINPE mal escrito no produce
+ningún error —los clientes transfieren a otra cuenta y se sabe días después por los reclamos—, así que
+la pantalla enseña la frase exacta que va a leer el cliente, con el número y el nombre resaltados.
+
+**Tres capas para que nunca haya un hueco:** migración con columnas nullables → script que siembra
+leyendo el entorno (idempotente por construcción, nunca imprime el valor) → segunda migración con
+`NOT NULL` y los `CHECK`. **El número real no entra al repositorio, que es público.**
+
+### La revisión lo RECHAZÓ, y tenía razón
+
+`scripts/seed-sinpe-inicial.ts` —el único archivo que decide qué número ven los clientes de ocho
+bodegas— **no tenía ni un test**. Mutarlo quitándole la idempotencia **y** el fallo ruidoso dejaba
+**19.902 tests en verde**. La causa era de trazabilidad: el requisito apuntaba a un caso que
+**reescribía a mano el `UPDATE` del seed** en vez de llamar a la función. Familia «probar el `WHERE`
+donde vive».
+
+### Y un casi-accidente que la revisión destapó
+
+El `UPDATE` del seed va **sin cualificar** y el adaptador de los tests de integración **no emite
+`SET search_path`** —comprobado en el `dist` del paquete instalado—, así que el test nuevo se habría
+escrito contra `public."zona"`, **la base de desarrollo real**. Resuelto cualificando el SQL, con un
+`throw` que aborta antes de tocar nada si alguna aparición queda sin cualificar.
+
+### Medido contra producción
+
+**2.491 mensajes** de chat llevan el SINPE, con **un solo número distinto** —lo que confirma la premisa
+del documento— y **cumple el formato**, así que el seed no abortará. El valor no se anotó en ningún
+archivo: solo hacía falta la forma.
+
+**NO se desplegó.** Por decisión del humano, las cuatro de SF-001 se acumulan en `dev` y salen juntas.
+Mergear a `dev` es seguro: `decidirMigracion` no aplica migraciones en preview.
+
+### Deuda declarada
+
+Un `admin` no puede ver **quién** cambió un número (vive en `historial_accion`, lectura `maestro`-only);
+`admin` no tiene entrada de menú a `/configuracion/sinpe`; y `/mi-bodega` no ofrece «confirmar sin
+cambiar», así que quien cierre el aviso ve «Sin revisar» y no puede quitarlo sin editar algo.
+
+---
+
+## 430 — contacto al cliente antes de recoger (2026-09-16) · SF-001 punto 3
+
+El mensajero puede escribirle al cliente **desde que le asignan el paquete**, sin esperar a recogerlo.
+
+**El documento firmado se equivocaba, y a nuestro favor.** Decía que «ver la orden» y «trabajarla» son
+hoy la misma puerta, y estimaba 3–5 días en separarlas. **Nunca lo fueron**: el chat autoriza con `id` +
+`deletedAt` + `mensajeroAsignadoId` y nada más. Lo único que lo impedía era **una línea del cliente**.
+Cero archivos de `lib/`, `db/` o `app/api/` en el diff.
+
+**Contactar no es aceptar, y ya estaba garantizado dos veces** desde la ficha 246: al cierre solo entran
+órdenes ya recogidas, y de esas se excluyen las reservadas. No hubo que construirlo.
+
+**Una decisión de diseño que evitó un fallo mudo.** El chat vive en las dos pantallas con UNA sola
+lista, porque `ChatFlotante` filtra el resumen de no leídos contra los contactos que la pantalla lista:
+**dos listas habrían hecho que cada pantalla escondiera los pendientes de la otra, sin ningún error
+visible**. Y el caso de uso lo exigía — las asignaciones anticipadas ocurren a las 20:00, hora a la que
+el mensajero tiene cero órdenes en Reparto.
+
+### Los tres huecos que encontró la revisión, todos con la misma forma
+
+Una protección que existía y que, mirada de cerca, no cubría lo que decía cubrir:
+
+1. **El argumento central del diseño no tenía test**: reponer el filtro viejo del contador de no leídos
+   dejaba **149 tests en verde**.
+2. **La guardia de «conversar no es aceptar» miraba con el detalle plegado**: un botón de «Gestionar»
+   escondido en el desplegable sobrevivía.
+3. **Un `= []` deshacía la prop requerida**: sin el tercer argumento, el typecheck pasaba igual.
+
+Los tres cerrados, cada uno comprobado con su propia mutación en rojo.
+
+### La red de la 261 no se tocó
+
+Los seis archivos que fijan «una orden de mañana no se recoge ni se gestiona» no aparecen en el diff, y
+la revisión los corrió enteros: **72 tests verdes**, con los tres de `integration/db` contra Postgres.
+
+### La documentación se actualizó dentro del cambio
+
+Primera prueba de la disciplina que sostiene el punto 4. `por-recoger.md` decía «No hay chat acá», que
+dejó de ser cierto. La revisión contrastó **las 11 afirmaciones nuevas contra el código: las 11 se
+cumplen**.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 431 — los cierres de satélite, autónomos (2026-09-16) · SF-001 punto 1
+
+La bodega satélite deja de necesitar la aprobación de la central para seguir trabajando. **La
+aprobación no se elimina: se transforma en marca de conciliación.**
+
+**El documento firmado se equivocaba en su afirmación clave.** Decía que esa aprobación «no dispara
+ningún proceso: es un visto bueno y nada más». La mitad del dinero era cierta, pero «nada más» era
+falso: mientras estaba pendiente, **la satélite no podía asignar órdenes a sus mensajeros**. Medido:
+mediana de 34 minutos, pero **3 de 32 veces pasó de 12 horas**.
+
+### El hallazgo que salvó la ficha
+
+Existía un índice único que permitía **una sola consolidación pendiente por zona**. Quitar el bloqueo
+de asignación sin tocarlo habría entregado una satélite que puede asignar pero **no volver a
+consolidar**: el mismo freno mudado de sitio, con la ficha cerrada y nada resuelto. El reviewer
+verificó **en la base** que el índice ya no existe.
+
+### El saldo mide EFECTIVO, no el total — y lo destapó una pregunta del spec
+
+Solo el efectivo viaja en el bulto; el SINPE llega directo a una cuenta. De **₡4.196.897** consolidados,
+**₡1.105.790 (26,3 %) son SINPE**. Con el total, la pantalla habría enseñado más de un millón de deuda
+fantasma y el backfill habría dejado el saldo del primer día en **−₡1.105.790**.
+
+### Ningún bloqueante de la revisión estaba en el código
+
+Las cinco mutaciones del reviewer —**cuatro distintas** de las del implementador— murieron todas. Lo que
+falló fue la documentación: `docs/ayuda/satelite/en-bodega.md` afirmaba *«la app no te deja asignar…
+mientras la central no lo resuelva»*, **exactamente el control que la ficha quita**. Y el asistente del
+punto 4 solo responde sobre esa carpeta.
+
+### Lo medido contra producción, que podía tumbar el despliegue
+
+`resuelto_por` es `ON DELETE SET NULL`: una fila cuyo aprobador hubiera sido borrado tendría `NULL`, el
+`CHECK` la rechazaría y **la migración abortaría a mitad del despliegue**. **Cero filas así.** El
+`design.md` decía que esa columna llevaba `RESTRICT` «igual que sus hermanas» — esa frase es la que
+hacía invisible el riesgo.
+
+### Puerta de despliegue, no de merge
+
+**T25 y T26 quedan sin marcar a propósito**: la corrida compuesta necesita datos que la base local no
+tiene. Y **la referencia caduca** — ayer 32 cierres, hoy 35: hay que capturarla justo antes de
+desplegar o la prueba de que el backfill no tocó nada más no se puede hacer nunca.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 433 — el módulo de ayuda dentro de la app (2026-09-16) · SF-001 punto 4, primera mitad
+
+Los 31 documentos de `docs/ayuda/**` dejan de ser archivos que nadie puede leer desde la aplicación:
+ítem «Ayuda» al final del menú, índice agrupado con buscador, y un **«?» en el encabezado que abre la
+ayuda DE ESA pantalla**. Los `.md` son la única fuente: el módulo los RENDERIZA, no guarda texto propio
+—sin artefacto generado, sin tabla, sin migración—, que es lo que sostiene la promesa del punto 4
+(«corregir un párrafo son minutos dentro del mismo cambio»).
+
+- Requisitos cubiertos: **R1–R20**, mapeados en `progress/impl_433.md`. La ficha es `sdd: false`: la
+  especificación es su `status_note`, y R1…R15 estaban numerados en los tests **sin que ningún
+  documento los definiera** hasta ese archivo.
+
+### El bloqueante de la revisión: el cableado no lo cubría nadie
+
+Tres mutaciones **sobrevivían a la suite entera** —el `notFound()` por rol del servidor (contra las 230
+guardias, 3346 tests), el gate del layout, y el montaje del «?» en `PageHeader` (contra 727 archivos y
+9375 tests)—. Traducido: se podía **borrar la defensa real del acotamiento por rol** y hacer desaparecer
+el «?» de las 29 pantallas, todo con el gate en verde. Las tres tienen ahora su test y **las tres se
+comprobaron en rojo con la mutación puesta**. La del «?» es la familia ya catalogada aquí: la guardia
+medía que alguien lo IMPORTARA, no que alguien lo MONTARA.
+
+### El arreglo que no era de tests: la ayuda podía tumbar el portal
+
+`app/(app)/layout.tsx` leía el catálogo **sin `try/catch`** y `leerCatalogoAyuda` **memoiza la promesa**.
+Encadenado: un solo fallo de lectura dejaba la promesa RECHAZADA en caché y **todas** las páginas del
+portal daban 500 para el resto de la vida del proceso — no sólo `/ayuda`. Dos arreglos: el rechazo ya no
+se memoriza (se limpia y se reintenta) y el layout degrada a «sin «?»» en vez de caerse. Los dos con su
+test y su mutación en rojo. Es la condición del humano para SF-001 aplicada al único punto donde esta
+ficha podía dañar algo ajeno.
+
+### La línea que separa «funciona» de «404 en producción» ya tiene red
+
+`outputFileTracingIncludes` (`next.config.ts`) es lo único que mete los `.md` en la función de Vercel:
+la ruta se arma en runtime y el trazado no tiene ningún `import` que seguir. **Borrar el bloque entero
+dejaba las 230 guardias en verde.** La guardia nueva ata el patrón a la carpeta que `catalogo.ts` lee
+de verdad, exige que cubra `/**` (el layout del portal lo necesita en las 29 pantallas) y que lleve
+`**`, porque los 31 documentos viven en subcarpetas.
+
+### Dos hallazgos que NO volvieron al implementador
+
+- **Que el maestro no vea la ayuda del mensajero** viene de los DATOS (`roles:` = «quién ve esa
+  pantalla», contrato del README de la carpeta), no del módulo. Decisión de producto, del humano.
+- **El encabezado a 390px** (`/monitoreo`: 8 líneas en 118px) es deuda pre-existente —`justify-between`
+  sin `flex-wrap`, botones con `shrink-0`— que esta ficha agrava en grado, no daño nuevo. Ficha aparte,
+  con medición antes/después.
+
+### Deuda menor, dicha en voz alta
+
+«Ayuda» ya significaba otra cosa en este repo (`orden-ayuda`, `rescate-ayuda`: el mensajero pidiendo
+auxilio con una orden). No hay colisión de símbolos, pero cualquier búsqueda futura por «ayuda»
+devuelve dos dominios sin relación.
+
+**NO se desplegó.** Las cuatro de SF-001 salen juntas.
+
+---
+
+## 436 — el asistente (2026-09-17) · SF-001 punto 4, segunda mitad
+
+Responde preguntas sobre **cómo se usa la aplicación**, y nada más. La única fuente son los 33 `.md`
+de `docs/ayuda/**`, los mismos que renderiza el módulo de la 433.
+
+**RAG quedó descartado con medida, no con opinión.** Los 33 documentos son ~21.000 tokens: caben
+enteros y cacheados, ~$0,004 por consulta contra ~$0,012 de buscar fragmentos. El documento firmado
+acertaba al decir que mandarlo todo costaría cinco o diez veces más —**eso era cierto sin caché**—;
+con caché se invierte, y desaparece la pieza más compleja del proyecto.
+
+**La decisión que más pesa no es de coste sino de seguridad: el contexto se acota por rol**,
+reutilizando el predicado de LECTURA de la 435. Sin eso, un mensajero le sonsaca al asistente cómo
+funciona la caja de la empresa y el `notFound()` que la 433 puso en el servidor queda decorativo:
+puerta cerrada en `/ayuda`, ventana abierta en el chat. Medido con la mutación: apagando el
+acotamiento viajaban **339 líneas de la oficina** en la petición de un mensajero.
+
+**Los cuatro límites son producto, no disculpa:** no consulta datos, no ejecuta nada (la petición va
+**sin `tools`**), no inventa —dice «no lo sé» y señala dónde mirar—, y **cada respuesta cita sus
+documentos**; una cita que no esté en el conjunto entregado se descarta.
+
+### Lo que la revisión encontró, y por qué importa
+
+- **El modelo no sabía con quién hablaba.** Le dijo a un `maestro` «no tenés cómo asignar… desde tu
+  cuenta de tienda». El spec acotó los *documentos* y se olvidó de la *persona*: ningún requisito lo
+  cubría. Ahora el rol viaja en el primer bloque del `system` —donde no cuesta caché— y hay requisito
+  con test.
+- **El aviso de datos sólo hablaba de capturas, y condicionado.** Quien escribía sin adjuntar nada
+  nunca se enteraba de que su texto salía de la empresa. El diseño aprobado traía la redacción
+  correcta y se había abandonado sin declararlo — y el test anclaba el literal equivocado, así que el
+  mapa requisito→test salía verde con el requisito incumplido. El test nuevo afirma **las dos mitades
+  por separado** y por propiedad, no copiando la cadena.
+- **Un rechazo por tope contaba como consulta**, inflando la única telemetría que esta pieza tiene.
+- **El coste de UNA pregunta no estaba acotado por nada nuestro**: el esquema admitía hasta 40
+  imágenes por petición y sólo lo frenaba el límite de cuerpo de Vercel, que es plataforma.
+
+### Lo que el navegador encontró y la suite no
+
+Dos cosas, con 29.677 tests en verde: el panel salía a **292 px** en vez de 390 —`tailwind-merge`
+sólo dedupe clases con el mismo prefijo de variante—, y el modelo responde en Markdown, así que la
+pantalla enseñaba los `**` en crudo. `toHaveTextContent` normaliza y ningún test lo veía.
+
+### Dos formas de test que sobrevivieron en verde antes de morir
+
+El `upsert` atómico **pasó dos veces con el código roto**: la primera por conexiones frías, la segunda
+porque un caso anterior había dejado sus sentencias preparadas. El veredicto dependía de qué otros
+casos hubieran corrido antes. Y el tope comprobado *después* de llamar al proveedor dejaba el
+**desenlace correcto**: un test que sólo mirara el resultado habría pasado con el dinero ya gastado.
+
+**NO se desplegó.** `ANTHROPIC_API_KEY` está en `.env` y probada con una llamada real, pero **no en
+Vercel**: T25, T26 y T27 quedan sin marcar a propósito, que es la señal de que falta.
+
+## 2026-09-25 — 462: aviso de reprogramados que esperan la aprobación de un cierre
+Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y franja en /ordenes desde un conteo único de solo lectura. Causa medida en prod el 24/09: la regla 276 retiene la reprogramada hasta aprobar su cierre (no hay 24 h). PR #825.
+
+## 2026-09-26 — 458-A: detalles y guardias de la wallet (hija A de la 458)
+- Sobre las pantallas actuales: el origen de cada movimiento con nombre y enlace (sin uuid), el cierre
+  se elige en un selector buscable (fuera los campos de pegar el id), los conceptos del filtro salen de
+  los movimientos con su cuenta, una sola `etiquetaDeCuenta` para nombrar tiendas y mensajeros, borde
+  `.uuid()`/`.strict()` y el panel mensual de `/analitica` dice «Movimiento neto del periodo».
+- Requisitos cubiertos: R1–R16 (selectores), R33, R36, R62, R84, R90, R93–R97, R99, R101 (parte),
+  R102–R104; mapa R→test en `progress/impl_458-A.md` §3 y §11.
+- Revisión RECHAZADA (`progress/review_458-A.md`): el historial del cobro leía «Tania Tienda» al
+  registrar y «Tania» al anular, y pagos/repartos «Juan Pérez» donde la tabla dice «Juan Pérez Mora»,
+  con la guardia verde porque su censo no miraba esos repositorios. Cerrado en §16–§18: el historial con
+  `etiquetaDeCuenta`, la guardia descubre por contenido a quien escribe el historial de una cuenta, test
+  contra Postgres con literales; además capas (`lib/services` ya no importa de `app/`), el buscador de
+  cierres sin `IN` sin tope (33.000 cierres rompían el selector), sin la lectura muerta de la caja en
+  `/analitica` y literales escritos a mano. 13 mutaciones en rojo. Gate completo `INIT_EXIT=0`,
+  31939 verdes, 26 saltados (ninguno en `integration/db`).
+- Deuda: contar en producción las tiendas con `segundo_apellido` antes de desplegar; m7–m9 de la
+  revisión (cobertura contra Postgres de 6 lectores del origen, ayuda de mensajeros, nombre de
+  `conciliadoPorNombre`); el panel de `/analitica` sigue oculto (región `financiero` comentada).
+
+
+## 2026-09-26 — 458-C: registrar un movimiento y panel «Ver» (hija C de la 458)
+- Diálogo único «Registrar un movimiento» (diez conceptos en tres grupos, «Así queda» del servidor,
+  comprobante opcional, D5 en el servidor) y panel «Ver» + «Anular…» uniforme en el libro de la caja.
+- Requisitos cubiertos: R37–R52, R58, R60, R63–R67, R71, R72, R74–R76, R79, R80, R90, R100, R102–R104;
+  mapa R→test en `progress/impl_458-C.md`.
+- Revisión RECHAZADA (`progress/review_458-C.md`) y cerrada: B1 tests literales de `ya_registrado`,
+  `sin_deuda`/`excede`, `ya_hay_saldo_inicial` y avisos de éxito; B2 la fila anulada dice «Anulado»; B3 el
+  pago a una tienda y el premio con documento y sin «Vigente» sin documento; M1 quién anuló, cuándo, motivo
+  y cómo (servidor de lectura ampliado, test contra Postgres); M3 aviso de fallo de red y clave nueva por
+  concepto; M2 recorrido de los dos pagos nuevos con R7/R8 = 0,00. 21 mutaciones rojas.
+- Deuda (TC.8 → TE.3 de la 458-E): instante de registro en el panel; `reversarEgresoAdministrativoAction`
+  sin superficie ni motivo; m7 (pagar a una cuenta inactiva con saldo desde el diálogo); la nota del pago
+  a una tienda no llega al libro de la caja («Por qué» dice el método).
+
+## 2026-09-26 — 458-D: estados de cuenta y Mi wallet (hija D de la 458)
+- Tres estados de cuenta nuevos (`/wallet/tiendas/[tiendaId]`, `/wallet/mensajeros/[mensajeroId]`,
+  `/wallet/satelites/[zonaId]`) sobre `components/shared/estado-cuenta/`: saldo inicial arriba, saldo
+  corrido por fila, chips, filtro por cierre, «Ver»/«Anular…», registrar con la cuenta fija y descarga;
+  `/mi-wallet` pasa a ser el estado de cuenta de la tienda (resumen de tres cifras, «Anulado por Ordenex»
+  con día y hora, sin nombres del personal, comprobante propio). Se retiraron los desgloses (D14).
+- Requisitos cubiertos (tasks.md, hija D): R3, R6–R8, R10–R12, R17–R32, R34–R36, R40, R48, R55, R70, R72,
+  R78, R81, R102, R103; mapa R→test en
+  `progress/impl_458-D.md` (pantalla y §Servidor: pendientes de servidor hechos por backend_dev, sin migraciones).
+- Revisión RECHAZADA (`progress/review_458-D.md`) y cerrada: B1 el filtro por cierre del mensajero perdía
+  sus pagos al retirar el desglose (172 R52), arreglado en `EstadoCuentaRepository` con test contra Postgres
+  que escribe pagos reales; m1 el resumen sigue a la lectura vigente; m3 «Anulado por Ordenex» ratificado
+  por el leader. Gate completo `progress/gate_458D_final.log`: `INIT_EXIT=0`, 32233 verdes, 26 saltados.
+- Deuda: F1 del recorrido final (los tres estados de cuenta sin «?» ni asistente) y el contraste de sus
+  enlaces (F3), cerrados en `fix/458-final`.
+
+## 2026-09-26 — 458-E: libro de la caja (hija E de la 458)
+- El libro de la caja con «A quién» y «Registró» por fila, filtro «A quién» (tienda, mensajero o nombre)
+  con un único `WHERE` para libro, tarjetas, composición, desglose, conceptos y descarga; enlaces de «A
+  quién» a los estados de cuenta de la 458-D; el panel dice cuándo se registró la fila (día y hora CR).
+- Requisitos cubiertos (tasks.md, hija E): R3, R7, R8, R34, R41, R53–R61, R73, R83, R87, R101–R104 (R104
+  cerrado con el recorrido completo por rol,
+  `progress/recorrido_458-final.md`); mapa R→test en `progress/impl_458-E.md`.
+- Revisión RECHAZADA (`progress/review_458-E.md`) y cerrada: B1 el instante de registro (R58) en el panel
+  y contra Postgres; M1 guardia de alcance de la 173 endurecida; M2 un anulado por nombre arrastra su
+  contra-asiento; M3 los enlaces de «A quién» apuntan a rutas que existen; M4
+  `reversarEgresoAdministrativoAction` retirada. Segunda revisión de C/D/E en `dev`: APROBADA
+  (`progress/review_458-final.md`). Gate `progress/gate_458E_merge.log`: `INIT_EXIT=0`, 32329 verdes.
+- Recorrido completo por rol en `dev`: 93 OK, 3 FALLO (F1–F3), 13 N/A; R7/R8 = 0,00 en las 46 medidas.
+  Los tres fallos y las observaciones baratas se arreglan en `fix/458-final`.

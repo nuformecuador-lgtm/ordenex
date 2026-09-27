@@ -1,0 +1,66 @@
+Ayuda
+
+Cómo funciona cada pantalla, explicado para tu trabajo.
+
+24/09/2026
+Claro
+Tema claro activado.
+Salir
+Buscar en la ayuda
+
+BODEGAS SATÉLITE
+En bodega
+Mi bodega
+Por recibir
+OFICINA
+Cierres
+Incidentes
+Monitoreo
+COMPARTIDO
+Analítica
+SIN INICIAR SESIÓN
+Entrar y recuperar la contraseña
+Postularse para trabajar
+Rastrear un paquete
+Analítica
+
+Los números del negocio: entregas, efectividad, dinero y de dónde sale el margen. Es donde se mira lo que ya pasó, no lo que está pasando ahora.
+
+Cada quien ve lo suyo
+
+La pantalla es la misma para todos, pero el alcance cambia con el rol:
+
+Rol	Qué ve
+Maestro / admin	Todo, y puede desglosar por zona, tienda y mensajero
+Tienda	Solo sus órdenes. Puede desglosar por zona
+Bodega satélite	Solo su zona, sin desglose por tienda ni mensajero
+
+Si echás en falta un filtro que alguien más tiene, es por esto: no está escondido, es que ese corte no aplica a tu alcance.
+
+Arriba hay siempre una nota de alcance de las cifras que dice sobre qué está calculado lo que ves.
+
+Los dos bloques
+
+Entregas. Lo operativo: cuántas se cargaron, cuántas se entregaron, el ciclo de vida promedio de una orden cerrada, las causas de devolución. Se acota por fecha, geografía y —según tu rol— zona, tienda y mensajero.
+
+Operativo. El panel con su propio rango — hoy, la semana, 30 días o personalizado — y su comparativa por categoría.
+
+Y el bloque financiero: qué cobró Ordenex, cómo se compone la ganancia y la conciliación de los cierres.
+
+Dos avisos que vas a ver, y qué significan
+
+«Cobrado y todavía sin liquidar: no se reparte». Plata que ya se cobró al cliente pero cuyo cierre no se aprobó aún. Está contada como cobrada y todavía no repartida entre las partes. No es un error: es dinero en tránsito.
+
+«Cobertura incompleta del rango». Del período que pediste faltan días sin datos calculados. La cifra es real pero no cubre todo el rango — o achicás el período, o la leés sabiendo que le faltan días.
+
+Una advertencia sobre comparar
+
+Los filtros de los dos bloques son independientes: el rango del bloque operativo no es el mismo que el de entregas. Antes de comparar dos cifras de distintos bloques, revisá que estén sobre el mismo período — es el error más fácil de cometer acá.
+
+Lo que esta pantalla NO hace
+No es el estado de ahora. Para el día en curso, Monitoreo.
+No es la contabilidad. Los saldos y pagos están en Wallet.
+
+Actualizado el 15/09/2026
+
+Siguiente: Entrar y recuperar la contraseña

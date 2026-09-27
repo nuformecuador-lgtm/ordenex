@@ -60,7 +60,7 @@ const JORNADA_DEL_21 = "2026-08-21";
 const ESTATUS_IDS: Record<string, string | null> = {
   en_reparto: "s-reparto",
   ayuda_tienda: "s-ayuda",
-  sin_gestionar: "s-sin-gestionar",
+  novedad_interna: "s-sin-gestionar",
 };
 
 function build(opts: {

@@ -1,0 +1,52 @@
+Ordenex
+Inicio
+Analítica
+Monitoreo
+Órdenes
+Ranking
+Wallet
+Configuración
+Usuarios
+Tarifas
+API
+Plantillas
+Vehículos
+Geografía
+SINPE por bodega
+Cierres del día
+Incidentes
+Histórico
+Ayuda
+MQ
+Maestro QA
+Maestro
+Plantillas
+
+Plantillas de mensaje con campos variables
+
+24/09/2026
+Ayuda
+Claro
+Tema claro activado.
+4 por hacer
+Salir
+Sincronizar con WhatsApp
+Nueva plantilla
+Descargar
+Nombre	Plant. Tienda	Estado	Cuerpo	Acciones
+
+
+No hay plantillas
+
+Crea una plantilla de mensaje con campos variables para reutilizarla.
+
+Nueva plantilla
+Sin resultados
+«
+‹
+1
+›
+»
+10
+25
+50

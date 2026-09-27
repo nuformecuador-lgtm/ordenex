@@ -20,7 +20,7 @@ const DATOS: ConteoProductosDTO = {
       producto: "Base C",
       unidades: 4,
       ordenes: 4,
-      porStatus: [{ status: "entregada", conteo: 4 }],
+      porStatus: [{ status: "entregado", conteo: 4 }],
       ordenesAcompanadas: 0,
       dinero: null,
     },

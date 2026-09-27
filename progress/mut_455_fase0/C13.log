@@ -1,0 +1,32 @@
+=== MUTACION C13 — 2026-09-24T04:52:12-05:00
+archivo: lib/types/rastreo-publico.ts
+perl: s/  entregada: "entregado",\n  reprogramada: "reprogramado",/  entregada: "en_reparto",\n  reprogramada: "reprogramado",/
+--- diff aplicado:
+diff --git a/lib/types/rastreo-publico.ts b/lib/types/rastreo-publico.ts
+index e3c3cc3f..c01b0151 100644
+--- a/lib/types/rastreo-publico.ts
++++ b/lib/types/rastreo-publico.ts
+@@ -88 +88 @@ export const HITO_POR_ESTATUS = {
+-  entregada: "entregado",
++  entregada: "en_reparto",
+lineas cambiadas: 2
+--- tests: tests/integration/db/455/caracterizacion/rastreo.test.ts
+ × tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > 24 filas de historial se publican como 21 entradas 6ms
+   → expected 20 to be 21 // Object.is equality
+ × tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > cada entrada lleva la fecha de la PRIMERA fila de su racha, y la vigente es la ultima 3ms
+   → expected [ '2026-09-01T06:00-06:00', …(19) ] to deeply equal [ '2026-09-01T06:00-06:00', …(20) ]
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > con una gestion pendiente (454), la ultima entrada es la pendiente 0ms
+ × tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > los textos de la linea, hoy (hitos) 1ms
+   → expected [ 'En proceso', …(19) ] to deeply equal [ 'En proceso', …(20) ]
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > el nombre del resultado pendiente, hoy 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > 24 filas de historial se publican como 21 entradas
+AssertionError: expected 20 to be 21 // Object.is equality
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > invariantes > cada entrada lleva la fecha de la PRIMERA fila de su racha, y la vigente es la ultima
+AssertionError: expected [ '2026-09-01T06:00-06:00', …(19) ] to deeply equal [ '2026-09-01T06:00-06:00', …(20) ]
+ FAIL  tests/integration/db/455/caracterizacion/rastreo.test.ts > 455/C13 — rastreo publico (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R31, R33, R34) > los textos de la linea, hoy (hitos)
+AssertionError: expected [ 'En proceso', …(19) ] to deeply equal [ 'En proceso', …(20) ]
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

@@ -36,8 +36,8 @@ function repoWith(prisma: ReturnType<typeof buildPrisma>) {
 
 const INPUT = {
   ordenId: "o1",
-  estatusDevueltaId: idEstado("devuelta"),
-  estatusReprogramadaId: idEstado("reprogramada"),
+  estatusDevueltaId: idEstado("novedad"),
+  estatusReprogramadaId: idEstado("reprogramado"),
   fechaReprogramacion: "2026-07-25",
   motivo: "cliente pidio otra fecha",
   actorUsuarioId: "tienda-1",
@@ -48,14 +48,14 @@ beforeEach(async () => {
 });
 
 describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/R11)", () => {
-  it("R21: UPDATE guardado por estatus=devuelta + no borrada -> reprogramada", async () => {
+  it("R21: UPDATE guardado por estatus=devuelta + no borrada -> reprogramado", async () => {
     const prisma = buildPrisma();
     const ok = await repoWith(prisma).reprogramarDesdeDevuelta(INPUT);
 
     expect(ok).toBe(true);
     const upd = prisma.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
-    expect(upd.data).toEqual({ estatusId: idEstado("reprogramada") });
+    expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("novedad"), deletedAt: null });
+    expect(upd.data).toEqual({ estatusId: idEstado("reprogramado") });
   });
 
   it("R5: deriva el mensajero de la ULTIMA gestion `devuelta` VIGENTE (no anulada, mas reciente)", async () => {
@@ -63,7 +63,7 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
     await repoWith(prisma).reprogramarDesdeDevuelta(INPUT);
 
     const q = prisma.gestionOrden.findFirst.mock.calls[0][0];
-    expect(q.where).toEqual({ ordenId: "o1", resultado: "devuelta", anuladaAt: null });
+    expect(q.where).toEqual({ ordenId: "o1", resultado: "novedad", anuladaAt: null });
     expect(q.orderBy).toEqual({ createdAt: "desc" });
     // La gestion sintetica se atribuye a ese mensajero.
     const gArg = prisma.gestionOrden.create.mock.calls[0][0];
@@ -79,7 +79,7 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
     expect(gArg.data).toMatchObject({
       ordenId: "o1",
       mensajeroId: "m-ultima-devuelta",
-      resultado: "reprogramada",
+      resultado: "reprogramado",
       motivo: "cliente pidio otra fecha",
       cierreId: null, // R10: money-neutral (el cierre solo acredita entregada/rechazada)
     });
@@ -90,7 +90,7 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
     expect(gArg.data).not.toHaveProperty("ingresoBodegaRechazo");
   });
 
-  it("R11/R2: append por el choke point, actor=adminTienda, origen_tipo=reprogramacion_tienda, destino reprogramada (NO devuelta -> R8)", async () => {
+  it("R11/R2: append por el choke point, actor=adminTienda, origen_tipo=reprogramacion_tienda, destino reprogramada (NO novedad -> R8)", async () => {
     const prisma = buildPrisma();
     await repoWith(prisma).reprogramarDesdeDevuelta(INPUT);
 
@@ -99,8 +99,8 @@ describe("reprogramarDesdeDevuelta — transicion + gestion sintetica (R2/R3/R5/
     expect(hist.data).toEqual([
       {
         ordenId: "o1",
-        estatusOrigenId: idEstado("devuelta"),
-        estatusDestinoId: idEstado("reprogramada"), // R8: destino reprogramada, no devuelta -> no cuenta intento
+        estatusOrigenId: idEstado("novedad"),
+        estatusDestinoId: idEstado("reprogramado"), // R8: destino reprogramada, no devuelta -> no cuenta intento
         actorUsuarioId: "tienda-1", // R11: el adminTienda (no NULL, no el mensajero)
         origenTipo: "reprogramacion_tienda", // R11
         motivo: "cliente pidio otra fecha",

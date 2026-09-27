@@ -32,7 +32,7 @@ const RAMA_B = {
   actorUsuarioId: "usuario-dedicado-de-la-key",
   nota: "direccion corregida por el call center",
   cambioDeEstado: false,
-  estadoResultante: "devuelta",
+  estadoResultante: "novedad",
 } as const;
 
 describe("Feature 266 · T3.2 — OrdenHabilitacionApiRepository.registrar", () => {
@@ -56,7 +56,7 @@ describe("Feature 266 · T3.2 — OrdenHabilitacionApiRepository.registrar", () 
     await repoCon(prisma).registrar({ ...RAMA_B });
     expect(prisma.ordenHabilitacionApi.create.mock.calls[0][0].data).toMatchObject({
       cambioDeEstado: false,
-      estadoResultante: "devuelta",
+      estadoResultante: "novedad",
     });
   });
 

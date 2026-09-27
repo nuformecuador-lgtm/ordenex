@@ -1,0 +1,9 @@
+Nº Guía	Nº Remisión	Estado	Intentos	Destinatario	Producto	Dirección	Tienda	Zona	Provincia	Cantón	Distrito	Monto a cobrar
+	111137	En bodega satélite	0	Miguel -	1 * Crema anti verrugas.	Calle las brisas Granadilla  -	Tania	Quepos	San José	Curridabat	Granadilla	14990
+	63413	En bodega satélite	0	Juan jose suarez trejos	1 * AND.	Contigo acondomlnlo real guayabos Granadilla  -	Tania	Quepos	San José	Curridabat	Curridabat	12900
+	63101	En bodega satélite	0	Gina Montero	1 * Polvo Destapador de Cañerias Mágico.	De taco bell san pedro 400 oeste 25 norte condominio antea #9 San Pedro  -	Tania	Quepos	San José	Montes de Oca	Mercedes	10900
+	QA-R-0019	En bodega satélite	0	Melissa Arce	Kit de maquillaje	San Rafael, Oreamuno	Tania	Quepos	Cartago	Oreamuno	San Rafael	19900
+53521827	QA-R-0018	En bodega satélite	0	Roberto Villalobos	Parlante portatil	San Vicente, Moravia	Tania	Quepos	San José	Moravia	San Vicente	26500
+990002	QA-R-0002	En bodega satélite	2	Diego Mora	Cafetera	Tambor, Alajuela	Tania	Quepos	Alajuela	Alajuela	Tambor	0
+990017	QA-R-0021	En reparto	0	Daniela Porras	Tabla de surf (cera)	Quepos, Quepos	Tania	Quepos	Puntarenas	Quepos	Quepos	4200
+990016	QA-R-0020	En reparto	0	Kevin Zuniga	Traje de bano	Quepos, Quepos	Tania	Quepos	Puntarenas	Quepos	Quepos	17500

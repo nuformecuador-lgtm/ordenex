@@ -272,13 +272,21 @@ describe("ficha 359 · A — el teorema: lo pintado se puede volver a leer", () 
 afterEach(cleanup);
 
 /**
- * La tarjeta «Dinero en caja»: SIETE importes con TRES identidades entre ellos, y
- * la peor de las trece por densidad. Las cifras llevan céntimos a propósito y se
- * derivan con `Prisma.Decimal`, igual que el servicio.
+ * La tarjeta de la caja: OCHO importes con TRES identidades entre ellos, y la peor
+ * de las trece por densidad. Las cifras llevan céntimos a propósito y se derivan con
+ * `Prisma.Decimal`, igual que el servicio.
  *
- *   entradas − salidas = enCaja
- *   deTerceros + ganancia = enCaja
+ *   entradas − salidas = cifra principal
+ *   deTerceros + ganancia + capital = cifra principal     ← ficha 459 (R7, design §3.2)
  *   ingresosPropios − egresosPropios = ganancia
+ *
+ * FICHA 459 (T A.8) — la segunda identidad era «terceros + ganancia = en caja». Desde
+ * la 459 la cifra principal tiene TRES sumandos: el capital de Ordenex (saldo inicial y
+ * aportes) es dinero de Ordenex que no es ganancia (R6/R7). El conjunto lleva un capital
+ * DISTINTO de cero y con céntimos: con capital 0 la identidad vieja y la nueva serían la
+ * misma y el caso no distinguiría nada. Es el contrato, reescrito a conciencia.
+ *
+ *   10000.00 − 1000.33 = 8999.67 (terceros) ; 8999.67 + 2415.92 + 1000.33 = 12415.92
  */
 const CAJA_CON_CENTIMOS: CajaResumenDTO = {
   entradas: "15416.47",
@@ -289,18 +297,35 @@ const CAJA_CON_CENTIMOS: CajaResumenDTO = {
   egresosPropios: "3000.55",
   ganancia: "2415.92",
   signoGanancia: "positivo",
-  deTerceros: "10000.00",
+  deTerceros: "8999.67",
   periodoFiltrado: false,
-  porcentajeTiendas: "80.54",
+  porcentajeTiendas: "72.49",
   modoComposicion: "dos_bolsillos",
+  capital: "1000.33",
+  signoCapital: "positivo",
+  deOrdenex: "3416.25",
+  signoDeTerceros: "positivo",
+  deTercerosAbsoluto: "8999.67",
+  // Estado «flujo»: el de producción hoy. La identidad no depende del estado (R7).
+  estado: "flujo",
+  flujoDesde: "2026-08-25",
 };
 
-describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tarjeta", () => {
+/** El rótulo de la cifra principal en el estado del conjunto (literal: design §3.3). */
+const ROTULO_PRINCIPAL = "Flujo de dinero registrado";
+
+describe("ficha 359 · B1 — la tarjeta de la caja: las tres identidades (459: tres sumandos)", () => {
   it("el conjunto de prueba es coherente ANTES de pintarlo (según el servidor)", () => {
     // Si el doble no cuadrara, la pantalla podría estar rota y este test verde.
     const c = (k: keyof CajaResumenDTO) => new Prisma.Decimal(CAJA_CON_CENTIMOS[k] as string);
     expect(c("entradas").sub(c("salidas")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.enCaja);
-    expect(c("deTerceros").add(c("ganancia")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.enCaja);
+    expect(c("deTerceros").add(c("ganancia")).add(c("capital")).toFixed(2)).toBe(
+      CAJA_CON_CENTIMOS.enCaja,
+    );
+    expect(c("ganancia").add(c("capital")).toFixed(2)).toBe(CAJA_CON_CENTIMOS.deOrdenex);
+    // Capital con céntimos y distinto de cero: con 0 la identidad de dos sumandos también
+    // cerraría y el caso no probaría la de tres.
+    expect(CAJA_CON_CENTIMOS.capital).not.toBe("0.00");
     expect(c("ingresosPropios").sub(c("egresosPropios")).toFixed(2)).toBe(
       CAJA_CON_CENTIMOS.ganancia,
     );
@@ -311,11 +336,13 @@ describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tar
   it("las tres cuentas cierran con las CADENAS que se leen en la tarjeta", () => {
     render(<CajaResumenCard resumen={CAJA_CON_CENTIMOS} />);
 
-    const enCaja = leerImporte(
-      screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja }),
-    );
+    const enCaja = leerImporte(screen.getByRole("region", { name: ROTULO_PRINCIPAL }));
     const ganancia = leerImporte(
       screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }),
+    );
+    // Ficha 459 (R25): el capital es su propia región, dentro del bolsillo de Ordenex.
+    const capital = leerImporte(
+      screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.capital }),
     );
     const texto = document.body.textContent ?? "";
 
@@ -332,15 +359,15 @@ describe("ficha 359 · B1 — «Dinero en caja»: las tres identidades de la tar
 
     // Identidad 1 — entradas − salidas = en caja.
     laCuentaCierra([enCaja, salidas], entradas, "caja: entradas − salidas");
-    // Identidad 2 — los dos bolsillos suman la caja.
-    laCuentaCierra([terceros, ganancia], enCaja, "caja: terceros + ganancia");
+    // Identidad 2 — ficha 459 (R7): terceros + ganancia + capital = cifra principal.
+    laCuentaCierra([terceros, ganancia, capital], enCaja, "caja: terceros + ganancia + capital");
     // Identidad 3 — el bolsillo de Ordenex, por dentro.
     laCuentaCierra([ganancia, egresos], ingresos, "caja: ingresos − egresos");
   });
 
   it("y las cifras que se leen son las del servidor, no una versión redondeada", () => {
     render(<CajaResumenCard resumen={CAJA_CON_CENTIMOS} />);
-    const enCaja = leerImporte(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja }));
+    const enCaja = leerImporte(screen.getByRole("region", { name: ROTULO_PRINCIPAL }));
     expect(centimosPintados(enCaja)).toBe(centimosDelServidor(CAJA_CON_CENTIMOS.enCaja));
     // El síntoma concreto: la tarjeta ya no pinta `₡12.416` por `12415.92`.
     expect(enCaja).not.toBe(money("12416"));
@@ -535,6 +562,13 @@ import {
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 
+import { marcaRecibida, marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
+// ⭑ FICHA 431 (T22): los dos rótulos de la marca, del modulo PURO donde la guardia de
+// vocabulario ancla su valor a mano.
+import {
+  FALTA_POR_RECIBIR_LABEL,
+  MONTO_RECIBIDO_LABEL,
+} from "@/app/(app)/cierres-admin/_components/cierre-labels";
 /**
  * El reparto que EXCEDE: se teclean 9.000 y el imputable real es 4.500,35. El
  * servidor devuelve `sobrante = 4.499,65`, así que en pantalla tiene que leerse
@@ -671,6 +705,8 @@ const BODEGA_CABECERA: CierreBodegaResumen = {
   // 126089.17 − 14000.55 − 250.25, derivado por el servidor.
   paraLaCentral: "111838.37",
   efectivoCubreDescuentos: true,
+  // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+  ...marcaSinConciliar("100000.17"),
 };
 
 /** El importe pintado que sigue a un rótulo dentro de una región. */
@@ -723,6 +759,103 @@ describe("ficha 393 · B4 — la TARJETA del cierre de bodega: la cascada a la c
     const resultado = importeTrasEn(cascada, PARA_LA_CENTRAL_LABEL);
     expect(centimosPintados(resultado)).toBe(centimosDelServidor("111838.37"));
     expect(resultado).not.toBe(money("111838"));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 431 · B4-bis — LA MARCA DE CONCILIACIÓN: recibido + falta = declarado
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// La identidad que esta ficha añade al censo (T22), y se comprueba SOBRE LAS CADENAS QUE SE
+// PINTAN, no contra el `Decimal` de origen. Es la diferencia entre medir la pantalla y medir el
+// servidor: comparar el importe contra la variable de la que salió estaría siempre verde, y es
+// exactamente el defecto que la ficha 359 encontró repetido en trece pantallas.
+//
+// POR QUÉ ESTE PAR Y NO OTRO: `faltaPorRecibir` llega DERIVADO del servidor y la pantalla sólo
+// lo pinta. Si alguien «optimizara» restándolo en el cliente —o si el servidor lo derivara sobre
+// `total_general` en vez de sobre el efectivo (Q2)— la cuenta dejaría de cerrar CON LO QUE SE
+// LEE, que es donde el usuario la va a comprobar.
+//
+// El doble lleva CÉNTIMOS en los tres importes a propósito: un juego de cifras redondas cierra
+// igual con una resta hecha en `number`, y entonces el caso no mediría nada.
+
+/** Una consolidación RECIBIDA POR MENOS: ₡485.000,00 de ₡500.000,17 declarados. */
+const BODEGA_INCOMPLETA: CierreBodegaResumen = {
+  ...BODEGA_CABECERA,
+  cierreBodegaId: "b2b2b2b2-2222-4222-8222-b2b2b2b2b2b2",
+  estado: "aprobado",
+  totales: {
+    efectivo: "500000.17",
+    simpe: "26089.00",
+    transferencia: "0.00",
+    general: "526089.17",
+  },
+  resueltoAt: "2026-09-15T17:40:00.000Z",
+  // 500000.17 − 485000.00 = 15000.17, derivado por el SERVIDOR. Se escribe a mano aquí porque
+  // es justo la cifra que este bloque afirma: calcularla con el fixture sería una aserción
+  // contra su propia fuente.
+  ...marcaRecibida("485000.00", "15000.17"),
+};
+
+describe("⭑ ficha 431 · B4-bis — la marca de conciliación en la tarjeta del cierre de bodega", () => {
+  async function abrirTarjeta(cierre: CierreBodegaResumen) {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <CierreBodegaFacturaResumen cierre={cierre} />
+      </SWRConfig>,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Ver detalles del cierre de bodega de Limón",
+      }),
+    );
+    return screen.getByRole("region", { name: "Conciliación" });
+  }
+
+  it("monto recibido + falta por recibir = efectivo declarado, leído del DOM (R17/R18/R20)", async () => {
+    const conciliacion = await abrirTarjeta(BODEGA_INCOMPLETA);
+    const efectivo = importeTrasEn(
+      screen.getByRole("region", { name: /Comprobante del cierre de bodega/ }),
+      "Efectivo",
+    );
+
+    laCuentaCierra(
+      [
+        importeTrasEn(conciliacion, MONTO_RECIBIDO_LABEL),
+        importeTrasEn(conciliacion, FALTA_POR_RECIBIR_LABEL),
+      ],
+      efectivo,
+      "tarjeta de bodega: la marca de conciliación",
+    );
+  });
+
+  it("la cifra que se lee es la del SERVIDOR, sin redondear al colón", async () => {
+    const conciliacion = await abrirTarjeta(BODEGA_INCOMPLETA);
+    const falta = importeTrasEn(conciliacion, FALTA_POR_RECIBIR_LABEL);
+    expect(centimosPintados(falta)).toBe(centimosDelServidor("15000.17"));
+    // El síntoma que la 230 dejó suelto: los 17 céntimos desaparecidos.
+    expect(falta).not.toBe(money("15000"));
+  });
+
+  it("⭑ la falta se deriva del EFECTIVO y NO del total general (decisión Q2, medida)", async () => {
+    // El doble tiene ₡26.089,00 de SINPE, que NO viaja en el bulto. Si `faltaPorRecibir` saliera
+    // del general, lo que la tarjeta enseñaría como pendiente de llegar serían ₡41.089,17 —una
+    // deuda fantasma que nadie va a entregar en mano jamás—. La cuenta de arriba cierra contra
+    // el EFECTIVO justamente porque no lo hace.
+    const conciliacion = await abrirTarjeta(BODEGA_INCOMPLETA);
+    const falta = importeTrasEn(conciliacion, FALTA_POR_RECIBIR_LABEL);
+    expect(centimosPintados(falta)).not.toBe(centimosDelServidor("41089.17"));
+  });
+
+  it("SIN MARCAR no hay línea de «monto recibido», y falta el efectivo ÍNTEGRO", async () => {
+    // Un «₡0» ahí diría «alguien contó y no había nada», que es otra cosa. Y lo que falta por
+    // llegar es todo el efectivo, que es el número que la bodega tiene que reconocer como suyo.
+    const conciliacion = await abrirTarjeta(BODEGA_CABECERA);
+    expect(conciliacion.textContent ?? "").not.toContain(MONTO_RECIBIDO_LABEL);
+    expect(centimosPintados(importeTrasEn(conciliacion, FALTA_POR_RECIBIR_LABEL))).toBe(
+      centimosDelServidor("100000.17"),
+    );
   });
 });
 
@@ -1019,8 +1152,10 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
   },
   { ruta: "app/(app)/wallet/_components/CajaResumenCard.tsx", identidad: "siete importes, tres identidades" },
   {
-    ruta: "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
-    identidad: "las líneas suman el total",
+    // FICHA 458-D (T D.8): el desglose por tienda se retiró; la superficie de dinero que lo sustituye
+    // es el estado de cuenta (tienda, mensajero y bodega), cuyas cifras de arriba enseñan su identidad.
+    ruta: "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
+    identidad: "saldo inicial + abonos − cargos = saldo final, afirmado por el servidor",
   },
   {
     ruta: "app/(app)/mis-asignaciones/_components/AsignacionDetalle.tsx",

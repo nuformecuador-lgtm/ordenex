@@ -93,7 +93,7 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
     FKS = fks;
     ACTOR = fks.tiendaId;
 
-    const valores = ["por_recoger", "en_reparto", "ayuda_tienda"];
+    const valores = ["mensajero_recogiendo_en_bodega", "en_reparto", "ayuda_tienda"];
     const estados = await prisma.orderStatus.findMany({
       where: { value: { in: valores } },
       select: { id: true, value: true },
@@ -128,14 +128,14 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
   });
 
   function estatusIdsAdmitidos(): string[] {
-    return [ESTATUS.por_recoger, ESTATUS.en_reparto, ESTATUS.ayuda_tienda];
+    return [ESTATUS.mensajero_recogiendo_en_bodega, ESTATUS.en_reparto, ESTATUS.ayuda_tienda];
   }
 
   /** Siembra UNA orden asignada con `fechaReparto` y ejecuta `fn`. Todo se revierte. */
   async function conOrden<T>(
     fechaReparto: Date,
     fn: (ctx: { repo: OrdenRepository; tx: PrismaClient; ordenId: string }) => Promise<T>,
-    estatusValue = "por_recoger",
+    estatusValue = "mensajero_recogiendo_en_bodega",
   ): Promise<T> {
     return enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
@@ -380,7 +380,10 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
       setOrdenEnGestion: vi.fn(async () => true),
       liberarOrdenEnGestion: vi.fn(async () => true),
       recogerLote: vi.fn(async (ids: string[]) => ids.length),
-      crearGestionYTransicionar: vi.fn(async () => "g1"),
+      // FICHA 454 (T1.4): el registro sin transicion y la guarda de gestionabilidad (sin gestion
+      // pendiente ni ayuda abierta). Aqui la orden no tiene ninguna de las dos.
+      registrarGestionPendiente: vi.fn(async () => ({ gestionId: "g1", ordenEventoId: "ev1" })),
+      findBloqueoDeGestion: vi.fn(async () => null),
       reprogramarDesdeDevuelta: vi.fn(async () => true),
       crearGestionDesdeAyuda: vi.fn(async () => "g-ayuda"),
       rechazarDesdeDevuelta: vi.fn(async () => true),

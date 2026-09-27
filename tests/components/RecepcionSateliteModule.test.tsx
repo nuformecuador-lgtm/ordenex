@@ -790,7 +790,15 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
   });
 
-  it("R22: bodega bloqueada por CIERRE DE BODEGA (ii) muestra el aviso de esa causa", async () => {
+  // ---------- ⭑ FICHA 431 (T13, R2/R4) ----------
+  //
+  // Los dos casos de abajo AFIRMABAN el bloqueo por consolidación pendiente y ahora afirman su
+  // contrario, que es el corazón de la ficha: la causa (ii) pasa de veto a AVISO. Estaban
+  // enumerados en la lista de T11 —«la red que fijaba el bloqueo»— como propios de la pasada de
+  // frontend, y se invierten aquí uno a uno, no se borran: borrarlos dejaría sin red justo la
+  // línea que se está cambiando.
+
+  it("⭑ 431/R2/R4: con consolidación pendiente de conciliar hay AVISO, y «Asignar» SIGUE HABILITADO", async () => {
     const user = userEvent.setup();
     renderModule({
       recibidas: [
@@ -800,26 +808,39 @@ describe("RecepcionSateliteModule", () => {
           estatusValue: "en_bodega_satelite",
         }),
       ],
+      // `bloqueada: false` es lo que devuelve HOY el repositorio para cualquier combinación
+      // (D4): la consolidación pendiente viaja como información, no como veto.
       bloqueoBodega: {
-        bloqueada: true,
+        bloqueada: false,
         porMensajeros: false,
         porCierreBodega: true,
+        consolidacionesSinConciliar: 3,
       },
     });
 
-    // El aviso de bloqueo precede al listado (no está dentro de su región).
-    const alerta = screen.getByRole("alert");
     const region = screen.getByRole("region", { name: LISTADO });
-    expect(alerta).toHaveTextContent(/cierre de bodega hacia la central está pendiente de aprobación/i);
-    expect(alerta).not.toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
-    // R48: la acción se ofrece al marcar, y el bloqueo la deja deshabilitada.
+
+    // (a) El aviso existe, CUENTA las que hay y dice que no frena.
+    const aviso = screen.getByRole("status", { name: /consolidaciones pendientes de conciliar/i });
+    expect(aviso).toHaveTextContent(
+      /Tenés 3 consolidaciones que la central todavía no marcó como recibidas/i,
+    );
+    expect(aviso).toHaveTextContent(/Podés seguir asignando órdenes con normalidad/i);
+
+    // (b) NO hay aviso de bloqueo: ni el `role="alert"` ni el texto retirado. Las dos mitades,
+    //     porque quitar el literal y dejar la alerta —o al revés— sería medio arreglo.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.body).not.toHaveTextContent(/pendiente de aprobación/i);
+
+    // (c) Y LO QUE DE VERDAD IMPORTA: el botón funciona. Es el requisito entero (R1/R4); sin
+    //     esta línea, el caso sólo mediría que el texto cambió de color.
     await user.click(
       within(region).getByRole("checkbox", { name: "Seleccionar REM-B1" }),
     );
-    expect(within(region).getByRole("button", { name: "Asignar" })).toBeDisabled();
+    expect(within(region).getByRole("button", { name: "Asignar" })).toBeEnabled();
   });
 
-  it("R22: bloqueada por AMBAS causas lista las dos líneas accionables", () => {
+  it("⭑ 431/R3: con las DOS causas a la vez, cada una tiene su aviso y no se tapan", () => {
     renderModule({
       recibidas: [
         makeOrden({
@@ -829,16 +850,27 @@ describe("RecepcionSateliteModule", () => {
         }),
       ],
       bloqueoBodega: {
+        // Sigue habiendo un camino que bloquea —la rama vive (D4/Q4)— y este caso lo usa para
+        // comprobar que el aviso de la consolidación NO se lo come el de bloqueo: son
+        // independientes desde la 241 y pueden darse juntas.
         bloqueada: true,
         porMensajeros: true,
         porCierreBodega: true,
+        consolidacionesSinConciliar: 1,
       },
     });
 
-    // El aviso precede al listado (no está dentro de su región).
     const alerta = screen.getByRole("alert");
     expect(alerta).toHaveTextContent(/resuelve los cierres pendientes de tus mensajeros/i);
-    expect(alerta).toHaveTextContent(/cierre de bodega hacia la central/i);
+    // La línea retirada NO vuelve por dentro del bloque de bloqueo.
+    expect(alerta).not.toHaveTextContent(/cierre de bodega hacia la central/i);
+
+    // Y el aviso de la consolidación está, aparte, con su singular escrito a mano.
+    expect(
+      screen.getByRole("status", { name: /consolidaciones pendientes de conciliar/i }),
+    ).toHaveTextContent(
+      /Tenés 1 consolidación que la central todavía no marcó como recibida\./i,
+    );
   });
 
   it("R22: sin bloqueo NO muestra aviso y 'Asignar' se habilita al seleccionar", async () => {
@@ -863,7 +895,7 @@ describe("RecepcionSateliteModule", () => {
 
   // ---------- Feature 139 (T3.3) — "Por devolver" por lote a bodega central ----------
 
-  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver + botón 'Enviar a central'", async () => {
+  it("R13/R21: 'Por devolver' es una TABLA seleccionable de las órdenes por_devolver_a_bodega_central + botón 'Enviar a central'", async () => {
     const user = userEvent.setup();
     renderModule({
       porDevolver: [
@@ -871,7 +903,7 @@ describe("RecepcionSateliteModule", () => {
           id: "d1",
           numRemision: "REM-PORDEV",
           destinatario: "Caro Díaz",
-          estatusValue: "por_devolver",
+          estatusValue: "por_devolver_a_bodega_central",
         }),
       ],
     });
@@ -899,7 +931,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "d1",
           numRemision: "REM-PORDEV",
-          estatusValue: "por_devolver",
+          estatusValue: "por_devolver_a_bodega_central",
         }),
       ],
     });
@@ -925,8 +957,8 @@ describe("RecepcionSateliteModule", () => {
     enviarACentralMock.mockResolvedValue({ status: "ok" });
     renderModule({
       porDevolver: [
-        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
-        makeOrden({ id: "d2", numRemision: "REM-B", estatusValue: "por_devolver" }),
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver_a_bodega_central" }),
+        makeOrden({ id: "d2", numRemision: "REM-B", estatusValue: "por_devolver_a_bodega_central" }),
       ],
     });
 
@@ -954,7 +986,7 @@ describe("RecepcionSateliteModule", () => {
     enviarACentralMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
     renderModule({
       porDevolver: [
-        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver" }),
+        makeOrden({ id: "d1", numRemision: "REM-A", estatusValue: "por_devolver_a_bodega_central" }),
       ],
     });
 
@@ -1029,7 +1061,7 @@ describe("RecepcionSateliteModule", () => {
           id: "n1",
           numRemision: "REM-DEVUELTA",
           destinatario: "Caro Díaz",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1054,7 +1086,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "n1",
           numRemision: "REM-DEVUELTA",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1079,7 +1111,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "n1",
           numRemision: "REM-DEVUELTA",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
         }),
       ],
     });
@@ -1158,7 +1190,7 @@ describe("RecepcionSateliteModule", () => {
         makeOrden({
           id: "d1",
           numRemision: "REM-DEV",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           prioridad: true,
         }),
       ],
@@ -1279,13 +1311,13 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
         makeOrden({
           id: "n1",
           numRemision: "REM-N1",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           intentosEntrega: 4,
         }),
         makeOrden({
           id: "n2",
           numRemision: "REM-N0",
-          estatusValue: "devuelta",
+          estatusValue: "novedad",
           intentosEntrega: 0,
         }),
       ],

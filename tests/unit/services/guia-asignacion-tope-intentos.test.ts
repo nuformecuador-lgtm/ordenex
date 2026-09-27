@@ -30,7 +30,7 @@ const GAM = "z-gam";
 const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
 const ESTATUS: Record<string, string> = {
-  por_recoger: "os-espera",
+  mensajero_recogiendo_en_bodega: "os-espera",
   en_bodega_central: "os-bodega",
 };
 
@@ -188,7 +188,7 @@ describe("276/T7 · el orden de guardas se conserva", () => {
       { o1: UMBRAL, o2: UMBRAL, o3: UMBRAL },
       {
         findByIdsForTransicion: vi.fn(async () => [
-          ordenRow({ id: "o1", estatusValue: "reprogramada" }),
+          ordenRow({ id: "o1", estatusValue: "reprogramado" }),
           ordenRow({ id: "o2" }),
           ordenRow({ id: "o3" }),
         ]),

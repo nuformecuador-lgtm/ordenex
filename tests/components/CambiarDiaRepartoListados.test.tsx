@@ -107,11 +107,11 @@ const FECHAS = { hoy: "2026-08-22", manana: "2026-08-23" };
  * negativo.
  */
 const CATALOGO = [
-  { id: "est-por_recoger", value: "por_recoger" },
+  { id: "est-mensajero_recogiendo_en_bodega", value: "mensajero_recogiendo_en_bodega" },
   { id: "est-en_reparto", value: "en_reparto" },
   { id: "est-ayuda_tienda", value: "ayuda_tienda" },
   { id: "est-en_bodega_central", value: "en_bodega_central" },
-  { id: "est-entregada", value: "entregada" },
+  { id: "est-entregada", value: "entregado" },
 ];
 
 function makeOrden(
@@ -120,8 +120,8 @@ function makeOrden(
   return {
     numGuia: 1001,
     numRemision: `REM-${over.id}`,
-    estatusId: "est-por_recoger",
-    estatusValue: "por_recoger",
+    estatusId: "est-mensajero_recogiendo_en_bodega",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     fechaRepartoISO: "2026-08-23",
     destinatario: "Destino",
     telefonoDest: "0999999999",
@@ -148,7 +148,7 @@ function makeOrdenSatelite(
   return {
     numGuia: 2001,
     numRemision: `SAT-${over.id}`,
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     fechaRepartoISO: "2026-08-23",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
@@ -233,7 +233,7 @@ afterEach(() => {
 // F3 / R13 — `/ordenes`: los TRES estados donde el día todavía decide algo
 // ---------------------------------------------------------------------------
 describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día vivo", () => {
-  it("se ofrece con una selección en `por_recoger` (el caso principal)", async () => {
+  it("se ofrece con una selección en `mensajero_recogiendo_en_bodega` (el caso principal)", async () => {
     const user = userEvent.setup();
     renderOrdenes([makeOrden({ id: "o1" })]);
 
@@ -255,15 +255,22 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
     expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
   });
 
-  it("se ofrece en `ayuda_tienda` — el mismo bloqueo por la otra puerta", async () => {
-    const user = userEvent.setup();
+  // ⏳ 2026-09-23 (FICHA 454, R37): este caso decia «se ofrece en `ayuda_tienda` — el mismo
+  // bloqueo por la otra puerta». La ayuda deja de ser estado: la orden con ayuda abierta ESTÁ en
+  // `en_reparto`, que ya ofrece la corrección (caso de arriba). Una fila con el estado retirado
+  // —imposible tras la migración— cae al `default`: NO se ofrece (fallo cerrado).
+  it("454: una fila con el estado retirado `ayuda_tienda` NO ofrece la corrección", async () => {
     renderOrdenes([
       makeOrden({ id: "o3", estatusId: "est-ayuda_tienda", estatusValue: "ayuda_tienda" }),
     ]);
 
-    await seleccionarFila(user, "REM-o3");
-
-    expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
+    // Sin ninguna acción que ofrecer, la fila ni siquiera es seleccionable: la fila está, su
+    // casilla no.
+    expect(await screen.findByText("REM-o3")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: "Seleccionar orden REM-o3" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
   it("NO se ofrece en un estado donde el día ya no decide nada (`en_bodega_central`)", async () => {
@@ -298,7 +305,7 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
     // pedido humano del 2026-08-27 acotó el borrado a las órdenes SIN GESTIÓN —una `entregada`
     // no lo está—, así que la fila vuelve a no llevar a ningún botón y vuelve a bloquearse.
     renderOrdenes([
-      makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregada" }),
+      makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregado" }),
       makeOrden({ id: "o5b" }),
     ]);
 
@@ -381,7 +388,7 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
 describe("R13 — la bodega satélite tiene su propia superficie", () => {
   const LISTADO_BODEGA = "Órdenes de la bodega";
 
-  it("con una `por_recoger` seleccionada, la acción se ofrece y está habilitada", async () => {
+  it("con una `mensajero_recogiendo_en_bodega` seleccionada, la acción se ofrece y está habilitada", async () => {
     const user = userEvent.setup();
     renderSatelite([makeOrdenSatelite({ id: "s1" })]);
 

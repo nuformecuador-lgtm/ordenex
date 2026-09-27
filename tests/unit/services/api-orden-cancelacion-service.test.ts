@@ -15,7 +15,7 @@ function fakeRepo(cancelarResult: unknown, overrides: Record<string, unknown> = 
 
 describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
   it("R19: ok desde en_bodega_central -> destino devolviendo_a_tienda; resuelve el estatusId del catalogo", async () => {
-    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_bodega_central" });
+    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_bodega_central", estadoAnteriorNombre: "En bodega central" });
     const svc = new ApiOrdenCancelacionService(repo as never);
 
     const res = await svc.cancelar(ACTOR, 10234);
@@ -29,20 +29,20 @@ describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
     });
     expect(res).toEqual({
       status: "ok",
-      data: { numGuia: 10234, estadoAnterior: "en_bodega_central", estado: "devolviendo_a_tienda" },
+      data: { numGuia: 10234, estadoAnterior: "en_bodega_central", estadoAnteriorNombre: "En bodega central", estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda" },
     });
   });
 
   it("R19: ok desde en_ruta_bodega_central -> devolviendo_a_tienda", async () => {
-    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_ruta_bodega_central" });
+    const repo = fakeRepo({ status: "ok", estadoAnterior: "en_ruta_bodega_central", estadoAnteriorNombre: "En ruta a bodega central" });
     const svc = new ApiOrdenCancelacionService(repo as never);
     const res = await svc.cancelar(ACTOR, 10234);
     expect(res).toEqual({
       status: "ok",
       data: {
         numGuia: 10234,
-        estadoAnterior: "en_ruta_bodega_central",
-        estado: "devolviendo_a_tienda",
+        estadoAnterior: "en_ruta_bodega_central", estadoAnteriorNombre: "En ruta a bodega central",
+        estado: "devolviendo_a_tienda", estadoNombre: "Devolviendo a tienda",
       },
     });
   });
@@ -63,7 +63,7 @@ describe("ApiOrdenCancelacionService.cancelar (feature 106, T9)", () => {
 
   it("falla ruidosamente si el catalogo no tiene devolviendo_a_tienda (fallo de infra, no de negocio)", async () => {
     const repo = fakeRepo(
-      { status: "ok", estadoAnterior: "en_bodega_central" },
+      { status: "ok", estadoAnterior: "en_bodega_central", estadoAnteriorNombre: "En bodega central" },
       { findEstatusIdByValue: vi.fn().mockResolvedValue(null) },
     );
     const svc = new ApiOrdenCancelacionService(repo as never);

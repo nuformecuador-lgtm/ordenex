@@ -125,10 +125,12 @@ import { textoSello, textoSelloCompleto } from "./ActualizarAnalitica";
 import { DineroProductoDetalle, hayMonto } from "./DineroProductoDetalle";
 import { calcularEfectividad } from "./efectividad";
 import {
+  ETIQUETA_EN_PROCESO,
   textoDesenlacesDeFila,
   tramosDeFila,
   type IdTramoDesenlace,
 } from "./desenlaces-de-fila";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 import { textoComposicionOtrosResultados } from "./otros-resultados";
 import {
   descargaAnaliticaProductos,
@@ -173,7 +175,11 @@ export const PRODUCTOS_TEXTOS = {
    * celdas separadas por 400 px de tabla.
    */
   avisoDesglose:
-    "Cada orden cuenta en un solo grupo: entregadas, rechazadas, otros resultados y en proceso suman la columna Órdenes.",
+    // FICHA 455 (2026-09-24): los grupos por el MISMO nombre que la frase de «En qué terminaron»
+    // (antes «entregadas, rechazadas … en proceso», nombres retirados).
+    `Cada orden cuenta en un solo grupo: ${NOMBRE_ESTADO.entregado}, ` +
+    `${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}, los demás resultados y ` +
+    `${ETIQUETA_EN_PROCESO} suman la columna Órdenes.`,
   /**
    * FICHA 347 (R45) — EL AVISO DEL DINERO, y es el mas importante de los tres.
    *

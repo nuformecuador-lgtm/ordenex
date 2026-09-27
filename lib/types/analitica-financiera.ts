@@ -22,6 +22,9 @@
 //    admiten un solo `tipo`, luego `Σ egreso = 0` y `neto = +bruto` SIEMPRE: el campo no
 //    informa de nada. Publican `ImporteSoloBruto`. Lo que R37 sigue prohibiendo —derivar el
 //    neto emparejando un `ajuste_*` con el movimiento que corrige— no se toca.
+//    FICHA 458-B (revision B2, 2026-09-26): `ingreso_flete` e `ingreso_iva` ganan el reverso de
+//    la anulacion de un cobro por rechazo y VUELVEN a publicar `ImporteConNeto`; solo
+//    `ingreso_comision_cod` sigue homogenea y `ImporteSoloBruto`.
 //  - ⟨D3⟩ / R43 — `esAcumulado` es `true` EXACTAMENTE en las dos cuentas por pagar, que son
 //    un saldo al corte y no un flujo del periodo.
 //  - ⟨D6⟩ / R38 — `cod_recaudado` se sirve en DOS vistas con ids distintos que NO suman

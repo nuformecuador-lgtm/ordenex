@@ -57,9 +57,9 @@ describe("💰 398 — sumar snapshots frente a re-derivar con la tarifa VIVA", 
   /** Dos gestiones del mismo cierre, con pagos congelados con tarifas DISTINTAS. */
   const GESTIONES = [
     // La que se acaba de corregir: su snapshot ya es 0.00 (`rechazada` no paga).
-    { gestionId: "g-corregida", resultado: "rechazada" as const, pagoMensajero: d("0.00") },
+    { gestionId: "g-corregida", resultado: "devolucion_a_origen_por_rechazo" as const, pagoMensajero: d("0.00") },
     // La OTRA del cierre, congelada cuando la tarifa era 900. Nadie la corrigio.
-    { gestionId: "g-ajena", resultado: "entregada" as const, pagoMensajero: d("900.00") },
+    { gestionId: "g-ajena", resultado: "entregado" as const, pagoMensajero: d("900.00") },
   ];
 
   it("sumar los snapshots da 900.00: la gestion ajena conserva SU pago congelado", () => {

@@ -63,21 +63,29 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
     });
   });
 
-  it("`OrdenGestion` declara EXACTAMENTE las cinco claves de R3, todas requeridas", () => {
+  // ⏳ 2026-09-23 (FICHA 454, R32/R36): SEIS claves — entra `pendienteConfirmacion`, al FINAL y
+  // requerida (el DTO la emite siempre, `false` en las gestiones ya aplicadas y en las legadas).
+  it("`OrdenGestion` declara EXACTAMENTE las seis claves (5 de R3 + 454/R32), todas requeridas", () => {
     // Escritas a mano y en el orden del contrato: una clave de mas o de menos se ve.
     expect(Object.keys(propsGestion)).toEqual([
       "createdAt",
       "resultado",
+      "resultadoNombre",
       "estadoResultante",
+      "estadoResultanteNombre",
       "motivo",
       "mensajero",
+      "pendienteConfirmacion",
     ]);
     expect(gestion.required).toEqual([
       "createdAt",
       "resultado",
+      "resultadoNombre",
       "estadoResultante",
+      "estadoResultanteNombre",
       "motivo",
       "mensajero",
+      "pendienteConfirmacion",
     ]);
     // Ninguna propiedad opcional, y nada fuera de la lista.
     expect(gestion.additionalProperties).toBe(false);
@@ -100,16 +108,17 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
   it("R5: el enum de `resultado` son los CINCO values crudos, y NO es el catalogo de estados", () => {
     // Literal a mano: si se comparara contra `ESTATUS_POR_RESULTADO` —de donde se deriva— el
     // aserto estaria siempre verde.
+    // 455 (T1.8): codigos vigentes, en orden alfabetico (se deriva con `.sort()`).
     expect((propsGestion.resultado as Nodo).enum).toEqual([
-      "devuelta",
-      "entregada",
+      "devolucion_a_origen_por_rechazo",
+      "entregado",
       "incidente",
-      "rechazada",
-      "reprogramada",
+      "novedad",
+      "reprogramado",
     ]);
     // No contiene `por_recoger`, asi que `esEnumDeEstado` de `openapi-contrato-en-reparto` NO lo
     // cuenta y los bloques de catalogo siguen siendo CUATRO.
-    expect((propsGestion.resultado as Nodo).enum).not.toContain("por_recoger");
+    expect((propsGestion.resultado as Nodo).enum).not.toContain("mensajero_recogiendo_en_bodega");
   });
 
   it("R20: hay un EJEMPLO de respuesta del detalle con al menos un elemento de `gestiones`", () => {
@@ -124,7 +133,9 @@ describe("405/R20 — `OrdenDetalle` declara `gestiones` y el `.yaml` es espejo 
       expect(Object.keys(g)).toEqual([
         "createdAt",
         "resultado",
+        "resultadoNombre",
         "estadoResultante",
+        "estadoResultanteNombre",
         "motivo",
         "mensajero",
       ]);
@@ -273,6 +284,7 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "destinatario",
       "telefonoDest",
       "producto",
@@ -302,6 +314,7 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
       "evidenciasUrl",
@@ -310,18 +323,19 @@ describe("405/R16 — el cuerpo del listado y el del webhook no ganan ninguna cl
       "numGuia",
       "numRemision",
       "estado",
+      "estadoNombre",
       "motivo",
       "mensajero",
     ]);
     expect(Object.keys(dataWebhook.properties as Nodo)).not.toContain("gestiones");
   });
 
-  it("`Evidencia` no cambia: los mismos cuatro campos y los mismos tres values", () => {
+  it("`Evidencia`: los mismos cuatro campos + `resultadoNombre` (455/R24) y los mismos tres values", () => {
     const evidencia = schemas.Evidencia;
-    expect(evidencia.required).toEqual(["resultado", "contentType", "url", "expiraEnSegundos"]);
+    expect(evidencia.required).toEqual(["resultado", "resultadoNombre", "contentType", "url", "expiraEnSegundos"]);
     expect(((evidencia.properties as Nodo).resultado as Nodo).enum).toEqual([
-      "entregada",
-      "rechazada",
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
       "incidente",
     ]);
   });

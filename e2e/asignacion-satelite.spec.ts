@@ -69,7 +69,7 @@ test.describe("Asignación satélite — asignar mensajero de la zona", () => {
     await page.goto("/recepcion-satelite/en-bodega");
   });
 
-  test("seleccionar orden recibida → Asignar mensajero → por_recoger", async ({
+  test("seleccionar orden recibida → Asignar mensajero → mensajero_recogiendo_en_bodega", async ({
     page,
   }) => {
     // The "Recibidas" region lists orders in `en_bodega_satelite` of the zone.

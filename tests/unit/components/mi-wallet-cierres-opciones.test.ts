@@ -4,7 +4,7 @@ import {
   CIERRE_TODOS_OPTION,
   opcionesDeCierre,
 } from "@/app/(app)/mi-wallet/_components/mi-wallet-cierres";
-import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
+import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 import type { CierreTiendaOpcionDTO } from "@/lib/types/wallet-tienda";
 
 /**
@@ -77,17 +77,15 @@ describe("335 / R23 — la etiqueta dice el día y el número de movimientos, nu
     expect(etiquetas).toHaveLength(2); // control de no-vacuidad del filtro de arriba
   });
 
-  it("el día es el MISMO que pinta la columna «Fecha» de la tabla", () => {
-    // No se compara contra un literal escrito a mano: se compara contra `fechaDiaISO`, la MISMA
-    // función que usa la descarga y que produce el mismo día que el `slice(0, 10)` de la
-    // columna. ⚠️ Los dos son el día UTC: un formateador de calendario local haría que la
-    // opción dijera un día y las filas de al lado otro.
-    const instante = "2026-07-12T23:45:00.000Z";
+  it("el día es el MISMO que pinta la columna «Fecha» de la tabla: el de Costa Rica (459/F1)", () => {
+    // Un cierre de las 22:00 del 12 de julio en Costa Rica es el 13 en UTC. La opción, la
+    // columna y la descarga dicen el 12 (literal escrito a mano, no la función que lo genera).
+    const instante = "2026-07-13T04:00:00.000Z";
     const [etiqueta] = etiquetasDeCierre([cierre({ fecha: instante })]);
 
-    expect(etiqueta).toContain(fechaDiaISO(instante));
-    // Y la tabla, con el mismo instante, pinta exactamente eso.
-    expect(fechaDiaISO(instante)).toBe(instante.slice(0, 10));
+    expect(etiqueta).toBe("Cierre del 2026-07-12 · 4 movimientos");
+    // Y la tabla y la descarga, con el mismo instante, pintan exactamente ese día.
+    expect(fechaDiaMovimientoCR(instante)).toBe("2026-07-12");
   });
 });
 
@@ -105,8 +103,8 @@ describe("335 / R24 — dos cierres del mismo día se distinguen entre ellos", (
     expect(new Set(etiquetas).size).toBe(2);
     // La hora entra en LAS DOS, no solo en la segunda: marcar únicamente a la repetida haría
     // creer que la primera es «la del día» y la otra una excepción.
-    expect(etiquetas[0]).toBe("Cierre del 2026-07-12 14:30 · 4 movimientos");
-    expect(etiquetas[1]).toBe("Cierre del 2026-07-12 18:05 · 4 movimientos");
+    expect(etiquetas[0]).toBe("Cierre del 2026-07-12 08:30 · 4 movimientos");
+    expect(etiquetas[1]).toBe("Cierre del 2026-07-12 12:05 · 4 movimientos");
   });
 
   it("mismo día pero distinto número de movimientos: NO hace falta la hora", () => {

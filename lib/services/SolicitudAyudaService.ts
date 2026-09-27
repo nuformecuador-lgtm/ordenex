@@ -15,9 +15,7 @@ import type {
 import { autorizarSobreHilo } from "@/lib/services/OrdenNotaService";
 import { rescatarOrdenAyuda } from "@/lib/services/rescate-ayuda";
 
-/** Los dos estatus del viaje de IDA. La vuelta la resuelve el punto unico de rescate. */
-const ESTATUS_EN_REPARTO = "en_reparto";
-const ESTATUS_AYUDA = "ayuda_tienda";
+// FICHA 454 (T1.15): aqui vivian los dos estatus del viaje de IDA (`en_reparto -> ayuda_tienda`).
 
 /**
  * SOLICITUD DE AYUDA de un mensajero sobre la orden que esta gestionando (pedido humano
@@ -59,7 +57,7 @@ export class SolicitudAyudaService implements ISolicitudAyudaService {
     private readonly notas: Pick<IOrdenNotaService, "publicar">,
     private readonly repo: Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "transicionarAyuda" | "incrementarIntentoContacto"
+      "registrarAyudaSolicitada" | "registrarAyudaResuelta" | "incrementarIntentoContacto"
     >,
     /**
      * Solo para `recuperar`, que no publica nada y por tanto no puede autorizarse a traves de
@@ -85,11 +83,8 @@ export class SolicitudAyudaService implements ISolicitudAyudaService {
     // despues, la nota ya estaria publicada y la orden no se habria movido - el hilo diria «pedi
     // ayuda» sobre una orden que sigue en la ruta. Resolviendo primero, la operacion se rechaza
     // ENTERA: sin nota y sin transicion.
-    const [enRepartoId, ayudaId] = await Promise.all([
-      this.repo.findEstatusIdByValue(ESTATUS_EN_REPARTO),
-      this.repo.findEstatusIdByValue(ESTATUS_AYUDA),
-    ]);
-    if (enRepartoId === null || ayudaId === null) return { status: "forbidden" };
+    // FICHA 454 (T1.15): aqui se resolvian los ids de `en_reparto` y `ayuda_tienda` para la
+    // transicion de ida. Ya no hay transicion: la ayuda es un HECHO sobre una orden que sigue en reparto.
 
     // El motivo ES el cuerpo de la nota. Va con el actor de la sesion; el autor jamas viaja en
     // el input (R5 de la 227).
@@ -113,12 +108,14 @@ export class SolicitudAyudaService implements ISolicitudAyudaService {
     // `updateMany` afecta a 0 filas, NO se hace el append y no queda ningun efecto parcial. El
     // `data` toca solo `estatusId`: el mensajero asignado NO cambia (R6), porque el paquete sigue
     // siendo suyo y sigue en su moto.
-    await this.repo.transicionarAyuda({
+    // FICHA 454 (T1.15, R21): el HECHO `ayuda_solicitada`, bajo candado y solo si la orden sigue
+    // siendo gestionable por este mensajero (en reparto, suya, sin gestion pendiente ni ayuda ya
+    // abierta). La orden NO cambia de estado. Si no la admite, no se escribe nada — igual que la
+    // guarda del `updateMany` de la 235 —: la nota ya publicada queda en el hilo, como hoy.
+    await this.repo.registrarAyudaSolicitada({
       ordenId: input.ordenId,
-      estatusOrigenId: enRepartoId,
-      estatusDestinoId: ayudaId,
-      actorUsuarioId: actor.usuarioId,
-      origenTipo: "solicitud_ayuda_tienda",
+      mensajeroId: actor.usuarioId,
+      actorRol: actor.rol,
     });
 
     // Pedido humano 2026-08-18 — Y DEJA DE SER LA GESTION EN CURSO. Pedir ayuda es declarar que

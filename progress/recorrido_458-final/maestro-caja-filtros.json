@@ -1,0 +1,170 @@
+[
+  {
+    "id": "filtro libro «Entra»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 38 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.585.733,22",
+      "entro": "₡13.585.733,22",
+      "salio": "₡0",
+      "movimientos": "38",
+      "deTiendas": "₡140.636,10",
+      "ganancia": "₡13.445.097,12",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Sale»",
+    "estado": "OK",
+    "direcciones": [
+      "Sale"
+    ],
+    "filasPagina": 16,
+    "paginacion": "1-16 de 16 ‹ ›",
+    "tarjetas": {
+      "cifra": "-₡101.800,50",
+      "entro": "₡0",
+      "salio": "₡101.800,50",
+      "movimientos": "16",
+      "deTiendas": "₡7.034",
+      "ganancia": "-₡108.834,50",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro «Todo»",
+    "estado": "OK",
+    "direcciones": [
+      "Entra",
+      "Sale"
+    ],
+    "filasPagina": 20,
+    "paginacion": "1-20 de 54 ‹ ›",
+    "tarjetas": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  },
+  {
+    "id": "filtro libro categoría «Sueldo»",
+    "estado": "OK",
+    "elegido": "Sueldo (2)",
+    "movimientosAntesDeAplicar": "54",
+    "filas": 2,
+    "tarjetas": {
+      "cifra": "-₡50.000",
+      "entro": "₡0",
+      "salio": "₡50.000",
+      "movimientos": "2",
+      "deTiendas": "₡0",
+      "ganancia": "-₡50.000",
+      "capital": "₡0"
+    },
+    "nota": "la categoría se aplica con «Aplicar» (borrador); Entra/Sale y A quién se aplican al elegir"
+  },
+  {
+    "id": "filtro libro periodo 2026-09-24",
+    "estado": "OK",
+    "filasPagina": 14,
+    "sqlDelDia": 14,
+    "tarjetas": {
+      "cifra": "₡27.000",
+      "entro": "₡38.500",
+      "salio": "₡11.500",
+      "movimientos": "14",
+      "deTiendas": "₡21.157,31",
+      "ganancia": "₡5.842,69",
+      "capital": "₡0"
+    },
+    "paginacion": "1-14 de 14 ‹ ›"
+  },
+  {
+    "id": "filtro libro «A quién» Tania",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 8 movimientos"
+    ],
+    "elegido": "Tania Tienda · Tienda · 8 movimientos",
+    "filasPagina": 8,
+    "tarjetas": {
+      "cifra": "₡0",
+      "entro": "₡4.000",
+      "salio": "₡4.000",
+      "movimientos": "8",
+      "deTiendas": "₡0",
+      "ganancia": "₡0",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtro libro «A quién» Marco",
+    "estado": "OK",
+    "opciones": [
+      "10",
+      "25",
+      "50",
+      "Todos",
+      "Cajero R458F-maestro · Nombre anotado · 2 movimientos",
+      "Librería R458F-maestro · Nombre anotado · 4 movimientos",
+      "Marco Mensajero · Mensajero · 19 movimientos",
+      "Pedro R458F-maestro · Nombre anotado · 4 movimientos",
+      "Quino QUEPOS · Mensajero · 7 movimientos",
+      "Rita Recorrido · Mensajero · 7 movimientos",
+      "Tania Tienda · Tienda · 8 movimientos"
+    ],
+    "elegido": "Marco Mensajero · Mensajero · 19 movimientos",
+    "filasPagina": 19,
+    "tarjetas": {
+      "cifra": "₡125.100",
+      "entro": "₡152.900",
+      "salio": "₡27.800",
+      "movimientos": "19",
+      "deTiendas": "₡126.512,79",
+      "ganancia": "-₡1.412,79",
+      "capital": "₡0"
+    },
+    "uuidEnOpciones": false
+  },
+  {
+    "id": "filtros: «Limpiar» devuelve las tarjetas",
+    "estado": "OK",
+    "base": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    },
+    "tras": {
+      "cifra": "₡13.483.932,72",
+      "entro": "₡13.585.733,22",
+      "salio": "₡101.800,50",
+      "movimientos": "54",
+      "deTiendas": "₡147.670,10",
+      "ganancia": "₡13.336.262,62",
+      "capital": "₡0"
+    }
+  }
+]

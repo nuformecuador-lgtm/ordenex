@@ -449,7 +449,7 @@ describeSiHayBase("266 / tabla — el DDL REAL contra Postgres (R21/R23/R29)", (
     );
     await tx.$executeRawUnsafe(
       `INSERT INTO "${TABLA}" ("id","orden_id","actor_usuario_id","nota","cambio_de_estado","estado_resultante")
-       VALUES ($1, $2, $3, 'el paquete ya volvio a bodega', false, 'devuelta')`,
+       VALUES ($1, $2, $3, 'el paquete ya volvio a bodega', false, 'novedad')`,
       randomUUID(),
       ordenId,
       actor.id,
@@ -472,7 +472,7 @@ describeSiHayBase("266 / tabla — el DDL REAL contra Postgres (R21/R23/R29)", (
       orden_inexistente: await resultadoDe(
         tx,
         `INSERT INTO "${TABLA}" ("id","orden_id","actor_usuario_id","nota","cambio_de_estado","estado_resultante")
-         VALUES ('${randomUUID()}', '${randomUUID()}', '${actor.id}', 'x', false, 'devuelta')`,
+         VALUES ('${randomUUID()}', '${randomUUID()}', '${actor.id}', 'x', false, 'novedad')`,
       ),
       // RESTRICT: la autoria es evidencia y no se pierde al dar de baja al usuario de la key.
       borrar_actor_con_filas: await resultadoDe(

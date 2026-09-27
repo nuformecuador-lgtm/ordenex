@@ -39,9 +39,21 @@ export const DETALLE_MOVIMIENTO_COLUMNAS = {
   orden: "Orden",
 } as const;
 
-/** R8: un detalle sin órdenes lo dice; no se deja una tabla muda. */
+/**
+ * R8: un detalle sin órdenes lo dice; no se deja una tabla muda.
+ *
+ * FICHA 458-D (cierre) — el texto EXPLICA el vacío en vez de contradecir el importe de la cabecera. Un
+ * concepto que sale en 0,00 no llega a emitir movimiento, así que un detalle vacío siempre está junto a
+ * un importe mayor que cero: pasa cuando los datos que el cierre CONGELÓ de sus órdenes (tarifa,
+ * resultado de cada gestión, comisión, monto a cobrar) no reproducen ese importe con la fórmula de hoy.
+ * Medido en la base local: el cierre del 2026-08-12 (comisión ₡4.343,50) tiene sus 12 órdenes SIN
+ * tarifa congelada y ninguna gestión «entregado», igual que los del 13 y 14 de agosto; todos los cierres
+ * posteriores reparten su importe exacto. No es un fallo de la lectura (R19): es un importe anterior a
+ * que el cierre congelara todo lo que la fórmula necesita. Antes decía «Ninguna orden de este cierre
+ * aporta a este concepto.», que junto a «Importe ₡4.343,50» se leía como un error.
+ */
 export const DETALLE_MOVIMIENTO_VACIO =
-  "Ninguna orden de este cierre aporta a este concepto.";
+  "Con los datos que el cierre guardó de sus órdenes, ninguna aporta a este concepto: este importe no se puede repartir orden por orden.";
 
 /** R7: el fallo se cuenta DENTRO de la fila, y el resto del libro sigue en pie. */
 export const DETALLE_MOVIMIENTO_ERROR =
@@ -114,17 +126,7 @@ export const DETALLE_MOVIMIENTO_NOMBRE = {
     `Órdenes que componen ${concepto} del ${fecha}`,
 } as const;
 
-/**
- * R11 — el rótulo del enlace a `/ordenes`. Dice a dónde va Y con qué, nunca «ver».
- *
- * Se exporta el prefijo para que el test no repita el literal, igual que hizo la ficha 341 con
- * `ETIQUETA_VER_ORDEN`.
- */
-export const DETALLE_MOVIMIENTO_VER_ORDEN = "Ver en órdenes la guía";
-
-export function etiquetaVerOrden(guia: string): string {
-  return `${DETALLE_MOVIMIENTO_VER_ORDEN} ${guia}`;
-}
+export { DETALLE_MOVIMIENTO_VER_ORDEN, etiquetaVerOrden } from "@/lib/constants/wallet-rotulos";
 
 /** Separador entre los resultados de las gestiones de UNA orden en el mismo cierre (R20). */
 const SEPARADOR_RESULTADOS = " · ";

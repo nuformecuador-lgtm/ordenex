@@ -109,6 +109,7 @@ import {
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CierresAdminModule } from "@/app/(app)/cierres-admin/_components/CierresAdminModule";
 import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/CierresBodegaAdminModule";
+import { marcaSinConciliar } from "@/tests/fixtures/marca-conciliacion";
 import {
   NIVEL_DETALLE_LABEL,
   NIVEL_LEGEND,
@@ -197,6 +198,8 @@ function cierreBodega(
     // el efectivo (1000.10) cubre los dos descuentos (105.10).
     paraLaCentral: "895.00",
     efectivoCubreDescuentos: true,
+    // FICHA 431: la marca de conciliacion, CUADRADA con el efectivo de este doble.
+    ...marcaSinConciliar("1000.10"),
     ...over,
   };
 }
@@ -221,7 +224,7 @@ function gestion(): CierreGestionDescargaDTO {
     intentosContactoTienda: 2,
     // FICHA 394 — los del MENSAJERO, distinto del de la tienda para que un cruce se vea.
     intentosEntrega: 5,
-    resultado: "entregada",
+    resultado: "entregado",
     montoRecibido: "1000.10",
     pagos: [],
     motivo: null,

@@ -37,7 +37,7 @@ function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionS
     id: "o1",
     numGuia: 10,
     numRemision: "R-1",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana",
     telefonoDest: "099",
     direccion: "calle",
@@ -75,11 +75,11 @@ function newService(
   return new RecepcionSateliteService(repo as unknown as IOrdenRepository, intentos);
 }
 
-describe("T6.3/R35 — el modulo satelite lista las `por_recoger` de SU zona", () => {
-  it("clasifica las `por_recoger` en el bucket `asignadas`, con el DTO completo", async () => {
+describe("T6.3/R35 — el modulo satelite lista las `mensajero_recogiendo_en_bodega` de SU zona", () => {
+  it("clasifica las `mensajero_recogiendo_en_bodega` en el bucket `asignadas`, con el DTO completo", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
-        recepcionRow({ id: "a", estatusValue: "por_recoger", numGuia: 77 }),
+        recepcionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega", numGuia: 77 }),
         recepcionRow({ id: "b", estatusValue: "en_bodega_satelite" }),
       ]),
     });
@@ -95,21 +95,21 @@ describe("T6.3/R35 — el modulo satelite lista las `por_recoger` de SU zona", (
       id: "a",
       numGuia: 77,
       numRemision: "R-1",
-      estatusValue: "por_recoger",
+      estatusValue: "mensajero_recogiendo_en_bodega",
       destinatario: "Ana",
       tiendaNombre: "T",
       zonaNombre: "Limon",
     });
   });
 
-  it("SCOPING: consulta con la zona del actor resuelta SERVER-SIDE y pide `por_recoger`", async () => {
+  it("SCOPING: consulta con la zona del actor resuelta SERVER-SIDE y pide `mensajero_recogiendo_en_bodega`", async () => {
     const repo = fakeRepo();
     await newService(repo).listar(ADMIN);
 
     expect(repo.findUsuarioZonaId).toHaveBeenCalledWith(ADMIN.usuarioId); // nunca del cliente
     const [zonaId, estatusValues] = vi.mocked(repo.findRecepcionSateliteByZona).mock.calls[0];
     expect(zonaId).toBe(ZONA); // D1: una bodega satelite solo ve su zona
-    expect(estatusValues).toContain("por_recoger");
+    expect(estatusValues).toContain("mensajero_recogiendo_en_bodega");
   });
 
   it("SCOPING: la consulta es POR ZONA — no hay ruta para ver ordenes de otra zona", async () => {
@@ -140,12 +140,12 @@ describe("T6.3/R35 — el modulo satelite lista las `por_recoger` de SU zona", (
   it("el bucket nuevo NO contamina los ya existentes (139/100 intactos)", async () => {
     const repo = fakeRepo({
       findRecepcionSateliteByZona: vi.fn(async () => [
-        recepcionRow({ id: "a", estatusValue: "por_recoger" }),
+        recepcionRow({ id: "a", estatusValue: "mensajero_recogiendo_en_bodega" }),
         recepcionRow({ id: "b", estatusValue: "en_ruta_bodega_satelite" }),
         recepcionRow({ id: "c", estatusValue: "en_bodega_satelite" }),
-        recepcionRow({ id: "d", estatusValue: "por_devolver" }),
+        recepcionRow({ id: "d", estatusValue: "por_devolver_a_bodega_central" }),
         recepcionRow({ id: "e", estatusValue: "devolviendo_a_bodega_central" }),
-        recepcionRow({ id: "f", estatusValue: "devuelta" }),
+        recepcionRow({ id: "f", estatusValue: "novedad" }),
       ]),
     });
 

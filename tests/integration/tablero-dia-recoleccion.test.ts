@@ -193,7 +193,7 @@ describeSiHayBase("tablero del dia — el camino de recoleccion (Postgres real)"
     const filas = await conteo(async (tx, base) => {
       const orden = await crearOrden(tx, base, {
         clave: "recoleccion-gestionada",
-        estatus: "entregada",
+        estatus: "entregado",
         mensajeroId: base.mensajero1,
         asignadoAt: null,
       });
@@ -201,7 +201,7 @@ describeSiHayBase("tablero del dia — el camino de recoleccion (Postgres real)"
       await crearGestion(tx, {
         ordenId: orden,
         mensajeroId: base.mensajero1,
-        resultado: "entregada",
+        resultado: "entregado",
         at: instanteCR(FECHA_CR, "14:00"),
       });
     });
@@ -282,7 +282,7 @@ describeSiHayBase("tablero del dia — el camino de recoleccion (Postgres real)"
           mensajeroAsignadoId: base.mensajero2,
           asignadoAt: instanteCR(FECHA_CR, "14:00"),
           fechaReparto: diaReparto(MANANA_CR),
-          estatusId: base.estatus.get("por_recoger") as string,
+          estatusId: base.estatus.get("mensajero_recogiendo_en_bodega") as string,
         },
       });
 

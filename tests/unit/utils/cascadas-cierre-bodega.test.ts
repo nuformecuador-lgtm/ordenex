@@ -134,7 +134,7 @@ describe("feature 393 — cascada A: de quien es el dinero", () => {
     // emite flete de devolucion y NO emite flete de entrega ni comision.
     const rechazada = derivarIngresoOrden(
       {
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         esCentral: false,
         esZonaEspecial: false,
         montoCobrar: "9999.99",

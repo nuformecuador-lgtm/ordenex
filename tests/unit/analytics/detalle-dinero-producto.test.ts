@@ -56,7 +56,7 @@ function siembra() {
       tiendaId: T1,
       guia: "rem-9",
       numGuia: null,
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       montoRecibido: null,
     }),
   ];
@@ -89,7 +89,7 @@ describe("R32 / R35 / R36 / R37 · que trae cada fila del detalle", () => {
       ordenId: "oA",
       guia: "3",
       destinatario: "Destinatario",
-      resultados: ["entregada"],
+      resultados: ["entregado"],
       estado: "liquidada",
       recaudado: "10000.00",
       ordenex: "3955.00",
@@ -118,7 +118,7 @@ describe("R32 / R35 / R36 / R37 · que trae cada fila del detalle", () => {
         gestionId: "g2",
         guia: "7",
         numGuia: 7,
-        resultado: "rechazada",
+        resultado: "devolucion_a_origen_por_rechazo",
         montoRecibido: null,
       }),
     ]);
@@ -126,7 +126,7 @@ describe("R32 / R35 / R36 / R37 · que trae cada fila del detalle", () => {
 
     expect(r.datos.ordenes).toHaveLength(1);
     expect(r.datos.total).toBe(1);
-    expect(r.datos.ordenes[0].resultados).toEqual(["entregada", "rechazada"]);
+    expect(r.datos.ordenes[0].resultados).toEqual(["entregado", "devolucion_a_origen_por_rechazo"]);
     expect(r.datos.ordenes[0].recaudado).toBe("10000.00");
     expect(r.datos.ordenes[0].retorno).toBe("2260.00");
   });

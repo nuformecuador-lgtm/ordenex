@@ -81,11 +81,11 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     // sobre varias combinaciones de la barra de filtros, no solo sin filtros.
     const combinaciones: Record<string, unknown>[] = [
       {},
-      { estados: ["devuelta"] },
-      { estados: ["en_bodega_satelite", "por_recoger"] },
+      { estados: ["novedad"] },
+      { estados: ["en_bodega_satelite", "mensajero_recogiendo_en_bodega"] },
       { canton_id: ["Escazú"] },
       { canton_id: ["Escazú", "Barva"], distrito_id: ["San Rafael"] },
-      { estados: ["devuelta"], canton_id: ["Barva"] },
+      { estados: ["novedad"], canton_id: ["Barva"] },
     ];
 
     let conFilas = 0;
@@ -203,7 +203,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     expect(inventado.total).toBe(0);
 
     const mezcla = await svc.listarOrdenesBodegaCompleto(
-      { estados: ["en_bodega_central", "devuelta"] },
+      { estados: ["en_bodega_central", "novedad"] },
       SAT_A,
     );
     if (mezcla.status !== "ok") throw new Error("no ok");
@@ -250,7 +250,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
   it("cada fila del archivo lleva su número de intentos, el 0 incluido (mismo mapper que la página)", async () => {
     const svc = servicio(repoSateliteEnMemoria().repo);
 
-    const r = await svc.listarOrdenesBodegaCompleto({ estados: ["devuelta"] }, SAT_A);
+    const r = await svc.listarOrdenesBodegaCompleto({ estados: ["novedad"] }, SAT_A);
     if (r.status !== "ok") throw new Error("no ok");
 
     // La columna «Intentos» del archivo sale de aqui. Si el conjunto dejara de pedir el lote,
@@ -260,7 +260,7 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     // Y el resto del DTO es IDENTICO al que entrega la pagina para la misma fila: dos mappers
     // distintos son dos archivos distintos del mismo listado.
     const pagina = await svc.listarOrdenesBodegaPaginado(
-      listarOrdenesBodegaPaginadoSchema.parse({ estados: ["devuelta"], page: 1, pageSize: 3 }),
+      listarOrdenesBodegaPaginadoSchema.parse({ estados: ["novedad"], page: 1, pageSize: 3 }),
       SAT_A,
     );
     if (pagina.status !== "ok") throw new Error("no ok");

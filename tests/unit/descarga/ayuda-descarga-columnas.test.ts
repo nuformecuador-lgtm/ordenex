@@ -40,6 +40,8 @@ const EN_AYUDA: NovedadDTO = {
   provinciaNombre: "San José",
   cantonNombre: "Escazú",
   distritoNombre: "San Rafael",
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
   secuenciaRuta: null,
   // El servicio emite `null` para este grupo y la consulta ni se hace (R26). Se pone aquí un valor
   // NO nulo a propósito: si alguien repusiera la columna, el archivo publicaría esta causa —que

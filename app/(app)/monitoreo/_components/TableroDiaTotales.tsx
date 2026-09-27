@@ -46,7 +46,7 @@ import { ETIQUETA_SERIE_RITMO, serieDeRitmo } from "./serie-ritmo";
 const TITULO = "Totales del día";
 /** R64.a — el rotulo CAMBIA con el filtro. No es un matiz: es una de las tres señales. */
 const TITULO_FILTRADO = "Totales de lo filtrado";
-const ETIQUETA_ASIGNADAS = "Asignadas";
+const ETIQUETA_ASIGNADAS = "Asignados";
 const COMPOSICION_DEL_DIA = "Composición del día";
 const COMPOSICION_DE_LO_FILTRADO = "Composición de lo filtrado";
 

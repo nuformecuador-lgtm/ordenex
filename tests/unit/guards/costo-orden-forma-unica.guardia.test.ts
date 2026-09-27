@@ -98,7 +98,7 @@ describe("415/T9 (1) — ESTRUCTURA: cada tipo se declara UNA sola vez en `lib/`
 // 2 y 3. LISTA BLANCA y COMPORTAMIENTO — sobre la CADENA REAL
 // -----------------------------------------------------------------------------------------------
 
-/** Las trece claves EXACTAS del item publicado tras esta ficha (R9/R34). */
+/** Las claves EXACTAS del item publicado (R9/R34; 455/R24 anade `estadoNombre`). */
 const CLAVES_DEL_ITEM = [
   "costoEstimado",
   "costoReal",
@@ -106,6 +106,7 @@ const CLAVES_DEL_ITEM = [
   "destinatario",
   "direccion",
   "estado",
+  "estadoNombre",
   "mensajero",
   "montoCobrar",
   "numGuia",
@@ -203,7 +204,7 @@ async function listadoYDetalle() {
 }
 
 describe("415/T9 (2) — LISTA BLANCA: el conjunto EXACTO de claves publicadas", () => {
-  it("el item tiene TRECE claves, `zona` DOS y cada costo CINCO — en los dos caminos", async () => {
+  it("el item tiene CATORCE claves (455/R24: + estadoNombre), `zona` DOS y cada costo CINCO — en los dos caminos", async () => {
     const { item, detalle } = await listadoYDetalle();
 
     expect(Object.keys(item).sort()).toEqual(CLAVES_DEL_ITEM);

@@ -7,6 +7,7 @@ import type {
   CrearMovimientoInput,
   DesgloseEgresosAgregado,
   IWalletMovimientoRepository,
+  LateralesDelRegistro,
   ListarMovimientosFiltros,
   ListarMovimientosPage,
   WalletTxClient,
@@ -18,6 +19,14 @@ import type {
   WalletOrigenTipo,
 } from "@/lib/types/wallet";
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
+import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+import { whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
+import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
+
+/** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
+const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
+  WALLET_MOVIMIENTO_CATEGORIA_SEED.filter((c) => NATURALEZA_POR_CATEGORIA[c] === "capital");
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
 // FICHA 362 (R9): los TRES movimientos que nacen de una DECISION humana —el ajuste manual de
@@ -25,7 +34,7 @@ import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 // el `Pick` gana `$transaction`, `historialAccion` y `usuario`.
 type WalletPrismaClient = Pick<
   PrismaClient,
-  "walletMovimiento" | "$transaction" | "historialAccion" | "usuario"
+  "walletMovimiento" | "$transaction" | "historialAccion" | "usuario" | "$queryRaw"
 >;
 
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
@@ -57,11 +66,20 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
     registradoPor: r.registradoPor,
     fechaMovimiento: r.fechaMovimiento.toISOString(),
     dueno: NATURALEZA_POR_CATEGORIA[r.categoria],
+    // Ficha 459 (design §7.3): el repositorio no conoce los documentos. Lo resuelve EN LOTE
+    // `WalletService.listarMovimientos` para la pagina que se pinta; en cualquier otro camino
+    // (descarga, detalle de una fila) la fila no ofrece acciones y el campo queda en `null`.
+    documento: null,
   };
 }
 
 // WHERE comun a listado y balance (R20): filtros opcionales tipo/categoria/rango fechas
-// sobre fecha_movimiento. `desde`/`hasta` inclusivos.
+// sobre fecha_movimiento. `desde` inclusivo, `hasta` EXCLUSIVO.
+//
+// Ficha 461 (R72, auditoria T1): `hasta` pasa de `lte` a `lt`. El borde manda el INICIO del dia CR
+// SIGUIENTE (`hastaDiaCRSchema`), asi que `<` cubre el dia entero elegido y ni un instante mas; con
+// `lte` un asiento fechado exactamente a las 06:00Z del dia siguiente entraria dos veces (en su dia y
+// en el anterior). `desde` sigue siendo `gte` sobre el inicio del dia CR.
 //
 // Ficha 339 (T3.2, design §4.4 — R33): + `categorias`, el CONJUNTO de una fila de la tarjeta de
 // la ganancia. Va en `AND` y NO sobreescribiendo `where.categoria`, para que CONVIVAN el filtro
@@ -77,10 +95,54 @@ function buildWhere(f: BalanceFiltros): Prisma.WalletMovimientoWhereInput {
   if (f.desde !== undefined || f.hasta !== undefined) {
     where.fechaMovimiento = {
       ...(f.desde !== undefined ? { gte: f.desde } : {}),
-      ...(f.hasta !== undefined ? { lte: f.hasta } : {}),
+      ...(f.hasta !== undefined ? { lt: f.hasta } : {}), // ficha 461/R72: cota EXCLUSIVA
     };
   }
   return where;
+}
+
+/**
+ * Ficha 458-E (TE.2, R59) — ¿lleva el filtro «A quién»? Entonces el conjunto lo decide
+ * `whereLibroCajaSql` (el cruce por origen es un `EXISTS` que el `where` de Prisma no expresa) y los
+ * TRES caminos —paginar, contar y agregar— usan ese mismo WHERE: por construccion, las tarjetas y el
+ * desglose suman exactamente las filas del libro filtrado.
+ */
+function conAQuien<F extends BalanceFiltros>(f: F): (F & { aQuien: AQuienFiltro }) | null {
+  return f.aQuien === undefined ? null : (f as F & { aQuien: AQuienFiltro });
+}
+
+/** Una suma por grupo, leida en SQL: `numeric` llega como `Prisma.Decimal` (nunca `number`). */
+type GrupoSql = { categoria: WalletMovimientoCategoria; tipo: MovimientoRow["tipo"]; total: Prisma.Decimal | null };
+
+/**
+ * Ficha 458-E (R59): `SUM(monto)` por (categoria, tipo) con el WHERE de «A quién». Funcion del modulo
+ * y no metodo: la superficie de la clase sigue siendo la de R47 (nueve metodos, ninguno que escriba).
+ */
+async function gruposConAQuien(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+  f: BalanceFiltros & { aQuien: AQuienFiltro },
+): Promise<GrupoSql[]> {
+  return prisma.$queryRaw<GrupoSql[]>(Prisma.sql`
+    SELECT w."categoria"::text AS "categoria", w."tipo"::text AS "tipo", SUM(w."monto") AS "total"
+    FROM "wallet_movimiento" w
+    WHERE ${whereLibroCajaSql(f)}
+    GROUP BY w."categoria", w."tipo"`);
+}
+
+/**
+ * Revision M1 (458-E): `SUM(monto)` por CATEGORIA con el WHERE de «A quién» — la suma la hace el motor,
+ * como el `groupBy(categoria)` del camino sin «A quién». En este repositorio ningun importe se suma en
+ * JavaScript (guardia `caja-173-alcance`).
+ */
+async function categoriasConAQuien(
+  prisma: Pick<PrismaClient, "$queryRaw">,
+  f: BalanceFiltros & { aQuien: AQuienFiltro },
+): Promise<Omit<GrupoSql, "tipo">[]> {
+  return prisma.$queryRaw<Omit<GrupoSql, "tipo">[]>(Prisma.sql`
+    SELECT w."categoria"::text AS "categoria", SUM(w."monto") AS "total"
+    FROM "wallet_movimiento" w
+    WHERE ${whereLibroCajaSql(f)}
+    GROUP BY w."categoria"`);
 }
 
 /**
@@ -114,6 +176,9 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       // omite —en vez de mandar `undefined`— para que quien no la pasa siga cayendo en el
       // `DEFAULT CURRENT_TIMESTAMP` de la columna, exactamente como hasta hoy.
       ...(m.fechaMovimiento !== undefined ? { fechaMovimiento: m.fechaMovimiento } : {}),
+      // Ficha 461 (R66/R67): la clave de idempotencia del cliente, SOLO si el llamador la trae. Con
+      // `skipDuplicates`, un choque en su indice UNIQUE deja la fila fuera y `count` en 0.
+      ...(m.claveIdempotencia !== undefined ? { claveIdempotencia: m.claveIdempotencia } : {}),
     }));
     const res = await tx.walletMovimiento.createMany({ data, skipDuplicates: true });
     return res.count;
@@ -137,10 +202,32 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   async crearMovimientoRegistrado(
     mov: CrearMovimientoInput & { id: string },
     registro: { accion: HistorialAccionTipo; actorUsuarioId: string | null },
+    laterales: LateralesDelRegistro = {},
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
       const count = await this.crearMovimientos(tx, [mov]);
       if (count === 0) return 0;
+
+      // FICHA 458-B (R42/R74): lo lateral, en ESTA transaccion y solo si el asiento se escribio.
+      if (laterales.anotacion !== undefined) {
+        await tx.walletAnotacion.create({
+          data: {
+            movimientoId: mov.id,
+            contraparteNombre: laterales.anotacion.contraparteNombre,
+            referencia: laterales.anotacion.referencia,
+          },
+        });
+      }
+      if (laterales.comprobante !== undefined) {
+        await tx.walletComprobante.create({
+          data: {
+            cajaMovimientoId: mov.id,
+            storagePath: laterales.comprobante.storagePath,
+            contentType: laterales.comprobante.contentType,
+            subidoPor: laterales.comprobante.subidoPor,
+          },
+        });
+      }
 
       const actor = await resolverActorCongelado(tx, registro.actorUsuarioId);
       await appendAccion(tx, [
@@ -176,8 +263,27 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    * identico, y `@@index([fechaMovimiento])` sigue sirviendo al filtro de rango.
    */
   async listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage> {
-    const where = buildWhere(filtros);
     const skip = (filtros.page - 1) * filtros.pageSize;
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): el MISMO orden total de abajo, en SQL, sobre el WHERE con «A quién».
+      const where = whereLibroCajaSql(f);
+      const [rows, cuenta] = await Promise.all([
+        this.prisma.$queryRaw<MovimientoRow[]>(Prisma.sql`
+          SELECT w."id", w."tipo"::text AS "tipo", w."categoria"::text AS "categoria", w."monto",
+                 w."origen_tipo"::text AS "origenTipo", w."origen_id" AS "origenId", w."descripcion",
+                 w."registrado_por" AS "registradoPor", w."fecha_movimiento" AS "fechaMovimiento",
+                 w."created_at" AS "createdAt", w."clave_idempotencia" AS "claveIdempotencia"
+          FROM "wallet_movimiento" w
+          WHERE ${where}
+          ORDER BY w."fecha_movimiento" DESC, w."created_at" DESC, w."id" DESC
+          OFFSET ${skip} LIMIT ${filtros.pageSize}`),
+        this.prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
+          SELECT COUNT(*)::int AS "total" FROM "wallet_movimiento" w WHERE ${where}`),
+      ]);
+      return { movimientos: rows.map(toDTO), total: cuenta[0]?.total ?? 0 };
+    }
+    const where = buildWhere(filtros);
     const [rows, total] = await Promise.all([
       this.prisma.walletMovimiento.findMany({
         where,
@@ -198,6 +304,16 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    * Solo agrega. Ni particiona por naturaleza ni resta: eso es de `derivarCaja`, que es pura.
    */
   async agregarPorCategoriaYTipo(filtros: BalanceFiltros): Promise<readonly AgregadoCajaRow[]> {
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): la misma agrupacion sobre el MISMO WHERE que `listar` con «A quién».
+      const grupos = await gruposConAQuien(this.prisma, f);
+      return grupos.map((g) => ({
+        categoria: g.categoria,
+        tipo: g.tipo,
+        total: (g.total ?? new Prisma.Decimal(0)).toFixed(2),
+      }));
+    }
     const where = buildWhere(filtros);
     const grupos = await this.prisma.walletMovimiento.groupBy({
       by: ["categoria", "tipo"],
@@ -214,6 +330,12 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */
   async obtenerPorId(id: string): Promise<WalletMovimientoDTO | null> {
     const row = await this.prisma.walletMovimiento.findUnique({ where: { id } });
+    return row === null ? null : toDTO(row);
+  }
+
+  /** Ficha 461 (R68): la fila que lleva ESA clave de idempotencia (columna UNIQUE), o null. */
+  async obtenerPorClave(claveIdempotencia: string): Promise<WalletMovimientoDTO | null> {
+    const row = await this.prisma.walletMovimiento.findUnique({ where: { claveIdempotencia } });
     return row === null ? null : toDTO(row);
   }
 
@@ -241,8 +363,40 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     return row === null || row === undefined ? null : toDTO(row);
   }
 
+  /**
+   * Ficha 459 (design §2.5, R15/R71) — el dia CR del primer movimiento de la caja, o `null`.
+   *
+   * `MIN(fecha_movimiento)` sobre el indice `wallet_movimiento_fecha_movimiento_idx`, y el dia se
+   * resuelve con `fechaCalendarioCR` (la convencion CR del repo, UTC−6). Con `excluirCapital`, el
+   * `WHERE` deja fuera las categorias que `NATURALEZA_POR_CATEGORIA` declara `capital`.
+   */
+  async primerDiaDeLaCaja(opciones: { excluirCapital?: boolean } = {}): Promise<string | null> {
+    const where: Prisma.WalletMovimientoWhereInput =
+      opciones.excluirCapital === true ? { categoria: { notIn: [...CATEGORIAS_DE_CAPITAL] } } : {};
+    const agregado = await this.prisma.walletMovimiento.aggregate({
+      where,
+      _min: { fechaMovimiento: true },
+    });
+    const primero = agregado._min.fechaMovimiento;
+    return primero === null ? null : fechaCalendarioCR(primero);
+  }
+
   /** Feature 45 (R11): SUM(monto) por categoria administrativa, con los mismos filtros. STRING. */
   async agregarPorCategoria(filtros: BalanceFiltros): Promise<DesgloseEgresosAgregado> {
+    const f = conAQuien(filtros);
+    if (f !== null) {
+      // Ficha 458-E (R59): con «A quién», la suma por categoria la hace el motor sobre el MISMO WHERE
+      // que el libro (revision M1: ninguna suma de importes en JavaScript).
+      const grupos = await categoriasConAQuien(this.prisma, f);
+      const sumaConAQuien = (categoria: string): string =>
+        (grupos.find((g) => g.categoria === categoria)?.total ?? new Prisma.Decimal(0)).toFixed(2);
+      return {
+        gastoFijo: sumaConAQuien("egreso_gasto_fijo"),
+        gastoVariable: sumaConAQuien("egreso_gasto_variable"),
+        sueldo: sumaConAQuien("egreso_sueldo"),
+        indemnizacion: sumaConAQuien("egreso_indemnizacion"),
+      };
+    }
     const where = buildWhere(filtros);
     const grupos = await this.prisma.walletMovimiento.groupBy({
       by: ["categoria"],

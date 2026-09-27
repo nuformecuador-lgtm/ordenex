@@ -1,0 +1,249 @@
+[
+  {
+    "id": "M1",
+    "que": "refrescar TODAS las cuentas en vez de SOLO la de esta página (R30)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/components/WalletRefrescoDirigido.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 3,
+    "rojos": 2,
+    "nombres": [
+      "tras «La tienda le paga a Ordenex»: aviso con el saldo del servidor, tarjeta nueva, y la otra cuenta sin releer",
+      "tras anular un pago a la tienda: tarjeta nueva y la otra cuenta sin releer"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M2",
+    "que": "«La tienda le paga a Ordenex» siempre, no solo en contra (R26)",
+    "archivo": "app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx",
+    "tests": [
+      "tests/components/EstadoCuentaAcciones.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 12,
+    "rojos": 2,
+    "nombres": [
+      "a favor: no se ofrece (control: el cobro sí se pinta)",
+      "en cero: no se ofrece (control: el cobro sí se pinta)"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M3",
+    "que": "«Ordenex le paga a la tienda» habilitado sin saldo a favor (R28)",
+    "archivo": "app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx",
+    "tests": [
+      "tests/components/EstadoCuentaAcciones.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 12,
+    "rojos": 1,
+    "nombres": [
+      "en contra: deshabilitado, con el motivo en texto visible que lo describe"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M4",
+    "que": "el anulado no se tacha (R25)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/components/EstadoCuentaAnulados.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 6,
+    "rojos": 1,
+    "nombres": [
+      "la fila anulada dice «Anulado el 2026-09-20 por Ana Admin · Se pagó dos veces» y su concepto e importe van tachados"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M5",
+    "que": "«anulado» deducido en el cliente: toda fila con un contra-asiento en la página (R71)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/components/EstadoCuentaAnulados.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 6,
+    "rojos": 1,
+    "nombres": [
+      "con su contra-asiento en la MISMA página pero sin `anulacion`, el original NO se pinta anulado"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M6",
+    "que": "el saldo inicial se repite en todas las páginas (R20)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/components/EstadoCuenta.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 20,
+    "rojos": 1,
+    "nombres": [
+      "la página 2 no repite la línea del saldo inicial"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M7",
+    "que": "la descarga solo trae la primera página (R32)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+    ],
+    "aplicado": true,
+    "total": 6,
+    "rojos": 1,
+    "nombres": [
+      "pide TODAS las páginas del periodo y chip vigentes; la primera fila es el saldo inicial"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M8",
+    "que": "la descarga no lleva la fila del saldo inicial (R32)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+    ],
+    "aplicado": true,
+    "total": 6,
+    "rojos": 1,
+    "nombres": [
+      "pide TODAS las páginas del periodo y chip vigentes; la primera fila es el saldo inicial"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M9",
+    "que": "la frase de la tarjeta con el monto CON signo (R18)",
+    "archivo": "components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx",
+    "tests": [
+      "tests/components/EstadoCuenta.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 20,
+    "rojos": 1,
+    "nombres": [
+      "tienda con saldo en contra: «Tania Tienda le debe ₡2.500 a Ordenex» y el saldo con su signo"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M10",
+    "que": "«Ver comprobante» en TODAS las filas de /mi-wallet (R78)",
+    "archivo": "app/(app)/mi-wallet/_components/DesgloseTiendaLedger.tsx",
+    "tests": [
+      "tests/components/MiWalletComprobante458.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 5,
+    "rojos": 1,
+    "nombres": [
+      "cobro, pago de Ordenex, pago de un gasto y pago de la tienda: sí; lo del cierre: no"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M11",
+    "que": "el enlace del listado de tiendas no lleva el id de SU fila (R17)",
+    "archivo": "app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx",
+    "tests": [
+      "tests/integration/wallet-tiendas-estado-page.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 11,
+    "rojos": 1,
+    "nombres": [
+      "cada fila lleva «Ver estado de cuenta» con el id SOLO en el href; ningún «Ver desglose»"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M12",
+    "que": "la conciliación no relee el estado de cuenta de la bodega tras marcar (R30/R31)",
+    "archivo": "app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx",
+    "tests": [
+      "tests/components/EstadoCuentaSatelite.test.tsx",
+      "tests/integration/wallet-satelites.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 42,
+    "rojos": 2,
+    "nombres": [
+      "R30: marcar recibido relee el estado de cuenta de ESTA bodega",
+      "marcar por MENOS envía el monto tecleado y refresca ESTA bodega"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M13",
+    "que": "la página de la tienda no comprueba el rol (R81)",
+    "archivo": "app/(app)/wallet/tiendas/[tiendaId]/page.tsx",
+    "tests": [
+      "tests/integration/wallet-tiendas-estado-page.test.tsx"
+    ],
+    "aplicado": true,
+    "total": 11,
+    "rojos": 4,
+    "nombres": [
+      "adminTienda → notFound, sin leer",
+      "mensajero → notFound, sin leer",
+      "adminSatelite → notFound, sin leer",
+      "apiKey → notFound, sin leer"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M14",
+    "que": "el tope de la descarga no se mira (R32: nunca un archivo al que le falten filas)",
+    "archivo": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+    "tests": [
+      "tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts"
+    ],
+    "aplicado": true,
+    "total": 6,
+    "rojos": 1,
+    "nombres": [
+      "por encima del tope NO hay archivo: se dice cuántas filas hay y cuál es el tope"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  },
+  {
+    "id": "M15",
+    "que": "conversión a número en una pieza del estado de cuenta (R90)",
+    "archivo": "components/shared/estado-cuenta/estado-cuenta-labels.ts",
+    "tests": [
+      "tests/unit/guards/wallet-money-safe-458.guardia.test.ts"
+    ],
+    "aplicado": true,
+    "total": 3,
+    "rojos": 1,
+    "nombres": [
+      "ningún archivo de la carpeta convierte a número (sin comentarios: pueden nombrarlo para explicarlo)"
+    ],
+    "restaurado": true,
+    "diffVacio": true
+  }
+]

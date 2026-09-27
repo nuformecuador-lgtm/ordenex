@@ -1,0 +1,74 @@
+MUTACION F17-menu-por-recoger
+archivo: lib/auth/menu-visibility.ts
+cambio (numstat): 1	1	lib/auth/menu-visibility.ts
+-       { label: "Recoger en bodega", href: "/mis-asignaciones/recoger" },
++       { label: "Por recoger", href: "/mis-asignaciones/recoger" },
+tests: ['tests/unit/auth/menu-visibility.test.ts', 'tests/unit/guards/nombres-estado-retirados.guardia.test.ts']
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a755d85d74c179df6
+
+ ❯ tests/unit/auth/menu-visibility.test.ts (50 tests | 1 failed) 22ms
+     × Entregas declara el submenú Reparto (primero) + Recoger en bodega 6ms
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (6 tests | 1 failed) 47ms
+     × ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2 5ms
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 54 passed (56)
+   Start at  08:11:19
+   Duration  2.52s (transform 255ms, setup 103ms, import 2.41s, tests 69ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/auth/menu-visibility.test.ts > primerDestino (aterrizaje de /dashboard) > Entregas declara el submenú Reparto (primero) + Recoger en bodega
+AssertionError: expected [ [ 'Reparto', …(1) ], …(1) ] to deeply equal [ [ 'Reparto', …(1) ], …(1) ]
+
+- Expected
++ Received
+
+@@ -2,9 +2,9 @@
+    [
+      "Reparto",
+      "/mis-asignaciones/reparto",
+    ],
+    [
+-     "Recoger en bodega",
++     "Por recoger",
+      "/mis-asignaciones/recoger",
+    ],
+  ]
+
+ ❯ tests/unit/auth/menu-visibility.test.ts:390:62
+    388|   // («Por recoger» era el nombre viejo de un estado). La RUTA no camb…
+    389|   it("Entregas declara el submenú Reparto (primero) + Recoger en bodeg…
+    390|     expect(entregas.children?.map((c) => [c.label, c.href])).toEqual([
+       |                                                              ^
+    391|       ["Reparto", "/mis-asignaciones/reparto"],
+    392|       ["Recoger en bodega", "/mis-asignaciones/recoger"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/unit/guards/nombres-estado-retirados.guardia.test.ts > 455/R41 · R9 · R37 (G2) — el arbol > ningun nombre retirado como texto visible fuera de las excepciones y de lo pendiente de la Fase 2
+AssertionError: un nombre de estado RETIRADO (requirements 455 §0.3) volvio como texto visible. Usa el nombre de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accion, un texto propio (R6).: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lib/auth/menu-visibility.ts:410 Por recoger",
++ ]
+
+ ❯ tests/unit/guards/nombres-estado-retirados.guardia.test.ts:200:7
+    198|       "un nombre de estado RETIRADO (requirements 455 §0.3) volvio com…
+    199|         "de `NOMBRE_ESTADO` (`nombreDeEstado`) o, si es un grupo/accio…
+    200|     ).toEqual([]);
+       |       ^
+    201|   });
+    202|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+RESTAURADO_LIMPIO=True

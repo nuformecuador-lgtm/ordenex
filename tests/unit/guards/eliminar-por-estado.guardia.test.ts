@@ -73,7 +73,7 @@ const ESTADOS_DE_LA_DECISION = [
   // Entran el 2026-09-04, a cambio de exigir cero intentos de entrega.
   "en_ruta_bodega_central",
   "en_ruta_bodega_satelite",
-  "por_recoger",
+  "mensajero_recogiendo_en_bodega",
 ] as const;
 
 function leer(rel: string): string {

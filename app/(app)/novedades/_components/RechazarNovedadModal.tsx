@@ -8,6 +8,7 @@ import { rechazarNovedad } from "@/lib/actions/resolver-novedad";
 import type { RechazarNovedadActionResult } from "@/lib/actions/resolver-novedad";
 import { rechazarNovedadSchema } from "@/lib/types/rechazo-tienda";
 import type { NovedadDTO } from "@/lib/types/novedad";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 
 // =================================================================================================
 // 💰 FEATURE 240 (T5.3, design §10.3 — R27/R28/R29/R31/R32, D5 y D10 firmadas) — LA VENTANA CON LA
@@ -124,7 +125,11 @@ export const RECHAZO_MOTIVO_AYUDA =
 export const RECHAZO_FALTA_MOTIVO = "Escribí el motivo para poder rechazar.";
 
 /** D10: el éxito dice a dónde va la mercadería, no «Listo». */
-export const RECHAZO_EXITO = "Orden rechazada. El paquete vuelve a tu bodega.";
+// FICHA 455 (2026-09-24): los desenlaces nombran el estado con su nombre vigente, leído de la fuente
+// (antes «Orden rechazada», «en devolución», «se cierra como rechazada»: nombres retirados).
+const NOVEDAD = NOMBRE_ESTADO.novedad;
+const RECHAZO = NOMBRE_ESTADO.devolucion_a_origen_por_rechazo;
+export const RECHAZO_EXITO = `La orden pasó a ${RECHAZO}. El paquete vuelve a tu bodega.`;
 
 /**
  * D10/R31 — la carrera perdida. El cron de plazo vencido pudo escalar la orden, o la bodega pudo
@@ -137,7 +142,7 @@ export const RECHAZO_EXITO = "Orden rechazada. El paquete vuelve a tu bodega.";
  * de datos.
  */
 export const RECHAZO_CONFLICTO =
-  "Esta orden ya no estaba en devolución, así que no se rechazó. Actualizá la pantalla.";
+  `Esta orden ya no estaba en ${NOVEDAD}, así que no se rechazó. Actualizá la pantalla.`;
 
 /** Los desenlaces que no son ni `ok` ni `conflict`, dichos de forma accionable. */
 export const RECHAZO_ERROR_FORBIDDEN = "No tenés permiso para rechazar esta orden.";
@@ -247,7 +252,7 @@ export function RechazarNovedadModal({
       title={RECHAZO_TITULO}
       // D10: la descripción dice qué pasa con el PAQUETE. La fila desaparece de la pantalla al
       // confirmar, y sin esta frase nada explicaría dónde quedó la mercadería.
-      description={`El paquete de ${orden.destinatario} (${guia}) vuelve a tu bodega y la orden se cierra como rechazada.`}
+      description={`El paquete de ${orden.destinatario} (${guia}) vuelve a tu bodega y la orden pasa a ${RECHAZO}.`}
       confirmLabel="Rechazar"
       // `destructive`: cierra la orden, cobra y no se puede deshacer.
       confirmVariant="destructive"

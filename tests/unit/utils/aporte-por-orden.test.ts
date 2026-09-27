@@ -66,7 +66,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "entregada", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
   },
   // Entrega con el COD que redondea hacia arriba en el paso intermedio (581.644 -> 581.64).
   {
@@ -77,7 +77,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "entregada", montoRecibido: "16618.40" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "16618.40" }],
   },
   // R20: UNA orden con DOS gestiones que aportan al mismo concepto en el mismo cierre.
   {
@@ -89,8 +89,8 @@ const CONJUNTO: OrdenSintetica[] = [
       tarifa: TARIFA,
     },
     gestiones: [
-      { resultado: "entregada", montoRecibido: "3000.00" },
-      { resultado: "entregada", montoRecibido: "4333.33" },
+      { resultado: "entregado", montoRecibido: "3000.00" },
+      { resultado: "entregado", montoRecibido: "4333.33" },
     ],
   },
   // Un rechazo: aporta a los DOS conceptos de devolucion y a ninguno de entrega.
@@ -102,7 +102,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "rechazada", montoRecibido: null }],
+    gestiones: [{ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null }],
   },
   // R23: sin tarifa congelada no deriva NINGUN concepto, y su ausencia no altera la suma.
   {
@@ -113,7 +113,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: null,
     },
-    gestiones: [{ resultado: "entregada", montoRecibido: "20000.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "20000.00" }],
   },
   // Resultados que no aportan a ningun concepto derivado, pero SI al COD recaudado.
   {
@@ -125,8 +125,8 @@ const CONJUNTO: OrdenSintetica[] = [
       tarifa: TARIFA,
     },
     gestiones: [
-      { resultado: "devuelta", montoRecibido: null },
-      { resultado: "reprogramada", montoRecibido: "250.75" },
+      { resultado: "novedad", montoRecibido: null },
+      { resultado: "reprogramado", montoRecibido: "250.75" },
     ],
   },
 ];

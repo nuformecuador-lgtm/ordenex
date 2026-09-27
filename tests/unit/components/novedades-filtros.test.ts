@@ -28,7 +28,7 @@ const base: NovedadDTO = {
   id: "o1",
   numGuia: 17496963,
   numRemision: "REM-2026-0912",
-  estatusValue: "devuelta",
+  estatusValue: "novedad",
   intentosContacto: 0,
   mensajeroNombre: "Marta Mensajera",
   destinatario: "Ana Cliente",
@@ -46,6 +46,8 @@ const base: NovedadDTO = {
   provinciaNombre: "San José",
   cantonNombre: "Escazú",
   distritoNombre: "San Rafael",
+  sinpeNumero: "80000000",
+  sinpeNombre: "Titular de Prueba",
   secuenciaRuta: null,
 };
 

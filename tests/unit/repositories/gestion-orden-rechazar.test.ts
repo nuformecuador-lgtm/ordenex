@@ -50,7 +50,7 @@ function buildPrisma(
 ) {
   const orden = {
     id: fila.id ?? ORDEN_ID,
-    estatusId: fila.estatusId ?? idEstado("devuelta"),
+    estatusId: fila.estatusId ?? idEstado("novedad"),
     deletedAt: fila.deletedAt ?? null,
   };
 
@@ -161,8 +161,8 @@ function repoWith(prisma: ReturnType<typeof buildPrisma>) {
 
 const INPUT = {
   ordenId: ORDEN_ID,
-  estatusDevueltaId: idEstado("devuelta"),
-  estatusRechazadaId: idEstado("rechazada"),
+  estatusDevueltaId: idEstado("novedad"),
+  estatusRechazadaId: idEstado("devolucion_a_origen_por_rechazo"),
   motivo: "el cliente ya compro en otro lado, no reintentar",
   actorUsuarioId: "tienda-1",
 };
@@ -189,7 +189,7 @@ describe("rechazarDesdeDevuelta — la transicion y su gestion sintetica (R8/R9/
     // `deletedAt` se rechazarian ordenes borradas.
     expect(upd.where).toEqual({
       id: ORDEN_ID,
-      estatusId: idEstado("devuelta"),
+      estatusId: idEstado("novedad"),
       deletedAt: null,
     });
   });
@@ -202,7 +202,7 @@ describe("rechazarDesdeDevuelta — la transicion y su gestion sintetica (R8/R9/
     // `toEqual` y no `toMatchObject`: la afirmacion ES que no hay nada mas. Ni
     // `mensajeroAsignadoId` (el bloque 139 de la aprobacion lo necesita para devolver el paquete),
     // ni `prioridad` (la orden no vuelve a reasignarse), ni un solo importe (R20).
-    expect(upd.data).toEqual({ estatusId: idEstado("rechazada") });
+    expect(upd.data).toEqual({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
     expect(Object.keys(upd.data)).toEqual(["estatusId"]);
   });
 
@@ -213,7 +213,7 @@ describe("rechazarDesdeDevuelta — la transicion y su gestion sintetica (R8/R9/
     // La vigencia se lee con el mismo criterio que `findDevueltasSla` de la 99: no anulada y la
     // mas reciente. Si esta lectura cambiara, las dos vias dejarian de atribuir igual.
     const q = prisma.gestionOrden.findFirst.mock.calls[0][0];
-    expect(q.where).toEqual({ ordenId: ORDEN_ID, resultado: "devuelta", anuladaAt: null });
+    expect(q.where).toEqual({ ordenId: ORDEN_ID, resultado: "novedad", anuladaAt: null });
     expect(q.orderBy).toEqual({ createdAt: "desc" });
 
     // 💰 Y ese id, y no el de la tienda, es el que va a la gestion. Es la mutacion T7.2: con
@@ -236,7 +236,7 @@ describe("rechazarDesdeDevuelta — la transicion y su gestion sintetica (R8/R9/
       // D1 (firmada): el MISMO `resultado` que escribe el cron de plazo vencido. De el cuelgan
       // `ingresoBodegaPorResultado` (56) y `derivarIngresoOrden` (42/43), asi que las dos vias
       // facturan lo mismo SIN que esta ficha escriba una linea de aritmetica (R17/R22).
-      resultado: "rechazada",
+      resultado: "devolucion_a_origen_por_rechazo",
       motivo: INPUT.motivo, // R12
       // R18: ningun movimiento de dinero en el instante del rechazo. El NULL es lo que deja que la
       // recoja el SIGUIENTE cierre del mensajero, por el mismo mecanismo que las suyas.
@@ -274,8 +274,8 @@ describe("rechazarDesdeDevuelta — la transicion y su gestion sintetica (R8/R9/
     expect(hist.data).toEqual([
       {
         ordenId: ORDEN_ID,
-        estatusOrigenId: idEstado("devuelta"),
-        estatusDestinoId: idEstado("rechazada"),
+        estatusOrigenId: idEstado("novedad"),
+        estatusDestinoId: idEstado("devolucion_a_origen_por_rechazo"),
         // R11: la persona de la tienda. Es la UNICA evidencia de quien decidio un cobro, y el dato
         // que alguien pedira el dia de la primera disputa. El cron, en cambio, escribe `null`.
         actorUsuarioId: "tienda-1",
@@ -311,7 +311,7 @@ describe("rechazarDesdeDevuelta — cuando NO se aplica, no deja NI UN efecto (R
     // la 99, o la bodega la recupero). Si alguien quita `estatusId` del `where`, este `updateMany`
     // pasa a coincidir por id y el resto del metodo se ejecuta: gestion + historial + un
     // `cobroRechazado` de mas sobre un paquete que ya se cobro.
-    const prisma = buildPrisma({ estatusId: idEstado("rechazada") });
+    const prisma = buildPrisma({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
     const ok = await repoWith(prisma).rechazarDesdeDevuelta(INPUT);
 
     expect(ok).toBe(false);
@@ -320,7 +320,7 @@ describe("rechazarDesdeDevuelta — cuando NO se aplica, no deja NI UN efecto (R
     // Ni siquiera se pregunta por el mensajero: el metodo sale en el paso 1.
     expect(prisma.gestionOrden.findFirst).not.toHaveBeenCalled();
     // Y el estado de la orden queda donde estaba.
-    expect(prisma._orden.estatusId).toBe(idEstado("rechazada"));
+    expect(prisma._orden.estatusId).toBe(idEstado("devolucion_a_origen_por_rechazo"));
   });
 
   it("R3: una orden BORRADA (soft-delete) tampoco se rechaza", async () => {
@@ -366,7 +366,7 @@ describe("rechazarDesdeDevuelta — cuando NO se aplica, no deja NI UN efecto (R
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
     // Y el UPDATE del paso 1 se revierte con la transaccion: la orden sigue en `devuelta` y la
     // tienda la vuelve a ver. Sin esto quedaria en `rechazada` sin gestion y sin historial.
-    expect(prisma._orden.estatusId).toBe(idEstado("devuelta"));
+    expect(prisma._orden.estatusId).toBe(idEstado("novedad"));
   });
 
   it("R10: el mensaje del abort NO lleva datos personales ni el motivo (R46)", async () => {
@@ -457,7 +457,7 @@ describe("rechazarDesdeDevuelta — el ancla de la devolucion queda INTACTA (R24
     // La rama sin efectos tiene que serlo tambien para el ancla: si el borrado viviera ANTES de la
     // guarda del `updateMany`, esta orden perderia su anclaje sin que nada mas ocurriera — el peor
     // de los casos, porque no dejaria ni rastro de que paso.
-    const prisma = buildPrisma({ estatusId: idEstado("rechazada") });
+    const prisma = buildPrisma({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
     return repoWith(prisma)
       .rechazarDesdeDevuelta(INPUT)
       .then((ok) => {
@@ -480,14 +480,14 @@ describe("el doble de este archivo SI mira el `where` (anti-vacuidad)", () => {
     const prisma = buildPrisma();
     return (async () => {
       const acierta = await prisma.orden.updateMany({
-        where: { id: ORDEN_ID, estatusId: idEstado("devuelta"), deletedAt: null },
-        data: { estatusId: idEstado("rechazada") },
+        where: { id: ORDEN_ID, estatusId: idEstado("novedad"), deletedAt: null },
+        data: { estatusId: idEstado("devolucion_a_origen_por_rechazo") },
       });
       expect(acierta).toEqual({ count: 1 });
 
       const falla = await prisma.orden.updateMany({
-        where: { id: ORDEN_ID, estatusId: idEstado("devuelta"), deletedAt: null },
-        data: { estatusId: idEstado("rechazada") },
+        where: { id: ORDEN_ID, estatusId: idEstado("novedad"), deletedAt: null },
+        data: { estatusId: idEstado("devolucion_a_origen_por_rechazo") },
       });
       expect(falla).toEqual({ count: 0 }); // ya no esta en `devuelta`: la primera la movio
     })();
@@ -527,7 +527,7 @@ describe("💰 337 — `trasCrearGestion`: el cobro entra en la MISMA transaccio
   it("⭑ NO se invoca cuando la orden ya salio de `devuelta` (carrera perdida)", async () => {
     // Un cobro sin rechazo seria dinero contra una tienda por algo que no paso. El hook cuelga del
     // paso 3, que solo corre si el `updateMany` guardado afecto una fila.
-    const prisma = buildPrisma({ estatusId: idEstado("rechazada") });
+    const prisma = buildPrisma({ estatusId: idEstado("devolucion_a_origen_por_rechazo") });
     const hook = vi.fn(async () => {});
 
     const ok = await repoWith(prisma).rechazarDesdeDevuelta({ ...INPUT, trasCrearGestion: hook });

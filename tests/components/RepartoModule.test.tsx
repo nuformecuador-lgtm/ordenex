@@ -166,7 +166,7 @@ function makeAsignacion(
   return {
     numGuia: 1001,
     numRemision: "REM-001",
-    estatusValue: "por_recoger",
+    estatusValue: "mensajero_recogiendo_en_bodega",
     destinatario: "Ana Pérez",
     telefonoDest: "88880000",
     direccion: "Calle 1, casa 2",
@@ -182,6 +182,8 @@ function makeAsignacion(
     provinciaNombre: "San José",
     cantonNombre: "Central",
     distritoNombre: "Carmen",
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     // Feature 92/R28: sin posicion en la ruta salvo que el test la fije.
     secuenciaRuta: null,
     ...over,
@@ -208,6 +210,10 @@ function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {
       // Feature 235 (R18): el tercer grupo llega ya separado del servidor. Los escenarios de este
       // archivo no tienen ordenes en ayuda; los que si, viven en `RepartoAyuda.test.tsx`.
       conAyuda={props?.conAyuda ?? []}
+      // FICHA 430: las asignadas y todavia sin recoger bajan SOLO para el chat. Los
+      // escenarios de este archivo no las usan; su cobertura vive en
+      // `ChatContactoAntesDeRecoger.test.tsx`.
+      porRecoger={props?.porRecoger ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
       bloqueo={props?.bloqueo ?? SIN_BLOQUEO}
@@ -350,7 +356,7 @@ beforeEach(() => {
   gestionarMock.mockResolvedValue({
     status: "ok",
     ordenId: "g1",
-    estado: "entregada",
+    estado: "entregado",
   });
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
   liberarMock.mockResolvedValue({ status: "ok" });
@@ -577,9 +583,11 @@ describe("RepartoModule", () => {
 
     // La selección sigue en la primera card. Ya no se comprueba contra el panel "Detalle de
     // la orden": el rediseño lo reserva al MODO FOCO (con una gestión activa), y en vista
-    // completa la orden elegida se distingue por el badge "En detalle" de su propia card.
-    expect(within(cardDe("REM-G1")).getByText("En detalle")).toBeInTheDocument();
-    expect(within(cardDe("REM-G2")).queryByText("En detalle")).toBeNull();
+    // completa la orden elegida se distingue por la marca de su propia card.
+    // ⏳ 2026-09-24 (FICHA 455, R8): la marca es «Abierta en detalle», aparte del chip de estado
+    // (antes el chip decía «En detalle», un nombre retirado).
+    expect(within(cardDe("REM-G1")).getByText("Abierta en detalle")).toBeInTheDocument();
+    expect(within(cardDe("REM-G2")).queryByText("Abierta en detalle")).toBeNull();
   });
 
   // Feature 113 (T6) reescribe el antiguo test de R19/R20: el spec 36 dejaba las demás
@@ -711,7 +719,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("resultado")).toBe("entregado");
     expect(fd.get("ordenId")).toBe("g1");
     expect(fd.get("montoRecibido")).toBe("150");
     expect(fd.getAll("pagoMetodo")).toEqual(["efectivo"]);
@@ -737,7 +745,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("entregada");
+    expect(fd.get("resultado")).toBe("entregado");
     expect(fd.get("montoRecibido")).toBe("0");
     // Feature 213 (R16): el `"efectivo"` que este panel FORZABA aquí se borró. Una entrega sin
     // cobro son CERO líneas y ningún escalar; el borde ya acepta esa forma (reglas 3 y 4).
@@ -751,7 +759,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "reprogramada",
+      estado: "reprogramado",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -770,7 +778,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("reprogramada");
+    expect(fd.get("resultado")).toBe("reprogramado");
     expect(fd.get("fechaReprogramacion")).toBe("2030-12-31");
     expect(fd.get("motivo")).toBe("Cliente ausente");
   });
@@ -784,7 +792,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "devuelta",
+      estado: "novedad",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -803,7 +811,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("devuelta");
+    expect(fd.get("resultado")).toBe("novedad");
     expect(fd.get("causaDevolucion")).toBe("wrong_address");
     expect(fd.get("motivo")).toBe("Rechazo del producto");
     expect(fd.get("evidencia")).toBeInstanceOf(File);
@@ -904,7 +912,7 @@ describe("RepartoModule", () => {
     gestionarMock.mockResolvedValue({
       status: "ok",
       ordenId: "g1",
-      estado: "rechazada",
+      estado: "devolucion_a_origen_por_rechazo",
     });
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
@@ -921,7 +929,7 @@ describe("RepartoModule", () => {
 
     await vi.waitFor(() => expect(gestionarMock).toHaveBeenCalledTimes(1));
     const fd = gestionarMock.mock.calls[0][0] as FormData;
-    expect(fd.get("resultado")).toBe("rechazada");
+    expect(fd.get("resultado")).toBe("devolucion_a_origen_por_rechazo");
     expect(fd.get("motivo")).toBe("Dirección inexistente");
     expect(fd.get("evidencia")).toBeInstanceOf(File);
   });
@@ -1563,6 +1571,7 @@ describe("RepartoModule", () => {
       <RepartoModule
         porGestionar={porGestionar}
         conAyuda={[]}
+        porRecoger={[]}
         ordenEnGestionId="g2"
         ruta={RUTA_VIGENTE}
         bloqueo={SIN_BLOQUEO}
@@ -1580,6 +1589,7 @@ describe("RepartoModule", () => {
       <RepartoModule
         porGestionar={porGestionar}
         conAyuda={[]}
+        porRecoger={[]}
         ordenEnGestionId={null}
         ruta={RUTA_VIGENTE}
         bloqueo={SIN_BLOQUEO}
@@ -1922,12 +1932,16 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -1935,6 +1949,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -1958,12 +1974,16 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -1971,6 +1991,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2007,18 +2029,24 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
           numRemision: "REM-G2",
           cantonNombre: "Central",
           distritoNombre: "Merced",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
           numRemision: "REM-G3",
           cantonNombre: "Central",
           distritoNombre: null,
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g4",
@@ -2026,6 +2054,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2053,6 +2083,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2060,6 +2092,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2095,6 +2129,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-G1",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2102,6 +2138,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });
@@ -2164,6 +2202,8 @@ describe("RepartoModule", () => {
           numRemision: "REM-UNO",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 1,
         }),
         // EN GESTIÓN, en OTRO cantón: no coincide con el filtro pero no se oculta.
@@ -2173,6 +2213,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 2,
         }),
         // Control: otro cantón y NO en gestión ⇒ se filtra.
@@ -2182,6 +2224,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Cartago",
           provinciaNombre: "Cartago",
           distritoNombre: "Oriental",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 3,
         }),
       ],
@@ -2230,6 +2274,8 @@ describe("RepartoModule", () => {
           destinatario: "Uno",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 1,
         }),
         makeAsignacion({
@@ -2239,6 +2285,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
           secuenciaRuta: 2,
         }),
       ],
@@ -2274,6 +2322,8 @@ describe("RepartoModule", () => {
           destinatario: "Ana",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g2",
@@ -2281,6 +2331,8 @@ describe("RepartoModule", () => {
           destinatario: "Beto",
           cantonNombre: "Central",
           distritoNombre: "Carmen",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
         makeAsignacion({
           id: "g3",
@@ -2289,6 +2341,8 @@ describe("RepartoModule", () => {
           cantonNombre: "Escazú",
           provinciaNombre: "San José",
           distritoNombre: "San Rafael",
+          sinpeNumero: "80000000",
+          sinpeNombre: "Titular de Prueba",
         }),
       ],
     });

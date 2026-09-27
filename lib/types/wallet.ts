@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import type { ConOrigen } from "@/lib/types/wallet-origen";
 import type {
   WalletMovimientoTipo as PrismaWalletMovimientoTipo,
   WalletMovimientoCategoria as PrismaWalletMovimientoCategoria,
@@ -8,6 +9,8 @@ import type {
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { composicionDetalleConfig } from "@/lib/config/composicion-detalle";
 import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
+import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
+import { aQuienFiltroSchema } from "@/lib/types/libro-caja-a-quien";
 import {
   esFechaCalendarioValida,
   fechaCalendarioCR,
@@ -55,6 +58,27 @@ export const WALLET_MOVIMIENTO_CATEGORIA_SEED = [
   // (lib/utils/caja-tesoreria.ts), que es un `Record` TOTAL sobre este union.
   "ingreso_cod_recaudado", // R11: entra al aprobar el cierre del dia
   "ingreso_reverso_pago_tienda", // R24/R26: vuelve al anular un pago a tienda (NUNCA ingreso_ajuste)
+  // Ficha 459 (design §4.1/§5): pago por cuenta de una tienda (terceros) y su anulacion; saldo
+  // inicial o aporte de capital (capital) y su anulacion.
+  "egreso_pago_por_cuenta_tienda",
+  "ingreso_reverso_pago_por_cuenta_tienda",
+  "ingreso_aporte_capital",
+  "egreso_reverso_aporte_capital",
+  // Ficha 461 (design §2.1, HD1): el cobro de Ordenex a una tienda es un CARGO como los fletes
+  // (propio, liquidez «cargo»: sube la ganancia, baja «De las tiendas», no toca «Entro») y su
+  // anulacion es el REVERSO de ese cargo (egreso propio «cargo», que no suma a «Salio»).
+  "ingreso_cobro_tienda",
+  "egreso_reverso_cobro_tienda",
+  // Ficha 457 (design §3.3/§4, DH1): el PAGO DE UNA TIENDA A ORDENEX es dinero de TERCEROS que
+  // entra de verdad (efectivo): sube «Entro», la cifra principal y «De las tiendas», y NO toca la
+  // ganancia. Su anulacion es el egreso de terceros que lo devuelve.
+  "ingreso_abono_tienda",
+  "egreso_reverso_abono_tienda",
+  // Ficha 458-B (design §2.1/§2.3, D7): la anulacion de un cobro por rechazo aprobado (337). DOS
+  // reversos de CARGO —flete e IVA por separado—, como el reverso del cobro de la 461: propios,
+  // liquidez «cargo»; bajan la ganancia y suben «De las tiendas» sin tocar «Entro» ni «Salio».
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly PrismaWalletMovimientoCategoria[];
 
 export type WalletMovimientoCategoria = (typeof WALLET_MOVIMIENTO_CATEGORIA_SEED)[number];
@@ -87,6 +111,20 @@ export const WALLET_ORIGEN_TIPO_SEED = [
   // etiquetado como `cierre_dia` ademas de devolver basura CHOCARIA con el
   // `egreso_pago_mensajero` que el feed del cierre ya escribio.
   "ranking_snapshot_fila",
+  // Ficha 459 (design §4.1): el documento del pago por cuenta, el del saldo inicial o aporte, y el
+  // cobro de un costo reclasificado como pago por cuenta (origen_id = id de la fila del cobro).
+  "pago_por_cuenta_tienda",
+  "aporte_capital",
+  "cobro_manual_reclasificado",
+  // Ficha 461 (design §3.1, P2): `cobro_tienda` = lo que escribe el SERVICIO al cobrar y al anular
+  // (origen_id = id del debito del cobro); `cobro_tienda_completado` = las lineas de caja que la
+  // migracion de datos añade a los cobros previos sin linea. Dos origenes para que el `down` de esa
+  // migracion borre EXACTAMENTE lo suyo.
+  "cobro_tienda",
+  "cobro_tienda_completado",
+  // Ficha 457 (design §0): el documento del PAGO DE UNA TIENDA A ORDENEX. Las cuatro filas de los dos
+  // libros llevan este origen con `origen_id` = id del documento.
+  "abono_tienda",
 ] as const satisfies readonly PrismaWalletOrigenTipo[];
 
 export type WalletOrigenTipo = (typeof WALLET_ORIGEN_TIPO_SEED)[number];
@@ -119,9 +157,15 @@ export type WalletIngresoConcepto = (typeof WALLET_INGRESO_CONCEPTO_SEED)[number
 // declara `propio` con tipo ingreso— la comprueba en RUNTIME
 // `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` (R23/R32): un `satisfies`
 // no puede afirmarlo, porque la naturaleza es un VALOR y no un tipo.
+//
+// Ficha 461 (design §4, R27): + `ingreso_cobro_tienda`, el OCTAVO ingreso propio. La guardia de
+// composicion exige que este seed sea EXACTAMENTE los ingresos propios, y el cobro lo es (HD1).
+// `WALLET_INGRESO_CONCEPTO_SEED` NO cambia: son los seis del feed del cierre y
+// `MAPEO_CONCEPTO_TIENDA` depende de el.
 export const WALLET_INGRESO_PROPIO_SEED = [
   ...WALLET_INGRESO_CONCEPTO_SEED,
   "ingreso_ajuste",
+  "ingreso_cobro_tienda",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletIngresoPropio = (typeof WALLET_INGRESO_PROPIO_SEED)[number];
@@ -150,9 +194,18 @@ export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[numb
  * movimiento» le PROMETE al usuario que ese gasto se llamara «Ajuste (egreso)»: sin fila
  * propia, la tarjeta rompe esa promesa.
  */
+//
+// Ficha 461 (design §4, R27): + `egreso_reverso_cobro_tienda`, el TERCER egreso nombrado. La
+// anulacion de un cobro baja la ganancia y tiene que verse con su nombre, no dentro de «Otros».
+//
+// Ficha 458-B (design §2.3): + los dos reversos del cobro por rechazo (flete e IVA). Bajan la
+// ganancia igual que el reverso del cobro de la 461 y, por el mismo motivo, se ven con su nombre.
 export const WALLET_EGRESO_NOMBRADO_SEED = [
   "egreso_pago_mensajero",
   "egreso_ajuste",
+  "egreso_reverso_cobro_tienda",
+  "egreso_reverso_flete_devolucion",
+  "egreso_reverso_iva_flete_devolucion",
 ] as const satisfies readonly WalletMovimientoCategoria[];
 
 export type WalletEgresoNombrado = (typeof WALLET_EGRESO_NOMBRADO_SEED)[number];
@@ -210,7 +263,11 @@ export type ComposicionFilaId = (typeof COMPOSICION_FILA_SEED)[number];
  * obligaria a `lib/types/` a importar de `lib/utils/`, invirtiendo la direccion de la
  * dependencia. La clasificacion en si (`NATURALEZA_POR_CATEGORIA`) NO se mueve.
  */
-export type NaturalezaMovimiento = "propio" | "terceros";
+//
+// Ficha 459 (design §2.2, P1): tercer dueño, `capital` — el saldo inicial y los aportes de capital.
+// Es dinero de Ordenex que NO es ganancia: suma a la cifra principal y a «De Ordenex», nunca a la
+// ganancia ni a «De las tiendas».
+export type NaturalezaMovimiento = "propio" | "terceros" | "capital";
 
 // ── Contratos I/O (frontera Server Action -> cliente). Montos SIEMPRE STRING (R4/R25) ──
 
@@ -230,6 +287,59 @@ export type WalletMovimientoDTO = {
    * tabla y la descarga no pueden decir cosas distintas.
    */
   dueno: NaturalezaMovimiento;
+  /**
+   * Ficha 459 (design §7.3, R66/R67) — el DOCUMENTO detras de la fila, resuelto EN LOTE por
+   * `WalletService` y SOLO para las filas ORIGINALES de un pago por cuenta de una tienda o de un
+   * saldo inicial o aporte. Los contra-asientos, las salidas de los cobros reclasificados y
+   * cualquier otra fila llevan `null`, y por eso el libro no les ofrece acciones (R66).
+   *
+   * El id del documento NO viaja aqui: ya es el `origenId` de la fila y nunca se pinta (R100).
+   * Las descargas no incluyen este campo (R58).
+   */
+  documento: DocumentoCajaDTO | null;
+};
+
+/**
+ * Ficha 459 (design §7.3) — el estado del documento de una fila original del libro de la caja.
+ *
+ * Ficha 461 (design §5.4, R20/R37): + `cobro_tienda`, la linea de caja de un cobro de Ordenex a una
+ * tienda, sea propia (origen `cobro_tienda`) o completada por la migracion de datos
+ * (`cobro_tienda_completado`). Su `tieneComprobante` es siempre `false` (un cobro no lleva
+ * comprobante). El reverso del cobro y las salidas reclasificadas siguen con `documento: null`.
+ */
+export type DocumentoCajaDTO = {
+  /**
+   * Ficha 461 (R71): + `ajuste_caja`, la correccion de caja original (su contra-asiento lleva `null`).
+   * Ficha 457 (design §8.5, R41): + `abono_tienda`, la entrada del pago de una tienda a Ordenex
+   * (`ingreso_abono_tienda` con origen `abono_tienda`); su reverso lleva `null`.
+   */
+  /**
+   * Ficha 458-B (design §3.6, R71): + `egreso_caja` (sueldo, gasto de Ordenex, gasto fijo cobrado),
+   * `indemnizacion` (la del incidente, no la del cierre) y `rechazo_tienda_cobro` (las DOS lineas del
+   * cobro por rechazo apuntan al mismo documento). Sus contra-asientos llevan `null`.
+   */
+  tipo:
+    | "pago_por_cuenta_tienda"
+    | "aporte_capital"
+    | "cobro_tienda"
+    | "ajuste_caja"
+    | "abono_tienda"
+    | "egreso_caja"
+    | "indemnizacion"
+    | "rechazo_tienda_cobro"
+    /**
+     * Ficha 458-C (revision B3, R71): el egreso de un pago de Ordenex A UNA TIENDA (172;
+     * `egreso_pago_tienda` con origen `pago_tienda`, documento = el `liquidacion_pago`) y el egreso del
+     * PREMIO del ranking (293; `egreso_pago_mensajero` con origen `ranking_snapshot_fila`, documento = la
+     * fila del podio). El servidor ya los anulaba desde la caja (`WalletAnulacionService.rutaDeCaja`);
+     * sin documento, la fila decia «Vigente» aunque estuviera anulada. Sus reversos llevan `null`.
+     */
+    | "pago_tienda"
+    | "premio_del_ranking";
+  anulado: boolean;
+  tieneComprobante: boolean;
+  /** Ficha 458-B (R72): anulado por un reverso anterior a la 458, sin constancia: «motivo no registrado». */
+  motivoNoRegistrado?: boolean;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";
@@ -265,8 +375,10 @@ export interface AgregadoCajaRow {
 //  - `enCaja`   = entradas - salidas, sin distinguir de quien es el dinero (R4).
 //  - `ganancia` = ingresos propios - egresos propios (R5). Es, numero por numero, lo que hoy
 //                 se rotula «Balance general»: no cambia de valor, cambia de nombre.
-//  - `deTerceros` [P6] = la diferencia entre ambas. NO es la deuda con las tiendas (R34): es
-//                 MAYOR, porque de ese dinero Ordenex aun descuenta flete, comision e IVA.
+//  - `deTerceros` [P6] = «De las tiendas». Ficha 459 (R5/R8): desde esta ficha SI es lo que
+//                 Ordenex les debe a las tiendas — ya descontados flete, comision e IVA (los
+//                 cargos a la tienda) —, salvo los cobros de un costo que no pasan por la caja.
+//  - `entradas` (ficha 459, R2): solo el EFECTIVO; los cargos a la tienda no entran aparte.
 export type CajaResumenDTO = {
   entradas: string;
   salidas: string;
@@ -295,7 +407,23 @@ export type CajaResumenDTO = {
    * comparando los DOS importes derivados; la pantalla no compara nada.
    */
   modoComposicion: ModoComposicionCaja;
+  // ── Ficha 459 (design §2.6) — todo STRING salvo el estado ──
+  /** R6 — saldos iniciales y aportes vigentes, menos sus anulaciones. */
+  capital: string;
+  signoCapital: WalletBalanceSigno;
+  /** R11 — ganancia + capital: el bolsillo de Ordenex de la barra. */
+  deOrdenex: string;
+  signoDeTerceros: WalletBalanceSigno;
+  /** |deTerceros|, para «Las tiendas le deben ₡X» sin aritmetica en el navegador (R23, R28). */
+  deTercerosAbsoluto: string;
+  /** R14 — «saldo» si hay un saldo inicial vigente; «flujo» en cualquier otro caso. */
+  estado: EstadoCaja;
+  /** R15 — YYYY-MM-DD (Costa Rica) del primer movimiento de la caja; null con el libro vacio. */
+  flujoDesde: string | null;
 };
+
+/** Ficha 459 (R14) — el estado de la caja lo decide el servidor. */
+export type EstadoCaja = "flujo" | "saldo";
 
 // Feature 231 (design §3.1) — los CUATRO estados posibles del reparto de la caja. Seed
 // primero para que la pantalla pueda montar un `Record` TOTAL sobre ellos (design §4.2): un
@@ -388,6 +516,19 @@ export const montoPositivoSchema = z
     }
   }, "El monto debe ser mayor que 0.");
 
+/**
+ * FICHA 461 (R66, auditoria de la wallet D2) — la CLAVE DE IDEMPOTENCIA de los tres registros
+ * manuales de dinero (correccion de caja, sueldo o gasto de Ordenex, cobro de Ordenex a una tienda).
+ * La genera el dialogo al abrirse (`crypto.randomUUID()`, como en el pago de un gasto de una tienda y
+ * el aporte) y se guarda en la propia fila del libro bajo un indice UNIQUE (R67): un doble clic o un
+ * reintento tras un error tardio con la misma clave NO crea una segunda fila (R68). Medido por la
+ * auditoria: dos cobros identicos en 10 s quedaron como dos filas. OBLIGATORIA: sin ella, el borde
+ * responde `validation_error` y no se escribe nada.
+ */
+export const claveIdempotenciaSchema = z
+  .string({ message: "Falta la clave de idempotencia del registro." })
+  .uuid("La clave de idempotencia debe ser un uuid.");
+
 // ── Ficha 334 — la FECHA del movimiento manual (R19/R20/R21) ──
 
 /** La forma `YYYY-MM-DD`. Se declara una vez: la usan el regex del schema y su superRefine. */
@@ -451,6 +592,7 @@ export const registrarMovimientoManualSchema = z
     monto: montoPositivoSchema,
     descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
     fecha: fechaMovimientoSchema.optional(),
+    claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
   })
   .refine(
     (v) =>
@@ -461,15 +603,56 @@ export const registrarMovimientoManualSchema = z
 
 export type RegistrarMovimientoManualInput = z.infer<typeof registrarMovimientoManualSchema>;
 
+// ── FICHA 461 (R69–R71, auditoria D3) — ANULAR una correccion de caja ──
+
+/**
+ * El BORDE de la anulacion de una correccion: la fila y un motivo. SIN monto, y `.strict()` lo hace
+ * cumplir (R70): el monto del contra-asiento se lee DE LA CORRECCION en el servidor, y una peticion
+ * que traiga `monto` —o cualquier otra clave no prevista— muere aqui con `validation_error` sin
+ * escribir nada. El motivo se recorta y no puede quedar vacio. Molde: `anularCobroTiendaSchema`.
+ */
+export const anularAjusteCajaSchema = z
+  .object({
+    movimientoId: z.string().uuid(),
+    motivo: z.string().trim().min(1, "El motivo de la anulacion es obligatorio."),
+  })
+  .strict();
+
+export type AnularAjusteCajaInput = z.infer<typeof anularAjusteCajaSchema>;
+
+/**
+ * El contrato COMPLETO que ve la pantalla. `unauthenticated` y `validation_error` los decide el
+ * borde; el resto, el dominio. `no_encontrado` cubre tambien «esa fila no es una correccion
+ * original» (su contra-asiento, el reverso de un egreso, un asiento automatico): sobre ellas no hay
+ * nada que anular por esta via. Ninguna rama viaja con importes.
+ */
+export type AnularAjusteCajaResult =
+  | { status: "ok" }
+  | { status: "ya_anulado" }
+  | { status: "no_encontrado" }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };
+
 // Listado (R20): paginado acotado + filtros opcionales tipo/categoria/rango de fechas.
 export const listarMovimientosSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   tipo: z.enum(WALLET_MOVIMIENTO_TIPO_SEED).optional(),
   categoria: z.enum(WALLET_MOVIMIENTO_CATEGORIA_SEED).optional(),
-  desde: z.coerce.date().optional(),
-  hasta: z.coerce.date().optional(),
-});
+  // Ficha 461 (R72, auditoria T1): dias de COSTA RICA. `desde` = inicio de ese dia (06:00Z); `hasta`
+  // = inicio del dia siguiente, cota EXCLUSIVA en el repositorio. Antes: `z.coerce.date()`, que es
+  // la medianoche UTC (18:00 CR del dia anterior) y dejaba «hoy» con 2 de 7 movimientos.
+  desde: desdeDiaCRSchema.optional(),
+  hasta: hastaDiaCRSchema.optional(),
+  // Ficha 458-E (TE.2, R59): «A quién» — una tienda, un mensajero o el nombre libre anotado. Lo
+  // resuelve el REPOSITORIO en el WHERE, igual para libro, tarjetas, composicion, desglose y descarga
+  // (todos derivan de este schema). Las opciones las da `quienesDelLibroCajaAction`.
+  aQuien: aQuienFiltroSchema.optional(),
+})
+  // Ficha 458-E: `.strict()` — una clave desconocida es `validation_error` sin leer nada. Los
+  // derivados (`…CompletoSchema`, `…DeFilaSchema`) lo heredan por `omit`/`extend`.
+  .strict();
 
 export type ListarMovimientosInput = z.infer<typeof listarMovimientosSchema>;
 
@@ -517,7 +700,8 @@ export type ListarMovimientosDeFilaInput = z.infer<typeof listarMovimientosDeFil
 // Feature 170 (T C.2): resultado del modo completo en el BORDE. `limite_excedido` lleva
 // SOLO conteos (R27) y ninguna rama de error viaja con filas (R16/R17/R18). Money-safe: los
 // montos siguen siendo STRING dentro del DTO.
-export type ListarMovimientosCompletoResult = ListarCompletoResult<WalletMovimientoDTO>;
+// Ficha 458-A (TA.2): cada fila de la descarga lleva su origen legible (R5, R94).
+export type ListarMovimientosCompletoResult = ListarCompletoResult<ConOrigen<WalletMovimientoDTO>>;
 
 // ── Feature 45 — egresos administrativos (manual) + reversa ──
 
@@ -545,6 +729,7 @@ export const registrarEgresoAdministrativoSchema = z.object({
   monto: montoPositivoSchema,
   descripcion: z.string().trim().min(1, "La descripcion es obligatoria."),
   fecha: fechaMovimientoSchema.optional(),
+  claveIdempotencia: claveIdempotenciaSchema, // ficha 461 (R66)
 });
 
 export type RegistrarEgresoAdministrativoInput = z.infer<

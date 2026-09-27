@@ -1,0 +1,33 @@
+=== MUTACION C11 — 2026-09-24T04:52:01-05:00
+archivo: lib/types/webhook-eventos.ts
+perl: s/(  "en_reparto",\n)  "entregada",\n(  "reprogramada",)/$1$2/
+--- diff aplicado:
+diff --git a/lib/types/webhook-eventos.ts b/lib/types/webhook-eventos.ts
+index 22f26200..bb80b5e1 100644
+--- a/lib/types/webhook-eventos.ts
++++ b/lib/types/webhook-eventos.ts
+@@ -96 +95,0 @@ export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStat
+-  "entregada",
+lineas cambiadas: 1
+--- tests: tests/integration/db/455/caracterizacion/webhook-estado.test.ts
+ × tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > un evento por transicion publica, con la dedupe determinista, y ninguno para la devolucion a tienda 9ms
+   → expected [ { orden: 'dev', …(2) }, …(1) ] to deeply equal [ { orden: 'dev', …(2) }, …(2) ]
+ × tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > cada entrega lleva el eventoId de su job y el estado de su destino 2ms
+   → expected [ [ 'dev', …(3) ], [ 'rec', …(3) ] ] to deeply equal [ [ 'dev', …(3) ], …(2) ]
+ × tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > R28: renombrado el catalogo tras encolar, el mismo job entrega el valor nuevo con el mismo eventoId 1ms
+   → expected null to deeply equal { estadoAntes: 'entregada', …(2) }
+ × tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > las claves del data entregado, hoy 1ms
+   → expected [ …(2) ] to deeply equal [ …(3) ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > un evento por transicion publica, con la dedupe determinista, y ninguno para la devolucion a tienda
+AssertionError: expected [ { orden: 'dev', …(2) }, …(1) ] to deeply equal [ { orden: 'dev', …(2) }, …(2) ]
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > cada entrega lleva el eventoId de su job y el estado de su destino
+AssertionError: expected [ [ 'dev', …(3) ], [ 'rec', …(3) ] ] to deeply equal [ [ 'dev', …(3) ], …(2) ]
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > invariantes > R28: renombrado el catalogo tras encolar, el mismo job entrega el valor nuevo con el mismo eventoId
+AssertionError: expected null to deeply equal { estadoAntes: 'entregada', …(2) }
+ FAIL  tests/integration/db/455/caracterizacion/webhook-estado.test.ts > 455/C11 — webhook de estado (Postgres real) > [INTERMEDIO] lo que la 455 cambia por diseño (R25) > las claves del data entregado, hoy
+AssertionError: expected [ …(2) ] to deeply equal [ …(3) ]
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+--- tras revertir, git diff --stat -- lib app db:
+(fin: vacio arriba = arbol limpio)

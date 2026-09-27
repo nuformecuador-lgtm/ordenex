@@ -5,37 +5,30 @@
 
 import type { ChatMensajeDireccion } from "@prisma/client";
 
-/** Familia de estado que el chip de la lista pinta con color. */
-export type ChatEstado =
-  | "por_recoger"
-  | "en_reparto"
-  | "entregada"
-  | "devuelta"
-  | "otro";
+import { nombreDeEstado, type OrderStatusValue } from "@/lib/types/order-status";
 
-/** Etiqueta + clases del chip por estado (tokens de marca, no colores crudos). */
-export const ESTADO_CHIP: Record<
-  ChatEstado,
-  { label: string; className: string }
-> = {
-  por_recoger: { label: "Por recoger", className: "bg-muted text-muted-foreground" },
-  en_reparto: { label: "En reparto", className: "bg-info-soft text-info-strong" },
-  entregada: { label: "Entregada", className: "bg-success-soft text-success-strong" },
-  devuelta: { label: "Devuelta", className: "bg-danger-soft text-danger-strong" },
-  otro: { label: "Asignada", className: "bg-muted text-muted-foreground" },
+/**
+ * FICHA 455 (2026-09-24, design §2.1; R7, R12). Hasta la 455 el chip de la lista y de la cabecera
+ * del chat tenía su propio mapa de textos («Por recoger», «Entregada», «Devuelta» y un cajón
+ * «Asignada» para todo lo demás). Ahora el TEXTO es siempre el nombre visible del estado de la orden
+ * (`nombreDeEstado`, la fuente única) y aquí solo se decide el COLOR, por CÓDIGO, con un mapa
+ * parcial y un color neutro por defecto.
+ */
+const CLASE_CHIP_POR_CODIGO: Partial<Record<OrderStatusValue, string>> = {
+  en_reparto: "bg-info-soft text-info-strong",
+  entregado: "bg-success-soft text-success-strong",
+  novedad: "bg-danger-soft text-danger-strong",
 };
 
-/** Familia de estado del chip a partir del `estatusValue` de la orden. */
-export function estadoDe(estatusValue: string): ChatEstado {
-  switch (estatusValue) {
-    case "por_recoger":
-    case "en_reparto":
-    case "entregada":
-    case "devuelta":
-      return estatusValue;
-    default:
-      return "otro";
-  }
+/** Color neutro de todo estado sin familia propia (antes, «Por recoger» y el cajón «Asignada»). */
+const CLASE_CHIP_NEUTRA = "bg-muted text-muted-foreground";
+
+/** Texto + clases del chip de una orden: su nombre de estado y el color de su código. */
+export function chipDeEstado(estatusValue: string): { label: string; className: string } {
+  return {
+    label: nombreDeEstado(estatusValue),
+    className: (CLASE_CHIP_POR_CODIGO as Partial<Record<string, string>>)[estatusValue] ?? CLASE_CHIP_NEUTRA,
+  };
 }
 
 /** Iniciales del avatar (una o dos letras) a partir del nombre del destinatario. */

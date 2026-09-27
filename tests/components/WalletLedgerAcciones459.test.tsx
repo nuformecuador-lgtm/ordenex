@@ -1,0 +1,276 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, cleanup, within } from "@testing-library/react";
+
+import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+
+// =================================================================================================
+// FICHA 459 (T B.16 / T C.6, design §7.3 y §9.4) — LAS ACCIONES DEL LIBRO DE LA CAJA
+// =================================================================================================
+//
+// R66: «Anular…» SOLO en la fila ORIGINAL vigente de un pago por cuenta o de un saldo inicial o
+// aporte; «Anulado» si ya lo está; NADA en los contra-asientos ni en las salidas de los cobros
+// reclasificados. R67: «Ver comprobante» donde lo haya. R65: tras anular, el módulo relee.
+// R87: la salida de un cobro reclasificado se lee con su origen legible y SIN acciones.
+// R100: ningún identificador interno en pantalla ni en la descarga.
+//
+// Quién decide qué fila tiene documento es el SERVIDOR (`WalletMovimientoDTO.documento`, resuelto
+// en `WalletService`; su test de servicio mide qué filas lo reciben y cuántas consultas cuesta).
+// Aquí se mide que la pantalla OBEDECE al campo y que sus dos acciones mandan lo que el borde
+// espera.
+
+const anularPagoMock = vi.fn();
+const comprobantePagoMock = vi.fn();
+const anularAporteMock = vi.fn();
+const comprobanteAporteMock = vi.fn();
+
+vi.mock("@/lib/actions/pago-por-cuenta-tienda", () => ({
+  anularPagoPorCuentaTiendaAction: (...a: unknown[]) => anularPagoMock(...a),
+  obtenerComprobantePagoPorCuentaAction: (...a: unknown[]) => comprobantePagoMock(...a),
+}));
+vi.mock("@/lib/actions/aporte-capital", () => ({
+  anularAporteCapitalAction: (...a: unknown[]) => anularAporteMock(...a),
+  obtenerComprobanteAporteCapitalAction: (...a: unknown[]) => comprobanteAporteMock(...a),
+}));
+vi.mock("@/lib/actions/wallet-egresos", () => ({
+  reversarEgresoAdministrativoAction: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+const successMock = vi.fn();
+const errorMock = vi.fn();
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: successMock,
+    error: errorMock,
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
+import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
+import {
+  COLUMNAS_DESCARGA_WALLET_CAJA,
+  filaDescargaMovimientoCaja,
+} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
+import { CATEGORIA_LABEL as CATEGORIA_LABEL_458, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
+
+const PAGO_ID = "0b6c1f7e-7a44-4b43-9c1a-5e0f2d9a1c11";
+const APORTE_ID = "9f2e3d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f";
+const COBRO_ID = "ecf6c289-9799-4558-be6d-ce5f8a12f5cd";
+
+function fila(over: Partial<WalletMovimientoDTO>): WalletMovimientoDTO {
+  return {
+    id: "m-0000",
+    tipo: "egreso",
+    categoria: "egreso_pago_por_cuenta_tienda",
+    monto: "10000.00",
+    origenTipo: "pago_por_cuenta_tienda",
+    origenId: PAGO_ID,
+    descripcion: "Tienda Norte · A Facebook · Pauta · SINPE · REF-1",
+    registradoPor: null,
+    fechaMovimiento: "2026-09-20T12:00:00.000Z",
+    dueno: "terceros",
+    documento: null,
+    ...over,
+  };
+}
+
+/** La fila ORIGINAL de un pago por cuenta vigente con comprobante. */
+const PAGO_VIGENTE = fila({
+  id: "m-pago",
+  documento: { tipo: "pago_por_cuenta_tienda", anulado: false, tieneComprobante: true },
+});
+/** La fila ORIGINAL de un pago por cuenta ya anulado, sin comprobante. */
+const PAGO_ANULADO = fila({
+  id: "m-pago-anulado",
+  fechaMovimiento: "2026-09-18T12:00:00.000Z",
+  descripcion: "Tienda Sur · A Jet Cargo · Envío · Efectivo",
+  documento: { tipo: "pago_por_cuenta_tienda", anulado: true, tieneComprobante: false },
+});
+/** Su contra-asiento: mismo origen, otra categoría, SIN documento. */
+const CONTRA_ASIENTO = fila({
+  id: "m-reverso",
+  tipo: "ingreso",
+  categoria: "ingreso_reverso_pago_por_cuenta_tienda",
+  fechaMovimiento: "2026-09-19T12:00:00.000Z",
+  descripcion: "Anulación · Tienda Sur · A Jet Cargo · Envío · Efectivo",
+});
+/** La salida de un cobro reclasificado (bloque C): misma categoría, origen del cobro, SIN documento. */
+const RECLASIFICADO = fila({
+  id: "m-reclasificado",
+  origenTipo: "cobro_manual_reclasificado",
+  origenId: COBRO_ID,
+  fechaMovimiento: "2026-09-10T12:00:00.000Z",
+  descripcion: "Nuform · pago FACEBOOK",
+});
+/** El saldo inicial vigente, sin comprobante. */
+const SALDO_INICIAL = fila({
+  id: "m-aporte",
+  tipo: "ingreso",
+  categoria: "ingreso_aporte_capital",
+  origenTipo: "aporte_capital",
+  origenId: APORTE_ID,
+  monto: "2500000.50",
+  dueno: "capital",
+  fechaMovimiento: "2026-08-25T06:00:00.000Z",
+  descripcion: "Saldo inicial · Arranque",
+  documento: { tipo: "aporte_capital", anulado: false, tieneComprobante: false },
+});
+
+const TODAS = [PAGO_VIGENTE, PAGO_ANULADO, CONTRA_ASIENTO, RECLASIFICADO, SALDO_INICIAL];
+
+function filaPorDescripcion(texto: RegExp): HTMLElement {
+  return screen.getByRole("row", { name: texto });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("FICHA 459 — el cobro reclasificado en el libro y en su descarga (T C.6, R87)", () => {
+  it("se lee con el concepto del pago por cuenta, dueño «Tienda» y el origen legible", () => {
+    render(<WalletLedger movimientos={[RECLASIFICADO]} />);
+    const f = filaPorDescripcion(/pago FACEBOOK/);
+    expect(within(f).getByText("Ordenex paga un gasto de una tienda")).toBeInTheDocument();
+    expect(
+      within(f).getByText("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK"),
+    ).toBeInTheDocument();
+    expect(within(f).getByText("Tienda")).toBeInTheDocument();
+  });
+
+  it("la descarga lleva el MISMO origen legible, las mismas columnas y ningún id", () => {
+    const f = filaDescargaMovimientoCaja(RECLASIFICADO);
+    expect(f.origen).toBe("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK");
+    expect(f.categoria).toBe("Ordenex paga un gasto de una tienda");
+    expect(f.dueno).toBe("Tienda");
+    expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort());
+  });
+});
+
+// ── Revisión B1 (R45/R77, design §5) ─────────────────────────────────────────────────────────
+//
+// El revisor cambió el dueño «Ordenex (capital)», el origen «Saldo inicial o aporte» y el origen
+// «Pago por cuenta de tienda» en `wallet-labels.ts` y la suite siguió verde (M-R5, M-R6). Aquí se
+// afirman LITERALES —escritos a mano, nunca leídos de `DUENO_LABEL`/`ORIGEN_LABEL`, que sería
+// comparar un texto contra su propia fuente—, en la TABLA y en la DESCARGA.
+
+/** El contra-asiento de un saldo inicial anulado: dueño capital, sin documento. */
+const REVERSO_APORTE = fila({
+  id: "m-aporte-reverso",
+  tipo: "egreso",
+  categoria: "egreso_reverso_aporte_capital",
+  origenTipo: "aporte_capital",
+  origenId: APORTE_ID,
+  monto: "2500000.50",
+  dueno: "capital",
+  fechaMovimiento: "2026-08-26T15:00:00.000Z",
+  descripcion: "Anulación · Saldo inicial · Arranque",
+});
+
+/** Lo que tiene que leerse en cada fila: concepto, origen legible y dueño (design §5). */
+const ESPERADO: ReadonlyArray<{
+  caso: string;
+  movimiento: WalletMovimientoDTO;
+  concepto: string;
+  origen: string;
+  dueno: string;
+}> = [
+  {
+    caso: "saldo inicial",
+    movimiento: SALDO_INICIAL,
+    concepto: "Aporte de dinero a la caja",
+    origen: "Aporte de dinero a la caja · Saldo inicial · Arranque",
+    dueno: "Ordenex (capital)",
+  },
+  {
+    caso: "anulación del saldo inicial",
+    movimiento: REVERSO_APORTE,
+    concepto: "Aporte de dinero a la caja anulado",
+    origen: "Aporte de dinero a la caja · Anulación · Saldo inicial · Arranque",
+    dueno: "Ordenex (capital)",
+  },
+  {
+    caso: "pago por cuenta",
+    movimiento: PAGO_VIGENTE,
+    concepto: "Ordenex paga un gasto de una tienda",
+    origen: "Pago de un gasto de una tienda · Tienda Norte · A Facebook · Pauta · SINPE · REF-1",
+    dueno: "Tienda",
+  },
+  {
+    caso: "anulación del pago por cuenta",
+    movimiento: CONTRA_ASIENTO,
+    concepto: "Pago de un gasto de una tienda anulado",
+    origen: "Pago de un gasto de una tienda · Anulación · Tienda Sur · A Jet Cargo · Envío · Efectivo",
+    dueno: "Tienda",
+  },
+];
+
+describe("FICHA 459 — concepto, origen y dueño del capital y del pago por cuenta (R45/R77, revisión B1)", () => {
+  it.each(ESPERADO)("tabla — $caso: «$concepto» · «$origen» · «$dueno»", (e) => {
+    render(<WalletLedger movimientos={[e.movimiento]} />);
+    const f = screen.getAllByRole("row")[1];
+    expect(within(f).getByText(e.concepto)).toBeInTheDocument();
+    expect(within(f).getByText(e.origen)).toBeInTheDocument();
+    expect(within(f).getByText(e.dueno)).toBeInTheDocument();
+    // Ningún valor crudo del enum se asoma en la fila.
+    expect(f.textContent ?? "").not.toMatch(/[a-z]+_[a-z_]+/);
+  });
+
+  it.each(ESPERADO)("descarga — $caso: las mismas tres palabras que la tabla", (e) => {
+    const d = filaDescargaMovimientoCaja(e.movimiento);
+    expect(d.categoria).toBe(e.concepto);
+    expect(d.origen).toBe(e.origen);
+    expect(d.dueno).toBe(e.dueno);
+  });
+
+  it("el filtro por concepto del libro ofrece los cuatro conceptos nuevos con su nombre", () => {
+    // 458-A (TA.3): las opciones son los conceptos CON movimientos (aquí, uno de cada uno).
+    const lista = opcionesDeConceptos(
+      ["egreso_pago_por_cuenta_tienda","ingreso_reverso_pago_por_cuenta_tienda","ingreso_aporte_capital","egreso_reverso_aporte_capital"].map((categoria) => ({ categoria, movimientos: 1 })),
+      CATEGORIA_LABEL_458,
+      "",
+      CATEGORIA_TODAS_OPTION,
+    );
+    const opciones = new Map(lista.map((o) => [o.value, o.label.replace(/ \(1\)$/, "")]));
+    expect(opciones.get("egreso_pago_por_cuenta_tienda")).toBe("Ordenex paga un gasto de una tienda");
+    expect(opciones.get("ingreso_reverso_pago_por_cuenta_tienda")).toBe("Pago de un gasto de una tienda anulado");
+    expect(opciones.get("ingreso_aporte_capital")).toBe("Aporte de dinero a la caja");
+    expect(opciones.get("egreso_reverso_aporte_capital")).toBe("Aporte de dinero a la caja anulado");
+  });
+});
+
+describe("FICHA 459 — ningún identificador interno en pantalla ni en la descarga (R58/R100)", () => {
+  it("la tabla no pinta ids de documento, de movimiento ni de cobro", () => {
+    render(<WalletLedger movimientos={TODAS} />);
+    const texto = document.body.textContent ?? "";
+    for (const id of [PAGO_ID, APORTE_ID, COBRO_ID, ...TODAS.map((m) => m.id)]) {
+      expect(texto).not.toContain(id);
+    }
+    // Tampoco en los nombres accesibles.
+    for (const nodo of document.querySelectorAll("[aria-label]")) {
+      const nombre = nodo.getAttribute("aria-label") ?? "";
+      for (const id of [PAGO_ID, APORTE_ID, COBRO_ID]) expect(nombre).not.toContain(id);
+    }
+  });
+
+  it("la descarga no gana columnas por el documento: ni `documento`, ni ids, ni ruta", () => {
+    for (const m of TODAS) {
+      const f = filaDescargaMovimientoCaja(m);
+      expect(Object.keys(f).sort()).toEqual(
+        COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort(),
+      );
+      const valores = Object.values(f).join(" | ");
+      for (const id of [PAGO_ID, APORTE_ID, COBRO_ID, m.id]) expect(valores).not.toContain(id);
+      expect(valores).not.toMatch(/comprobante|anulado":|tieneComprobante/i);
+    }
+  });
+});

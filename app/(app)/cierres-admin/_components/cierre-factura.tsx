@@ -11,6 +11,7 @@ import {
   Warehouse,
 } from "lucide-react";
 
+import { EstadoConInfo } from "@/components/shared/EstadoInfo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -37,7 +38,11 @@ import type {
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
-import type { OrderStatusValue } from "@/lib/types/order-status";
+import {
+  nombreDeEstado,
+  type OrderStatusRetirado,
+  type OrderStatusValue,
+} from "@/lib/types/order-status";
 // FICHA 425 — la fecha del rechazo se pinta en el CALENDARIO DE COSTA RICA. `rechazadoAt` es un
 // instante UTC, y cortarlo con `slice(0, 10)` daría el día siguiente para todo rechazo hecho
 // después de las 18:00. Aquí la fecha ES el dato: explica por qué un paquete lleva semanas (D3).
@@ -45,6 +50,25 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // FICHA 425 — los nombres de los dos estados a los que sale la orden al aprobar se leen del MISMO
 // mapa que pinta el chip de estado de la orden: lo que la hoja anuncia es lo que el admin verá.
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
+// ⭑ FICHA 431 (T17/T19, R26/R28) — el vocabulario de la CONCILIACION, del modulo PURO donde la
+// guardia lo ancla a mano. Se importa aqui y no se reescribe: la consolidacion que el maestro
+// concilia en `/wallet/satelites` es la MISMA que la bodega satelite mira en su pestaña, y dos
+// mapas paralelos dirian cosas distintas sobre el mismo bulto en cuanto alguien tocara uno.
+import {
+  ESTADO_CONCILIACION_LABEL,
+  ESTADO_CONCILIACION_VARIANT,
+  FALTA_POR_RECIBIR_LABEL,
+  MONTO_RECIBIDO_LABEL,
+  estadoConciliacionDe,
+  hayFaltantePorRecibir,
+} from "./cierre-labels";
+// FICHA 462 (T3.3, S3, R27) — la marca «Retiene N paquetes reprogramados para hoy». Se monta en
+// ESTE archivo, y en dos sitios, porque aquí viven las tres superficies que enseñan un cierre: el
+// comprobante compacto (`CierreFacturaResumen`, que comparten la COLA y el HISTÓRICO) y la cabecera
+// del comprobante detallado (`CierreFacturaDetalle`). Un `rechazado` retiene igual que un
+// `solicitado` (R28/R41), y el histórico es el único sitio donde se ve: por eso la marca va en el
+// comprobante y no en cada listado.
+import { RetieneReprogramadasBadge } from "./RetieneReprogramadasBadge";
 
 import {
   money,
@@ -524,6 +548,92 @@ function TituloColumna({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 431 (T17/T19, R26/R28) — LA MARCA DE CONCILIACION EN EL COMPROBANTE DE BODEGA.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//
+// Las dos piezas de abajo son lo que hace que la bodega satelite se entere de lo que le pasa a
+// SU dinero sin salir de donde ya mira. No son adorno: son la mitad de Q7 que le toca a ella.
+
+/** Rotulo de la columna de la marca en el desplegable. */
+const RESUMEN_CONCILIACION_TITULO = "Conciliación";
+/** Quien marco que el efectivo llego. */
+const CONCILIADO_POR_LABEL = "Conciliado por";
+/** Cuando se marco. */
+const CONCILIADO_EL_LABEL = "Conciliado el";
+
+/**
+ * El badge del estado de CONCILIACION: «Pendiente de conciliar» · «Recibido» · «Recibido
+ * incompleto». Los tres salen de `estadoConciliacionDe`, la MISMA funcion que usa el desglose de
+ * `/wallet/satelites`, asi que la bodega y la central no pueden leer estados distintos.
+ *
+ * ⚠️ «Recibido incompleto» va en `warning`, el MISMO tono que «Pendiente de conciliar», y NO en
+ * `success`: mientras falte un colon por llegar, ese bulto sigue teniendo dinero fuera de la
+ * central. Pintarlo como una recibida entera seria decir en color lo contrario de lo que dice la
+ * cifra de al lado.
+ */
+function ConciliacionBadge({
+  marca,
+}: Readonly<{ marca: MarcaConciliacionComprobante }>) {
+  const estado = estadoConciliacionDe(marca);
+  return (
+    <Badge variant={ESTADO_CONCILIACION_VARIANT[estado]}>
+      {ESTADO_CONCILIACION_LABEL[estado]}
+    </Badge>
+  );
+}
+
+/**
+ * La columna de la marca dentro del desplegable: cuanto llego, cuanto falta, quien lo dijo y su
+ * nota.
+ *
+ * ── LO QUE SE PINTA SIN MARCA, Y POR QUE NO ES UN CERO
+ * Sin conciliar, «Monto recibido» NO existe como linea: un «₡0,00» ahi diria «alguien conto y no
+ * habia nada», que es otra cosa. Lo que si se pinta es «Falta por recibir» con el efectivo
+ * INTEGRO, porque eso si es cierto y es el numero que la bodega tiene que reconocer como suyo.
+ *
+ * ── LA DIFERENCIA SE DESTACA (Q7)
+ * Cuando queda algo por llegar, la linea va `destacado`: es el caso por el que existe toda esta
+ * columna. Si la satelite entrego ₡500.000 y la central conto ₡485.000, los ₡15.000 tienen que
+ * saltar a la vista en su propia pantalla, no esconderse en una fila mas de una lista.
+ *
+ * ── LA NOTA SE VE
+ * Es lo que distingue una conciliacion real de la RETROACTIVA del backfill de la migracion
+ * (R30). Sin ella, los 32 historicos parecerian contados uno a uno.
+ *
+ * MONEY-SAFE: los dos importes llegan restados del servidor. Aqui no se opera con dinero.
+ */
+function ColumnaConciliacion({
+  marca,
+}: Readonly<{ marca: MarcaConciliacionComprobante }>) {
+  const falta = hayFaltantePorRecibir(marca.faltaPorRecibir);
+  return (
+    <section aria-label={RESUMEN_CONCILIACION_TITULO}>
+      <TituloColumna>{RESUMEN_CONCILIACION_TITULO}</TituloColumna>
+      {marca.montoRecibido === null ? null : (
+        <LineaMonto label={MONTO_RECIBIDO_LABEL} monto={marca.montoRecibido} />
+      )}
+      <LineaMonto
+        label={FALTA_POR_RECIBIR_LABEL}
+        monto={marca.faltaPorRecibir}
+        destacado={falta}
+        ultima={marca.conciliadoPorNombre === null && marca.conciliadoAt === null}
+      />
+      {marca.conciliadoPorNombre === null ? null : (
+        <LineaFecha
+          label={CONCILIADO_POR_LABEL}
+          value={marca.conciliadoPorNombre}
+          ultima={marca.conciliadoAt === null}
+        />
+      )}
+      {marca.conciliadoAt === null ? null : (
+        <LineaFecha label={CONCILIADO_EL_LABEL} value={fecha(marca.conciliadoAt)} ultima />
+      )}
+      {marca.conciliadoNota ? <NotaColumna>{marca.conciliadoNota}</NotaColumna> : null}
+    </section>
+  );
+}
+
 /** Dato `rótulo / valor` de la columna de fechas. */
 function LineaFecha({
   label,
@@ -595,6 +705,10 @@ export function CierreFacturaResumen({
               cierresPorReenviar={bloqueo.cierresPorReenviar}
             />
           ) : null}
+          {/* FICHA 462 (R27): cuántos paquetes reprogramados para hoy retiene ESTE cierre. La
+              cifra llega del servidor (una lectura por página, R26); con 0 o ausente no se pinta
+              nada. Ninguna acción, orden ni descarga cambia por esta marca (R29/R31). */}
+          <RetieneReprogramadasBadge cuantas={cierre.reprogramadasRetenidasHoy} />
         </>
       }
       acciones={acciones}
@@ -667,6 +781,38 @@ interface HojaResumenProps {
    * NO se pasa nunca por aqui (R39).
    */
   cascadaCentral?: { paraLaCentral: string; efectivoCubreDescuentos: boolean };
+  /**
+   * ⭑ FICHA 431 (T17/T19, R26/R28) — LA MARCA DE CONCILIACION, ya derivada por el servidor.
+   *
+   * Presente SOLO en el comprobante de un cierre de BODEGA. Cuando llega, hace DOS cosas y las
+   * dos son el requisito:
+   *
+   *  1. SUSTITUYE el badge de `estado`. En esta superficie `solicitado` se lee «Pendiente de
+   *     conciliar» y `aprobado` se lee «Recibido» (D2). El enum `cierre_estado` NO se toca —lo
+   *     comparten `cierre_dia` y `cierre_bodega` (D3)—, asi que lo que cambia es COMO SE LEE
+   *     aqui, no lo que hay en la base. `ESTADO_LABEL` sigue intacto para el cierre del
+   *     MENSAJERO, donde «Recibido» no significaria nada.
+   *  2. AÑADE al desglose el MONTO RECIBIDO y lo que FALTA POR RECIBIR, con quien marco y su
+   *     nota. Es la mitad de Q7 que le toca a la satelite: si la central recibio ₡485.000 de
+   *     ₡500.000, la bodega tiene que verlo DONDE YA MIRA —su pestaña de cierres de bodega— y
+   *     no enterarse semanas despues, cuando se lo reclamen.
+   *
+   * Ausente ⇒ se pinta `estado` como siempre (las otras tres superficies del comprobante, R21).
+   *
+   * MONEY-SAFE: los dos importes llegan como STRING ya restados por el servidor. Aqui no se
+   * compara un importe con otro: si falta algo lo dice `hayFaltantePorRecibir` sobre el string.
+   */
+  marcaConciliacion?: MarcaConciliacionComprobante;
+}
+
+/** Los seis campos de la marca tal como viajan en `CierreBodegaResumen`. */
+export interface MarcaConciliacionComprobante {
+  conciliado: boolean;
+  montoRecibido: string | null;
+  faltaPorRecibir: string;
+  conciliadoAt: string | null;
+  conciliadoPorNombre: string | null;
+  conciliadoNota: string | null;
 }
 
 /**
@@ -693,6 +839,7 @@ function HojaResumen({
   extra,
   audiencia = "admin",
   cascadaCentral,
+  marcaConciliacion,
 }: Readonly<HojaResumenProps>) {
   const [open, setOpen] = useState(false);
   // Design §7.2: en la hoja del mensajero no entra la plata de la empresa.
@@ -734,7 +881,16 @@ function HojaResumen({
             <span className="font-mono text-xs text-muted-foreground">
               #{numeroFolio}
             </span>
-            {estado ? <EstadoCierreBadge estado={estado} /> : null}
+            {/* ⭑ FICHA 431 (R28): en una superficie de cierre de BODEGA manda la marca de
+                conciliacion; en las otras tres, el estado de siempre. El ternario es
+                EXCLUYENTE a proposito — dos badges diciendo «Pendiente de conciliar» y
+                «Solicitado» sobre la misma fila serian dos vocabularios a la vez, que es lo
+                que R28 prohibe. */}
+            {marcaConciliacion ? (
+              <ConciliacionBadge marca={marcaConciliacion} />
+            ) : estado ? (
+              <EstadoCierreBadge estado={estado} />
+            ) : null}
             {rotulo}
           </div>
 
@@ -873,6 +1029,11 @@ function HojaResumen({
               </section>
             )}
 
+            {/* ⭑ FICHA 431 (R26/R28): la columna de la MARCA, sólo en el comprobante de bodega.
+                Va ANTES de «Fechas» y no al final: la pregunta «¿llegó el dinero?» es la que
+                trae a alguien a mirar esta tarjeta, y las fechas son el cierre de la ficha. */}
+            {marcaConciliacion ? <ColumnaConciliacion marca={marcaConciliacion} /> : null}
+
             {/* Sin `solicitadoAt` no hay columna que pintar: el DTO de los consolidables no
                 lleva fechas, y rellenarla con guiones diría «no tiene fecha» cuando lo cierto
                 es que este listado no la trae. */}
@@ -929,8 +1090,25 @@ export function CierreBodegaFacturaResumen({
       ariaLabel={`Comprobante del cierre de bodega de ${cierre.zonaNombre}`}
       toggleSufijo={`del cierre de bodega de ${cierre.zonaNombre}`}
       folio={folio(cierre.cierreBodegaId)}
-      estado={cierre.estado}
+      /* ⭑ FICHA 431 (R28): esta hoja YA NO PASA `estado`, y es deliberado. En una superficie de
+         cierre de bodega el estado se lee con el vocabulario de la conciliación —«Pendiente de
+         conciliar» / «Recibido» / «Recibido incompleto»— y lo pinta `marcaConciliacion`. Pasar
+         los dos dejaría dos badges con dos vocabularios sobre la misma fila, que es justo lo que
+         R28 prohíbe. `ESTADO_LABEL` y `EstadoCierreBadge` siguen intactos para las otras tres
+         superficies del comprobante, donde «Recibido» no significaría nada.
+
+         Y con él se va «Rechazado» de la pantalla (R16): una consolidación rechazada —cero en
+         producción— ya no anuncia su estado aquí. La fila sigue en la base y el histórico sigue
+         legible; lo que se retira es el rótulo. */
       acciones={acciones}
+      marcaConciliacion={{
+        conciliado: cierre.conciliado,
+        montoRecibido: cierre.montoRecibido,
+        faltaPorRecibir: cierre.faltaPorRecibir,
+        conciliadoAt: cierre.conciliadoAt,
+        conciliadoPorNombre: cierre.conciliadoPorNombre,
+        conciliadoNota: cierre.conciliadoNota,
+      }}
       partes={[
         { icon: <Warehouse size={14} aria-hidden="true" />, texto: cierre.zonaNombre },
         { icon: <User size={14} aria-hidden="true" />, texto: cierre.solicitadoPorNombre },
@@ -1057,6 +1235,12 @@ export interface CierreFacturaCabecera {
   motivoRechazo: string | null;
   /** Solo en la vista de admin: de quién es el cierre. */
   mensajeroNombre?: string;
+  /**
+   * FICHA 462 (R27): cuántos paquetes reprogramados para hoy retiene este cierre. Solo lo trae la
+   * vista de admin (`CierreAdminResumen`); el `CierrePasadoDTO` del mensajero no lo tiene y la
+   * cabecera no pinta nada. Aditivo y opcional por eso mismo.
+   */
+  reprogramadasRetenidasHoy?: number;
 }
 
 /**
@@ -1228,7 +1412,10 @@ const FOOTER_RECAUDADO_LABEL = "Total recaudado";
 const FOOTER_ENTREGAS_LABEL = "entregas";
 
 // --- Feature 264: rótulos de la sección de órdenes SIN GESTIONAR (i18n-ready) ---
-const SIN_GESTION_TITULO = "Órdenes sin gestionar";
+// FICHA 455 (2026-09-24): «Sin gestionar» es el nombre RETIRADO de `novedad_interna`, el estado al
+// que el corte pasa estas órdenes; el rótulo lo nombra con su nombre vigente, leído de la fuente.
+const NOVEDAD_INTERNA = nombreDeEstado("novedad_interna");
+const SIN_GESTION_TITULO = `Pasaron a ${NOVEDAD_INTERNA}`;
 /**
  * R17 — la nota fija. Dice las dos cosas que hacen falta para leer la sección sin equivocarse:
  * de dónde salieron estas órdenes (el corte del día) y por qué no tienen ni una columna de
@@ -1242,34 +1429,39 @@ const SIN_GESTION_NOTA =
  * la razón de existir de `sinGestionRegistrado`.
  */
 const SIN_GESTION_NO_REGISTRADO =
-  "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.";
+  `Este cierre es anterior al registro de las órdenes que pasan a ${NOVEDAD_INTERNA}: no se conserva la lista.`;
 /** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
+const SIN_GESTION_LISTA_LABEL = `Lista de órdenes que pasaron a ${NOVEDAD_INTERNA}`;
 
 /**
  * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la
  * mano del mensajero del que esperaba respuesta de la tienda, y eso cambia qué se hace con él.
  *
- * `Partial` y no `Record` exhaustivo A PROPÓSITO: el corte solo barre desde `ESTADOS_A_BARRER`
- * (`en_reparto`, `ayuda_tienda`), así que sólo esos dos pueden llegar. Cualquier otro valor —o
- * `null`, que es lo que viaja cuando NO CONSTA— hace que la pieza se OMITA (R32). Nada de un
- * «—» permanente: un marcador de ausencia fijo es el mismo silencio ambiguo de R28 en pequeño.
+ * El corte solo barre desde `ESTADOS_A_BARRER`. `null` —lo que viaja cuando NO CONSTA— hace que
+ * la pieza se OMITA (R32). Nada de un «—» permanente: un marcador de ausencia fijo es el mismo
+ * silencio ambiguo de R28 en pequeño.
  *
- * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
- * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
- * no en un chip de una tabla de estados.
+ * FICHA 454 (2026-09-23): el corte ya barre desde UN solo origen (`en_reparto`, con o sin ayuda
+ * abierta; la ayuda dejó de ser estado). El origen de ayuda sobrevive SOLO para las filas
+ * históricas de cierres barridos antes de la ficha (R40).
+ * Una barrida nueva con ayuda abierta se lee «En reparto» (Pregunta abierta 4 del spec).
  */
-const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
-  en_reparto: "En reparto",
-  ayuda_tienda: "Ayuda de la tienda",
-};
+//
+// FICHA 455 (2026-09-24, design §2.1; R2/R11): el rótulo del origen es `nombreDeEstado(origen)`, la
+// fuente única. Aquí vivían dos mapas propios («En reparto» y, para las barridas históricas, «Ayuda
+// de la tienda», un nombre que el estado nunca tuvo): un origen vigente se lee con su nombre y el
+// retirado de la 454 como «Ayuda solicitada a la tienda (estado retirado)» (R11), igual que en la
+// línea de tiempo. `null`/ausente sigue OMITIENDO la pieza (R32).
+//
+// FICHA 456 (T3.4): el rótulo ya no se calcula aquí: `EstadoConInfo` lo calcula con la misma
+// `nombreDeEstado` y le pone su botón de información (R9); un retirado sale sin botón (R15).
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
-  entregada: "success",
-  reprogramada: "warning",
-  devuelta: "neutral",
-  rechazada: "neutral",
+  entregado: "success",
+  reprogramado: "warning",
+  novedad: "neutral",
+  devolucion_a_origen_por_rechazo: "neutral",
   // Feature 158/R18: `incidente` es un cierre EN ERROR. `EstatusBadge` lo pinta `danger`,
   // pero esta píldora no ofrece ese tono; `warning` es el más cercano y lo separa de las
   // salidas rutinarias (devuelta/rechazada), que sí van en neutro.
@@ -1354,6 +1546,9 @@ function TabResultado({
   active: boolean;
   onSelect: () => void;
 }>) {
+  // FICHA 456 (design §5.2): la pestaña con cifra es un control (`role="tab"`) y un rótulo de
+  // recuento: su nombre no lleva botón (cada fila del panel que abre, sí).
+  const nombrePestana = RESULTADO_LABEL[resultado];
   const tonos = {
     success: "bg-success/15 text-success-strong",
     warning: "bg-warning/15 text-warning-strong",
@@ -1376,7 +1571,7 @@ function TabResultado({
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
-      {RESULTADO_LABEL[resultado]}
+      {nombrePestana}
       <span
         className={cn(
           "rounded-full px-1.5 py-0.5 text-[0.6875rem]",
@@ -1590,7 +1785,7 @@ function FilaGestion({
                 </Badge>
               </span>
             ) : null}
-            {g.resultado === "rechazada" ? (
+            {g.resultado === "devolucion_a_origen_por_rechazo" ? (
               <>
                 <DatoFila
                   label={INGRESO_BODEGA_RECHAZOS_LABEL}
@@ -1651,7 +1846,7 @@ function FilaGestion({
             {/* Solo donde hay algo que repartir: una ENTREGA que cobró. Los otros resultados no
                 tienen desglose, y una entrega sin cobro no reparte cero colones entre métodos
                 (misma regla que el servidor, que rechaza las dos cosas). */}
-            {onCorregirPagos && g.resultado === "entregada" && g.pagos.length > 0 ? (
+            {onCorregirPagos && g.resultado === "entregado" && g.pagos.length > 0 ? (
               <Button
                 type="button"
                 size="sm"
@@ -1668,7 +1863,7 @@ function FilaGestion({
                 entrega declarada sin dinero también puede no haber ocurrido, y el servidor solo
                 mira el `resultado` (R4). Que el cierre esté ABIERTO lo decide el padre, que es
                 quien conoce su estado: aquí llega como la ausencia del callback. */}
-            {onCorregirResultado && g.resultado === "entregada" ? (
+            {onCorregirResultado && g.resultado === "entregado" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1698,8 +1893,12 @@ function FilaGestion({
 // --- FICHA 425: rótulos de la sección de rechazos de tienda (i18n-ready) ---
 /** R16 — el rótulo que aprobó el humano el 2026-09-14 (`design.md §5.4`, Q3), literal. */
 const RECHAZOS_TITULO = "Rechazados por la tienda";
-/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
-const RECHAZOS_LISTA_LABEL = "Lista de órdenes rechazadas por la tienda";
+/**
+ * Nombre accesible de la lista, para que su recuento no dependa de una clase. FICHA 455 (m8): en
+ * masculino, como el título aprobado (se habla del paquete), para que no se lea como el estado
+ * retirado «Rechazada»; es el rechazo de la TIENDA (425), no un estado.
+ */
+const RECHAZOS_LISTA_LABEL = "Lista de paquetes rechazados por la tienda";
 /**
  * Los DOS CONTEOS de la forma aprobada, cada uno con lo que HACE: las gestiones del mensajero
  * «paga» —entran en su liquidación— y los rechazos de la tienda «revisar» —se separan y no se
@@ -1746,7 +1945,7 @@ function separarParaDevolucion(cuantas: number): string {
  */
 function efectoAlAprobar(cuantas: number): string {
   const central = ORDER_STATUS_LABELS.por_devolver_a_tienda;
-  const satelite = ORDER_STATUS_LABELS.por_devolver;
+  const satelite = ORDER_STATUS_LABELS.por_devolver_a_bodega_central;
   return cuantas === 1
     ? `Al aprobar el cierre, la orden pasa sola a «${central}» (si es de zona satélite, a «${satelite}»).`
     : `Al aprobar el cierre, las ${cuantas} pasan solas a «${central}» (las de zona satélite, a «${satelite}»).`;
@@ -1946,9 +2145,7 @@ function SeccionRechazosDeTienda({
  * producto y **desaparece** cuando no consta (R32): no se pinta un guion en su lugar.
  */
 function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
-  const origen = o.estatusOrigen
-    ? SIN_GESTION_ORIGEN_LABEL[o.estatusOrigen]
-    : undefined;
+  const origen: OrderStatusValue | OrderStatusRetirado | null = o.estatusOrigen ?? null;
   return (
     // `break-inside-avoid` (feature 223): mismo criterio que `FilaGestion` — la fila se repite N
     // veces y es la que decide dónde caen los cortes. Partida, deja la guía en una página y el
@@ -1973,9 +2170,14 @@ function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
         <span className="truncate text-[13px] text-foreground">
           {o.destinatario}
         </span>
-        <span className="truncate text-[11px] text-muted-foreground">
-          {o.numRemision} · {o.producto}
-          {origen ? ` · ${origen}` : null}
+        {/* FICHA 456 (T3.4, R9/R15): el estado de origen con su botón de información (un origen
+            retirado sale con su nombre histórico y sin botón). */}
+        <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <span className="truncate">
+            {o.numRemision} · {o.producto}
+            {origen ? " · " : null}
+          </span>
+          {origen ? <EstadoConInfo codigo={origen} className="shrink-0" /> : null}
         </span>
       </span>
       <span className="min-w-0 truncate text-[13px] text-muted-foreground">
@@ -2109,7 +2311,7 @@ export function CierreFacturaDetalle({
   );
   // Arranca en la primera sección CON órdenes: abrir en una pestaña vacía no dice nada.
   const [tab, setTab] = useState<CierreResultado>(
-    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregada",
+    ORDEN_RESULTADOS.find((r) => (grupos[r]?.length ?? 0) > 0) ?? "entregado",
   );
   const filas = grupos[tab] ?? [];
 
@@ -2132,6 +2334,9 @@ export function CierreFacturaDetalle({
               {FACTURA_TITULO}
             </span>
             <EstadoCierreBadge estado={cierre.estado} />
+            {/* FICHA 462 (R27): la marca de retención también en la cabecera del detalle, junto al
+                estado, para que quien va a APROBAR vea qué desbloquea. Misma cifra que la fila. */}
+            <RetieneReprogramadasBadge cuantas={cierre.reprogramadasRetenidasHoy} />
           </span>
           <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <Warehouse size={15} aria-hidden="true" />
@@ -2387,7 +2592,7 @@ export function CierreFacturaDetalle({
           <b className="font-medium text-foreground tabular-nums">
             {money(cierre.totales.general)}
           </b>{" "}
-          · {grupos.entregada?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
+          · {grupos.entregado?.length ?? 0} {FOOTER_ENTREGAS_LABEL}
         </span>
         {cierre.motivoRechazo ? (
           <span className="text-xs text-muted-foreground">

@@ -1,0 +1,169 @@
+- table "Estado de cuenta de Marco Mensajero":
+  - rowgroup:
+    - row "Desglose Fecha Movimiento y motivo Cargo Abono Saldo Ver":
+      - columnheader "Desglose"
+      - columnheader "Fecha"
+      - columnheader "Movimiento y motivo"
+      - columnheader "Cargo"
+      - columnheader "Abono"
+      - columnheader "Saldo"
+      - columnheader "Ver"
+  - rowgroup:
+    - row "— Saldo inicial ₡0":
+      - cell
+      - cell "—"
+      - cell "Saldo inicial"
+      - cell
+      - cell
+      - cell "₡0"
+      - cell
+    - 'row "Ver las órdenes que componen Pago devengado del 2026-08-12 2026-08-12 Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡10.200 Ver Pago devengado del 2026-08-12 por ₡10.200"':
+      - cell "Ver las órdenes que componen Pago devengado del 2026-08-12":
+        - button "Ver las órdenes que componen Pago devengado del 2026-08-12"
+      - cell "2026-08-12"
+      - 'cell "Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin"':
+        - text: Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero
+        - link "Ver el cierre del 2026-08-12 de Marco Mensajero":
+          - /url: /cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29
+          - text: Ver
+        - text: "Registró: Automático · Aprobación del cierre por Ana Admin"
+      - cell
+      - cell "₡10.200"
+      - cell "₡10.200"
+      - cell "Ver Pago devengado del 2026-08-12 por ₡10.200":
+        - button "Ver Pago devengado del 2026-08-12 por ₡10.200": Ver
+    - 'row "Ver las órdenes que componen Pago del efectivo del 2026-08-12 2026-08-12 Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡0 Ver Pago del efectivo del 2026-08-12 por ₡10.200"':
+      - cell "Ver las órdenes que componen Pago del efectivo del 2026-08-12":
+        - button "Ver las órdenes que componen Pago del efectivo del 2026-08-12"
+      - cell "2026-08-12"
+      - 'cell "Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero Ver el cierre del 2026-08-12 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin"':
+        - text: Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero
+        - link "Ver el cierre del 2026-08-12 de Marco Mensajero":
+          - /url: /cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29
+          - text: Ver
+        - text: "Registró: Automático · Aprobación del cierre por Ana Admin"
+      - cell "₡10.200"
+      - cell
+      - cell "₡0"
+      - cell "Ver Pago del efectivo del 2026-08-12 por ₡10.200":
+        - button "Ver Pago del efectivo del 2026-08-12 por ₡10.200": Ver
+    - 'row "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante. ₡1.400 -₡1.400 Ver Liquidación del 2026-08-13 por ₡1.400"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante."'
+      - cell "₡1.400"
+      - cell
+      - cell "-₡1.400"
+      - cell "Ver Liquidación del 2026-08-13 por ₡1.400":
+        - button "Ver Liquidación del 2026-08-13 por ₡1.400": Ver
+    - 'row "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin ₡1.400 ₡0 Ver Ajuste (devengo) del 2026-08-13 por ₡1.400"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin"'
+      - cell
+      - cell "₡1.400"
+      - cell "₡0"
+      - cell "Ver Ajuste (devengo) del 2026-08-13 por ₡1.400":
+        - button "Ver Ajuste (devengo) del 2026-08-13 por ₡1.400": Ver
+    - 'row "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. ₡3.400 -₡3.400 Ver Liquidación del 2026-08-13 por ₡3.400"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero."'
+      - cell "₡3.400"
+      - cell
+      - cell "-₡3.400"
+      - cell "Ver Liquidación del 2026-08-13 por ₡3.400":
+        - button "Ver Liquidación del 2026-08-13 por ₡3.400": Ver
+    - 'row "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. ₡600 -₡4.000 Ver Liquidación del 2026-08-13 por ₡600"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero."'
+      - cell "₡600"
+      - cell
+      - cell "-₡4.000"
+      - cell "Ver Liquidación del 2026-08-13 por ₡600":
+        - button "Ver Liquidación del 2026-08-13 por ₡600": Ver
+    - 'row "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin ₡600 -₡3.400 Ver Ajuste (devengo) del 2026-08-13 por ₡600"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin"'
+      - cell
+      - cell "₡600"
+      - cell "-₡3.400"
+      - cell "Ver Ajuste (devengo) del 2026-08-13 por ₡600":
+        - button "Ver Ajuste (devengo) del 2026-08-13 por ₡600": Ver
+    - 'row "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin ₡3.400 ₡0 Ver Ajuste (devengo) del 2026-08-13 por ₡3.400"':
+      - cell
+      - cell "2026-08-13"
+      - 'cell "Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo Registró: Ana Admin"'
+      - cell
+      - cell "₡3.400"
+      - cell "₡0"
+      - cell "Ver Ajuste (devengo) del 2026-08-13 por ₡3.400":
+        - button "Ver Ajuste (devengo) del 2026-08-13 por ₡3.400": Ver
+    - 'row "Ver las órdenes que componen Pago devengado del 2026-08-13 2026-08-13 Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡3.400 ₡3.400 Ver Pago devengado del 2026-08-13 por ₡3.400"':
+      - cell "Ver las órdenes que componen Pago devengado del 2026-08-13":
+        - button "Ver las órdenes que componen Pago devengado del 2026-08-13"
+      - cell "2026-08-13"
+      - 'cell "Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin"':
+        - text: Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero
+        - link "Ver el cierre del 2026-08-13 de Marco Mensajero":
+          - /url: /cierres-admin?cierre=942993c5-9c11-4153-a207-9af086b22fc3
+          - text: Ver
+        - text: "Registró: Automático · Aprobación del cierre por Ana Admin"
+      - cell
+      - cell "₡3.400"
+      - cell "₡3.400"
+      - cell "Ver Pago devengado del 2026-08-13 por ₡3.400":
+        - button "Ver Pago devengado del 2026-08-13 por ₡3.400": Ver
+    - 'row "Ver las órdenes que componen Pago devengado del 2026-08-13 2026-08-13 Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin ₡1.700 ₡5.100 Ver Pago devengado del 2026-08-13 por ₡1.700"':
+      - cell "Ver las órdenes que componen Pago devengado del 2026-08-13":
+        - button "Ver las órdenes que componen Pago devengado del 2026-08-13"
+      - cell "2026-08-13"
+      - 'cell "Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver el cierre del 2026-08-13 de Marco Mensajero Registró: Automático · Aprobación del cierre por Ana Admin"':
+        - text: Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero
+        - link "Ver el cierre del 2026-08-13 de Marco Mensajero":
+          - /url: /cierres-admin?cierre=f4c93d88-3fbc-44e5-8ff6-e0b532fd6266
+          - text: Ver
+        - text: "Registró: Automático · Aprobación del cierre por Ana Admin"
+      - cell
+      - cell "₡1.700"
+      - cell "₡5.100"
+      - cell "Ver Pago devengado del 2026-08-13 por ₡1.700":
+        - button "Ver Pago devengado del 2026-08-13 por ₡1.700": Ver
+    - 'row "2026-09-26 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Cómo se pagó: Efectivo Registró: Maestro QA Anulado el 2026-09-26 por Maestro QA · R458F-maestro anular el pago desde la wallet ₡1.000 ₡4.100 Ver Liquidación del 2026-09-26 por ₡1.000"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Cómo se pagó: Efectivo Registró: Maestro QA Anulado el 2026-09-26 por Maestro QA · R458F-maestro anular el pago desde la wallet"'
+      - cell "₡1.000"
+      - cell
+      - cell "₡4.100"
+      - cell "Ver Liquidación del 2026-09-26 por ₡1.000":
+        - button "Ver Liquidación del 2026-09-26 por ₡1.000": Ver
+    - 'row "2026-09-26 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Registró: Maestro QA ₡1.000 ₡5.100 Ver Ajuste (devengo) del 2026-09-26 por ₡1.000"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Registró: Maestro QA"'
+      - cell
+      - cell "₡1.000"
+      - cell "₡5.100"
+      - cell "Ver Ajuste (devengo) del 2026-09-26 por ₡1.000":
+        - button "Ver Ajuste (devengo) del 2026-09-26 por ₡1.000": Ver
+    - 'row "2026-09-26 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-09-26 por Ana Admin · R458F-admin anular el pago desde la wallet ₡1.000 ₡4.100 Ver Liquidación del 2026-09-26 por ₡1.000"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-09-26 por Ana Admin · R458F-admin anular el pago desde la wallet"'
+      - cell "₡1.000"
+      - cell
+      - cell "₡4.100"
+      - cell "Ver Liquidación del 2026-09-26 por ₡1.000":
+        - button "Ver Liquidación del 2026-09-26 por ₡1.000": Ver
+    - 'row "2026-09-26 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Registró: Ana Admin ₡1.000 ₡5.100 Ver Ajuste (devengo) del 2026-09-26 por ₡1.000"':
+      - cell
+      - cell "2026-09-26"
+      - 'cell "Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-09-26 · Efectivo Registró: Ana Admin"'
+      - cell
+      - cell "₡1.000"
+      - cell "₡5.100"
+      - cell "Ver Ajuste (devengo) del 2026-09-26 por ₡1.000":
+        - button "Ver Ajuste (devengo) del 2026-09-26 por ₡1.000": Ver

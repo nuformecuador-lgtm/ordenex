@@ -1,0 +1,85 @@
+{
+  "mutaciones": [
+    {
+      "mutacion": "M1 «A quién»/«Registró» ignoran la autoría leída",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 5,
+      "total": 28,
+      "roja": true
+    },
+    {
+      "mutacion": "M2 el enlace de la tienda apunta a mensajeros",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 1,
+      "total": 16,
+      "roja": true
+    },
+    {
+      "mutacion": "M3 la descarga pone el id de la cuenta en «A quién»",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 1,
+      "total": 8,
+      "roja": true
+    },
+    {
+      "mutacion": "M4 Todo/Entra/Sale no se aplica al pulsarlo",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 3,
+      "total": 16,
+      "roja": true
+    },
+    {
+      "mutacion": "M5 el módulo no pide la autoría (siempre «Cargando…»)",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 5,
+      "total": 41,
+      "roja": true
+    },
+    {
+      "mutacion": "M6 la descarga no lee la autoría del libro entero",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 2,
+      "total": 12,
+      "roja": true
+    },
+    {
+      "mutacion": "M7 anular desde el panel no relee el libro",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 1,
+      "total": 16,
+      "roja": true
+    },
+    {
+      "mutacion": "M8 el filtro manda el tipo al revés",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 3,
+      "total": 16,
+      "roja": true
+    },
+    {
+      "mutacion": "M9 la dirección vuelve a «Ingreso»/«Egreso»",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 2,
+      "total": 24,
+      "roja": true
+    },
+    {
+      "mutacion": "M10 la fila anulada deja de decir «Anulado»",
+      "aplicado": true,
+      "restaurado": true,
+      "rojos": 2,
+      "total": 16,
+      "roja": true
+    }
+  ],
+  "git_diff_stat_final": ""
+}

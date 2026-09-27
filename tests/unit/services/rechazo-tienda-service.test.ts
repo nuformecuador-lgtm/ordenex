@@ -45,7 +45,7 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
     numGuia: 10,
     numRemision: "REM-1",
     estatusId: "os-devuelta",
-    estatusValue: "devuelta",
+    estatusValue: "novedad",
     destinatario: "Ana",
     telefonoDest: "0991234567",
     tiendaId: "store-1",
@@ -71,7 +71,7 @@ type GestionRepoDoble = Pick<IGestionOrdenRepository, "rechazarDesdeDevuelta">;
 type TarifaRepoDoble = Pick<ITarifaVigenteRepository, "resolveTarifas">;
 type CobroRepoDoble = Pick<IRechazoTiendaCobroRepository, "crearPendiente">;
 
-const ESTATUS: Record<string, string> = { devuelta: "os-devuelta", rechazada: "os-rechazada" };
+const ESTATUS: Record<string, string> = { novedad: "os-devuelta", devolucion_a_origen_por_rechazo: "os-rechazada" };
 
 /** Reloj FIJO. El `generado_el` del cobro no puede depender de cuando corra la suite. */
 const AHORA = new Date("2026-08-31T15:00:00.000Z"); // 09:00 en Costa Rica -> dia CR 2026-08-31
@@ -288,13 +288,13 @@ describe("RechazoTiendaService — autorizacion por tienda dueña (R2)", () => {
     // y no esta en devuelta») ni `not_found` (que diria «no existe»). La guardia de autz va ANTES
     // de mirar el estatus, y por eso los dos casos son indistinguibles desde fuera.
     const { service } = build({
-      findById: vi.fn(async () => ordenDTO({ tiendaId: "store-2", estatusValue: "entregada" })),
+      findById: vi.fn(async () => ordenDTO({ tiendaId: "store-2", estatusValue: "entregado" })),
     });
 
     const r = await service.rechazar("o1", MOTIVO, TIENDA);
     expect(r).toEqual({ status: "forbidden" });
-    expect(JSON.stringify(r)).not.toContain("entregada");
-    expect(JSON.stringify(r)).not.toContain("devuelta");
+    expect(JSON.stringify(r)).not.toContain("entregado");
+    expect(JSON.stringify(r)).not.toContain("novedad");
   });
 });
 
@@ -310,7 +310,7 @@ describe("RechazoTiendaService — las ramas que NO escriben (R3)", () => {
     expect(gestionRepo.rechazarDesdeDevuelta).not.toHaveBeenCalled();
   });
 
-  it.each(["en_reparto", "rechazada", "reprogramada", "ayuda_tienda", "devolucion_por_confirmar"])(
+  it.each(["en_reparto", "devolucion_a_origen_por_rechazo", "reprogramado", "ayuda_tienda", "devolucion_por_confirmar"])(
     "R3: una orden en `%s` -> conflict SIN llamar al repositorio",
     async (estatusValue) => {
       // La lista incluye `devolucion_por_confirmar` a proposito: es el PRE-estado de la 239, la
@@ -403,7 +403,7 @@ describe("RechazoTiendaService — las ramas que NO escriben (R3)", () => {
     await expect(service.rechazar("o1", MOTIVO, TIENDA)).rejects.toThrow("db down");
   });
 
-  it.each(["devuelta", "rechazada"])(
+  it.each(["novedad", "devolucion_a_origen_por_rechazo"])(
     "catalogo sin `%s` -> config_error (fallo CERRADO), sin escribir",
     async (faltante) => {
       // Sin el id de `devuelta` no hay guarda que poner en el `where`, y escribir sin guarda es

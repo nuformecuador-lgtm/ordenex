@@ -50,6 +50,8 @@ function row(id: string, estatusValue: string): MiAsignacionRow {
     provinciaNombre: "P",
     cantonNombre: "C",
     distritoNombre: null,
+    sinpeNumero: "80000000",
+    sinpeNombre: "Titular de Prueba",
     mensajeroAsignadoId: "m-1",
   };
 }
@@ -83,6 +85,11 @@ function build(rows: MiAsignacionRow[], rutaPrevia: RutaOptimizadaDTO | null) {
     findMisAsignacionesByIds: vi.fn(async () => []),
     contarEntregadas: vi.fn(async () => 7),
     sumMontoCobrarGestionadas: vi.fn(async () => 500),
+    // FICHA 454 (R6/R22): ni pendientes ni ayudas en estas filas — el reordenado es lo medido.
+    findPendientesYAyudas: vi.fn(async () => ({
+      conGestionPendiente: new Set<string>(),
+      conAyudaAbierta: new Set<string>(),
+    })),
   } as unknown as IGestionOrdenRepository;
 
   const rutaRepo = {
@@ -195,9 +202,9 @@ describe("R29 — 'Por recoger' NO se toca", () => {
   it("conserva su orden de llegada y su secuenciaRuta es siempre null", async () => {
     const r = await listar(
       [
-        row("P2", "por_recoger"),
+        row("P2", "mensajero_recogiendo_en_bodega"),
         row("A", "en_reparto"),
-        row("P1", "por_recoger"),
+        row("P1", "mensajero_recogiendo_en_bodega"),
         row("B", "en_reparto"),
       ],
       ruta({
@@ -280,7 +287,7 @@ describe("bloque `ruta` del resultado y KPIs", () => {
 
   it("los KPIs de la feature 61 NO se alteran por el reordenado", async () => {
     const r = await listar(
-      [row("A", "en_reparto"), row("B", "en_reparto"), row("P", "por_recoger")],
+      [row("A", "en_reparto"), row("B", "en_reparto"), row("P", "mensajero_recogiendo_en_bodega")],
       ruta({ secuenciaPorOrden: new Map([["B", 1]]) }),
     );
 

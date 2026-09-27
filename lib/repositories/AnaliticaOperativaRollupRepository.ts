@@ -3,6 +3,7 @@ import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import { whereRollup } from "@/lib/analytics/alcance-columnas";
 import { fechaComoDate } from "@/lib/analytics/rollup-dia";
 import type { DimensionAnalitica } from "@/lib/analytics/types";
+import { nombreDeEstado } from "@/lib/types/order-status";
 import {
   DIMENSION_AGREGADA,
   type CuboRollup,
@@ -127,9 +128,10 @@ export class AnaliticaOperativaRollupRepository implements IAnaliticaOperativaRo
       where: { id: { in: [...new Set(reales)] } },
       select: { id: true, value: true },
     });
-    // `order_status` no tiene columna `label` (`db/schema.prisma:377-394`): la etiqueta que
-    // la tabla da a un estatus ES su `value`. Ver la desviacion declarada en la interfaz.
-    return new Map(filas.map((f) => [f.id, { value: f.value, label: f.value }]));
+    // `order_status` no tiene columna `label` (`db/schema.prisma:377-394`). FICHA 455 (T1.11, R3): la
+    // etiqueta ya no es el `value` crudo sino su NOMBRE VISIBLE de la fuente unica (un retirado se lee
+    // «<historico> (estado retirado)»). El `value` sigue viajando al lado para quien necesite el codigo.
+    return new Map(filas.map((f) => [f.id, { value: f.value, label: nombreDeEstado(f.value) }]));
   }
 }
 

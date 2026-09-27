@@ -95,9 +95,9 @@ interface GateCoordenadasResultado {
 }
 
 // Feature 46/R2: estatus bloqueado por reprogramacion (guardia explicito y tipado).
-const ESTATUS_REPROGRAMADA = "reprogramada";
+const ESTATUS_REPROGRAMADA = "reprogramado";
 
-const ESTATUS_EN_ESPERA_ACEPTACION = "por_recoger"; // R26 (asignarDesdeBodega)
+const ESTATUS_EN_ESPERA_ACEPTACION = "mensajero_recogiendo_en_bodega"; // R26 (asignarDesdeBodega)
 const ESTATUS_EN_BODEGA = "en_bodega_central"; // feature 156/R3: destino UNICO de generar guia
 const ESTATUS_EN_RUTA_BODEGA_SATELITE = "en_ruta_bodega_satelite"; // feature 30/R9
 // Feature 157 (ampliacion): destino de la asignacion de recoleccion. Que exista este estado
@@ -137,7 +137,11 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // entregar. La 235 movio la orden de `en_reparto` a un estatus propio y esta lista no se entero —
 // la cazó la revision, no la suite—. La guardia `carga-del-mensajero.guardia.test.ts` existe para
 // que la proxima vez la cace un test.
-const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto", "ayuda_tienda"];
+//
+// FICHA 454 (T1.18, R56): `ayuda_tienda` sale porque deja de ser estado — una orden con ayuda abierta
+// sigue `en_reparto` y SIGUE contando como carga. Lo que ya NO cuenta es una orden `en_reparto` con
+// gestion PENDIENTE de confirmar: esa exclusion vive en `findMensajerosConOrdenesEn` (predicado unico).
+const ESTADOS_REPARTO_PENDIENTE = ["mensajero_recogiendo_en_bodega", "en_reparto"];
 // Lo que ocupa a un mensajero es la recoleccion que TIENE ASIGNADA (`recolectando`); las que
 // esperan sin dueño no son de nadie y por tanto no bloquean a nadie.
 const ESTADOS_RECOLECCION_PENDIENTE = [ESTATUS_RECOLECTANDO];

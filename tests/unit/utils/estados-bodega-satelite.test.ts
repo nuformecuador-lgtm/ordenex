@@ -7,7 +7,6 @@ import {
   alcanceDerivadoDelGrafo,
   estadosDelListado,
 } from "@/lib/utils/estados-bodega-satelite";
-import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 
 /**
@@ -50,18 +49,18 @@ describe("FICHA 357 · ESTADOS_BODEGA_SATELITE es el cierre del grafo, no una li
     // literal y completo.
     expect([...ESTADOS_BODEGA_SATELITE]).toEqual([
       "en_bodega_satelite",
-      "por_recoger",
+      "mensajero_recogiendo_en_bodega",
       "en_reparto",
-      "ayuda_tienda",
-      "entregada",
-      "reprogramada",
-      "rechazada",
-      "sin_gestionar",
+      // ⏳ 2026-09-23 (FICHA 454, R37): aqui iba `ayuda_tienda`, y abajo `devolucion_por_confirmar`.
+      // Salen del catalogo; la orden con ayuda abierta o gestion pendiente esta en `en_reparto`.
+      "entregado",
+      "reprogramado",
+      "devolucion_a_origen_por_rechazo",
+      "novedad_interna",
       "incidente",
-      "devolucion_por_confirmar",
-      "por_devolver",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
-      "devuelta",
+      "novedad",
       "por_devolver_a_tienda",
       "devolviendo_a_tienda",
       "devuelta_a_tienda",
@@ -72,10 +71,10 @@ describe("FICHA 357 · ESTADOS_BODEGA_SATELITE es el cierre del grafo, no una li
       (ESTADOS_BODEGA_SATELITE as readonly string[]).indexOf(value);
     const losCincoDeSiempre = [
       "en_bodega_satelite",
-      "por_recoger",
-      "por_devolver",
+      "mensajero_recogiendo_en_bodega",
+      "por_devolver_a_bodega_central",
       "devolviendo_a_bodega_central",
-      "devuelta",
+      "novedad",
     ];
     const posiciones = losCincoDeSiempre.map(posicion);
     expect(posiciones).toEqual([...posiciones].sort((a, b) => a - b));
@@ -117,7 +116,7 @@ describe("FICHA 357 · las tres exclusiones que se revierten, y lo que NO se toc
   it("(cara A) los desenlaces que la bodega perdia de vista SI estan en el listado", () => {
     // Las 17 ordenes invisibles de produccion estaban repartidas en estos tres estados: 15
     // `entregada`, 1 `rechazada` (la guia 66840050 del reporte) y 1 `reprogramada`.
-    for (const desenlace of ["entregada", "rechazada", "reprogramada"]) {
+    for (const desenlace of ["entregado", "devolucion_a_origen_por_rechazo", "reprogramado"]) {
       expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain(desenlace);
     }
   });
@@ -126,17 +125,15 @@ describe("FICHA 357 · las tres exclusiones que se revierten, y lo que NO se toc
     expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("en_reparto");
   });
 
-  it("235/R37 REVERTIDA: `ayuda_tienda` entra, porque VER no es tener en el estante", () => {
-    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("ayuda_tienda");
-  });
-
-  it("239/P4 REVERTIDA SOLO EN CUANTO A VER: el pre-estado se lista y SIGUE sin recuperacion manual", () => {
-    // Las dos mitades van juntas y por eso se afirman juntas. P4 decidio que el adminSatelite NO
-    // puede RECUPERAR A BODEGA una devolucion aun no anclada, y eso NO cambia: el grafo sigue
-    // sin la arista. Lo que cambia es que la fila deja de ser invisible mientras espera.
-    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("devolucion_por_confirmar");
-    const familias = TRANSICIONES.devolucion_por_confirmar.map((d) => d.via);
-    expect(familias).not.toContain("recuperacion_manual");
+  // ⏳ 2026-09-23 (FICHA 454, R37): aqui vivian «235/R37 REVERTIDA: `ayuda_tienda` entra» y
+  // «239/P4 REVERTIDA SOLO EN CUANTO A VER: el pre-estado se lista». La intencion de la 357 —que la
+  // satelite VEA la orden mientras espera— se cumple ahora por `en_reparto`, que es donde esta una
+  // orden con ayuda abierta o con su gestion pendiente de confirmar (caso de arriba). Lo que se
+  // afirma aqui es que los dos estados retirados ya no se ofrecen.
+  it("454/R37: los dos estados retirados ya no estan en el listado de la satelite", () => {
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain("ayuda_tienda");
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain("devolucion_por_confirmar");
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("en_reparto");
   });
 
   it("la reversion de cualquiera de las tres es UN solo sitio, y las dos listas no pueden divergir", () => {
@@ -166,16 +163,16 @@ describe("FICHA 357 · el filtro INTERSECA, nunca amplia", () => {
   });
 
   it("el resultado sale en el orden canonico aunque la seleccion llegue al reves", () => {
-    expect(estadosDelListado(["devuelta", "en_bodega_satelite"])).toEqual([
+    expect(estadosDelListado(["novedad", "en_bodega_satelite"])).toEqual([
       "en_bodega_satelite",
-      "devuelta",
+      "novedad",
     ]);
   });
 
   it("una seleccion mixta se queda solo con lo que el contrato admite", () => {
-    expect(estadosDelListado(["entregada", "en_bodega_central", "rechazada"])).toEqual([
-      "entregada",
-      "rechazada",
+    expect(estadosDelListado(["entregado", "en_bodega_central", "devolucion_a_origen_por_rechazo"])).toEqual([
+      "entregado",
+      "devolucion_a_origen_por_rechazo",
     ]);
   });
 });
