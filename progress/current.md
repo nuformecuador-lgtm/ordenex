@@ -1,3 +1,7 @@
+# ESTADO 2026-09-27 — RELEASE LISTA EN `dev`, SIN DESPLEGAR
+
+Todo lo pedido está hecho y en `dev`: SF-001 (429–436), 454, 455, 456, 457, 458 (A–E y los arreglos finales, #828–#834), 459, 460, 461 y 462. El gate limpio está en `progress/gate_dev_release.log`. Para desplegar solo falta la orden de Carlos y sus tres decisiones: el modal del SINPE, enviar la guía de la API y la hora. Los pasos están en `docs/release.md` › «Pendiente para la PRÓXIMA release», y las pruebas en `progress/plan_pruebas_release.md`.
+
 # PUNTO DE RETOMA — 2026-09-25 noche (la cuota semanal va al 75 %: si se corta, se sigue de aquí)
 
 **AUTORIZACIÓN (2026-09-25 noche):** Carlos se fue a dormir y dejó dicho: «quédate trabajando hasta terminar... que lo último que quede es desplegar y ya, que no te quede ni un pendiente». Esto cubre terminar la 457 y la 458 completas, con revisión, recorrido y merge a `dev`, y dejar listo el plan de pruebas y la lista previa a desplegar. NO cubre desplegar.
