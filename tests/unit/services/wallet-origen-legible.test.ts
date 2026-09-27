@@ -106,11 +106,46 @@ describe("458-A R5/R6 — el origen de cada movimiento dice su entidad concreta"
       ],
       MAESTRO,
     );
+    // FICHA 458 (O1 del recorrido final): el gasto fijo decía «Gasto fijo de Ordenex · Alquiler —
+    // sep 2026» y la pantalla le pegaba DESPUÉS la misma descripción («… · Alquiler — sep 2026 ·
+    // Alquiler — sep 2026»). La plantilla y su periodo siguen a la vista: los trae la descripción,
+    // que toda superficie pinta junto al origen.
     expect(r.map((o) => o.texto)).toEqual([
       "Gasto de Ordenex",
-      "Gasto fijo de Ordenex · Alquiler — sep 2026",
+      "Gasto fijo de Ordenex",
       "Gasto o sueldo registrado a mano",
     ]);
+  });
+
+  it("458/O1 — el nombre de la tienda sale una sola vez cuando la descripción ya empieza por él", async () => {
+    const svc = new OrigenLegibleService(repoFalso());
+    const r = await svc.resolver(
+      "caja",
+      [
+        fila("cobro_tienda", { descripcion: "Tania Tienda · Cobro de material" }),
+        fila("pago_por_cuenta_tienda", { descripcion: "A Facebook · Pauta de septiembre · Efectivo" }),
+        // Control: una descripción que NO repite nada deja el origen entero.
+        fila("cobro_tienda", { descripcion: "Cobro de material" }),
+        fila("cobro_tienda"),
+      ],
+      MAESTRO,
+    );
+    expect(r.map((o) => o.texto)).toEqual([
+      "Cobro de Ordenex a una tienda",
+      "Pago de un gasto de una tienda · Tania Tienda",
+      "Cobro de Ordenex a una tienda · Tania Tienda",
+      "Cobro de Ordenex a una tienda · Tania Tienda",
+    ]);
+  });
+
+  it("458/O1 — el rótulo no se quita nunca, aunque la descripción lo repita", async () => {
+    const svc = new OrigenLegibleService(repoFalso());
+    const [o] = await svc.resolver(
+      "caja",
+      [fila("cobro_tienda", { descripcion: "Cobro de Ordenex a una tienda · Tania Tienda" })],
+      MAESTRO,
+    );
+    expect(o.texto).toBe("Cobro de Ordenex a una tienda");
   });
 
   it("`gestion_orden` en el libro de la TIENDA: el flete por rechazo dice la guía (459/461 §7.3)", async () => {

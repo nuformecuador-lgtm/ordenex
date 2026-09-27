@@ -133,6 +133,28 @@ function textoDeGasto(fila: FilaConOrigenTecnico): string | null {
   }
 }
 
+function normalizarParte(parte: string): string {
+  return parte.trim().toLocaleLowerCase("es");
+}
+
+/**
+ * FICHA 458 (O1 del recorrido final) — EL ORIGEN NO REPITE LO QUE YA DICE LA DESCRIPCION.
+ *
+ * Toda superficie pinta el origen JUNTO a la descripcion de la fila (`textoDeOrigen` en el libro y
+ * sus paneles; la columna «Motivo» al lado de «Origen» en el estado de cuenta y en las descargas).
+ * Desde la 461 la descripcion de un cobro a una tienda empieza por su nombre, y la de un gasto fijo
+ * ES la plantilla con su periodo, asi que se leia «… · Tania Tienda · Tania Tienda · Cobro …» y
+ * «Gasto fijo de Ordenex · Alquiler — 2026-09 · Alquiler — 2026-09». Aqui se quita del origen toda
+ * parte que la descripcion ya trae como segmento propio (sin distinguir mayusculas: «a Facebook» y
+ * «A Facebook»). El ROTULO (la primera parte) no se quita nunca: el origen siempre dice de donde sale.
+ */
+function sinLoQueDiceLaDescripcion(texto: string, descripcion: string | null): string {
+  if (descripcion === null || descripcion.trim() === "") return texto;
+  const yaDichas = new Set(descripcion.split(SEPARADOR_ORIGEN.trim()).map(normalizarParte));
+  const [rotulo, ...resto] = texto.split(SEPARADOR_ORIGEN);
+  return unir(rotulo, ...resto.filter((parte) => !yaDichas.has(normalizarParte(parte))));
+}
+
 /**
  * Compone el origen de UNA fila a partir de las entidades ya leidas. PURA: sin base, sin reloj.
  * Si la entidad no aparece (fila huerfana, `origen_id` nulo), el origen es el rotulo solo: legible
@@ -147,7 +169,7 @@ export function componerOrigen(
   const rotulo = DICCIONARIO_ORIGEN[libro][fila.origenTipo];
   const id = fila.origenId;
   const solo = (texto: string | null, enlace: EnlaceOrigenDTO | null = null): OrigenLegibleDTO => ({
-    texto: texto ?? rotulo,
+    texto: sinLoQueDiceLaDescripcion(texto ?? rotulo, fila.descripcion),
     enlace,
   });
 
