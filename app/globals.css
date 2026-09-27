@@ -207,6 +207,13 @@
   --color-chart-11-strong: var(--chart-11-strong);
   --color-chart-12-strong: var(--chart-12-strong);
   --color-chart-13-strong: var(--chart-13-strong);
+  /* Ficha 458 (F3 del recorrido final) — EL NARANJA DE MARCA COMO TEXTO DE ENLACE. `text-primary`
+     (#f26419) mide 2.99 sobre `--background` (#f7f8fc) y `brand-dark` (#d4530d) 3.93: ninguno
+     llega al 4.5 de texto, y el sistema no tenía token de enlace. Es un ALIAS, no un color nuevo:
+     el tono más oscuro del mismo naranja que ya existe con su par por tema, `--chart-11-strong`
+     (#9a3412 en claro, #fdba74 en oscuro; medidos en la guardia de contraste). Por eso gira
+     con el tema sin repetir el valor en cada bloque de `:root`/`.dark`. */
+  --color-primary-strong: var(--chart-11-strong);
   --color-hivis: #f4c500;
   --color-kraft-canvas: #f7f8fc;
   --color-kraft-card: #ffffff;

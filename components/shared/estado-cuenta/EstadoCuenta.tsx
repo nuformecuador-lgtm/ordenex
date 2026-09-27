@@ -501,7 +501,7 @@ function OrigenDeFila({ fila, rotulos }: { fila: FilaEstadoCuentaDTO; rotulos: R
         <Link
           href={enlace.href}
           aria-label={enlace.etiqueta}
-          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+          className="rounded-sm text-primary-strong underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
         >
           {ORIGEN_ENLACE_VISIBLE}
         </Link>

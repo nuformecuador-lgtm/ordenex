@@ -36,7 +36,7 @@ export default async function EstadoCuentaMensajeroPage({ params }: { params: Pr
       <div className="flex flex-col gap-4">
         <Link
           href="/wallet/mensajeros"
-          className="w-fit rounded-sm text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+          className="w-fit rounded-sm text-sm text-primary-strong underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
         >
           {ESTADO_CUENTA_MENSAJERO_PAGINA.volver}
         </Link>
