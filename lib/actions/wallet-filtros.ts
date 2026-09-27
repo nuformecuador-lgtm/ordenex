@@ -51,8 +51,15 @@ function toError(
  * R13–R15 — los conceptos con movimientos del periodo y la cuenta que se miran, con su numero.
  * `libro`: `caja` (`/wallet`), `tienda` (desglose/estado de cuenta de UNA tienda, con `tiendaId`) o
  * `mi_tienda` (`/mi-wallet`: la tienda sale de la sesion y NO se admite ningun id).
- * La consumen `WalletFiltros`, `MiWalletFiltros` y `DesgloseMovimientosTienda`
- * (`useConceptosConMovimientos`).
+ * La consume `WalletFiltros` (`useConceptosConMovimientos`, libro `caja`). El desglose de una tienda y
+ * `MiWalletFiltros` de `/mi-wallet`, que tambien la usaban, se retiraron en la 458-D (el estado de
+ * cuenta filtra por chip).
+ *
+ * FICHA 458-D (servidor, 2026-09-26) — la rama `libro: "tienda"` se queda SIN pantalla y NO se retira:
+ * sin llamadores en API publica, asistente, scripts ni crons, pero la usan
+ * `tests/integration/db/wallet-conceptos-con-movimientos.test.ts` (R13 de la 458-A contra Postgres,
+ * incluida la tienda ajena) y `tests/unit/services/filtros-wallet-service.test.ts`; retirarla exige
+ * mover antes esa red a la rama `mi_tienda`, que lee el MISMO repositorio.
  */
 export async function conceptosConMovimientosAction(
   input: unknown,
@@ -70,8 +77,11 @@ export async function conceptosConMovimientosAction(
 /**
  * R10–R12 — los cierres con movimientos en el libro de UNA tienda o de UN mensajero, para el
  * selector con busqueda (por dia `YYYY-MM-DD` o por nombre del mensajero). Solo acceso total.
- * La consume el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
+ * La consumia el `SelectorBuscable` de `DesgloseMovimientosTienda` y `DesglosePagosMensajero`
  * (`useCierresDeLaCuenta`).
+ *
+ * Superficie (FICHA 458-D): el filtro por cierre del estado de cuenta de una tienda o de un mensajero
+ * (`components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx`, via `useCierresDeLaCuenta`).
  */
 export async function cierresDeLaCuentaAction(
   input: unknown,

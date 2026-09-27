@@ -3,11 +3,16 @@ titulo: Wallet · Satélites
 modulo: wallet
 pantalla: /wallet/satelites
 roles: [maestro, admin]
-actualizado: 2026-09-16
+actualizado: 2026-09-26
 fuentes:
   - app/(app)/wallet/satelites/page.tsx
   - app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx
-  - app/(app)/wallet/satelites/_components/DesgloseConsolidacionesSatelite.tsx
+  - app/(app)/wallet/satelites/[zonaId]/page.tsx
+  - app/(app)/wallet/satelites/_components/EstadoCuentaSatelite.tsx
+  - app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx
+  - components/shared/estado-cuenta/EstadoCuenta.tsx
+  - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - lib/services/EstadoCuentaService.ts
   - components/shared/conciliacion/ConciliacionAcciones.tsx
   - components/shared/conciliacion/MarcarRecibidoDialog.tsx
   - lib/utils/conciliacion-satelite.ts
@@ -49,11 +54,24 @@ efectivo**.
 ## La tabla
 
 Una fila por bodega: **Pendiente**, **Más antigua sin conciliar** (cuánto lleva esperando) y **Última
-recibida**. Con el conmutador **Con pendiente / Todas** te quedás solo con las que deben algo.
+recibida**. Con el conmutador **Con pendiente / Todas** te quedás solo con las que deben algo. Cada
+fila lleva **Ver estado de cuenta**.
+
+## El estado de cuenta de una bodega
+
+Es la cuenta de la bodega con la central, como un extracto. Arriba, lo que **tiene por entregar hoy**
+con una frase («FGAM Puntarenas tiene ₡115.000 por entregar»), y las cifras del periodo: **Por entregar
+al inicio**, **Declarado en el periodo**, **Recibido en el periodo** y **Por entregar al final del
+periodo**.
+
+El extracto, del más antiguo al más reciente, tiene dos clases de filas: **Consolidación declarada**
+(lo que la bodega consolidó, en efectivo) y **Recibido en la central** (lo que marcaste que llegó), y
+después de cada una **lo que la bodega tiene por entregar** en ese momento. Se filtra con los chips
+**Todo · Declarado · Recibido** y con **Desde** / **Hasta**, y se puede **descargar** el periodo entero.
 
 ## Marcar que llegó
 
-Abrís una bodega y ves sus consolidaciones:
+Debajo del estado de cuenta de la bodega están sus consolidaciones:
 
 | Estado | Qué significa |
 | --- | --- |
@@ -63,7 +81,8 @@ Abrís una bodega y ves sus consolidaciones:
 
 **Marcar recibido** abre un diálogo con el monto ya puesto —el efectivo que la bodega declaró—.
 Si contaste lo mismo, confirmás y listo. **Si contaste otra cosa, cambiás el número**: la diferencia
-queda anotada y sigue contando como pendiente de esa bodega.
+queda anotada y sigue contando como pendiente de esa bodega. Al marcar, el estado de cuenta de esa
+bodega y su fila de la tabla se actualizan solos.
 
 ## Desmarcar no mueve dinero
 

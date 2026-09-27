@@ -1,0 +1,23 @@
+{
+ "mensajero": {
+  "nombre": "Marco Mensajero",
+  "tarjetas": "Saldo actual\n₡5.100\n\nOrdenex le debe ₡5.100 a Marco Mensajero\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡15.300\nCargos del periodo\n₡10.200\nSaldo al final del periodo\n₡5.100",
+  "filasSinFiltro": 11,
+  "opciones": [
+   "Todos los cierres",
+   "Cierre del 2026-08-13 · Marco Mensajero · 3 movimientos",
+   "Cierre del 2026-08-13 · Marco Mensajero · 5 movimientos",
+   "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+  ],
+  "disparador": "Cierre: Cierre del 2026-08-13 · Marco Mensajero · 5 movimientos",
+  "filasFiltradas": [
+   "\t—\tSaldo inicial\t\t\t₡0\t",
+   "\t2026-08-13\t\nLiquidación\nEfectivo\nPago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo\nCómo se pagó: Efectivo\nRegistró: Ana Admin\nAnulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante.\n\t₡1.400\t\t-₡1.400\tVer",
+   "\t2026-08-13\t\nAjuste (devengo)\nAnulación\nAnulación de pago · Efectivo\nPago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo\nRegistró: Ana Admin\n\t\t₡1.400\t₡0\tVer",
+   "\t2026-08-13\t\nLiquidación\nEfectivo\nPago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo\nCómo se pagó: Efectivo\nRegistró: Ana Admin\nAnulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero.\n\t₡3.400\t\t-₡3.400\tVer",
+   "\t2026-08-13\t\nAjuste (devengo)\nAnulación\nAnulación de pago · Efectivo\nPago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo\nRegistró: Ana Admin\n\t\t₡3.400\t₡0\tVer",
+   "\t2026-08-13\t\nPago devengado\nCierre del día · 2026-08-13 · Marco Mensajero\nVer\nRegistró: Automático · Aprobación del cierre por Ana Admin\n\t\t₡3.400\t₡3.400\tVer"
+  ],
+  "uuidEnTexto": false
+ }
+}

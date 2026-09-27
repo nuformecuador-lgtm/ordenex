@@ -1,0 +1,165 @@
+{
+  "arnes": "autocomprobacion: el archivo cambia (old aparece 1 vez), se corren >0 tests, se restaura byte a byte (sha256 igual)",
+  "mutaciones": [
+    {
+      "id": "B1-M1",
+      "desc": "172 R52: el filtro por cierre del mensajero SIN la rama del pago",
+      "file": "lib/repositories/EstadoCuentaRepository.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts",
+        "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+      ],
+      "total": 18,
+      "rojos": 4,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "B1-M2",
+      "desc": "la rama del pago sin el cierre (todos los pagos del mensajero)",
+      "file": "lib/repositories/EstadoCuentaRepository.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts"
+      ],
+      "total": 5,
+      "rojos": 3,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "B1-M3",
+      "desc": "el filtro de cierre del mensajero sin la rama del cierre (solo pagos)",
+      "file": "lib/repositories/EstadoCuentaRepository.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts"
+      ],
+      "total": 5,
+      "rojos": 2,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "B1-M4",
+      "desc": "R11: el selector del mensajero NO cuenta los pagos del cierre",
+      "file": "lib/repositories/FiltrosWalletRepository.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts"
+      ],
+      "total": 6,
+      "rojos": 1,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R25-M1",
+      "desc": "R25 /mi-wallet: sin la leyenda de la tienda (vuelve la de la oficina, sin «Anulado por Ordenex» ni hora)",
+      "file": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+      "tests": [
+        "tests/integration/mi-wallet-page.test.tsx"
+      ],
+      "total": 39,
+      "rojos": 2,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R25-M2",
+      "desc": "R25 /mi-wallet: la leyenda de la tienda sin la hora",
+      "file": "app/(app)/mi-wallet/_components/mi-estado-cuenta-labels.ts",
+      "tests": [
+        "tests/integration/mi-wallet-page.test.tsx"
+      ],
+      "total": 39,
+      "rojos": 2,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R25-M3",
+      "desc": "R25: el servidor no manda la hora de la anulacion",
+      "file": "lib/services/EstadoCuentaService.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts",
+        "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+      ],
+      "total": 19,
+      "rojos": 2,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R25-M4",
+      "desc": "R25: la hora de la anulacion en UTC y no en Costa Rica",
+      "file": "lib/services/EstadoCuentaService.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts"
+      ],
+      "total": 6,
+      "rojos": 1,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R25-M5",
+      "desc": "R25/D2: la vista de la tienda deja pasar el nombre de quien anulo",
+      "file": "lib/services/EstadoCuentaService.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-servidor-458d.test.ts"
+      ],
+      "total": 13,
+      "rojos": 1,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "m1-M1",
+      "desc": "el resumen de /mi-wallet vuelve a pintarse con la lectura inicial",
+      "file": "app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx",
+      "tests": [
+        "tests/components/MiWalletResumenVigente.test.tsx",
+        "tests/integration/mi-wallet-page.test.tsx"
+      ],
+      "total": 41,
+      "rojos": 1,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "m1-M2",
+      "desc": "el estado de cuenta no pinta su encabezado (el resumen desaparece)",
+      "file": "components/shared/estado-cuenta/EstadoCuenta.tsx",
+      "tests": [
+        "tests/components/MiWalletResumenVigente.test.tsx",
+        "tests/integration/mi-wallet-page.test.tsx"
+      ],
+      "total": 41,
+      "rojos": 6,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R53-M1",
+      "desc": "172 R53: el pago a la tienda no cuenta en «Ya pagado» (va a cargos)",
+      "file": "lib/utils/desglose-tienda.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts"
+      ],
+      "total": 4,
+      "rojos": 3,
+      "muerta": true,
+      "exit": 1
+    },
+    {
+      "id": "R53-M2",
+      "desc": "172 R53: el saldo de la tarjeta de la tienda no descuenta los debitos",
+      "file": "lib/repositories/EstadoCuentaRepository.ts",
+      "tests": [
+        "tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts"
+      ],
+      "total": 4,
+      "rojos": 1,
+      "muerta": true,
+      "exit": 1
+    }
+  ]
+}

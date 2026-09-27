@@ -18,6 +18,8 @@ function contarMovimientos(n: number): string {
 }
 
 /**
+ * FICHA 458-D (R10): lo monta el filtro por cierre del estado de cuenta de una tienda o de un mensajero
+ * (`components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx`).
  * Las opciones del selector. Rotulo: `Cierre del <dia> · <mensajero> · <n> movimientos`; si dos
  * rotulos coinciden, a TODOS los repetidos se les añade la hora (mismo criterio que el selector de
  * `/mi-wallet`, ficha 335). El `value` es el cierre y NUNCA se pinta (R1).

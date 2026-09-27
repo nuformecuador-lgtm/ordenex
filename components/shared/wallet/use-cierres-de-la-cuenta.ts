@@ -29,6 +29,7 @@ export interface CierresDeLaCuenta {
   buscar: (texto: string) => void;
 }
 
+/** FICHA 458-D (R10): lo monta el filtro por cierre del estado de cuenta (`SelectorCierreDeCuenta`). */
 export function useCierresDeLaCuenta(cuenta: CuentaDelSelector): CierresDeLaCuenta {
   /** `null` = el selector aun no se abrio: no se lee. */
   const [busqueda, setBusqueda] = useState<string | null>(null);

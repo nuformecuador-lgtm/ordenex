@@ -1,42 +1,68 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
+import { SWRConfig } from "swr";
 
-import {
-  MiWalletFiltros,
-  type MiWalletFiltrosValue,
-} from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
+import { ToastProvider } from "@/providers/ToastProvider";
+
 import type { CierresDeLaTienda } from "@/app/(app)/mi-wallet/_components/mi-wallet-cierres";
+import { estado } from "@/tests/fixtures/estado-cuenta";
 
 /**
- * FICHA 335 (C3, R20/R22/R25/R26/R27) — el filtro de cierre deja de pedir un UUID.
+ * FICHA 335 (C3, R20/R22/R25/R26/R27) — el filtro de cierre de `/mi-wallet` deja de pedir un UUID.
  *
- * Lo que había antes: un `<input type="text" placeholder="ID del cierre">`. El campo existía,
- * se veía y aceptaba texto, pero NADIE conoce ese identificador —no se enseña en ninguna
- * pantalla—, así que en la práctica el filtro no se podía usar. Es un fallo mudo de manual: no
- * rompía ningún test porque el componente hacía exactamente lo que decía hacer.
+ * Lo que había antes: un `<input type="text" placeholder="ID del cierre">`. El campo existía, se
+ * veía y aceptaba texto, pero NADIE conoce ese identificador, así que el filtro no se podía usar.
  *
- * Por eso el caso central de este archivo es negativo (no queda ningún campo que pida un
- * identificador) y va acompañado del positivo (el selector emite el `cierreId` correcto).
+ * FICHA 458-D (T D.5, R34/R10): `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda y conserva SU
+ * selector de cierre (día y número de movimientos, sin el mensajero). La barra de filtros de antes
+ * (`MiWalletFiltros`, con «Aplicar» y «Limpiar») se retiró con el libro: el cierre se aplica al
+ * elegirlo y «Todos los cierres» lo deshace (R27); el concepto lo sustituyen los chips (R24) y las
+ * fechas, el periodo del estado de cuenta. Este archivo mide lo MISMO sobre el módulo nuevo
+ * (`MiEstadoCuenta`): el cierre se elige, emite SU identificador a la lectura de la tienda de la
+ * sesión, y el selector degrada sin mentir.
  */
+
+const verMiEstadoCuentaMock = vi.fn();
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: vi.fn(),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: (...a: unknown[]) => verMiEstadoCuentaMock(...a),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-tienda", () => ({
+  verDetalleDeMiMovimientoAction: vi.fn(),
+  verDetalleDeMiMovimientoCompletoAction: vi.fn(),
+}));
+
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
+
+const C1 = "11111111-1111-4111-8111-111111111111";
+const C2 = "22222222-2222-4222-8222-222222222222";
 
 const CIERRES: CierresDeLaTienda = {
   opciones: [
-    { cierreId: "c-1", fecha: "2026-08-01T09:15:00.000Z", movimientos: 7 },
-    { cierreId: "c-2", fecha: "2026-07-12T14:30:00.000Z", movimientos: 4 },
+    { cierreId: C1, fecha: "2026-08-01T09:15:00.000Z", movimientos: 7 },
+    { cierreId: C2, fecha: "2026-07-12T14:30:00.000Z", movimientos: 4 },
   ],
   hayMas: false,
   disponible: true,
 };
 
-const onAplicar = vi.fn<(v: MiWalletFiltrosValue) => void>();
-const onLimpiar = vi.fn();
+function conSWR(ui: ReactNode) {
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ToastProvider>{ui}</ToastProvider>
+    </SWRConfig>,
+  );
+}
 
 function montar(cierres: CierresDeLaTienda = CIERRES) {
-  return render(
-    <MiWalletFiltros onAplicar={onAplicar} onLimpiar={onLimpiar} cierres={cierres} />,
-  );
+  return conSWR(<MiEstadoCuenta inicial={estado()} cierres={cierres} />);
 }
 
 /** Abre el selector de cierre y elige la opción cuyo rótulo se pide. */
@@ -46,35 +72,30 @@ async function elegirCierre(user: ReturnType<typeof userEvent.setup>, rotulo: st
   await user.click(within(lista).getByRole("option", { name: rotulo }));
 }
 
-/** El último valor emitido por «Aplicar». */
-function ultimoAplicado(): MiWalletFiltrosValue {
-  expect(onAplicar).toHaveBeenCalled();
-  return onAplicar.mock.calls[onAplicar.mock.calls.length - 1][0];
+/** La última entrada con la que se leyó el estado de cuenta de la tienda. */
+function ultimaLectura(): Record<string, unknown> {
+  expect(verMiEstadoCuentaMock).toHaveBeenCalled();
+  return verMiEstadoCuentaMock.mock.calls[verMiEstadoCuentaMock.mock.calls.length - 1][0];
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  verMiEstadoCuentaMock.mockResolvedValue({ status: "ok", estado: estado() });
 });
 
 afterEach(() => {
   cleanup();
 });
 
-describe("MiWalletFiltros — el cierre se ELIGE, no se escribe (R22) [335]", () => {
+describe("/mi-wallet — el cierre se ELIGE, no se escribe (R22) [335 → 458-D]", () => {
   it("R22: el filtro de cierre es un `combobox` y ningún campo de la pantalla pide un identificador", () => {
     montar();
 
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeInTheDocument();
-
-    // Lo que se fue, dicho por su nombre: el placeholder que pedía el uuid.
     expect(screen.queryByPlaceholderText("ID del cierre")).not.toBeInTheDocument();
 
-    // Y en general: ningún campo de texto libre. Los dos `input` que quedan son fechas, que el
-    // navegador pinta con su propio selector de calendario.
-    //
-    // Se descartan los `aria-hidden`: Base UI planta un input oculto por cada `Select` para que
-    // el control participe del envío nativo del formulario. No los ve ni se pueden escribir;
-    // contarlos aquí haría que este caso midiera la primitiva en vez de la pantalla.
+    // Ningún campo de texto libre: los dos `input` que quedan son las fechas del periodo. Se
+    // descartan los `aria-hidden` (Base UI planta un input oculto por cada `Select`).
     const visibles = Array.from(document.querySelectorAll("input")).filter(
       (i) => i.getAttribute("aria-hidden") !== "true",
     );
@@ -84,119 +105,91 @@ describe("MiWalletFiltros — el cierre se ELIGE, no se escribe (R22) [335]", ()
 
   it("R22: el rótulo del selector cuelga de un `id` REAL, no de la nada", () => {
     montar();
-    const rotulo = document.querySelector<HTMLLabelElement>(
-      'label[for="mi-wallet-filtro-cierre"]',
-    );
+    const rotulo = document.querySelector<HTMLLabelElement>('label[for="mi-wallet-filtro-cierre"]');
     expect(rotulo).not.toBeNull();
-    // El defecto que `/wallet` documentó haber arreglado: `htmlFor` apuntando a un id que no
-    // existía en el documento, así que la etiqueta colgaba de la nada.
     expect(document.getElementById("mi-wallet-filtro-cierre")).not.toBeNull();
     expect(rotulo!.textContent).toBe("Cierre");
   });
 });
 
-describe("MiWalletFiltros — «todos los cierres» es el estado de partida (R25) [335]", () => {
-  it("R25: la primera opción es «Todos los cierres» y emite cadena vacía", async () => {
+describe("/mi-wallet — «todos los cierres» es el estado de partida (R25) [335 → 458-D]", () => {
+  it("R25: la primera opción es «Todos los cierres»; las demás, día y número de movimientos (sin mensajero, R10)", async () => {
     const user = userEvent.setup();
     montar();
 
-    // De partida no hay selección: el control muestra el placeholder, que dice lo mismo.
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
     expect(selector).toHaveTextContent("Todos los cierres");
 
     await user.click(selector);
     const lista = await screen.findByRole("listbox");
-    const opciones = within(lista).getAllByRole("option");
-    expect(opciones[0]).toHaveTextContent("Todos los cierres");
-    expect(opciones.map((o) => o.textContent)).toEqual([
+    expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Todos los cierres",
       "Cierre del 2026-08-01 · 7 movimientos",
       "Cierre del 2026-07-12 · 4 movimientos",
     ]);
-
-    await user.click(opciones[0]);
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-
-    // Cadena vacía = no filtrar por cierre. `buildInput` omite las claves vacías, así que el
-    // input de la action no lleva `cierreId` en absoluto.
-    expect(ultimoAplicado().cierreId).toBe("");
   });
 
-  it("R25: sin tocar el selector, «Aplicar» tampoco filtra por cierre", async () => {
-    const user = userEvent.setup();
+  it("R25: sin tocar el selector no se lee nada más: la primera página ya vino del servidor", () => {
     montar();
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    expect(ultimoAplicado()).toEqual({ cierreId: "", categoria: "", desde: "", hasta: "" });
+    expect(verMiEstadoCuentaMock).not.toHaveBeenCalled();
   });
 });
 
-describe("MiWalletFiltros — elegir un cierre lo aplica (R26) y «Limpiar» lo deshace (R27) [335]", () => {
-  it("R26: al elegir un cierre y aplicar, se emite su `cierreId`", async () => {
+describe("/mi-wallet — elegir un cierre lo aplica (R26) y «Todos los cierres» lo deshace (R27) [335 → 458-D]", () => {
+  it("R26: al elegir un cierre se lee el estado de cuenta con SU `cierreId`, sin ninguna clave de cuenta (R36)", async () => {
     const user = userEvent.setup();
     montar();
 
     await elegirCierre(user, "Cierre del 2026-07-12 · 4 movimientos");
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-
-    // El IDENTIFICADOR, no la etiqueta: es lo que el filtro del backend espera como `cierreId`,
-    // y es justo la confusión que un selector mal cableado produciría en silencio.
-    expect(ultimoAplicado().cierreId).toBe("c-2");
-    expect(ultimoAplicado().cierreId).not.toContain("Cierre del");
+    await waitFor(() => expect(ultimaLectura()).toEqual({ cierreId: C2, page: 1, pageSize: 20 }));
+    // El IDENTIFICADOR, no la etiqueta; y ni `cuenta` ni `tiendaId`: la tienda es la de la sesión.
+    expect(ultimaLectura().cierreId).not.toContain("Cierre del");
+    expect(ultimaLectura()).not.toHaveProperty("cuenta");
+    expect(ultimaLectura()).not.toHaveProperty("tiendaId");
   });
 
   it("R26: cada opción emite SU identificador, no siempre el primero", async () => {
     const user = userEvent.setup();
     montar();
-
     await elegirCierre(user, "Cierre del 2026-08-01 · 7 movimientos");
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    expect(ultimoAplicado().cierreId).toBe("c-1");
+    await waitFor(() => expect(ultimaLectura().cierreId).toBe(C1));
   });
 
-  it("R27: «Limpiar» devuelve el selector a «Todos los cierres»", async () => {
+  it("R27: «Todos los cierres» devuelve el selector al estado de partida y la lectura deja de filtrar", async () => {
     const user = userEvent.setup();
     montar();
 
     await elegirCierre(user, "Cierre del 2026-07-12 · 4 movimientos");
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
-    expect(selector).toHaveTextContent("Cierre del 2026-07-12 · 4 movimientos");
+    await waitFor(() => expect(selector).toHaveTextContent("Cierre del 2026-07-12 · 4 movimientos"));
 
-    await user.click(screen.getByRole("button", { name: "Limpiar" }));
-
-    // Lo que se ve vuelve al estado de partida, Y el módulo recibe la orden de recargar sin
-    // filtro. Las dos mitades: un reset visual que no avisara dejaría la tabla filtrada bajo un
-    // control que dice «todos».
-    expect(selector).toHaveTextContent("Todos los cierres");
-    expect(onLimpiar).toHaveBeenCalledTimes(1);
+    await elegirCierre(user, "Todos los cierres");
+    await waitFor(() => expect(selector).toHaveTextContent("Todos los cierres"));
+    // Vuelve a la clave inicial (la del servidor): lo que se pinta es la cuenta SIN filtro de cierre.
+    for (const [entrada] of verMiEstadoCuentaMock.mock.calls) {
+      if ((entrada as { cierreId?: string }).cierreId === undefined) expect(entrada).toEqual({ page: 1, pageSize: 20 });
+    }
+    expect(screen.getByRole("table", { name: "Estado de cuenta de Tania Tienda" })).toBeInTheDocument();
   });
 });
 
-describe("MiWalletFiltros — el selector degrada sin mentir (R28/R29/R30) [335]", () => {
+describe("/mi-wallet — el selector degrada sin mentir (R28/R29/R30) [335]", () => {
   it("R28: sin cierres queda deshabilitado y dice que todavía no hay", () => {
     montar({ opciones: [], hayMas: false, disponible: true });
-
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("Todavía no hay cierres en tu wallet.")).toBeInTheDocument();
   });
 
   it("R29: si la lectura no respondió, queda deshabilitado y dice qué hacer", () => {
     montar({ opciones: [], hayMas: false, disponible: false });
-
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
-    expect(
-      screen.getByText("No pudimos cargar tus cierres. Probá recargando la página."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No pudimos cargar tus cierres. Probá recargando la página.")).toBeInTheDocument();
   });
 
   it("R30: con más cierres de los que caben, avisa de que solo ofrece los recientes", () => {
     montar({ ...CIERRES, hayMas: true });
-
     const aviso = screen.getByText("Mostramos los cierres más recientes.");
-    expect(aviso).toBeInTheDocument();
-    // Sin `role="note"`: la pantalla tiene EXACTAMENTE uno y se la busca en singular.
     expect(aviso.getAttribute("role")).toBeNull();
-    expect(screen.queryAllByRole("note")).toEqual([]);
-    // Y con cierres que ofrecer el control sigue usable: el tope no lo apaga.
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).not.toBeDisabled();
   });
 
@@ -212,9 +205,8 @@ describe("MiWalletFiltros — el selector degrada sin mentir (R28/R29/R30) [335]
   });
 });
 
-describe("MiWalletFiltros — voseo y lenguaje claro (R20) [335]", () => {
-  it("R20: los textos del selector están en voseo y sin jerga", () => {
-    // Los tres estados a la vez, para barrer todo lo que este componente puede llegar a decir.
+describe("/mi-wallet — voseo y lenguaje claro (R20) [335]", () => {
+  it("R20: los textos de la pantalla están en voseo y sin jerga", () => {
     const textos: string[] = [];
     for (const cierres of [
       CIERRES,
@@ -226,25 +218,12 @@ describe("MiWalletFiltros — voseo y lenguaje claro (R20) [335]", () => {
       textos.push(container.textContent ?? "");
       cleanup();
     }
-
     expect(textos.join(" ").length).toBeGreaterThan(0); // control de no-vacuidad
 
     for (const texto of textos) {
-      for (const prohibido of [
-        "SLA",
-        "acuerdo a nivel de servicio",
-        "UUID",
-        "cierre_dia",
-        "origen_id",
-        "débito",
-        "crédito",
-      ]) {
-        expect(texto.toLowerCase(), `dice «${prohibido}»`).not.toContain(
-          prohibido.toLowerCase(),
-        );
+      for (const prohibido of ["SLA", "acuerdo a nivel de servicio", "UUID", "cierre_dia", "origen_id", "débito", "crédito"]) {
+        expect(texto.toLowerCase(), `dice «${prohibido}»`).not.toContain(prohibido.toLowerCase());
       }
-      // «ID» se busca como palabra suelta: `olvidés` o `válido` contienen esas letras y no son
-      // el defecto que se persigue.
       expect(texto, "pide un ID").not.toMatch(/\bID\b/);
     }
   });
@@ -252,7 +231,6 @@ describe("MiWalletFiltros — voseo y lenguaje claro (R20) [335]", () => {
   it("R20: el tuteo peninsular no se cuela en los textos nuevos", () => {
     montar({ opciones: [], hayMas: false, disponible: false });
     const texto = document.body.textContent ?? "";
-    // Voseo: «Probá», no «Prueba»/«Prueba tú». El repo ya corrigió esto una vez (ficha 331).
     expect(texto).toContain("Probá recargando la página.");
     expect(texto).not.toContain("Prueba recargando");
     expect(texto).not.toContain("Recarga la página");

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 
@@ -15,7 +16,6 @@ import {
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import type { ResumenSatelitesDTO, SaldoSateliteDTO } from "@/lib/types/conciliacion-satelites";
 
-import { DesgloseConsolidacionesSatelite } from "./DesgloseConsolidacionesSatelite";
 import {
   COLUMNAS_DESCARGA_SALDOS_SATELITES,
   filaDescargaSaldoSatelite,
@@ -47,8 +47,9 @@ import {
 //
 // La tercera pantalla de la misma familia: `SaldosTiendasTable` pregunta cuánto le debemos a cada
 // tienda, `CuentasPorPagarTable` cuánto a cada mensajero, y ésta cuánto **nos deben a nosotros**,
-// en efectivo y todavía dentro de una bodega. Mismo patrón: tabla → desglose desplegable →
-// acciones, con los datos por props desde un Server Component que ya resolvió el rol.
+// en efectivo y todavía dentro de una bodega. Mismo patrón: tabla → estado de cuenta de cada bodega
+// (FICHA 458-D, D14: la fila ENLAZA y deja de desplegar) → acciones, con los datos por props desde un
+// Server Component que ya resolvió el rol.
 //
 // ── MONEY-SAFE (R20): CERO `Number(`, CERO `parseFloat`, CERO sumas.
 // Cada `saldoSinConciliar` llega como STRING ya cuadrado y se pinta tal cual. Las TRES CIFRAS DE
@@ -134,19 +135,9 @@ export interface SaldosSatelitesTableProps {
    * motivo para esconder los saldos.
    */
   resumen: ResumenSatelitesDTO | null;
-  /**
-   * Si el actor puede marcar y desmarcar. Lo decide el SERVIDOR con `esAccesoTotal`, el MISMO
-   * predicado con el que `ConciliacionSatelitesService` responde `forbidden` (R27). **Default
-   * `false`: falla cerrado** — quien monte esta tabla sin decidir el permiso no ofrece conciliar.
-   */
-  puedeConciliar?: boolean;
 }
 
-export function SaldosSatelitesTable({
-  initialData,
-  resumen,
-  puedeConciliar = false,
-}: Readonly<SaldosSatelitesTableProps>) {
+export function SaldosSatelitesTable({ initialData, resumen }: Readonly<SaldosSatelitesTableProps>) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
   const [filtro, setFiltro] = useState<FiltroSaldos>("con_pendiente");
@@ -241,6 +232,21 @@ export function SaldosSatelitesTable({
           </span>
         ),
     },
+    {
+      // FICHA 458-D (T D.4, R17, D14) — la fila ENLAZA al estado de cuenta de su bodega, donde viven
+      // ahora el extracto Declarado/Recibido y la conciliación. El identificador va SOLO en el `href`.
+      id: "estadoCuenta",
+      value: SALDOS_SATELITES_COLUMNAS.estadoCuenta,
+      render: (s) => (
+        <Link
+          href={`/wallet/satelites/${s.zonaId}`}
+          aria-label={SALDOS_SATELITES_NOMBRE.estadoCuenta(s.zonaNombre)}
+          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {SALDOS_SATELITES_NOMBRE.estadoCuentaVisible}
+        </Link>
+      ),
+    },
   ];
 
   return (
@@ -329,20 +335,6 @@ export function SaldosSatelitesTable({
                 filaDescargaSaldoSatelite,
               ),
           }}
-          /**
-           * R24/R25 — cada fila despliega el DESGLOSE de SU bodega. `renderExpanded` se INVOCA en
-           * cada render, pero el `DataTable` sólo MONTA el elemento cuando la fila está abierta;
-           * como el `useSWR` vive dentro del desglose, listar N bodegas no dispara ninguna lectura
-           * y abrir una fila dispara exactamente una, sólo la de esa bodega.
-           */
-          renderExpanded={(s) => (
-            <DesgloseConsolidacionesSatelite
-              resumen={s}
-              id={`desglose-satelite-${s.zonaId}`}
-              puedeConciliar={puedeConciliar}
-            />
-          )}
-          expandAriaLabel={(s) => SALDOS_SATELITES_NOMBRE.expandir(s.zonaNombre)}
         />
       </div>
 

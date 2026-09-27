@@ -6,11 +6,24 @@ roles: [maestro, admin]
 actualizado: 2026-09-26
 fuentes:
   - app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx
-  - components/shared/SelectorBuscable.tsx
+  - app/(app)/wallet/tiendas/[tiendaId]/page.tsx
+  - app/(app)/wallet/tiendas/_components/EstadoCuentaTienda.tsx
+  - app/(app)/wallet/tiendas/_components/EstadoCuentaAcciones.tsx
+  - app/(app)/wallet/tiendas/_components/estado-cuenta-tienda-labels.ts
+  - app/(app)/wallet/tiendas/_components/PagosTiendaEstadoCuenta.tsx
+  - components/shared/estado-cuenta/EstadoCuenta.tsx
+  - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
+  - components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx
   - components/shared/wallet/cierres-selector.ts
-  - components/shared/wallet/conceptos-filtro.ts
-  - components/shared/wallet/OrigenMovimiento.tsx
+  - app/(app)/wallet/_components/DetalleMovimientoCierre.tsx
+  - app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts
+  - lib/actions/estado-cuenta.ts
   - lib/services/OrigenLegibleService.ts
+  - components/shared/wallet/DetalleMovimientoPanel.tsx
+  - components/shared/wallet/RegistrarMovimientoDialog.tsx
+  - lib/services/EstadoCuentaService.ts
+  - lib/utils/estado-cuenta-chips.ts
   - app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts
   - app/(app)/mi-wallet/_components/mi-wallet-labels.ts
   - lib/utils/descripcion-pago-por-cuenta.ts
@@ -19,8 +32,6 @@ fuentes:
   - lib/services/CobroTiendaService.ts
   - lib/services/AbonoTiendaService.ts
   - lib/utils/descripcion-abono.ts
-  - app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx
-  - app/(app)/wallet/tiendas/_components/PagoTiendaAcciones.tsx
   - app/(app)/wallet/tiendas/_components/saldo-tienda-signo-label.ts
 ---
 
@@ -43,42 +54,96 @@ Una fila por tienda, con su saldo y su signo:
 | **En contra** | Ella te debe. Los cargos superaron lo recaudado |
 | **En cero** | Cuadrado |
 
-Al pagar o anular desde el desglose de una tienda, su fila se actualiza sola, sin recargar.
+Cada fila lleva **Ver estado de cuenta**, que abre la cuenta de esa tienda en su propia página. Al
+volver, la fila ya dice el saldo nuevo si registraste o anulaste algo allá.
 
-## El desglose
+## El estado de cuenta de una tienda
 
-Abriendo una tienda ves **todos sus movimientos**: lo recaudado, las comisiones, los cargos, los cobros
-y las correcciones, cada uno con la orden y el cierre de los que viene.
+Es el extracto de la tienda con Ordenex, como el de un banco.
 
-Ahí se resuelven las discusiones de *«este número no me cuadra»*: se baja hasta la entrega concreta.
+Arriba, la cifra grande es el **saldo actual** con una frase que dice **quién le debe a quién**:
+«Ordenex le debe ₡12.000 a Tania Tienda» o «Tania Tienda le debe ₡3.000 a Ordenex». Debajo, cuatro
+cifras del periodo: **Saldo inicial**, **Abonos del periodo** (lo que suma a favor de la tienda),
+**Cargos del periodo** (lo que resta) y **Saldo al final del periodo**. Siempre se cumple: saldo inicial
+más abonos menos cargos es el saldo final. Los movimientos anulados y su anulación **no cuentan** en
+abonos ni cargos: se cancelan entre ellos.
 
-Arriba del desglose, cuatro cifras: **A favor de la tienda** (contra-entrega cobrado, correcciones a
-favor, pagos de la tienda a Ordenex y devoluciones por anulaciones), **Cargos de Ordenex** (fletes,
-comisión, IVA, los cobros de Ordenex a la tienda y sus pagos a Ordenex anulados), **Pagado a la tienda** (lo que Ordenex le pagó a la tienda o pagó por ella) y
-**Saldo a favor**.
+La tabla es el **extracto**, del más antiguo al más reciente:
 
-## De dónde viene cada movimiento
+- La primera fila es el **saldo inicial** del periodo: lo que la tienda tenía al terminar el día anterior.
+- Cada movimiento dice su fecha, su concepto (desde Ordenex), el motivo, de dónde viene, si tiene
+  comprobante y **quién lo registró** («Registró: Ana Admin», o «Automático · Aprobación del cierre por
+  Ana Admin»), el **cargo** o el **abono**, y el **saldo** de la tienda justo después de ese movimiento.
+- **De dónde viene** lo dice con nombre —«Cierre del día · 2026-09-12 · Juan Pérez Mora», «Pago de
+  Ordenex a una tienda · 2026-09-14 · SINPE»— y, cuando esa cosa tiene su pantalla, con un enlace
+  **Ver** que te lleva a ella (por ejemplo, al cierre).
+- Si el movimiento es un pago, dice **Cómo se pagó**: el método y la referencia («SINPE · referencia
+  12345»).
+- El saldo de la última fila es el de la tarjeta y el de la fila de la tabla de saldos.
 
-La columna **Origen** dice qué produjo cada movimiento, con nombre: «Cierre del día · 2026-09-12 ·
-Juan Pérez Mora», «Gestión de orden · cobro por rechazo · guía 4321», «Pago de Ordenex a una tienda ·
-Tania Tienda · 2026-09-12 · SINPE». Cuando ese origen tiene pantalla propia, al lado aparece **Ver**,
-que te lleva al cierre, a la orden o al ranking de ese día. La descarga lleva el mismo texto.
+### Las órdenes de un cierre
 
-## Filtrar el desglose
+Las filas que vienen de un **cierre** tienen una flecha al principio: al abrirla ves **las órdenes de esta
+tienda que componen ese importe** —guía (con enlace a la orden), destinatario, resultado y cuánto aportó
+cada una—, con el día del cierre, el mensajero y cuántas de sus órdenes aportan. Se pueden descargar.
 
-- **Cierre**: se elige de la lista de cierres **de esta tienda** que tienen movimientos, cada uno con
-  su día, el mensajero y cuántos movimientos trajo. Podés buscar **por día (2026-09-12) o por el nombre
-  del mensajero**. Si la lista dice «Mostramos los cierres más recientes», buscá para ver los demás.
-  No hace falta copiar ni pegar nada.
-- **Concepto**: solo aparecen los conceptos que **tienen movimientos** de esta tienda en el periodo
-  (y el cierre) que elegiste, cada uno con su número entre paréntesis, por ejemplo «Flete cobrado a la
-  tienda (12)». Si cambiás el periodo y el concepto elegido se queda sin movimientos, sigue elegido
-  con **(0)** hasta que lo quites.
-- **Desde** y **Hasta**: días completos de Costa Rica.
+### Filtrar el estado de cuenta
+
+- Los **chips** de arriba: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
+  uno solo. El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres: por eso no
+  baja de a poco como si los otros movimientos no existieran.
+- **Desde** y **Hasta**: días completos de Costa Rica. Con un periodo, la primera fila es el saldo
+  con el que la tienda empezó ese periodo.
+- **Cierre**: un selector con búsqueda. Solo ofrece los cierres que tienen movimientos en **esta**
+  tienda, cada uno con su día y el mensajero («Cierre del 2026-09-12 · Juan Pérez Mora · 3
+  movimientos»); se busca por un día (2026-09-12) o por el nombre del mensajero. **Todos los cierres**
+  quita el filtro. Como con los chips, el saldo de cada fila sigue siendo el de la cuenta entera.
+
+### Anulados
+
+Un movimiento anulado **no desaparece**: sigue en su lugar, tachado, y dice **quién lo anuló, cuándo y
+por qué** («Anulado el 2026-09-20 por Ana Admin · Se pagó dos veces»). Si se anuló antes de que la
+wallet guardara el motivo, dice **«motivo no registrado»**. Su anulación aparece como otra fila, con la
+marca **Anulación**.
+
+### Ver un movimiento
+
+**Ver**, en cada fila, abre su detalle a un costado: a quién, por qué, de dónde viene, el comprobante (si
+tiene, se abre con **Ver comprobante**), quién lo registró, si está vigente o anulado y **Cómo quedó** la
+caja y la tienda después de ese movimiento. Desde ahí se **anula** con **Anular…** y un motivo, cuando el
+movimiento lo admite (lo que produce la aprobación de un cierre no se anula desde acá).
+
+### Descargar
+
+La descarga trae **el periodo entero** que estás mirando (no solo la página), con el saldo inicial
+arriba y el **saldo** de cada fila, en las mismas columnas que la tabla. No lleva ningún identificador.
+Respeta el periodo, el chip y el cierre elegidos. Si hay más movimientos de los que entran en una
+descarga, **no se descarga nada** y te lo dice: «El estado de cuenta tiene … movimientos con estos
+filtros y la descarga admite hasta …». Elegí un periodo más corto, un chip o un cierre y volvé a
+descargar.
+
+## Registrar desde el estado de cuenta
+
+Tres acciones, cada una abre el mismo **Registrar un movimiento** de la caja con el concepto y la tienda
+ya elegidos:
+
+- **La tienda le paga a Ordenex** — solo cuando la tienda está **en contra**: registra el pago que ella
+  le hizo a Ordenex (hasta lo que debe, con fecha, motivo, método y comprobante opcional). Su saldo sube.
+- **Ordenex le cobra a la tienda** — siempre: un cobro de Ordenex. Su saldo baja y es ganancia de Ordenex.
+- **Ordenex le paga a la tienda** — lo que se le paga de su saldo a favor, hasta lo que Ordenex le debe.
+  Si la tienda no tiene saldo a favor, el botón está apagado y lo dice: «Ordenex no le debe nada a…».
+
+Antes de confirmar, **«Así queda»** enseña cómo quedan el saldo de la tienda y la caja. Al registrar,
+las tarjetas y el extracto de esa tienda se actualizan solos, sin recargar.
+
+Debajo del extracto está la lista de **Pagos de Ordenex a la tienda**, cada uno con su método, su
+referencia y su comprobante. Un pago registrado por error se **anula** desde ahí (con el motivo) o desde
+**Ver** en su fila del extracto. Si te dice **«Este pago ya estaba anulado»**, es que alguien se te
+adelantó.
 
 ## Cómo se llama cada movimiento
 
-| En el desglose dice | Qué es | ¿Salió dinero de la caja? |
+| En el estado de cuenta dice | Qué es | ¿Salió dinero de la caja? |
 | --- | --- | --- |
 | **Contra-entrega cobrado a los clientes de la tienda** | Lo que el mensajero cobró a los clientes en nombre de la tienda | No: entró, y es de la tienda |
 | **Flete cobrado a la tienda**, **Comisión de contra-entrega cobrada a la tienda**, **IVA del flete cobrado a la tienda**… | El servicio de Ordenex, al aprobarse un cierre | No: se descuenta del saldo y es ganancia de Ordenex |
@@ -91,42 +156,27 @@ que te lleva al cierre, a la orden o al ranking de ese día. La descarga lleva e
 | **Pago de la tienda a Ordenex anulado** | La anulación de ese pago: el saldo vuelve a bajar | Vuelve a salir |
 | **Corrección a favor de la tienda** / **Corrección en contra de la tienda** | Una corrección hecha a mano | — |
 
-El cobro y el pago de un gasto se registran desde **Wallet · Caja**, con **Registrar movimiento**:
-«Ordenex le cobra a una tienda» y «Ordenex paga un gasto de una tienda». Ahí está explicado cuál elegir,
-con un ejemplo. **Un pago de un gasto no cuenta como un pago a la tienda**: no aparece en su lista de
-pagos. Y tanto el cobro como el pago de un gasto pueden dejar el saldo **en contra**: entonces la tienda
-le debe ese dinero a Ordenex.
+**Un pago de un gasto no cuenta como un pago a la tienda**. Y tanto el cobro como el pago de un gasto
+pueden dejar el saldo **en contra**: entonces la tienda le debe ese dinero a Ordenex.
 
 Algunos cobros antiguos eran en realidad pagos de un gasto de la tienda. Se corrigieron en la caja,
 pero **acá se siguen viendo como «Ordenex le cobra a la tienda»**: el saldo de la tienda ya era correcto.
-
-## Registrar un pago
-
-Desde las acciones de la tienda registrás lo que le pagaste, y el saldo se mueve.
-
-Un pago se puede **anular** si se registró por error. Si te dice **«Este pago ya estaba anulado»**, es
-que alguien se te adelantó — recargá y mirá cómo quedó.
-
-## Registrar un pago de la tienda a Ordenex
-
-Cuando una tienda está **en contra**, desde las acciones de su desglose registrás el pago que ella le hizo a Ordenex: **Registrar pago de la tienda a Ordenex**. Se pide el monto —hasta lo que debe—, la fecha real, el motivo, el método (con referencia en SINPE y transferencia) y un comprobante opcional. Su saldo sube en el monto y la fila se actualiza sola. Se anula desde **Wallet · Caja**, en el libro, con motivo.
-
-Con la tienda en cero o a favor, esa acción no aparece: no hay nada que la tienda deba.
 
 ## Cosas que te pueden pasar
 
 **«No hay tiendas con saldo registrado».** Ninguna tiene movimientos todavía. En una operación nueva
 es lo esperable hasta que se apruebe el primer cierre.
 
-**«No se pudieron cargar los saldos por tienda».** Fallo al leer; recargá. Si sigue, es para revisar.
+**«No se pudo cargar el estado de cuenta».** Fallo al leer esa página del extracto; las tarjetas siguen
+en pie. Recargá.
+
+**«Ya estaba anulado; no se registró nada más».** Alguien lo anuló antes que vos. No se hizo nada dos veces.
 
 **Un saldo que no cuadra con lo que la tienda dice.** Casi siempre es tiempo, no error: los movimientos
 entran **al aprobarse el cierre del mensajero**, no al entregarse el paquete. Comparen con la misma
-fecha de corte.
+fecha de corte: el estado de cuenta con un periodo dice el saldo de ese día exacto.
 
 ## Lo que esta pantalla NO hace
 
 - **No es la caja de Ordenex.** Eso es **Wallet · Caja**.
-- **No se registran ni se anulan cobros a una tienda ni pagos de un gasto de una tienda, ni se anulan
-  pagos de la tienda a Ordenex.** Eso es en **Wallet · Caja**, desde el libro.
 - **No se corrige una entrega desde acá.** Un cargo mal calculado nace de la orden; se arregla allá.

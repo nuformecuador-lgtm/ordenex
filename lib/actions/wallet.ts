@@ -12,6 +12,7 @@ import {
 import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/RechazoTiendaCobroAnulacionRepository";
 import { AporteCapitalRepository } from "@/lib/repositories/AporteCapitalRepository";
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepository";
 import { CobroTiendaAnulacionRepository } from "@/lib/repositories/CobroTiendaAnulacionRepository";
 import { PagoPorCuentaTiendaRepository } from "@/lib/repositories/PagoPorCuentaTiendaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
@@ -169,6 +170,7 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletMovimientoRepository(prisma),
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
+    new EstadoCuentaRepository(prisma), // 458-D (servidor, R19): la fila del mensajero; este borde no la usa
   );
 }
 

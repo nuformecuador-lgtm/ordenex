@@ -74,8 +74,12 @@ const CLAVE_DETALLE = "wallet-libro:detalle-movimiento";
  * Meter los filtros en la clave invalidaría la caché por un cambio que no puede alterar la
  * respuesta.
  */
-function claveDetalle(movimientoId: string, page: number): readonly [string, string, number] {
-  return [CLAVE_DETALLE, movimientoId, page] as const;
+function claveDetalle(
+  movimientoId: string,
+  page: number,
+  prefijo: string = CLAVE_DETALLE,
+): readonly [string, string, number] {
+  return [prefijo, movimientoId, page] as const;
 }
 
 /**
@@ -86,7 +90,7 @@ function claveDetalle(movimientoId: string, page: number): readonly [string, str
  * dónde sale ese importe. Tratarlo como error dejaría el panel diciendo «no se pudo cargar»,
  * que es justamente la fila muda que R48 prohíbe.
  */
-type VistaDetalle =
+export type VistaDetalle =
   | { modo: "ok"; data: DetalleMovimientoPayload }
   | { modo: "sin_reparto"; motivo: MotivoSinReparto };
 
@@ -123,6 +127,27 @@ async function obtenerFilasDescarga(movimientoId: string): Promise<DescargaFilas
   }
   return filasDesdeResultado(res, filaDescargaDetalleMovimiento);
 }
+
+/**
+ * FICHA 458-D (R19) — DE DÓNDE SALE el detalle. El panel es el mismo (mismas columnas, misma
+ * cabecera, misma paginación del servidor, mismo `sin_reparto` en palabras) para la fila del libro de
+ * la caja y para la fila de cierre del ESTADO DE CUENTA de una tienda o de un mensajero; lo único que
+ * cambia es la lectura. `clave` separa las cachés: el mismo movimiento no se lee igual desde dos
+ * libros.
+ */
+export interface FuenteDetalleMovimiento {
+  /** Prefijo de la clave SWR de ESTA lectura. */
+  clave: string;
+  leer: (movimientoId: string, page: number) => Promise<VistaDetalle>;
+  descargar: (movimientoId: string) => Promise<DescargaFilasResult>;
+}
+
+/** La fuente de siempre: el libro de la caja principal (ficha 344). */
+export const FUENTE_DETALLE_CAJA: FuenteDetalleMovimiento = {
+  clave: CLAVE_DETALLE,
+  leer: detalleFetcher,
+  descargar: obtenerFilasDescarga,
+};
 
 /**
  * R11 — la guía de la orden, llevada al buscador de `/ordenes`.
@@ -273,12 +298,15 @@ export interface DetalleMovimientoCierreProps {
   concepto: string;
   /** La fecha VISIBLE de la fila (`YYYY-MM-DD`). Compone los nombres accesibles con el anterior. */
   fecha: string;
+  /** FICHA 458-D (R19) — la lectura; sin ella, la del libro de la caja (ficha 344). */
+  fuente?: FuenteDetalleMovimiento;
 }
 
 export function DetalleMovimientoCierre({
   movimientoId,
   concepto,
   fecha,
+  fuente = FUENTE_DETALLE_CAJA,
 }: DetalleMovimientoCierreProps) {
   const [page, setPage] = useState(1);
   /**
@@ -322,8 +350,8 @@ export function DetalleMovimientoCierre({
       ? undefined
       : { maxWidth: `${anchoVisible}px`, position: "sticky" as const, left: 0 };
 
-  const { data, error, isLoading } = useSWR(claveDetalle(movimientoId, page), () =>
-    detalleFetcher(movimientoId, page),
+  const { data, error, isLoading } = useSWR(claveDetalle(movimientoId, page, fuente.clave), () =>
+    fuente.leer(movimientoId, page),
   );
 
   const nombreRegion = DETALLE_MOVIMIENTO_NOMBRE.region(concepto, fecha);
@@ -404,7 +432,7 @@ export function DetalleMovimientoCierre({
           descarga={{
             titulo: DETALLE_MOVIMIENTO_NOMBRE.descarga(concepto, fecha),
             columnas: COLUMNAS_DESCARGA_DETALLE_MOVIMIENTO,
-            obtenerFilas: () => obtenerFilasDescarga(movimientoId),
+            obtenerFilas: () => fuente.descargar(movimientoId),
           }}
         />
       </div>

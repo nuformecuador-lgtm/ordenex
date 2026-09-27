@@ -101,8 +101,9 @@ async function leerComprobante(
 /**
  * R1–R30 — registra un pago de una tienda a Ordenex. Entrada: `FormData` con `claveIdempotencia`,
  * `tiendaId`, `monto`, `metodo`, `referencia?`, `motivo`, `fechaPago` y `comprobante?` (File).
- * Superficie: el concepto «Una tienda le paga a Ordenex» de `RegistrarMovimientoCajaDialog` (que
- * también abre el botón «Registrar pago de la tienda a Ordenex» de `PagoTiendaAcciones`).
+ * Superficie: el concepto «Una tienda le paga a Ordenex» de `RegistrarMovimientoDialog` (458-C), que
+ * también abre la acción «La tienda le paga a Ordenex» del estado de cuenta de la tienda (458-D,
+ * `EstadoCuentaAcciones`).
  */
 export async function registrarAbonoTiendaAction(
   formData: FormData,
@@ -139,7 +140,7 @@ export async function anularAbonoTiendaAction(
 /**
  * R42–R44 — el enlace temporal del comprobante (acceso total, o la tienda dueña: DH3).
  *
- * @sin-superficie FICHA 458-C (TC.3/TC.5, decision, no deuda): el panel «Ver» del libro pide TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77). Se conserva para la 458-D, que decide si `/mi-wallet` la usa (TD.5).
+ * @sin-superficie FICHA 458-C/458-D (decision, no deuda): el panel «Ver» del libro (458-C) y «Ver comprobante» de `/mi-wallet` (458-D, TD.5) piden TODO comprobante por `verComprobanteAction({ destino })`, que tambien lee el de este documento (458-B, R77): un solo camino para la oficina y para la tienda. NO se retira (458-D servidor, 2026-09-26): sin llamadores en API publica, asistente, scripts ni crons, pero la usan `tests/integration/db/abono-tienda-457.test.ts` (el alcance del comprobante de la 457 contra Postgres: la propia, la de otra tienda y el mensajero), `tests/unit/actions/abono-tienda-action.test.ts` y el doble de `WalletLedgerAcciones457.test.tsx`; retirarla exige mover antes esas redes a `verComprobanteAction`.
  */
 export async function obtenerComprobanteAbonoAction(
   input: unknown,

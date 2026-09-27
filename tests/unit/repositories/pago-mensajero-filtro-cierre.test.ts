@@ -5,6 +5,13 @@ import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensaj
 // Feature 172 / T C.3 (R52, design §5) — «filtrar el desglose de un mensajero por un cierre»
 // incluye los PAGOS registrados contra ese cierre y sus ANULACIONES.
 //
+// FICHA 458-D (revision B1): este archivo mide el repositorio del DESGLOSE retirado, que ya no tiene
+// pantalla (`listarPagosDeMensajero{,Completo}Action` quedan `@sin-superficie`). La cita de 172 R52
+// en `specs/172-liquidacion/tasks.md` apunta ahora a
+// `tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts`: el filtro por cierre del ESTADO
+// DE CUENTA de `/wallet/mensajeros/[id]`, contra Postgres y con pagos REALES. Esta red se queda
+// mientras el repositorio viva.
+//
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // POR QUE ESTE ARCHIVO ESTA EN `tests/unit/repositories/` Y NO EN LOS TESTS DEL SERVICIO
 // ─────────────────────────────────────────────────────────────────────────────────────────────

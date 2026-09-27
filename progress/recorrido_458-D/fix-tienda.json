@@ -1,0 +1,15 @@
+{
+ "tienda": {
+  "resumen": "A tu favor\n₡192.900\nLo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular\nCargos de Ordenex\n₡45.229,90\nFletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon\nYa pagado\n₡0\nLo que Ordenex te pagó o pagó por ti\nSaldo a favor\nA favor\n₡147.670,10\n\n«Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+  "tarjetas": "Saldo actual\n₡147.670,10\n\nOrdenex te debe ₡147.670,10\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡191.400\nCargos del periodo\n₡43.729,90\nSaldo al final del periodo\n₡147.670,10",
+  "resumenTrasChip": "A tu favor\n₡192.900\nLo cobrado a tus clientes, las correcciones a tu favor, lo que le pagaste a Ordenex y lo que Ordenex te devolvió al anular\nCargos de Ordenex\n₡45.229,90\nFletes, comisión, IVA, lo que Ordenex te cobró y los pagos a Ordenex que se anularon\nYa pagado\n₡0\nLo que Ordenex te pagó o pagó por ti\nSaldo a favor\nA favor\n₡147.670,10\n\n«Ya pagado» sigue contando los pagos que se anularon, y «A tu favor» suma la devolución de cada uno, así que esos dos importes quedan más altos de lo que se movió de verdad. «Saldo a favor» ya tiene todo eso descontado: ese es el número correcto.",
+  "tarjetasTrasChip": "Saldo actual\n₡147.670,10\n\nOrdenex te debe ₡147.670,10\n\nSaldo inicial\n₡0\nAbonos del periodo\n₡191.400\nCargos del periodo\n₡43.729,90\nSaldo al final del periodo\n₡147.670,10",
+  "filaAnulada": [
+   "\t2026-09-26\t\nOrdenex te cobró\nMaterial de despacho 458D fix\nRegistrado a mano\nAnulado por Ordenex el 2026-09-26 a las 18:26 · Cobro duplicado 458D fix\n\t₡1.500\t\t₡146.170,10\t\nVer comprobante",
+   "\t2026-09-26\t\nOrdenex anuló un cobro y te lo devolvió\nAnulación\nAnulación · Material de despacho 458D fix\nCobro de Ordenex a una tienda · Tania Tienda\n\t\t₡1.500\t₡147.670,10\t"
+  ],
+  "anuladoPorOrdenex": true,
+  "nombresDePersonal": false,
+  "uuidEnTexto": false
+ }
+}

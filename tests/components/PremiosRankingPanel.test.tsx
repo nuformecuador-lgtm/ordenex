@@ -492,8 +492,10 @@ describe("el refresco dirigido apunta a claves que EXISTEN", () => {
       "app/(app)/wallet/mensajeros/_components/cuentas-por-pagar-clave.ts",
     ],
     [
-      "wallet-mensajeros:desglose",
-      "app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero.tsx",
+      // FICHA 458-D (T D.8): el desplegable del desglose se retiró; lo que el premio deja desfasado
+      // ahora es el ESTADO DE CUENTA del mensajero, y el dueño de ese prefijo es su módulo de claves.
+      "estado-cuenta",
+      "components/shared/estado-cuenta/estado-cuenta-clave.ts",
     ],
     [
       "liquidacion:reparto-previsualizacion",

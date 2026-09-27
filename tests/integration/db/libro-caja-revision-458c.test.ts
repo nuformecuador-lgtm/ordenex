@@ -175,7 +175,7 @@ describeSiHayBase("458-C revisión B3/M1 — el pago a una tienda y el premio en
 
   it("M1/R58: el pago anulado dice quién lo anuló, el día y el motivo; y cómo se pagó", () => {
     const a = m().autoria.pagoAnulado;
-    expect(a?.anulacion).toEqual({ motivo: "Se pago a la cuenta equivocada", por: m().maestro, fecha: m().hoy });
+    expect(a?.anulacion).toEqual({ motivo: "Se pago a la cuenta equivocada", por: m().maestro, fecha: m().hoy, hora: expect.stringMatching(/^\d{2}:\d{2}$/) });
     expect(a?.como).toEqual({ metodo: "efectivo", referencia: null });
   });
 
@@ -195,7 +195,7 @@ describeSiHayBase("458-C revisión B3/M1 — el pago a una tienda y el premio en
 
   it("M1/R58: el gasto anulado por la vía uniforme: su constancia (quién, cuándo, motivo) y la referencia anotada", () => {
     const a = m().autoria.gastoAnulado;
-    expect(a?.anulacion).toEqual({ motivo: "Factura duplicada 458-C", por: m().maestro, fecha: m().hoy });
+    expect(a?.anulacion).toEqual({ motivo: "Factura duplicada 458-C", por: m().maestro, fecha: m().hoy, hora: expect.stringMatching(/^\d{2}:\d{2}$/) });
     expect(a?.como).toEqual({ metodo: null, referencia: "FACT-458C" });
   });
 

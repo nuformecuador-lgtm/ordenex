@@ -1,0 +1,183 @@
+{
+ "rol": "admin",
+ "pasos": [
+  {
+   "nombre": "oficina-01-estado-cuenta",
+   "tarjetas": "Saldo actual ₡147.670,10 Ordenex le debe ₡147.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10",
+   "nombreCuenta": "Tania Tienda",
+   "filasPagina1": 21,
+   "uuids": []
+  },
+  {
+   "nombre": "oficina-02-origen",
+   "enlaces": 20,
+   "muestra": [
+    {
+     "texto": "Ver",
+     "nombre": "Ver el cierre del 2026-08-12 de Marco Mensajero",
+     "href": "/cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29"
+    },
+    {
+     "texto": "Ver",
+     "nombre": "Ver el cierre del 2026-08-12 de Marco Mensajero",
+     "href": "/cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29"
+    },
+    {
+     "texto": "Ver",
+     "nombre": "Ver el cierre del 2026-08-12 de Marco Mensajero",
+     "href": "/cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29"
+    }
+   ],
+   "filaEjemplo": " 2026-08-12 Comisión de contra-entrega cobrada a la tienda Cierre del día · 2026-08-12 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡4.343,50 -₡4.343,50 Ver",
+   "nombreSinUuid": true
+  },
+  {
+   "nombre": "oficina-02b-enlace-abre",
+   "href": "/cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29",
+   "status": 200
+  },
+  {
+   "nombre": "oficina-03-ordenes-de-fila",
+   "botones": 4,
+   "nombreAbrir": "Ver las órdenes que componen Contra-entrega cobrado a los clientes de la tienda del 2026-08-12",
+   "panel": "Cierre del día 2026-08-12 Mensajero: Marco Mensajero 6 de 12 órdenes del cierre aportan a este concepto Importe del movimiento: ₡124.100 Descargar Guía Destinatario Tienda Resultado Aporte 990001 Karla Vargas Tania Reprogramado · Reprogramado ₡12.500 990003 Sofia Rojas Tania Reprogramado ₡34.000 990005 Mariana Solis Tania Reprogramado ₡21.000 990006 Luis Jimenez Tania Reprogramado ₡5.600 990008 Fernando Castro Tania Incidente ₡45.000 990009 Gabriela Nunez Tania Reprogramado ₡18.500 1-6 de 6 ‹ ›",
+   "uuids": false
+  },
+  {
+   "nombre": "oficina-04-filtro-cierre",
+   "opciones": [
+    "Todos los cierres",
+    "Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos",
+    "Cierre del 2026-09-24 · Rita Recorrido · 5 movimientos",
+    "Cierre del 2026-08-13 14:22 · Marco Mensajero · 5 movimientos",
+    "Cierre del 2026-08-13 08:59 · Marco Mensajero · 5 movimientos"
+   ],
+   "buscaPorMensajero": "Quino QUEPOS",
+   "resultadosPorNombre": 2,
+   "buscaPorDia": "2026-09-24",
+   "resultadosPorDia": 3,
+   "filasFiltradas": 8,
+   "soloEseDia": true,
+   "uuids": [],
+   "selector": "Cierre: Cierre del 2026-09-24 · Quino QUEPOS · 7 movimientos"
+  },
+  {
+   "nombre": "oficina-05-descarga-con-cierre",
+   "archivo": "cierre-admin-05-estado-cuenta-cierre.xlsx",
+   "filas": 9,
+   "encabezados": [
+    "Fecha",
+    "Movimiento",
+    "Motivo",
+    "Origen",
+    "Cómo se pagó",
+    "Registró",
+    "Cargo",
+    "Abono",
+    "Saldo",
+    "Estado"
+   ],
+   "primera": [
+    "",
+    "Saldo inicial",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "0.00"
+   ],
+   "ultima": [
+    "2026-09-24",
+    "Flete cobrado a la tienda",
+    null,
+    "Cierre del día · 2026-09-24 · Quino QUEPOS",
+    null,
+    "Automático · Aprobación del cierre por Sat QUEPOS",
+    "3000.00",
+    null,
+    "147670.10"
+   ],
+   "uuids": 0
+  },
+  {
+   "nombre": "oficina-05b-descarga-completa",
+   "archivo": "cierre-admin-05b-estado-cuenta-completo.xlsx",
+   "filas": 31,
+   "encabezados": [
+    "Fecha",
+    "Movimiento",
+    "Motivo",
+    "Origen",
+    "Cómo se pagó",
+    "Registró",
+    "Cargo",
+    "Abono",
+    "Saldo",
+    "Estado"
+   ],
+   "primera": [
+    "",
+    "Saldo inicial",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "0.00"
+   ],
+   "ultima": [
+    "2026-09-26",
+    "Corrección a favor de la tienda",
+    "Anulación de pago · SINPE · REC458D-maestro",
+    "Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · SINPE",
+    null,
+    "Maestro QA",
+    null,
+    "1000.00",
+    "147670.10",
+    "Anulación"
+   ],
+   "uuids": 0,
+   "ultimaFilaPantalla": " 2026-09-26 Corrección a favor de la tienda Anulación Anulación de pago · SINPE · REC458D-maestro Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · SINPE Registró: Maestro QA ₡1.000 ₡147.670,10 Ver",
+   "tarjetas": "Saldo actual ₡147.670,10 Ordenex le debe ₡147.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10"
+  },
+  {
+   "nombre": "oficina-06-mensajero",
+   "tarjetas": "Saldo actual ₡5.100 Ordenex le debe ₡5.100 a Marco Mensajero Saldo inicial ₡0 Abonos del periodo ₡15.300 Cargos del periodo ₡10.200 Saldo al final del periodo ₡5.100",
+   "botonesDesplegar": 4,
+   "panel": "Este importe es el total que el cierre del día dejó anotado para pagarle al mensajero. No se acumula orden por orden, así que no se puede repartir entre ellas: para verlo en detalle, abrí el cierre en la pantalla de cierres.",
+   "enlacesOrigen": 4,
+   "hrefEjemplo": "/cierres-admin?cierre=70ebf5e2-8f69-4bb5-9367-814f73545e29",
+   "uuids": []
+  },
+  {
+   "nombre": "oficina-06b-mensajero-filtro-cierre",
+   "opciones": [
+    "Todos los cierres",
+    "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+    "Cierre del 2026-08-13 08:59 · Marco Mensajero · 1 movimiento",
+    "Cierre del 2026-08-12 · Marco Mensajero · 2 movimientos"
+   ],
+   "elegida": "Cierre del 2026-08-13 14:22 · Marco Mensajero · 1 movimiento",
+   "filas": 2
+  },
+  {
+   "nombre": "oficina-07-pago-metodo-referencia",
+   "ultimaFila": " 2026-09-26 Ordenex le paga a la tienda SINPE · REC458D-admin Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · SINPE Cómo se pagó: SINPE · referencia REC458D-admin Registró: Ana Admin ₡1.000 ₡146.670,10 Ver",
+   "tieneComo": true,
+   "tarjetas": "Saldo actual ₡146.670,10 Ordenex le debe ₡146.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡44.729,90 Saldo al final del periodo ₡146.670,10"
+  },
+  {
+   "nombre": "oficina-07b-panel-como",
+   "panel": "Ordenex le paga a la tienda 2026-09-26 · Sale ₡1.000 A quién Tania Tienda Por qué SINPE · REC458D-admin De dónde sale Pago de Ordenex a una tienda · Tania Tienda · 2026-09-26 · SINPE Cómo SINPE · referencia REC458D-admin Comprobante Sin comprobante. Adjuntar comprobante Registró Ana Admin Estado Vigente Cómo quedó Flujo de dinero registrado ₡13.482.932,72 Ganancia de Ordenex ₡13.336.262,62 Lo que Ordenex les debe a las tiendas ₡146.670,10 Saldo inicial y aportes ₡0 Saldo de la tienda ₡146.670,10 Anular… Close",
+   "tieneComo": true
+  },
+  {
+   "nombre": "oficina-07c-anulado",
+   "tarjetas": "Saldo actual ₡147.670,10 Ordenex le debe ₡147.670,10 a Tania Tienda Saldo inicial ₡0 Abonos del periodo ₡191.400 Cargos del periodo ₡43.729,90 Saldo al final del periodo ₡147.670,10"
+  }
+ ]
+}

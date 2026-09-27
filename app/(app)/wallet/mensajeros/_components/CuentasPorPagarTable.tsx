@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 import { Users } from "lucide-react";
@@ -18,7 +19,7 @@ import { normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-lista
 import { cn } from "@/lib/utils";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
-import { DesglosePagosMensajero } from "./DesglosePagosMensajero";
+import { ENLACE_ESTADO_CUENTA_MENSAJERO } from "./estado-cuenta-mensajero-labels";
 import { claveCuentasPorPagar } from "./cuentas-por-pagar-clave";
 import {
   COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
@@ -34,9 +35,8 @@ import {
 
 // Feature 44 (T14, R18/R19/R21/R22) — tabla-resumen de CUENTAS POR PAGAR a mensajeros (una fila
 // por mensajero: devengado / pagado / cuenta por pagar, con estado por signo). El maestro ve a
-// TODOS los mensajeros (R19, no acotado). Cada fila EXPANDE su DESGLOSE POR CIERRE
-// (`DesglosePagosMensajero`, paginado, mas reciente primero, R18) usando el `renderExpanded` del
-// `DataTable`. Money-safe: los montos se renderizan TAL CUAL con `money`, sin parseFloat/Number.
+// TODOS los mensajeros (R19, no acotado). Cada fila ENLAZA al estado de cuenta de su mensajero
+// (FICHA 458-D, D14: el desglose desplegable se retiro). Money-safe: los montos se renderizan TAL CUAL con `money`, sin parseFloat/Number.
 //
 // Feature 170 — FASE 2 (T L.2, R42/R43/R50/R52): la pantalla deja de recibir el conjunto entero
 // por props y pinta UNA PAGINA que resuelve el servidor (T L.1). Lo que eso mueve, y por que:
@@ -51,8 +51,8 @@ import {
 //    mensajero, calculada en el servidor antes de recortar la pagina (T L.1 §5). Aqui no se suma
 //    ni se deriva nada;
 //  - **la descarga sigue entregando el CONJUNTO filtrado**, releido al pulsar el control (R52);
-//  - **expandir una fila funciona igual en cualquier pagina** (R50): la clave de expansion es el
-//    `mensajeroId` y el desglose lo pide `DesglosePagosMensajero` por su cuenta.
+//  - **el enlace de una fila funciona igual en cualquier pagina** (R50): lleva el `mensajeroId` de SU
+//    fila, y el estado de cuenta se lee en su propia pagina.
 //
 // El control de paginacion y el contador viven en ESTE archivo, que es el que la guardia de
 // T H.3 mira: reconoce como pantalla paginada al archivo que monta `<Pagination>` y a los que
@@ -139,6 +139,21 @@ const COLUMNS: Column<CuentaPorPagarResumenDTO>[] = [
       const badge = SIGNO_BADGE[m.signo];
       return <Badge variant={badge.variant}>{badge.label}</Badge>;
     },
+  },
+  {
+    // FICHA 458-D (T D.3, R17, D14) — la fila ENLAZA al estado de cuenta del mensajero y deja de
+    // desplegar el desglose. El identificador va SOLO en el `href` (D1).
+    id: "estadoCuenta",
+    value: ENLACE_ESTADO_CUENTA_MENSAJERO.columna,
+    render: (m) => (
+      <Link
+        href={`/wallet/mensajeros/${m.mensajeroId}`}
+        aria-label={ENLACE_ESTADO_CUENTA_MENSAJERO.nombre(m.mensajeroNombre)}
+        className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        {ENLACE_ESTADO_CUENTA_MENSAJERO.visible}
+      </Link>
+    ),
   },
 ];
 
@@ -284,16 +299,6 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
           description:
             "Cuando un mensajero tenga montos devengados o pagados, aparecerá aquí con su cuenta por pagar.",
         }}
-        /**
-         * R50 — el desglose de una fila se abre igual en la página 1 que en la 3: la fila que
-         * llega aquí es la de la página visible y `DesglosePagosMensajero` pide SU desglose por
-         * `mensajeroId`, sin depender de la página. Los montos del resumen bajan por props
-         * desde esta misma fila, o sea del servidor: cambiar de página no los recalcula.
-         */
-        renderExpanded={(m) => (
-          <DesglosePagosMensajero resumen={m} id={`desglose-${m.mensajeroId}`} />
-        )}
-        expandAriaLabel={(m) => `Ver desglose de ${m.mensajeroNombre}`}
       />
 
       <Pagination

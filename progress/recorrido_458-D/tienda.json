@@ -1,0 +1,68 @@
+{
+  "rol": "tienda",
+  "pasos": [
+    {
+      "paso": "adminTienda /mi-wallet",
+      "ok": true,
+      "lecturas": [
+        [
+          "Ordenex te cobró",
+          true
+        ],
+        [
+          "Ordenex pagó un gasto por ti",
+          true
+        ],
+        [
+          "Le pagaste a Ordenex",
+          false
+        ]
+      ],
+      "verComprobante": 6,
+      "escritura": [],
+      "sinUuid": true
+    },
+    {
+      "paso": "8 /mi-wallet: selector de cierre",
+      "ok": true,
+      "opciones": [
+        "Todos los cierres",
+        "Cierre del 2026-09-24 · 7 movimientos",
+        "Cierre del 2026-09-24 · 5 movimientos",
+        "Cierre del 2026-08-13 14:22 · 5 movimientos",
+        "Cierre del 2026-08-13 09:00 · 5 movimientos"
+      ],
+      "pideId": false
+    },
+    {
+      "paso": "adminTienda ver comprobante",
+      "ok": true,
+      "aviso": "Este registro no tiene comprobante."
+    },
+    {
+      "paso": "adminTienda /wallet → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminTienda /wallet/tiendas → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminTienda /wallet/tiendas/773e9313-6b7b-4a29-876f-80d61be489b0 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminTienda /wallet/mensajeros/9cbcccb6-7a7b-43a5-b3b8-eb77c0cdb558 → 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "paso": "adminTienda /wallet/satelites/30d1fad3-bdc1-4bbd-86e0-08f1166f95b0 → 404",
+      "ok": true,
+      "status": 404
+    }
+  ]
+}

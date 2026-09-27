@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Prisma, type PrismaClient, type GestionResultado } from "@prisma/client";
 
 import { CierreAporteRepository } from "@/lib/repositories/CierreAporteRepository";
+import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
@@ -356,6 +357,7 @@ async function sembrar(tx: Tx, semilla: Semilla[] = SEMILLA): Promise<Sembrado> 
     new WalletMovimientoRepository(cliente),
     new WalletTiendaMovimientoRepository(cliente),
     new CierreAporteRepository(cliente),
+    new EstadoCuentaRepository(cliente),
   );
 
   const filaCaja = (categoria: WalletMovimientoCategoria) =>
@@ -760,6 +762,75 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
         (o) => o.ordenId === s.ordenPorClave.get("reprogramado"),
       );
       expect(reprogramada?.aporte).toBe("250.00");
+    });
+  });
+
+  // ── FICHA 458-D (servidor, R19): las ordenes de una fila del ESTADO DE CUENTA, desde la oficina ──
+
+  it("458-D R19: la oficina abre la fila de flete de la tienda A y ve SOLO las ordenes de A, con el mensajero", async () => {
+    await enTransaccionRevertida(prisma, async (tx) => {
+      const s = await sembrar(tx);
+      const debitoA = await s.movimientoTienda(s.tiendaA, "flete");
+      expect(debitoA, "el feed no emitio el debito de flete de la tienda A").not.toBeNull();
+
+      const r = await s.servicio.verDetalleDeFilaDeCuenta(
+        { cuenta: { tipo: "tienda", id: s.tiendaA }, movimientoId: debitoA!, page: 1, pageSize: 50 },
+        MAESTRO,
+      );
+      if (r.status !== "ok") throw new Error(`esperado ok, llego ${r.status}`);
+      // El cierre mezcla tiendas: la orden de la B aporta al flete de la CAJA pero no al de A.
+      expect(r.data.ordenes.map((o) => o.ordenId)).not.toContain(s.ordenPorClave.get("de-la-tienda-b"));
+      expect(new Set(r.data.ordenes.map((o) => o.tiendaNombre))).toEqual(new Set(["Tienda A 344"]));
+      expect(r.data.total).toBe(3);
+      expect(r.data.ordenesDelCierre).toBe(8);
+      expect(sumar(r.data.ordenes.map((o) => o.aporte))).toBe(await s.montoTienda(s.tiendaA, "flete"));
+      // La oficina SI ve quien hizo el cierre (la tienda no: R15 de la 344).
+      expect(r.data.cierre.mensajeroNombre).toBe("Mensajero 344");
+    });
+  });
+
+  it("458-D R19: el movimiento de la tienda A pedido como fila de la B responde no encontrado; la tienda no entra", async () => {
+    await enTransaccionRevertida(prisma, async (tx) => {
+      const s = await sembrar(tx);
+      const debitoA = await s.movimientoTienda(s.tiendaA, "flete");
+      expect(debitoA).not.toBeNull();
+      const pedir = (cuentaId: string, actor: Actor) =>
+        s.servicio.verDetalleDeFilaDeCuenta(
+          { cuenta: { tipo: "tienda", id: cuentaId }, movimientoId: debitoA!, page: 1, pageSize: 50 },
+          actor,
+        );
+      expect(await pedir(s.tiendaB, MAESTRO)).toEqual({ status: "not_found" });
+      expect(await pedir(s.tiendaA, { usuarioId: s.tiendaA, rol: "adminTienda" })).toEqual({ status: "forbidden" });
+      // No-vacuidad: el mismo id con SU cuenta responde con datos.
+      expect((await pedir(s.tiendaA, MAESTRO)).status).toBe("ok");
+    });
+  });
+
+  it("458-D R19: la fila de cierre del mensajero se abre y dice que su importe es el total del cierre; la de otro mensajero, no encontrada", async () => {
+    await enTransaccionRevertida(prisma, async (tx) => {
+      const s = await sembrar(tx);
+      const { mensajeroId } = await tx.cierreDia.findUniqueOrThrow({ where: { id: s.cierreId }, select: { mensajeroId: true } });
+      const movimientoId = randomUUID();
+      await tx.pagoMensajeroMovimiento.create({
+        data: {
+          id: movimientoId,
+          mensajeroId,
+          tipo: "devengo",
+          categoria: "pago_devengado",
+          monto: "4500.00",
+          origenTipo: "cierre_dia",
+          origenId: s.cierreId,
+          registradoPor: null,
+        },
+      });
+      const pedir = (cuentaId: string) =>
+        s.servicio.verDetalleDeFilaDeCuenta(
+          { cuenta: { tipo: "mensajero", id: cuentaId }, movimientoId, page: 1, pageSize: 25 },
+          MAESTRO,
+        );
+      expect(await pedir(mensajeroId)).toEqual({ status: "sin_reparto", motivo: "snapshot_del_cierre" });
+      // Otra cuenta (la tienda A pedida como mensajero) = inexistente.
+      expect(await pedir(s.tiendaA)).toEqual({ status: "not_found" });
     });
   });
 

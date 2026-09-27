@@ -234,7 +234,7 @@ describeSiHayBase("⭑ 458-B/FASE 0 — la fotografia de las cuentas (Postgres r
   it("TB.6 R25/R71: el pago anulado (c5) sale tachado con su constancia y NO anulable; su anulacion (c6) es contra-asiento", () => {
     const [, , , , c5, c6, pc] = foto().ec.tiendaTodo.filas;
     expect({ anulacion: c5.anulacion, anulable: c5.anulable, esContra: c5.esContraAsiento }).toEqual({
-      anulacion: { motivo: "Pago a la cuenta equivocada 458", por: foto().esc.maestroNombre, fecha: hoy() },
+      anulacion: { motivo: "Pago a la cuenta equivocada 458", por: foto().esc.maestroNombre, fecha: hoy(), hora: expect.stringMatching(/^\d{2}:\d{2}$/) },
       anulable: false,
       esContra: false,
     });

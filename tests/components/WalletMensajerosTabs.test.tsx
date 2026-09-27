@@ -16,26 +16,17 @@
 //    el desorden que la ficha viene a arreglar.
 //
 // Acá se montan los DOS componentes REALES (tabla y panel), no dobles: lo único que se dobla son
-// las Server Actions, porque el refresco se mide por las llamadas que provoca. La única excepción
-// es `DesglosePagosMensajero`, que sólo se monta al expandir una fila y arrastraría media
-// pantalla de liquidación a jsdom; acá no se expande ninguna.
+// las Server Actions, porque el refresco se mide por las llamadas que provoca. (Hasta la 458-D se
+// doblaba también `DesglosePagosMensajero`, el desplegable de la fila; se retiró y la fila enlaza al
+// estado de cuenta, así que ya no hay nada que doblar.)
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
-import type { DesglosePagosMensajeroProps } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
 import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 import type { PremioPodioDTO } from "@/lib/types/premio-ranking-devengo";
 
-vi.mock(
-  "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero",
-  () => ({
-    DesglosePagosMensajero: ({ resumen }: DesglosePagosMensajeroProps) => (
-      <div data-testid={`desglose-stub-${resumen.mensajeroId}`} />
-    ),
-  }),
-);
 
 const { paginadoMock, conjuntoMock, listarPremiosMock, registrarMock, anularMock } =
   vi.hoisted(() => ({

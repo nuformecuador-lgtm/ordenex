@@ -16,21 +16,24 @@
 //
 // No-vacuidad: los datos SÍ llevan uuid hasta el DOM (hay enlaces cuyo `href` los contiene) y se
 // renderizan las N superficies. Contraprueba: el `EnlaceCierre` de antes de la 458-A la pone roja.
+//
+// FICHA 458-D (T D.8): los desgloses de `/wallet/tiendas` y `/wallet/mensajeros` se retiraron. En su
+// lugar entran los ESTADOS DE CUENTA de tienda (con el panel «Ver» abierto), mensajero (con el pago
+// y su previsualización) y bodega (con la conciliación), los listados que enlazan a ellos (el uuid SOLO
+// en el `href`) y el selector de cierre abierto sobre la MISMA composición que usaban los desgloses.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
 
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
-import type { PagoMensajeroMovimientoDTO } from "@/lib/types/wallet-mensajero";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
 
 const H = vi.hoisted(() => ({
   conceptos: vi.fn(),
   cierres: vi.fn(),
-  desgloseTienda: vi.fn(),
-  desgloseMensajero: vi.fn(),
+  estadoCuenta: vi.fn(),
+  consolidaciones: vi.fn(),
   previsualizar: vi.fn(),
   deFila: vi.fn(),
 }));
@@ -39,14 +42,33 @@ vi.mock("@/lib/actions/wallet-filtros", () => ({
   cierresDeLaCuentaAction: (...a: unknown[]) => H.cierres(...a),
 }));
 vi.mock("@/lib/actions/wallet-tienda", () => ({
-  listarMovimientosDeTiendaAction: (...a: unknown[]) => H.desgloseTienda(...a),
-  listarMovimientosDeTiendaCompletoAction: vi.fn(),
   verDetalleDeMiMovimientoAction: vi.fn(),
   verDetalleDeMiMovimientoCompletoAction: vi.fn(),
+  // Los listados pintan su página del servidor (`fallbackData`); la relectura queda pendiente a propósito.
+  listarSaldosTiendasPaginadoAction: vi.fn(() => new Promise(() => {})),
+  listarSaldosTiendasCompletoAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-mensajero", () => ({
-  listarPagosDeMensajeroAction: (...a: unknown[]) => H.desgloseMensajero(...a),
-  listarPagosDeMensajeroCompletoAction: vi.fn(),
+  listarCuentasPorPagarPaginadoAction: vi.fn(() => new Promise(() => {})),
+  listarCuentasPorPagarCompletoAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/estado-cuenta", () => ({
+  verEstadoCuentaAction: (...a: unknown[]) => H.estadoCuenta(...a),
+  verEstadoCuentaCompletoAction: vi.fn(),
+  verMiEstadoCuentaAction: vi.fn(),
+  verMiEstadoCuentaCompletoAction: vi.fn(),
+  verOrdenesDeFilaAction: vi.fn(),
+}));
+vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn(async () => ({ status: "forbidden" })) }));
+vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn(), adjuntarComprobanteAction: vi.fn() }));
+vi.mock("@/lib/actions/wallet-anulacion", () => ({ anularMovimientoAction: vi.fn() }));
+vi.mock("@/lib/actions/conciliacion-satelites", () => ({
+  listarConsolidacionesSateliteAction: (...a: unknown[]) => H.consolidaciones(...a),
+  listarConsolidacionesSateliteCompletoAction: vi.fn(),
+  listarSaldosSatelitesAction: vi.fn(() => new Promise(() => {})),
+  listarSaldosSatelitesCompletoAction: vi.fn(),
+  marcarConsolidacionRecibidaAction: vi.fn(),
+  revertirConciliacionAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/liquidacion", () => ({
   previsualizarRepartoMensajeroAction: (...a: unknown[]) => H.previsualizar(...a),
@@ -63,10 +85,17 @@ import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
 import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
 import { DetalleFilaComposicion } from "@/app/(app)/wallet/_components/DetalleFilaComposicion";
 import { FILTROS_VACIOS } from "@/app/(app)/wallet/_components/WalletFiltros";
-import { DesgloseTiendaLedger } from "@/app/(app)/mi-wallet/_components/DesgloseTiendaLedger";
-import { MiWalletFiltros } from "@/app/(app)/mi-wallet/_components/MiWalletFiltros";
-import { DesgloseMovimientosTienda } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
-import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_components/DesglosePagosMensajero";
+import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
+import { EstadoCuentaTienda } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
+import { EstadoCuentaMensajero } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
+import { EstadoCuentaSatelite } from "@/app/(app)/wallet/satelites/_components/EstadoCuentaSatelite";
+import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable";
+import { CuentasPorPagarTable } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
+import { SaldosSatelitesTable } from "@/app/(app)/wallet/satelites/_components/SaldosSatelitesTable";
+import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
+import { CIERRE_SELECTOR_TEXTOS } from "@/components/shared/wallet/cierres-selector";
+import { useCierresDeLaCuenta } from "@/components/shared/wallet/use-cierres-de-la-cuenta";
+import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { RepartoPrevisualizacion } from "@/app/(app)/wallet/mensajeros/_components/RepartoPrevisualizacion";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -98,35 +127,69 @@ const CAJA: (WalletMovimientoDTO & { origen: OrigenLegibleDTO })[] = [
     origen: ORIGEN,
   },
 ];
-const TIENDA_FILAS: (WalletTiendaMovimientoDTO & { origen: OrigenLegibleDTO })[] = [
-  {
-    id: u(11),
-    tiendaId: TIENDA,
-    tipo: "credito",
-    categoria: "cod_recaudado",
-    monto: "9000.00",
-    origenTipo: "cierre_dia",
-    origenId: CIERRE,
-    descripcion: null,
-    fechaMovimiento: "2026-09-12T20:00:00.000Z",
-    origen: ORIGEN,
-  },
-];
-const MENSAJERO_FILAS: (PagoMensajeroMovimientoDTO & { origen: OrigenLegibleDTO })[] = [
-  {
-    id: u(12),
-    mensajeroId: MENSAJERO,
-    tipo: "devengo",
-    categoria: "pago_devengado",
-    monto: "4000.00",
-    origenTipo: "cierre_dia",
-    origenId: CIERRE,
-    descripcion: null,
-    fechaMovimiento: "2026-09-12T20:00:00.000Z",
-    cierreId: CIERRE,
-    origen: ORIGEN,
-  },
-];
+
+/** Una fila del estado de cuenta con uuid en su destino (viaja, no se pinta). */
+function filaEC(n: number, parcial: Partial<FilaEstadoCuentaDTO> = {}): FilaEstadoCuentaDTO {
+  return {
+    ref: { libro: "tienda", movimientoId: u(n) },
+    consolidacionId: null,
+    fecha: "2026-09-12",
+    categoria: "cobro_manual",
+    origenTipo: "manual",
+    origen: { texto: "Registrado a mano", enlace: null },
+    pago: null,
+    descripcion: "Cobro de etiquetas",
+    registro: { nombre: "Ana Admin", automatico: null },
+    cargo: "500.00",
+    abono: null,
+    saldoCorrido: "8500.00",
+    chip: "cobros",
+    anulacion: null,
+    esContraAsiento: false,
+    tieneComprobante: true,
+    anulable: true,
+    naceDeUnCierre: false,
+    ...parcial,
+  };
+}
+
+function estadoEC(tipo: EstadoCuentaDTO["cuenta"]["tipo"], id: string, nombre: string, filas: FilaEstadoCuentaDTO[]): EstadoCuentaDTO {
+  return {
+    cuenta: { tipo, id, nombre },
+    saldoActual: "8500.00",
+    signo: "positivo",
+    sentido: tipo === "bodega" ? "por_entregar" : "ordenex_debe",
+    saldoInicial: "0.00",
+    abonos: "9000.00",
+    cargos: "500.00",
+    saldoFinal: "8500.00",
+    resumen: null,
+    filas,
+    total: filas.length,
+    page: 1,
+    pageSize: 20,
+  };
+}
+
+/** La composición del selector de cierre que montaban los desgloses (458-A), abierta. */
+function SelectorCierre() {
+  const cierres = useCierresDeLaCuenta({ cuenta: "tienda", tiendaId: TIENDA });
+  return (
+    <SelectorBuscable
+      id="cierre"
+      etiqueta="Cierre"
+      opciones={cierres.opciones}
+      valor={null}
+      onCambiar={vi.fn()}
+      onBuscar={cierres.buscar}
+      estado={cierres.estado}
+      hayMas={cierres.hayMas}
+      textos={CIERRE_SELECTOR_TEXTOS}
+    />
+  );
+}
+
+const BODEGA = u(5);
 
 // ── El detector ────────────────────────────────────────────────────────────────────────────────
 
@@ -177,26 +240,26 @@ beforeEach(() => {
     opciones: [{ cierreId: CIERRE, dia: "2026-09-12", hora: "14:00", mensajero: "Juan Pérez Mora", movimientos: 1 }],
     hayMas: false,
   });
-  H.desgloseTienda.mockResolvedValue({
+  H.estadoCuenta.mockResolvedValue({ status: "forbidden" });
+  H.consolidaciones.mockResolvedValue({
     status: "ok",
-    data: {
-      tiendaId: TIENDA,
-      movimientos: TIENDA_FILAS,
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      desglose: { aFavor: "9000.00", cargos: "0.00", pagado: "0.00", saldo: "9000.00", signo: "positivo" },
-    },
-  });
-  H.desgloseMensajero.mockResolvedValue({
-    status: "ok",
-    data: {
-      movimientos: MENSAJERO_FILAS,
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      cuenta: { devengado: "4000.00", pagado: "0.00", cuentaPorPagar: "4000.00", signo: "positivo" },
-    },
+    items: [
+      {
+        cierreBodegaId: u(20),
+        solicitadoAt: "2026-09-12T20:00:00.000Z",
+        totales: { efectivo: "8500.00", simpe: "0.00", transferencia: "0.00", general: "8500.00" },
+        montoRecibido: null,
+        faltaPorRecibir: "8500.00",
+        conciliado: false,
+        conciliadoAt: null,
+        conciliadoPorNombre: null,
+        nota: null,
+        cantidadCierres: 1,
+      },
+    ],
+    total: 1,
+    page: 1,
+    pageSize: 25,
   });
   H.previsualizar.mockResolvedValue({
     status: "ok",
@@ -243,41 +306,110 @@ const SUPERFICIES: { nombre: string; montar: () => Promise<void> }[] = [
     },
   },
   {
-    nombre: "/mi-wallet · libro de la tienda y filtros (cierre con uuid)",
+    // FICHA 458-D (T D.5): `/mi-wallet` es el estado de cuenta de la tienda, con su selector de cierre
+    // (el cierre con uuid en las opciones) y el origen con entidad (uuid SOLO en el `href`).
+    nombre: "/mi-wallet · estado de cuenta de la tienda y selector de cierre (cierre con uuid)",
+    montar: async () => {
+      conSWR(
+        <MiEstadoCuenta
+          inicial={estadoEC("tienda", TIENDA, "Tania Tienda", [
+            filaEC(11, {
+              categoria: "cod_recaudado",
+              origenTipo: "cierre_dia",
+              origen: ORIGEN,
+              registro: { nombre: null, automatico: null },
+              chip: "cierres",
+              naceDeUnCierre: true,
+              anulable: false,
+              cargo: null,
+              abono: "9000.00",
+            }),
+          ])}
+          cierres={{ opciones: [{ cierreId: CIERRE, fecha: "2026-09-12T20:00:00.000Z", movimientos: 1 }], hayMas: false, disponible: true }}
+        />,
+      );
+      await screen.findByText(/Cierre del día · 2026-09-12/);
+    },
+  },
+  {
+    nombre: "/wallet/tiendas|mensajeros|satelites · listados que enlazan al estado de cuenta",
     montar: async () => {
       conSWR(
         <>
-          <MiWalletFiltros
-            onAplicar={vi.fn()}
-            onLimpiar={vi.fn()}
-            cierres={{ opciones: [{ cierreId: CIERRE, fecha: "2026-09-12T20:00:00.000Z", movimientos: 1 }], hayMas: false, disponible: true }}
+          <SaldosTiendasTable initialData={{ items: [{ tiendaId: TIENDA, tiendaNombre: "Tania Tienda", saldo: "9000.00", signo: "positivo" }], total: 1, pageSize: 25 }} />
+          <CuentasPorPagarTable
+            initialData={{
+              items: [{ mensajeroId: MENSAJERO, mensajeroNombre: "Juan Pérez Mora", devengado: "4000.00", pagado: "0.00", cuentaPorPagar: "4000.00", signo: "positivo" }],
+              total: 1,
+              pageSize: 25,
+            }}
           />
-          <DesgloseTiendaLedger movimientos={TIENDA_FILAS} />
+          <SaldosSatelitesTable
+            initialData={{
+              items: [
+                {
+                  zonaId: BODEGA,
+                  zonaNombre: "FGAM Puntarenas",
+                  saldoSinConciliar: "8500.00",
+                  totalEfectivo: "8500.00",
+                  totalConsolidado: "8500.00",
+                  totalRecibido: "0.00",
+                  consolidacionesSinConciliar: 1,
+                  diasDeLaMasAntigua: 1,
+                  fechaDeLaMasAntigua: "2026-09-12T20:00:00.000Z",
+                  ultimaRecibida: null,
+                },
+              ],
+              total: 1,
+              pageSize: 25,
+            }}
+            resumen={null}
+          />
         </>,
       );
-      await screen.findByText(/Cierre del día · 2026-09-12/);
+      await screen.findByRole("link", { name: "Ver estado de cuenta de FGAM Puntarenas" });
     },
   },
   {
-    nombre: "/wallet/tiendas · desglose con el selector de cierre ABIERTO",
+    nombre: "/wallet/tiendas/[tiendaId] · estado de cuenta con el panel «Ver» abierto",
     montar: async () => {
-      conSWR(
-        <DesgloseMovimientosTienda resumen={{ tiendaId: TIENDA, tiendaNombre: "Tania Tienda", saldo: "9000.00", signo: "positivo" }} />,
-      );
-      await screen.findByText(/Cierre del día · 2026-09-12/);
-      fireEvent.click(screen.getByRole("button", { name: /^Cierre:/ }));
-      await screen.findByRole("option", { name: /Cierre del 2026-09-12/ });
+      conSWR(<EstadoCuentaTienda inicial={estadoEC("tienda", TIENDA, "Tania Tienda", [filaEC(30), filaEC(31, { anulacion: { motivo: "Duplicado", por: "Ana Admin", fecha: "2026-09-13", hora: "10:30" }, anulable: false })])} puedeRegistrar />);
+      fireEvent.click(screen.getAllByRole("button", { name: /^Ver Ordenex le cobra a la tienda/ })[0]);
+      await screen.findByRole("dialog");
     },
   },
   {
-    nombre: "/wallet/mensajeros · desglose (Ver el cierre) con el selector ABIERTO",
+    nombre: "/wallet/mensajeros/[mensajeroId] · estado de cuenta con el pago del mensajero",
     montar: async () => {
       conSWR(
-        <DesglosePagosMensajero
-          resumen={{ mensajeroId: MENSAJERO, mensajeroNombre: "Juan Pérez Mora", devengado: "4000.00", pagado: "0.00", cuentaPorPagar: "4000.00", signo: "positivo" }}
+        <EstadoCuentaMensajero
+          inicial={estadoEC("mensajero", MENSAJERO, "Juan Pérez Mora", [
+            filaEC(32, { ref: { libro: "mensajero", movimientoId: u(32) }, categoria: "liquidacion", origenTipo: "pago_mensajero", chip: "pagos" }),
+          ])}
+          puedeRegistrar
         />,
       );
-      await screen.findAllByRole("link", { name: /^Ver el cierre/ });
+      await waitFor(() => expect(H.previsualizar).toHaveBeenCalled());
+    },
+  },
+  {
+    nombre: "/wallet/satelites/[zonaId] · estado de cuenta y conciliación",
+    montar: async () => {
+      conSWR(
+        <EstadoCuentaSatelite
+          inicial={estadoEC("bodega", BODEGA, "FGAM Puntarenas", [
+            filaEC(33, { ref: null, consolidacionId: u(20), categoria: "declarado", origenTipo: "cierre_bodega", chip: "declarado" }),
+          ])}
+          puedeConciliar
+        />,
+      );
+      await screen.findByRole("button", { name: /Marcar recibido la consolidación/ });
+    },
+  },
+  {
+    nombre: "selector de cierre de una cuenta ABIERTO (la composición de los desgloses retirados)",
+    montar: async () => {
+      conSWR(<SelectorCierre />);
       fireEvent.click(screen.getByRole("button", { name: /^Cierre:/ }));
       await screen.findByRole("option", { name: /Cierre del 2026-09-12/ });
     },
@@ -297,10 +429,11 @@ describe("458-A R96 — ninguna superficie de la wallet muestra un identificador
     expect(uuidsEnPantalla(document.body)).toEqual([]);
   });
 
-  it("no-vacuidad: se renderizan ≥ 7 superficies y los ids SÍ llegan al DOM (en `href`)", async () => {
-    expect(SUPERFICIES.length).toBeGreaterThanOrEqual(7);
-    await SUPERFICIES.find((s) => s.nombre.startsWith("/wallet/mensajeros · desglose"))!.montar();
-    expect(enlacesConUuid()).toBeGreaterThanOrEqual(2); // origen + «Ver el cierre»
+  it("no-vacuidad: se renderizan ≥ 10 superficies y los ids SÍ llegan al DOM (en `href`)", async () => {
+    expect(SUPERFICIES.length).toBeGreaterThanOrEqual(10);
+    // 458-D: los tres listados enlazan al estado de cuenta con el uuid SOLO en el `href`.
+    await SUPERFICIES.find((s) => s.nombre.startsWith("/wallet/tiendas|mensajeros|satelites"))!.montar();
+    expect(enlacesConUuid()).toBeGreaterThanOrEqual(3);
   });
 
   it("CONTRAPRUEBA: el `EnlaceCierre` de antes (uuid en un `sr-only`) la pone roja", () => {
