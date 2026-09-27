@@ -215,6 +215,17 @@ clon. Siembra SOLO en el clon: una plantilla y un cobro de gasto fijo pendientes
 | **n5** | `progress/history.md`: entradas de la 458-D y la 458-E | — | — | — |
 | **O5** | El `role="group"` con su nombre pasa a un envoltorio de la `<dl>` en las dos columnas de «Cómo se compone la ganancia» | `ComposicionGananciaCard.test.tsx` «458/O5» (grupo `DIV` que envuelve una `<dl>` sin rol; todo `dt/dd` cuelga de ella) | O5-a `role` de vuelta en la `<dl>`: 2 rojos | axe en `/wallet`: **0** «dlitem» (antes 1) |
 
+### Build y gate
+
+- `progress/build_458_final.log`: `BUILD_EXIT=0` (migraciones omitidas, build local); rutas dinámicas presentes.
+- Gate completo `./init.sh` contra `ordenex_458z`, sin tail, `INIT_EXIT` dentro del log:
+  - `progress/gate_458_final_fix_1.log` — `INIT_EXIT=1`: 1 rojo, `gasto-fijo-cobro-idempotencia.test.ts:371`
+    (`cobrosPendientesTotales` 1 ≠ 0). **Causa: mi siembra del recorrido** (el cobro de gasto fijo pendiente
+    `R458Z-` que dejé en el clon para ver la cola como admin; el test cuenta la cola global). Borrada la siembra,
+    el archivo aislado da 9/9 tres veces (`progress/rerun_458_final_fix_aislado.log`).
+  - `progress/gate_458_final_fix.log` — **`INIT_EXIT=0`**: 2327/2327 archivos, 32356 verdes, 26 saltados (los 26
+    de Analítica: `AnaliticaPage` 17 + `AnaliticaShell` 9), **0** en `integration/db`.
+
 ### Aceptado (no se cambia), y por qué
 
 - **O2 — la categoría espera a «Aplicar».** Es el contrato de la feature 42 (R20, borrador + «Aplicar») y la 458-E
