@@ -700,3 +700,139 @@ Los cuatro puntos del leader quedan cerrados: el resumen de tres cifras de la 17
 tarjeta y el corrido (probado contra Postgres), las tres actions sin pantalla se retiraron con sus redes movidas, la
 «comision 0 de 12» es un importe de agosto que los datos congelados no reproducen (no un fallo de R19) y su texto ya lo
 explica; 12/12 mutaciones muertas, build y gate completo en verde.
+
+---
+
+# §Arreglo de la revisión — `progress/review_458-D.md` RECHAZADA (backend_dev, 2026-09-26)
+
+**Rama:** `wt/458-D-fix` = `git checkout -B wt/458-D-fix origin/feature/458-D` en `efbfcf54` + `git merge --no-edit
+origin/review/458-D` (`5085d264`, solo el informe), empujada a `feature/458-D` tras cada paso.
+**Base:** clon propio `ordenex_458dx` (`CREATE DATABASE … TEMPLATE ordenex` con **0** conexiones a la plantilla
+medidas antes; `prisma migrate deploy`: «No pending migrations»; `migrate status` → `ordenex_458dx` en
+`localhost:5432`). `.env` del checkout principal copiado sin imprimirlo, con la base cambiada al clon y **sin**
+`DATABASE_URL_PREVIEW`. `pnpm install --frozen-lockfile` propio, sin junction. Ni la base `ordenex` ni
+`feature_list.json` se tocaron. El clon se borra al terminar.
+**Búsqueda — lo digo explícitamente:** no usé el MCP `codebase-memory`; la bitácora ya midió tres veces que el
+índice no tiene las piezas de la 458. Todo se localizó con `grep` y lectura del archivo real.
+**Sin migraciones.** Un campo nuevo en un DTO (`AnulacionDeFilaDTO.hora`), sin columnas ni tablas.
+
+## 1 — BLOQUEANTE B1 (172 R52): el filtro por cierre del mensajero trae los pagos de ese cierre y sus anulaciones
+
+| Pieza | Cambio |
+| --- | --- |
+| `lib/repositories/EstadoCuentaRepository.ts` | `cierreSql` se parte en dos. **Mensajero** (`cierreDeMensajeroSql`): `(origen_tipo = 'cierre_dia' AND origen_id = <cierre>) OR (origen_tipo = 'pago_mensajero' AND origen_id IN (SELECT lp.id FROM liquidacion_pago lp WHERE lp.cierre_id = <cierre> AND lp.mensajero_id = <cuenta>))`, sobre el `libro` ya acotado por `mensajero_id`: la cuenta va en el WHERE dos veces. El contra-asiento comparte `origen_id` con su pago, así que la rama lo trae por el documento (la semántica de `PagoMensajeroMovimientoRepository.buildFiltrosWhere`). **Tienda** (`cierreDeTiendaSql`): igual que antes |
+| `lib/repositories/FiltrosWalletRepository.ts` (`cierresDeMensajero`, R11) | «N movimientos» del selector cuenta lo MISMO que trae el filtro (filas del cierre + pagos contra él y sus anulaciones, del mismo mensajero). El orden sigue saliendo de las filas del cierre. **Decisión técnica:** sin esto el selector decía «2 movimientos» y el filtro enseñaba 5 |
+| `docs/ayuda/oficina/wallet-mensajeros.md` | «Al elegir un cierre se ven sus filas y los pagos registrados contra ese cierre, con sus anulaciones; el número de movimientos del selector ya los cuenta.» (`contexto-458.test.ts` lo afirma literal) |
+| `specs/172-liquidacion/tasks.md` R52 | repuntada a `tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts`; el test viejo del repositorio del desglose lo dice en su cabecera y se queda mientras ese repositorio viva |
+
+**¿Tiene la tienda el mismo hueco? No, medido:** `liquidacion_pago_cierre_check` es `(mensajero_id IS NULL) = (cierre_id
+IS NULL)`, así que un pago a una tienda nunca lleva cierre; `abono_tienda`, `pago_por_cuenta_tienda` y `cobro_tienda`
+no tienen columna de cierre (las únicas tablas con `cierre_id` son `cierre_detail`, `cierre_rechazo_tienda`,
+`cierre_sin_gestion`, `gestion_orden` y `liquidacion_pago`). El desglose retirado de la tienda también filtraba solo por
+`cierre_dia` (`WalletTiendaMovimientoRepository.ts:44-50`). No hay nada que arreglar ahí; queda escrito en el comentario
+de `cierreDeTiendaSql`.
+
+**Test** `tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts` (6, Postgres, transacción revertida): sobre el
+mensajero M del escenario de la 458 (que trae dos `pago_mensajero` SIN documento que no deben colarse), dos cierres
+`cierre_dia` aprobados y un mensajero N; los pagos los escribe **`LiquidacionService.registrarPagoMensajero`** (documento
+`liquidacion_pago` con su `cierre_id`) y la anulación **`anularPago`** (documento `liquidacion_anulacion` + contra-asiento).
+Mide: el cierre A trae exactamente sus 2 filas + 2 pagos + la anulación del primero (5), ni el pago del cierre B ni el
+de N; el pago anulado lleva su motivo y su día y hora de Costa Rica (calculados en el test por un camino independiente,
+UTC−6); por la action igual que por el servicio; el cierre de N sobre M da 0 filas y sobre N trae su pago; el corrido es
+el de la cuenta entera; el selector dice 5 y 2, igual que el filtro.
+
+## 2 — R25 en `/mi-wallet` (decisión del leader, 2026-09-26)
+
+**Decisión:** la tienda ve que un movimiento está anulado con **«Anulado por Ordenex»**, el **día y la hora de Costa
+Rica** y el **motivo**, **sin el nombre de la persona**. El personal de Ordenex sigue sin nombre en `/mi-wallet` (ni
+«Registró», ni quién anuló). Resuelve el hallazgo m3 de la revisión.
+
+| Pieza | Cambio |
+| --- | --- |
+| `lib/types/estado-cuenta.ts` | `AnulacionDeFilaDTO.hora: string \| null` («HH:mm» de Costa Rica) |
+| `lib/services/EstadoCuentaService.ts`, `LibroCajaAutoriaService.ts` | la hora con `horaCostaRica` (la única pieza con `Intl` y `timeZone`) en las tres fuentes de anulación; `paraLaTienda` sigue vaciando `por` |
+| `components/shared/estado-cuenta/estado-cuenta-lineas.ts` | `RotulosEstadoCuenta.anulado?` — la leyenda de un anulado la pone la superficie; sin él, la de la oficina (sin cambios) |
+| `app/(app)/mi-wallet/_components/mi-estado-cuenta-labels.ts`, `MiEstadoCuenta.tsx` | `textoAnuladoMiWallet`: «Anulado por Ordenex el 2026-09-26 a las 18:26 · <motivo>» (o «motivo no registrado»), en pantalla y en la descarga; no recibe `por`, así que un nombre que llegara no se pinta |
+| `docs/ayuda/tienda/mi-wallet.md` | «tachado, con la leyenda **Anulado por Ordenex**, el día y la hora (de Costa Rica) en que se anuló y el motivo» |
+
+Tests: `tests/integration/mi-wallet-page.test.tsx` («R25: … "Anulado por Ordenex" con el día, la hora … sin nombre» y
+«aunque la fila trajera un nombre, la tienda no lo ve (ni en pantalla ni en la descarga)», literales de contrato);
+`estado-cuenta-cierre-pagos-172r52` (la hora CR del servidor contra un cálculo independiente);
+`estado-cuenta-servidor-458d` (R35/D2: la hora viaja, `por` no).
+
+## 3 — Menores
+
+| # | Hallazgo | Arreglo | Test |
+| --- | --- | --- | --- |
+| m1 | el resumen de tres cifras se pintaba con la lectura inicial | `EstadoCuenta` gana `encabezado?: (vigente) => ReactNode`, pintado ENCIMA de las tarjetas y hermano de ellas; `/mi-wallet` pinta ahí `ResumenMiWallet` con `vigente.resumen` | `tests/components/MiWalletResumenVigente.test.tsx` (tras cambiar de chip con un saldo nuevo, resumen y tarjeta cambian juntos, y el resumen sigue fuera de las tarjetas) + los R55 de `mi-wallet-page` |
+| m2 | 172 R53 citado a un test que medía contra un doble | cita repuntada | `tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts` (4, Postgres, pago REAL por `registrarPagoTienda`): «Ya pagado» 4.000 → 5.234,56 y saldo 5.200 → 3.965,44 en la tarjeta de la tienda, la de la oficina y el corrido de la última fila; anulado, el saldo vuelve a 5.200 y «Ya pagado» sigue en 5.234,56 (N1). Literales |
+| m3 | R25 sin ratificar | decisión del leader (punto 2) | — |
+| m4 | la ayuda de la tienda prometía «de qué orden y de qué cierre viene» | «Cada línea dice de dónde viene: el cierre, el pago, la guía… Las órdenes de un cierre se ven desplegando su fila; los pagos, cobros y correcciones no vienen de una orden.» (se conserva la frase del origen con nombre que afirma la 458-A) | `contexto-458.test.ts` (literal y `not.toContain` de la frase vieja) |
+| m5 | el resumen no se vio en el navegador | recorrido (punto 4) | `progress/recorrido_458-D/fix-02*` |
+| m6 | comentarios rancios | `lib/actions/novedades.ts`, `lib/actions/wallet-filtros.ts`, `app/(app)/novedades/_components/NovedadesModule.tsx`, `app/(app)/mi-wallet/_components/mi-wallet-cierres.ts` | — |
+| m7 | `Ventana` sin `cierreId` | `cierreId?: string` en el tipo | typecheck |
+
+## 4 — Recorrido
+
+`progress/recorrido_458-D/recorrido.md` §«Arreglo de la revisión»: Marco filtrado por su cierre del 2026-08-13 → 5 filas
+(los dos pagos REALES anulados, sus dos anulaciones y el devengo; antes, 1) y el selector dice «5 movimientos»;
+`/mi-wallet` con el resumen = tarjeta = 147.670,10 antes y después de un chip, y la fila del cobro anulado «Anulado por
+Ordenex el 2026-09-26 a las 18:26 · Cobro duplicado 458D fix», sin «Ana Admin» en la página. **R7 = R8 = 0,00** antes
+y después con `c458c-1.sql`.
+
+## Mutaciones — 13/13 muertas (`progress/mutaciones_458-D_fix.json`; arnés con autocomprobación: el archivo cambia, corren > 0 tests, se restaura byte a byte con el mismo sha256)
+
+| # | Mutación | Rojos |
+| --- | --- | --- |
+| B1-M1 | el filtro por cierre del mensajero SIN la rama del pago | 4/18 |
+| B1-M2 | la rama del pago sin el cierre (todos los pagos del mensajero) | 3/5 |
+| B1-M3 | el filtro del mensajero sin la rama del cierre (solo pagos) | 2/5 |
+| B1-M4 | el selector no cuenta los pagos del cierre (R11) | 1/6 |
+| R25-M1 | `/mi-wallet` sin su leyenda (vuelve la de la oficina) | 2/39 |
+| R25-M2 | la leyenda de la tienda sin la hora | 2/39 |
+| R25-M3 | el servidor no manda la hora | 2/19 |
+| R25-M4 | la hora en UTC y no en Costa Rica | 1/6 |
+| R25-M5 | la vista de la tienda deja pasar el nombre de quien anuló | 1/13 |
+| m1-M1 | el resumen vuelve a la lectura inicial | 1/41 |
+| m1-M2 | el estado de cuenta no pinta su encabezado | 6/41 |
+| R53-M1 | el pago a la tienda cae en «Cargos» y no en «Ya pagado» | 3/4 |
+| R53-M2 | el corrido de la tienda no descuenta los débitos | 1/4 |
+
+R53-M2 salió **viva** la primera vez (0/4): el test no miraba el corrido y el servicio solo afirma R22 sobre los totales.
+Se añadió la aserción del corrido de la última fila y murió (1/4). Una mutación sobre el `HAVING` del selector salió viva
+porque era redundante (todo cierre con un pago tiene filas propias: pagarle exige pendiente > 0, es decir un devengo o un
+premio, y los dos cuelgan de `cierre_dia`); se quitó el `HAVING` en vez de dejar código que ningún test puede tumbar.
+
+## Mapa R → test (arreglo)
+
+| R | Test |
+| --- | --- |
+| 172 R52 | `tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts` |
+| 458 R11 (con pagos) | idem («el selector de cierres dice los MISMOS movimientos que trae el filtro») |
+| 458 R12 (la cuenta en el WHERE) | idem («el cierre de OTRO mensajero, sobre M, da 0 filas») |
+| 458 R25 en `/mi-wallet` | `tests/integration/mi-wallet-page.test.tsx` («R25: …» ×2), `estado-cuenta-cierre-pagos-172r52` (hora CR), `estado-cuenta-servidor-458d` (R35/D2) |
+| 172 R53 | `tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts` |
+| 172 R55 (m1) | `tests/components/MiWalletResumenVigente.test.tsx` |
+| R102/R103 (ayuda) | `tests/unit/asistente/contexto-458.test.ts` |
+
+## Build y gate (arreglo)
+
+- `pnpm run typecheck` y `pnpm exec eslint` sobre los archivos tocados: 0 errores.
+- `pnpm run build` sobre el árbol del commit del recorrido: **`BUILD_EXIT=0`** (`progress/build_458D_fix.log`).
+- Gate completo `./init.sh` contra el clon `ordenex_458dx`, sin tail, con `INIT_EXIT` escrito dentro:
+  - `progress/gate_458D_fix_1.log` — `INIT_EXIT=1`, cuatro archivos rojos. **Dos eran míos:**
+    `libro-caja-revision-458c` y `wallet-caracterizacion-458` comparaban la anulación con un `toEqual` literal de
+    tres claves y ahora hay cuatro (la `hora`); se añadió `hora` con su forma («HH:mm», el instante es el de la
+    corrida). **Dos ajenos:** `analitica-financiera-action` (R21, `4250.00` en vez de `250.00`) y
+    `ajuste-caja-anulacion-461` (ganancia +30,00) leen totales de la base compartida mientras otros archivos
+    escriben en ella; **3/3 verdes aislados** los cuatro (`progress/aislado_458D_fix.log`).
+  - `progress/gate_458D_fix.log` — **`INIT_EXIT=0`**: «DATABASE_URL resuelta: los 319 archivos de tests contra
+    Postgres SI se ejecutan»; **2320 archivos, 32246 tests verdes, 26 saltados**, todos en
+    `AnaliticaPage`/`AnaliticaShell` (ajenos, los mismos de siempre); **0 saltados en `integration/db`** (407
+    archivos, medido sobre `.vitest/rojos.json`); «sin rojos nuevos».
+
+## Veredicto (arreglo)
+
+B1 cerrado: el filtro por cierre del mensajero trae los pagos REALES de ese cierre y sus anulaciones con la cuenta en el
+WHERE (la tienda no tiene el hueco, medido), R25 en `/mi-wallet` según la decisión del leader, los menores m1–m7
+resueltos; 13/13 mutaciones muertas, recorrido con R7 = R8 = 0,00, build y gate completo en verde.
