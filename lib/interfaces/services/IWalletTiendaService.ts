@@ -145,16 +145,19 @@ export interface IWalletTiendaService {
    * acota por el actor; abrir esta le daria el saldo de su competencia.
    */
   listarSaldosTiendasPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; busqueda?: string },
     actor: Actor,
   ): Promise<ListarSaldosTiendasPaginadoServiceResult>;
   /**
    * Feature 184 — Tanda G (R1/R4/R5/R6): el MISMO listado sin recorte por pagina, para el
    * archivo. Mismo guard (`esAccesoTotal`) evaluado ANTES de tocar el repositorio, la MISMA
-   * lectura ordenada de la que sale la pagina y el tope del servidor. Sin parametro de entrada:
-   * este listado no admite filtros.
+   * lectura ordenada de la que sale la pagina y el tope del servidor. FICHA 463 (R45): el unico
+   * filtro es la busqueda por nombre de la pagina, opcional (sin ella, el conjunto entero).
    */
-  listarSaldosTiendasCompleto(actor: Actor): Promise<ListarSaldosTiendasCompletoServiceResult>;
+  listarSaldosTiendasCompleto(
+    actor: Actor,
+    filtro?: { busqueda?: string },
+  ): Promise<ListarSaldosTiendasCompletoServiceResult>;
   /**
    * Feature 171 (R22/R24/R26/R27/R28) — desglose de UNA tienda elegida: pagina de movimientos
    * + total del conjunto filtrado + los cuatro importes de la cabecera, en una sola respuesta.

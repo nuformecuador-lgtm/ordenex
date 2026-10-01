@@ -7,7 +7,7 @@ import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cu
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 import { cargarCatalogo459, enTransaccionRevertida459, montarServicios459 } from "./_fixtures/caja-459";
-import { leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
+import { CRONOLOGICO, leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-D (revision m2) — 172 R53 sobre el ESTADO DE CUENTA, contra Postgres y con un pago REAL.
@@ -53,7 +53,7 @@ describeSiHayBase("458-D m2 — 172 R53: el pago vigente a una tienda sube «Ya 
         const ec = montarEstadoCuenta(s);
         const tienda: Actor = { usuarioId: esc.tiendaC, rol: "adminTienda" };
         const leer = async () => {
-          const r = await ec.leerMiTienda({ page: 1, pageSize: 50 }, tienda);
+          const r = await ec.leerMiTienda({ page: 1, pageSize: 50, ...CRONOLOGICO }, tienda);
           if (r.status !== "ok") throw new Error(`mi estado de cuenta: ${JSON.stringify(r)}`);
           return {
             tienda: r.estado,

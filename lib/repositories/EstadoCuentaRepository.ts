@@ -16,6 +16,7 @@ import type {
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+import { escaparComodinesLike } from "@/lib/utils/escapar-like";
 
 type Cliente = Pick<
   PrismaClient,
@@ -88,6 +89,29 @@ function filtroDeChip(pares: ParDeChip[] | null, conPremio: boolean): Prisma.Sql
       : Prisma.sql`(l.categoria = ${p.categoria} AND l.origen_tipo = ${p.origen})`;
   return Prisma.sql` AND (${Prisma.join(pares.map(unaCondicion), " OR ")})`;
 }
+
+/**
+ * FICHA 463 (design §3.2, R24/R26/R27/R28) — el termino del buscador, en el `WHERE` EXTERIOR (despues de
+ * la ventana, como el chip). `ILIKE` sin distinguir mayusculas; `%` y `_` escapados son texto (R28).
+ * El nombre de quien registro (`NOMBRE_SQL`, del `LEFT JOIN usuario u`) solo entra en la oficina: en
+ * `/mi-wallet` buscar a una persona de Ordenex no reduce ni amplia el resultado (R27). Mutacion «sin la
+ * rama del nombre» → roja en `estado-cuenta-busqueda-orden-463` (R26).
+ */
+function terminoSql(v: Pick<VentanaDeLibro, "termino" | "conNombreRegistrador">): Prisma.Sql {
+  if (v.termino === undefined) return Prisma.empty;
+  const patron = `%${escaparComodinesLike(v.termino)}%`;
+  return v.conNombreRegistrador
+    ? Prisma.sql` AND (l.descripcion ILIKE ${patron} OR ${NOMBRE_SQL} ILIKE ${patron})`
+    : Prisma.sql` AND l.descripcion ILIKE ${patron}`;
+}
+
+/**
+ * FICHA 463 (R33/R36/R37) — el sentido del `ORDER BY` FINAL, el mismo en las tres columnas (orden total
+ * en los dos sentidos). La ventana del corrido NO lo usa: sigue cronologica, asi que el corrido de una
+ * fila es el mismo en «Mas recientes» y en «Mas antiguas». Mutacion «invertir tambien el `OVER (ORDER
+ * BY …)`» → roja en `estado-cuenta-busqueda-orden-463` (R37).
+ */
+const sentidoSql = (sortDir: VentanaDeLibro["sortDir"]) => (sortDir === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`);
 
 const desdeSql = (desde?: Date) => (desde === undefined ? Prisma.empty : Prisma.sql` AND l.fecha_movimiento >= ${desde}`);
 
@@ -233,7 +257,8 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
                  OVER (ORDER BY mv.fecha_movimiento, mv.orden, mv.id) AS saldo_corrido
         FROM mov mv${hasta}
       )`;
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, false)}`;
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, false)}${terminoSql(v)}`;
+    const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
@@ -241,11 +266,13 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
              l.saldo_corrido::text AS saldo_corrido, l.premio_dia
       FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por
       ${where}
-      ORDER BY l.fecha_movimiento, l.orden, l.id
+      ORDER BY l.fecha_movimiento ${dir}, l.orden ${dir}, l.id ${dir}
       LIMIT ${v.take} OFFSET ${v.skip}`;
+    // El conteo con el MISMO `FROM` (el termino puede mirar el nombre de `u`); el `LEFT JOIN` por la
+    // clave primaria es 0..1 y no multiplica filas.
     const [{ total }] = await this.prisma.$queryRaw<{ total: number }[]>`
       ${libro}
-      SELECT count(*)::int AS total FROM libro l ${where}`;
+      SELECT count(*)::int AS total FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por ${where}`;
     return { filas: filas.map(aFila), total };
   }
 
@@ -255,7 +282,8 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
     conPremio: boolean,
     filtroDeCierre: Prisma.Sql,
   ): Promise<PaginaDeLibro> {
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}`;
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}${terminoSql(v)}`;
+    const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
@@ -263,11 +291,12 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
              l.saldo_corrido::text AS saldo_corrido, l.premio_dia
       FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por
       ${where}
-      ORDER BY l.fecha_movimiento, l.created_at, l.id
+      ORDER BY l.fecha_movimiento ${dir}, l.created_at ${dir}, l.id ${dir}
       LIMIT ${v.take} OFFSET ${v.skip}`;
+    // Mismo `FROM` que la pagina (el termino puede mirar el nombre de `u`); 0..1, no multiplica filas.
     const [{ total }] = await this.prisma.$queryRaw<{ total: number }[]>`
       ${libro}
-      SELECT count(*)::int AS total FROM libro l ${where}`;
+      SELECT count(*)::int AS total FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por ${where}`;
     return { filas: filas.map(aFila), total };
   }
 

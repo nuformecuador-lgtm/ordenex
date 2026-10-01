@@ -21,8 +21,9 @@ import type {
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
-import { whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
+import { whereLibroCajaConTerminoSql, whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
+import { ordenTotal, type DireccionOrden } from "@/lib/types/ordenamiento-listado";
 
 /** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
 const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
@@ -249,7 +250,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   }
 
   /**
-   * R20/R24: pagina el libro, mas reciente primero, filtros en el WHERE.
+   * R20/R24: pagina el libro, mas reciente primero salvo `sortDir: "asc"` (ficha 463), filtros en el WHERE.
    *
    * Ficha 334 (R26, design §4) — el orden es TOTAL, no solo por fecha. Ordenar por UNA columna
    * y paginar con `skip`/`take` deja las filas que empatan en orden indefinido, y eso significa
@@ -264,10 +265,23 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    */
   async listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage> {
     const skip = (filtros.page - 1) * filtros.pageSize;
-    const f = conAQuien(filtros);
-    if (f !== null) {
-      // Ficha 458-E (R59): el MISMO orden total de abajo, en SQL, sobre el WHERE con «A quién».
-      const where = whereLibroCajaSql(f);
+    // FICHA 463 (R33/R36): el sentido lo elige quien lee; ausente, lo mas nuevo primero (el de siempre).
+    // Las TRES columnas van en el MISMO sentido: el desempate invertido respecto de la fecha seguiria
+    // siendo total, pero el «Mas antiguas» de dos filas del mismo instante no seria el reverso exacto
+    // del «Mas recientes».
+    const sentido: DireccionOrden = filtros.sortDir ?? "desc";
+    if (filtros.aQuien !== undefined || filtros.termino !== undefined) {
+      // Ficha 458-E (R59) y 463 (R24/R25): el MISMO orden total de abajo, en SQL, sobre el WHERE con
+      // «A quién» y/o el termino. El conteo usa el MISMO WHERE: la pagina y el total no discrepan.
+      const where = whereLibroCajaConTerminoSql(filtros);
+      const dir = sentido === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+      const orden = Prisma.join(
+        ordenTotal(
+          [Prisma.sql`w."fecha_movimiento" ${dir}`, Prisma.sql`w."created_at" ${dir}`],
+          Prisma.sql`w."id" ${dir}`,
+        ),
+        ", ",
+      );
       const [rows, cuenta] = await Promise.all([
         this.prisma.$queryRaw<MovimientoRow[]>(Prisma.sql`
           SELECT w."id", w."tipo"::text AS "tipo", w."categoria"::text AS "categoria", w."monto",
@@ -276,7 +290,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
                  w."created_at" AS "createdAt", w."clave_idempotencia" AS "claveIdempotencia"
           FROM "wallet_movimiento" w
           WHERE ${where}
-          ORDER BY w."fecha_movimiento" DESC, w."created_at" DESC, w."id" DESC
+          ORDER BY ${orden}
           OFFSET ${skip} LIMIT ${filtros.pageSize}`),
         this.prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
           SELECT COUNT(*)::int AS "total" FROM "wallet_movimiento" w WHERE ${where}`),
@@ -287,7 +301,10 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     const [rows, total] = await Promise.all([
       this.prisma.walletMovimiento.findMany({
         where,
-        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        orderBy: ordenTotal<Prisma.WalletMovimientoOrderByWithRelationInput>(
+          [{ fechaMovimiento: sentido }, { createdAt: sentido }],
+          { id: sentido },
+        ),
         skip,
         take: filtros.pageSize,
       }),

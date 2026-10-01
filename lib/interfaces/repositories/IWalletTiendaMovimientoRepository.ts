@@ -154,6 +154,14 @@ export interface SaldoTiendaAgregado {
 
 // Una fila por tienda para la vista del maestro (R20): totales agregados + nombre de la
 // tienda. El service deriva el saldo con signo.
+/**
+ * FICHA 463 (design §3.3, R45) — el UNICO filtro de «Saldos de tiendas»: la busqueda por nombre de la
+ * tienda. Molde de `CuentasPorPagarFiltro` (`/wallet/mensajeros`). Ausente o vacia = el conjunto entero.
+ */
+export interface SaldosTiendasFiltro {
+  busqueda?: string;
+}
+
 export interface SaldoTiendaAgregadoRow {
   tiendaId: string;
   tiendaNombre: string;
@@ -234,6 +242,8 @@ export interface IWalletTiendaMovimientoRepository {
    */
   listarSaldosTiendasPaginado(
     rango: RangoPagina,
+    /** FICHA 463 (R45): la busqueda por nombre, aplicada ANTES del recorte; `total` es el del conjunto filtrado. */
+    filtro?: SaldosTiendasFiltro,
   ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>>;
   /**
    * Feature 171 (R22/R24/R34): Σ monto agrupado por (tipo, categoria) para UNA tienda +

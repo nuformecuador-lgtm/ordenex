@@ -176,7 +176,7 @@ describe("verMiEstadoCuentaAction — el libro de la tienda (antes listarMisMovi
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("ok");
     expect(typeof r.estado.filas[0].saldoCorrido).toBe("string");
-    expect(service.leerMiTienda).toHaveBeenCalledWith({ page: 1, pageSize: 20 }, TIENDA);
+    expect(service.leerMiTienda).toHaveBeenCalledWith({ page: 1, pageSize: 20, sortBy: "fecha", sortDir: "desc" }, TIENDA); // 463/R34
   });
 });
 

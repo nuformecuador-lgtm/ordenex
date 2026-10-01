@@ -144,7 +144,7 @@ export type ListarMovimientosTiendaResult = {
 /**
  * Feature 170 — FASE 2 (T I.1, R40) — entrada del listado paginado de SALDOS DE TIENDAS.
  *
- * Sin filtros (design §11.3, riesgo BAJO) y sin alcance: quien lo ve son los roles de acceso
+ * Sin alcance (design §11.3, riesgo BAJO): quien lo ve son los roles de acceso
  * total y lo decide el servicio. `.strict()` para que un `tiendaId` colado —la clave que
  * convertiria un listado global en uno dirigido— muera en el BORDE. Tamano de pagina desde
  * `walletTiendaConfig` (T H.1), recortado a `MAX_PAGE_SIZE`.
@@ -158,6 +158,11 @@ export const listarSaldosTiendasPaginadoSchema = z
       .positive()
       .default(walletTiendaConfig.DEFAULT_PAGE_SIZE)
       .transform((n) => Math.min(n, walletTiendaConfig.MAX_PAGE_SIZE)),
+    // FICHA 463 (design §2.3/§3.3, R45) — la busqueda por NOMBRE de tienda, resuelta en el servidor.
+    // Molde exacto de `listarCuentasPorPagarPaginadoSchema` (`/wallet/mensajeros`): texto libre que el
+    // repositorio normaliza (recorte, minusculas, sin acentos) y casa como subcadena, SIN comodines.
+    // El completo la hereda por `omit`, asi que la descarga trae el mismo conjunto que la tabla.
+    busqueda: z.string().optional(),
   })
   .strict();
 
@@ -167,7 +172,7 @@ export type ListarSaldosTiendasPaginadoInput = z.infer<typeof listarSaldosTienda
  * Feature 184 — Tanda G (R17) — entrada del modo SIN paginacion (el conjunto del archivo).
  *
  * DERIVADA de la de su pagina quitando `page`/`pageSize`, no reescrita. La lista blanca
- * resultante tiene CERO claves, y la que importa sigue siendo `tiendaId`: la unica que
+ * resultante tiene UNA clave (`busqueda`, ficha 463/R45), y la que importa sigue siendo `tiendaId`: la unica que
  * convertiria un listado global —el saldo de TODAS las tiendas— en uno dirigido. Muere aqui,
  * antes del servicio, con `validation_error`.
  */

@@ -362,13 +362,20 @@ export function montarEstadoCuenta(s: Servicios459): EstadoCuentaService {
   );
 }
 
-/** Lee el estado de cuenta y falla ruidosamente si no responde `ok`. */
+/**
+ * FICHA 463 — el orden CRONOLOGICO del libro (`asc`), el que estas redes daban por hecho antes de que el
+ * libro se pudiera ordenar (D4 de la 458). Desde la 463 el borde manda `desc` por defecto (R34); las
+ * redes que llaman al SERVICIO sin pasar por el esquema lo eligen explicito, y siguen midiendo lo mismo.
+ */
+export const CRONOLOGICO = { sortBy: "fecha", sortDir: "asc" } as const;
+
+/** Lee el estado de cuenta (cronologico salvo que `input` diga otro orden) y falla si no responde `ok`. */
 export async function leerEstadoCuenta(
   servicio: EstadoCuentaService,
   actor: Actor,
   input: Partial<EstadoCuentaInput> & Pick<EstadoCuentaInput, "cuenta">,
 ): Promise<EstadoCuentaDTO> {
-  const r = await servicio.leer({ page: 1, pageSize: 50, ...input }, actor);
+  const r = await servicio.leer({ page: 1, pageSize: 50, ...CRONOLOGICO, ...input }, actor);
   if (r.status !== "ok") throw new Error(`estado de cuenta: ${JSON.stringify(r)}`);
   return r.estado;
 }

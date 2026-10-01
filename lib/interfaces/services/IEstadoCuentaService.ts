@@ -23,7 +23,8 @@ export interface IEstadoCuentaService {
   /**
    * R81 — rol (acceso total) ANTES de leer. La cuenta tiene que existir con ESE papel (una tienda es un
    * `adminTienda`, un mensajero un `mensajero`, una bodega una zona satelite): si no, `no_encontrado`
-   * sin distinguir. Devuelve el extracto paginado en orden ascendente (D4) con el saldo corrido de la
+   * sin distinguir. Devuelve el extracto paginado en el orden pedido (FICHA 463: `sortDir`, por defecto
+   * lo mas nuevo primero; antes siempre ascendente, D4) con el saldo corrido de la
    * cuenta ENTERA (R21), el saldo inicial (R20), los totales netos del periodo (D3) y el saldo actual;
    * afirma R22 (`inicial ± abonos/cargos = final` y, sin `hasta`, `final = actual`) y LANZA si no se
    * cumple: un extracto que no cuadra no se enseña.

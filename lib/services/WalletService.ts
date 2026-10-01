@@ -19,7 +19,8 @@ import type {
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import type {
-  ListarMovimientosCompletoInput,
+  ListarLibroCajaCompletoServicioInput,
+  ListarLibroCajaServicioInput,
   ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
@@ -29,6 +30,7 @@ import type {
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import {
   categoriasDeFilaComposicion,
   derivarCaja,
@@ -133,6 +135,22 @@ export function tipoDeDocumentoOriginal(
  */
 function idDeDocumento(m: WalletMovimientoDTO, tipo: DocumentoCajaDTO["tipo"]): string | null {
   return tipo === "ajuste_caja" || tipo === "egreso_caja" || tipo === "indemnizacion" ? m.id : m.origenId;
+}
+
+/**
+ * Ficha 463 (design §4, R24/R33/R42) — lo que SOLO el libro (pagina y descarga) lleva al repositorio:
+ * el termino y el sentido del orden. Fuera de `construirFiltros` a proposito: ese metodo lo comparten
+ * el resumen, el desglose y el detalle de una fila, y las cifras de la wallet no se filtran por texto
+ * ni dependen del orden (R12). Lo ausente no viaja.
+ */
+function terminoYOrden(input: { q?: string; sortDir?: DireccionOrden }): {
+  termino?: string;
+  sortDir?: DireccionOrden;
+} {
+  return {
+    ...(input.q !== undefined ? { termino: input.q } : {}),
+    ...(input.sortDir !== undefined ? { sortDir: input.sortDir } : {}),
+  };
 }
 
 /**
@@ -275,7 +293,7 @@ export class WalletService implements IWalletService {
   }
 
   async listarMovimientos(
-    input: ListarMovimientosInput,
+    input: ListarLibroCajaServicioInput,
     actor: Actor,
   ): Promise<ListarMovimientosServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
@@ -284,6 +302,7 @@ export class WalletService implements IWalletService {
       page: input.page,
       pageSize: input.pageSize,
       ...this.construirFiltros(input),
+      ...terminoYOrden(input),
     });
     return {
       status: "ok",
@@ -308,7 +327,7 @@ export class WalletService implements IWalletService {
    * que usa la pantalla. Si manana el libro gana un filtro, lo ganan los dos a la vez.
    */
   async listarMovimientosCompleto(
-    input: ListarMovimientosCompletoInput,
+    input: ListarLibroCajaCompletoServicioInput,
     actor: Actor,
   ): Promise<ListarMovimientosCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
@@ -321,6 +340,8 @@ export class WalletService implements IWalletService {
     // sale de un `count` independiente del `take`.
     const { movimientos, total } = await this.repo.listar({
       ...this.construirFiltros(input),
+      // Ficha 463 (R42): el archivo trae el conjunto del libro en pantalla —termino y orden incluidos—.
+      ...terminoYOrden(input),
       page: 1,
       pageSize: limite + 1,
     });

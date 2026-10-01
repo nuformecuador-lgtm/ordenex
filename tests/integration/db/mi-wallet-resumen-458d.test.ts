@@ -8,7 +8,7 @@ import { EstadoCuentaRepository } from "@/lib/repositories/EstadoCuentaRepositor
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 import { cargarCatalogo459, enTransaccionRevertida459, montarServicios459 } from "./_fixtures/caja-459";
-import { leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
+import { CRONOLOGICO, leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-D (cierre) — VUELVE a `/mi-wallet` el resumen de tres cifras de la 172 (R55 `[P5]`, N1),
@@ -61,11 +61,11 @@ describeSiHayBase("458-D cierre — el resumen de tres cifras de /mi-wallet cont
         const ec = montarEstadoCuenta(s);
         const tiendaC: Actor = { usuarioId: esc.tiendaC, rol: "adminTienda" };
         const deLaTienda = async (input: Record<string, unknown> = {}) => {
-          const r = await ec.leerMiTienda({ page: 1, pageSize: 50, ...input }, tiendaC);
+          const r = await ec.leerMiTienda({ page: 1, pageSize: 50, ...CRONOLOGICO, ...input }, tiendaC);
           if (r.status !== "ok") throw new Error(`mi estado de cuenta: ${JSON.stringify(r)}`);
           return r.estado;
         };
-        const completo = await ec.leerMiTiendaCompleto({}, tiendaC);
+        const completo = await ec.leerMiTiendaCompleto({ ...CRONOLOGICO }, tiendaC);
         if (completo.status !== "ok") throw new Error(`completo: ${JSON.stringify(completo)}`);
         const accion = await verMiEstadoCuentaAction({}, { getActor: async () => tiendaC, service: ec });
         if (accion.status !== "ok") throw new Error(`accion: ${JSON.stringify(accion)}`);
@@ -97,7 +97,7 @@ describeSiHayBase("458-D cierre — el resumen de tres cifras de /mi-wallet cont
           .mockImplementation(async function (this: EstadoCuentaRepository, tiendaId: string) {
             return [...(await real.call(this, tiendaId)), { tipo: "debito", categoria: "flete", total: "100.00" }];
           });
-        const descuadre = await ec.leerMiTienda({ page: 1, pageSize: 50 }, tiendaC).then(
+        const descuadre = await ec.leerMiTienda({ page: 1, pageSize: 50, ...CRONOLOGICO }, tiendaC).then(
           (r) => `respondio ${r.status}`,
           (e: unknown) => (e instanceof Error ? e.message : String(e)),
         );

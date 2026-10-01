@@ -14,11 +14,13 @@ import type {
   SaldoTiendaAgregado,
   SaldoTiendaAgregadoRow,
   SaldoTiendaFiltros,
+  SaldosTiendasFiltro,
   WalletTiendaHistorialTxClient,
   WalletTiendaTxClient,
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import { coincideBusquedaMensajero, normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-listado";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletMovimientoRepository).
 type WalletTiendaPrismaClient = Pick<PrismaClient, "walletTiendaMovimiento" | "usuario">;
@@ -308,8 +310,15 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
    */
   async listarSaldosTiendasPaginado(
     rango: RangoPagina,
+    filtro: SaldosTiendasFiltro = {},
   ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>> {
-    const filas = await this.listarSaldosTodasTiendas();
+    // FICHA 463 (R45) — la busqueda por NOMBRE, ANTES del recorte (al reves buscaria dentro de la
+    // pagina) y con el MISMO criterio que «Cuentas por pagar» (`/wallet/mensajeros`): recorte,
+    // minusculas, sin acentos, subcadena, `%`/`_` como texto. No corta en la base por el motivo de
+    // arriba: cada fila es la agregacion del ledger entero de la tienda y el nombre vive en `usuario`.
+    // El total es el del conjunto FILTRADO (R41), asi que la pagina y el total no pueden discrepar.
+    const q = normalizarBusquedaMensajero(filtro.busqueda);
+    const filas = (await this.listarSaldosTodasTiendas()).filter((f) => coincideBusquedaMensajero(f.tiendaNombre, q));
     const ordenadas = [...filas].sort(
       (a, b) =>
         a.tiendaNombre.localeCompare(b.tiendaNombre) || a.tiendaId.localeCompare(b.tiendaId),

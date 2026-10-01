@@ -11,7 +11,7 @@ aprobar, este desglose se ajusta primero.
 
 ## Backend
 
-- [ ] **T1 — Contratos de borde** (deps: ninguna)
+- [x] **T1 — Contratos de borde** (deps: ninguna)
   - `lib/config`: `BUSQUEDA_LIBRO_MIN_CHARS = 3` y `CAMPOS_ORDEN_LIBRO = ["fecha"]`.
   - `lib/types/wallet.ts`: `listarLibroCajaSchema` y `listarLibroCajaCompletoSchema` (design §2.1);
     `listarMovimientosSchema` sin cambios de forma.
@@ -21,7 +21,7 @@ aprobar, este desglose se ajusta primero.
     `sortDir` ⇒ `validation_error`), R40 (dirección o campo inválido ⇒ `validation_error`), default
     `desc` presente en los cuatro esquemas del estado de cuenta y en el del libro de caja.
 
-- [ ] **T2 — Repositorio de la caja** (deps: T1) [P con T3]
+- [x] **T2 — Repositorio de la caja** (deps: T1) [P con T3]
   - `WalletMovimientoRepository.listar` y el modo completo: término (R25, R28) y `sortDir` con
     `ordenTotal` en los dos caminos (Prisma y SQL con «A quién»).
   - **Hecho:** integración contra Postgres (`tests/integration/db/…`) que siembra movimientos con
@@ -31,7 +31,7 @@ aprobar, este desglose se ajusta primero.
     menos un test (anotar la mutación y el rojo en `progress/impl_463.md`). Los tests NO deben pasar
     en verde sin filas (comprobar que el conjunto sembrado no está vacío).
 
-- [ ] **T3 — Repositorio y servicio del estado de cuenta** (deps: T1) [P con T2]
+- [x] **T3 — Repositorio y servicio del estado de cuenta** (deps: T1) [P con T2]
   - `VentanaDeLibro` + `paginar` + `paginaDeBodega`: `ORDER BY` final según `sortDir`, término en el
     `WHERE` exterior, nombre del registrador solo con `conNombreRegistrador` (design §3.2).
   - `EstadoCuentaService.leerCuenta`: propagar `q`, `sortDir`, `conNombreRegistrador = vista ===
@@ -41,7 +41,7 @@ aprobar, este desglose se ajusta primero.
     registrador da el mismo resultado que un texto ausente), R11 a nivel servicio (tarjetas iguales con
     y sin `q`/`chip`/`sortDir`). Mutación: invertir también el `OVER (ORDER BY …)` ⇒ R37 rojo.
 
-- [ ] **T4 — Acciones y listado de tiendas** (deps: T1, T2, T3)
+- [x] **T4 — Acciones y listado de tiendas** (deps: T1, T2, T3)
   - `listarMovimientosAction`/`listarMovimientosCompletoAction` parsean los esquemas nuevos;
     `verResumenCajaAction`, `verDesgloseEgresosAction`, `listarMovimientosDeFilaAction` sin cambio.
   - `listarSaldosTiendasPaginadoAction`/completo: `busqueda` hasta el repositorio (molde de cuentas por
