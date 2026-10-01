@@ -5542,7 +5542,7 @@
       "title": "el excel de las wallets: columnas a elegir y el detalle de cada orden",
       "description": "La descarga de las wallets usa el selector de columnas y trae cada orden con sus dineros, no solo la fila del cierre.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "alta",
       "depends_on": 463,
