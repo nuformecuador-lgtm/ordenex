@@ -5524,6 +5524,54 @@
       "depends_on": null,
       "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25. Causa medida en prod (24/09): la regla 276 retiene la reprogramada hasta aprobar el cierre de su gestion; la guia 46397476 espero ~20 h (fecha cambiada a hoy a las 11:45, cierre aprobado al dia siguiente 07:32). NO se cambia la regla (riesgo de intento de mas y cobro por tope). El aviso reutiliza el conteo esperandoCierre de LiberacionReprogramadaService (~:246-252) y el sistema de avisos existente. Entra en la release completa. || CONFIRMADO POR EL HUMANO el 2026-09-25: el aviso sale a las 07:00 CR y la notificacion al celular NO va al maestro (admin y adminSatelite). || HECHA 2026-09-25, en dev por PR #825. NO desplegada: entra en la release completa. Revision APROBADA; campana optimizada a 7 consultas. Pendiente de release: medir con scripts/medir-462-retenidas.sql (T5.1) y comprobar el push con VAPID en la primera corrida de las 07:00 (H6).",
       "branch": "feature/462-aviso-reprogramadas"
+    },
+    {
+      "id": 463,
+      "title": "wallets: buscador y filtros canonicos en dos niveles, con selector de orden",
+      "description": "Todas las wallets usan el buscador y los filtros compartidos: arriba los que mueven toda la wallet, junto al libro los que solo filtran el libro, y un selector de orden (lo mas nuevo primero por defecto).",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453).",
+      "branch": null
+    },
+    {
+      "id": 464,
+      "title": "el excel de las wallets: columnas a elegir y el detalle de cada orden",
+      "description": "La descarga de las wallets usa el selector de columnas y trae cada orden con sus dineros, no solo la fila del cierre.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": 463,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 2). Decision por defecto del leader: segunda hoja 'Detalle por orden' enlazada al movimiento. Falta lectura en lote (hoy verDetalleDeMovimiento/verOrdenesDeFila son de una fila).",
+      "branch": null
+    },
+    {
+      "id": 465,
+      "title": "tarifas: excel de cobertura",
+      "description": "Descargar desde tarifas un Excel por distrito que diga si hay cobertura, con que zona y donde no llegamos.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending).",
+      "branch": null
+    },
+    {
+      "id": 466,
+      "title": "'rechazo' al nombre nuevo en conceptos, KPIs y ayuda",
+      "description": "Los conceptos de la wallet, cierres, analitica, ayuda y Excel dejan de decir 'rechazo' y usan el nombre del estado vigente.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado.",
+      "branch": null
     }
   ]
 }
