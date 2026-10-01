@@ -21,6 +21,37 @@
 
 ---
 
+## 2026-10-01 — Sin ruptura — El flete de una devolución a origen cambia de nombre en las descripciones
+
+> **Sin ruptura.** Solo cambian **textos de descripción** del contrato. Ningún campo, valor
+> enumerado, id de métrica, ruta, código de respuesta ni forma de cuerpo cambia: un cliente que ya
+> funciona sigue funcionando sin tocar nada.
+
+**Qué cambia, en una frase:** el flete que se cobra cuando una orden termina en **Devolución a origen
+por rechazo** (`devolucion_a_origen_por_rechazo`) se llama ahora **«Flete por devolución a origen»**,
+en la aplicación, en las descargas y en este contrato. Hasta hoy se llamaba «Flete por rechazo» (y
+antes del 2026-08-31, «Flete de devolución»).
+
+**Las descripciones que cambian** (en `lib/api/openapi-spec.ts` y en su espejo
+`docs/api/api-key-openapi.yaml`):
+
+| Dónde | Antes | Ahora |
+|---|---|---|
+| `CotizacionEscenarioDevuelto.properties.flete` | «Flete por rechazo. …» | «Flete por devolución a origen. …» |
+| `CotizacionEscenarioDevuelto.properties.iva` | «IVA del flete por rechazo. …» | «IVA del flete por devolución a origen. …» |
+| `CotizacionEscenarioDevuelto` | «… al cerrarse la orden como RECHAZADA …» | «… al cerrarse la orden en Devolución a origen por rechazo (`devolucion_a_origen_por_rechazo`) …» |
+| `costoReal` del detalle | «Si la orden terminó RECHAZADA, lo que se te factura es el flete de DEVOLUCIÓN y su IVA» | «Si la orden terminó en Devolución a origen por rechazo (`devolucion_a_origen_por_rechazo`), lo que se te factura es el flete por devolución a origen y su IVA» |
+
+Y en `docs/api/manual-metricas-por-mensajero.md`, la misma frase del `costoReal`: «flete por
+devolución a origen y su IVA».
+
+**Lo que NO cambia:** los campos `flete` e `iva` del escenario `devuelto`, sus importes, el código de
+resultado `devolucion_a_origen_por_rechazo`, y los ids de métrica `rechazos` y `tasa_rechazo` (sus
+rótulos en la aplicación pasan a «Devoluciones a origen» y «Tasa de devolución a origen», pero el id
+que se pide y se recibe por este canal es el mismo).
+
+---
+
 ## 2026-09-24 — ⚠️ RUPTURA — Los estados cambian de código y ganan su nombre
 
 > **Fecha de despliegue: PENDIENTE — se avisará con antelación y se escribirá aquí.** Este cambio

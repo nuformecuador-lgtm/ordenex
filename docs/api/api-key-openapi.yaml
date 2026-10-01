@@ -1281,8 +1281,9 @@ components:
             cuando entró en un cierre aprobado. Ya no se mueve con los cambios de tarifa.
 
             ⚠️ **Es lo que se congeló al cerrar, NO «la línea que entró en tu wallet».** Como
-            `costoEstimado`, es el escenario de **ENTREGA**. Si la orden terminó RECHAZADA, lo que
-            se te factura es el flete de DEVOLUCIÓN y su IVA, que son conceptos distintos y que
+            `costoEstimado`, es el escenario de **ENTREGA**. Si la orden terminó en Devolución a origen
+            por rechazo (`devolucion_a_origen_por_rechazo`), lo que se te factura es el flete por
+            devolución a origen y su IVA, que son conceptos distintos y que
             podés consultar en el escenario `devuelto` de la cotización.
 
             `null` significa **«esta orden todavía no ha entrado en ningún cierre aprobado»**.
@@ -2005,7 +2006,7 @@ components:
           description: "Lo que recibe la tienda. String money-safe de escala 2, crudo; negativo si el COD no cubre lo facturado."
     CotizacionEscenarioDevuelto:
       type: object
-      description: "Costo si la orden se DEVUELVE, es decir si el paquete vuelve a tu tienda: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo. **Cuándo se cobra este escenario:** al cerrarse la orden como RECHAZADA, que es el resultado con el que el paquete regresa. Un intento de entrega fallido que aún se puede reprogramar o recuperar NO cobra nada por sí solo; los importes de aquí aparecen cuando el retorno se consuma."
+      description: "Costo si la orden se DEVUELVE, es decir si el paquete vuelve a tu tienda: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo. **Cuándo se cobra este escenario:** al cerrarse la orden en Devolución a origen por rechazo (`devolucion_a_origen_por_rechazo`), que es el resultado con el que el paquete regresa. Un intento de entrega fallido que aún se puede reprogramar o recuperar NO cobra nada por sí solo; los importes de aquí aparecen cuando el retorno se consuma."
       required:
         - flete
         - iva
@@ -2015,10 +2016,10 @@ components:
       properties:
         flete:
           type: string
-          description: "Flete por rechazo. String money-safe de escala 2, crudo. En pantalla, en la wallet y en las descargas este concepto se llama exactamente así desde el 2026-08-31: sólo lo cobra una gestión RECHAZADA (ver `CotizacionEscenarioDevuelto`), nunca una devolución que siga viva. Antes se documentaba como «Flete de devolución»."
+          description: "Flete por devolución a origen. String money-safe de escala 2, crudo. En pantalla, en la wallet y en las descargas este concepto se llama exactamente así desde el 2026-10-01: sólo lo cobra una gestión con resultado `devolucion_a_origen_por_rechazo` (ver `CotizacionEscenarioDevuelto`), nunca una devolución que siga viva. Sus nombres anteriores están en el CHANGELOG."
         iva:
           type: string
-          description: "IVA del flete por rechazo. String money-safe de escala 2, crudo. Antes «IVA del flete de devolución»."
+          description: "IVA del flete por devolución a origen. String money-safe de escala 2, crudo. Sus nombres anteriores están en el CHANGELOG."
         comision:
           type: string
           description: 'Siempre "0.00": una devolución no cobra comisión COD.'
