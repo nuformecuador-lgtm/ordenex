@@ -5530,12 +5530,12 @@
       "title": "wallets: buscador y filtros canonicos en dos niveles, con selector de orden",
       "description": "Todas las wallets usan el buscador y los filtros compartidos: arriba los que mueven toda la wallet, junto al libro los que solo filtran el libro, y un selector de orden (lo mas nuevo primero por defecto).",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
       "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Espera cupo fullstack (466 y 465 en curso) y comparte rotulos de wallet con la 466.",
-      "branch": null
+      "branch": "feature/463-wallets-filtros-y-orden"
     },
     {
       "id": 464,
@@ -5566,11 +5566,11 @@
       "title": "'rechazo' al nombre nuevo en conceptos, KPIs y ayuda",
       "description": "Los conceptos de la wallet, cierres, analitica, ayuda y Excel dejan de decir 'rechazo' y usan el nombre del estado vigente.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado. || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Confirmado: revierte la eleccion de la 338 (Flete por devolucion a origen).",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado. || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Confirmado: revierte la eleccion de la 338 (Flete por devolucion a origen). || HECHA 2026-10-01, en dev por PR #838 (a42d7bc3). NO desplegada. Dos revisiones (la 1a rechazo por la guia de integradores y faltar ver la app; la 2a APROBADA). Gate completo verde 32407 (progress/gate_466_fix.log). Ver la app: /wallet, estado de cuenta, cierres, tarifas y analitica sin rechazo olvidado. Pendiente aceptado: mirar /mi-wallet y 4 pantallas mas con sesion de tienda la proxima vez.",
       "branch": "feature/466-rechazo-nombre-nuevo"
     }
   ]
