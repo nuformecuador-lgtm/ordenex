@@ -1,3 +1,11 @@
+# ESTADO 2026-10-01 — fichas 463-466 (pedidas por Carlos hoy)
+
+- **466** (rechazo → devolución a origen) y **465** (Excel de cobertura en tarifas): spec aprobado, `in_progress` en `feature/466-rechazo-nombre-nuevo` y `feature/465-tarifas-excel-cobertura` (worktrees aislados, backend_dev → frontend_dev).
+- **463** (filtros y orden de las wallets): spec aprobado, espera cupo fullstack y que la 466 libere los rótulos de wallet.
+- **464** (Excel de wallets con detalle por orden): spec en escritura; depende de la 463.
+- **WhatsApp interno** (plantillas por rol y hora): sin registrar; Carlos dará ejemplos al terminar lo demás. Prerrequisito: 7 de 19 teléfonos del personal no sirven.
+- Caja de prod (consulta 2026-10-01): ganancia −2.694.283,20; Carlos registrará una «Corrección de caja (suma)» para dejarla en 0.
+
 # ESTADO 2026-09-27 — RELEASE LISTA EN `dev`, SIN DESPLEGAR
 
 Todo lo pedido está hecho y en `dev`: SF-001 (429–436), 454, 455, 456, 457, 458 (A–E y los arreglos finales, #828–#834), 459, 460, 461 y 462. El gate limpio está en `progress/gate_dev_release.log`. Para desplegar solo falta la orden de Carlos y sus tres decisiones: el modal del SINPE, enviar la guía de la API y la hora. Los pasos están en `docs/release.md` › «Pendiente para la PRÓXIMA release», y las pruebas en `progress/plan_pruebas_release.md`.

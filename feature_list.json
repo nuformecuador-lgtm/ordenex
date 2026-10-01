@@ -5534,7 +5534,7 @@
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453).",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Espera cupo fullstack (466 y 465 en curso) y comparte rotulos de wallet con la 466.",
       "branch": null
     },
     {
@@ -5554,24 +5554,24 @@
       "title": "tarifas: excel de cobertura",
       "description": "Descargar desde tarifas un Excel por distrito que diga si hay cobertura, con que zona y donde no llegamos.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending).",
-      "branch": null
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec.",
+      "branch": "feature/465-tarifas-excel-cobertura"
     },
     {
       "id": 466,
       "title": "'rechazo' al nombre nuevo en conceptos, KPIs y ayuda",
       "description": "Los conceptos de la wallet, cierres, analitica, ayuda y Excel dejan de decir 'rechazo' y usan el nombre del estado vigente.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado.",
-      "branch": null
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado. || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Confirmado: revierte la eleccion de la 338 (Flete por devolucion a origen).",
+      "branch": "feature/466-rechazo-nombre-nuevo"
     }
   ]
 }
