@@ -26,9 +26,18 @@ function filas(texto: string): [string, string, string][] {
 }
 
 describe("455/R30 — la entrada del CHANGELOG", () => {
-  it("existe, esta fechada, es la PRIMERA y se marca como RUPTURA", () => {
+  it("existe, esta fechada, va por delante de toda entrada ANTERIOR y se marca como RUPTURA", () => {
     expect(ENTRADA).not.toBe("");
-    expect(CHANGELOG.indexOf("## 2026-09-24 — ⚠️ RUPTURA")).toBe(CHANGELOG.indexOf("\n## ") + 1);
+    // FICHA 466 (R19): era «la PRIMERA» mientras no hubo entradas posteriores. El CHANGELOG va de la
+    // mas nueva a la mas vieja, asi que lo que se exige es eso: por encima solo hay entradas de
+    // fecha POSTERIOR al 2026-09-24, y por debajo solo anteriores o del mismo dia.
+    const posicion = CHANGELOG.indexOf("## 2026-09-24 — ⚠️ RUPTURA");
+    const fechas = [...CHANGELOG.matchAll(/^## (\d{4}-\d{2}-\d{2}) /gm)].map((m) => ({ fecha: m[1], en: m.index ?? 0 }));
+    expect(fechas.length).toBeGreaterThan(3);
+    for (const { fecha, en } of fechas) {
+      if (en < posicion) expect(fecha > "2026-09-24", `entrada ${fecha} por encima de la 455`).toBe(true);
+      if (en > posicion) expect(fecha <= "2026-09-24", `entrada ${fecha} por debajo de la 455`).toBe(true);
+    }
   });
 
   it("trae la tabla de los 7 estados y la de los 4 resultados, anterior → vigente → nombre", () => {

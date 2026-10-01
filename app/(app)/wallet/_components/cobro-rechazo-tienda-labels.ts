@@ -17,7 +17,7 @@ import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
  */
 
 /** El nombre accesible de la sección: por él la encuentra quien navega por regiones. */
-export const COBROS_RECHAZO_SECCION = "Cobros por rechazo de tienda por aprobar";
+export const COBROS_RECHAZO_SECCION = "Cobros por devolución a origen de tienda por aprobar";
 
 /** El título VISIBLE de la tarjeta. Es el mismo que el de la región, a propósito. */
 export const COBROS_RECHAZO_TITULO = COBROS_RECHAZO_SECCION;
@@ -35,9 +35,9 @@ export const COBROS_RECHAZO_COLUMNA = {
   tienda: "Tienda",
   guia: "Guía",
   remision: "Remisión",
-  flete: "Flete por rechazo",
+  flete: "Flete por devolución a origen",
   iva: "IVA",
-  generadoEl: "Rechazado el",
+  generadoEl: "Fecha de la devolución a origen",
   acciones: "Acciones",
 } as const;
 
@@ -101,8 +101,8 @@ export const COBRO_RECHAZO_MENSAJE = {
   rechazado: "Cobro descartado: no se le cobró nada a la tienda.",
   yaDecidido: "Alguien decidió este cobro antes que vos. Se actualizó la lista.",
   noExiste: "Ese cobro ya no existe. Se actualizó la lista.",
-  sinPermiso: "No tenés permiso para decidir cobros por rechazo de tienda.",
+  sinPermiso: "No tenés permiso para decidir cobros por devolución a origen de tienda.",
   sesionExpirada: "Tu sesión expiró. Iniciá sesión de nuevo.",
   noSePudo: "No se pudo procesar el cobro. Volvé a intentarlo.",
-  errorCarga: "No se pudieron cargar los cobros por rechazo de tienda.",
+  errorCarga: "No se pudieron cargar los cobros por devolución a origen de tienda.",
 } as const;

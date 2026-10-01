@@ -346,10 +346,10 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     expect(pares(listaIngresos())).toEqual([
       { rotulo: "Flete cobrado a la tienda", importe: "₡150" },
-      { rotulo: "Flete por rechazo cobrado a la tienda", importe: "₡4.000" },
+      { rotulo: "Flete por devolución a origen cobrado a la tienda", importe: "₡4.000" },
       { rotulo: "Comisión de contra-entrega cobrada a la tienda", importe: "₡900" },
       { rotulo: "IVA del flete cobrado a la tienda", importe: "₡19,50" },
-      { rotulo: "IVA del flete por rechazo cobrado a la tienda", importe: "₡520" },
+      { rotulo: "IVA del flete por devolución a origen cobrado a la tienda", importe: "₡520" },
       { rotulo: "IVA de la comisión cobrado a la tienda", importe: "₡30,25" },
       { rotulo: "Corrección de caja (suma)", importe: "₡90" },
       // Ficha 461 (R27): la fila del cobro de Ordenex a una tienda; en este fixture vale 0,00.
@@ -379,9 +379,9 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "Correcciones de caja (resta)", importe: "₡45,75" },
       // Ficha 461 (R27): la fila de los cobros anulados; en este fixture vale 0,00.
       { rotulo: "Cobros a una tienda anulados", importe: "₡0" },
-      // Ficha 458-B (design §2.3): las dos filas de la anulacion de un cobro por rechazo; aqui 0,00.
-      { rotulo: "Fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
-      { rotulo: "IVA de fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
+      // Ficha 458-B (design §2.3): las dos filas de la anulacion de un cobro por devolución a origen; aqui 0,00.
+      { rotulo: "Fletes por devolución a origen cobrados a una tienda anulados", importe: "₡0" },
+      { rotulo: "IVA de fletes por devolución a origen cobrados a una tienda anulados", importe: "₡0" },
       { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
       { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
@@ -481,8 +481,8 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461: tercer nombrado, antes de «Otros»
-      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
-      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "Fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
       "Otros gastos de Ordenex",
       "Total de egresos",
     ]);
@@ -676,8 +676,8 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461
-      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
-      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "Fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
       "Total de egresos",
     ]);
   });

@@ -12,7 +12,7 @@ import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWallet
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// 💰 FICHA 337 (segunda mitad) — la REGLA del cobro por rechazo desde novedades: quien decide,
+// 💰 FICHA 337 (segunda mitad) — la REGLA del cobro por devolución a origen desde novedades: quien decide,
 // que se escribe al aprobar y que NO se escribe al rechazar.
 //
 // ⚠️ LO QUE ESTE ARCHIVO NO PUEDE PROBAR, dicho aqui para que nadie lo de por cubierto:
@@ -118,7 +118,7 @@ function movimientosDeTienda(repo: { crearMovimientos: ReturnType<typeof vi.fn> 
 /* 1. Quien decide                                                             */
 /* -------------------------------------------------------------------------- */
 
-describe("💰 337 — quien puede decidir un cobro por rechazo (`esAccesoTotal`)", () => {
+describe("💰 337 — quien puede decidir un cobro por devolución a origen (`esAccesoTotal`)", () => {
   it.each([
     ["maestro", MAESTRO],
     ["admin", ADMIN],

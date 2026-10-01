@@ -17,8 +17,15 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
  * después de leer «Flete devuelto» en el detalle de un cierre y creer que se le estaba cobrando
  * a una tienda por una devolución. No había plata mal cobrada; había vocabulario que asusta.
  *
- * El nombre, decidido por el humano para toda la app, es **«Flete por rechazo»**. Está en
+ * El nombre, decidido por el humano para toda la app, fue **«Flete por rechazo»**. Está en
  * pantallas, wallet, descargas y en la documentación de la API pública.
+ *
+ * ── FICHA 466 (2026-10-01): EL NOMBRE VIGENTE PASA A «Flete por devolución a origen»
+ * La 455 renombró el estado a «Devolución a origen por rechazo» y el humano pidió después que
+ * los conceptos derivados lo sigan (requirements 466 §0.2). Lo que esta guardia PROHÍBE no
+ * cambia («flete de devolución», «flete devuelto»: sin «por», que es lo que asustaba); lo que
+ * cambia es el nombre que su autocomprobación busca. «Flete por rechazo» como frase retirada lo
+ * vigila ahora `rechazo-nombre-466.guardia.test.ts` (brazo 2).
  *
  * ── POR QUÉ HACE FALTA UNA GUARDIA Y NO BASTAN LOS TESTS
  * El rename tocó nueve archivos de `app/` y dos contratos. Nada impide que el rótulo viejo
@@ -51,7 +58,7 @@ const EXTENSIONES = [".ts", ".tsx"];
 const NOMBRE_RETIRADO = /flete\s+(?:de\s+)?(?:devoluci[oó]n(?:es)?|devuelt[oa]s?)/iu;
 
 /** El nombre que sí vale, para la autocomprobación (2) y para el mensaje de error. */
-const NOMBRE_VIGENTE = /flete\s+por\s+rechazo/iu;
+const NOMBRE_VIGENTE = /flete\s+por\s+devoluci[oó]n\s+a\s+origen/iu;
 
 /** Todos los `.ts`/`.tsx` de `app/**`, recursivo. */
 function fuentesDeApp(dir: string = APP): string[] {
@@ -114,7 +121,7 @@ describe("338 — autocomprobación del censo (una guardia estática rota no fal
     // o el rename de la ficha 338 no está puesto. En cualquiera de los dos casos hay que mirar
     // ESTE test antes de creerle al de abajo.
     const vigentes = censar(NOMBRE_VIGENTE);
-    expect(vigentes.length, "el nombre «Flete por rechazo» no aparece en app/").toBeGreaterThan(5);
+    expect(vigentes.length, "el nombre «Flete por devolución a origen» no aparece en app/").toBeGreaterThan(5);
   });
 
   it("el detector marca el literal y NO marca el comentario", () => {
@@ -128,6 +135,11 @@ describe("338 — autocomprobación del censo (una guardia estática rota no fal
     // Y las variantes: si la expresión se escribiera de menos, esto lo dice.
     expect(lineasQueCasan('"Flete devuelto"', NOMBRE_RETIRADO)).toEqual([1]);
     expect(lineasQueCasan('"IVA del flete de devolucion"', NOMBRE_RETIRADO)).toEqual([1]);
+    // FICHA 466 (R24): el nombre VIGENTE no puede casar el retirado; si casara, esta guardia
+    // prohibiría el nombre que fija la 466.
+    expect(lineasQueCasan('"Flete por devolución a origen"', NOMBRE_RETIRADO)).toEqual([]);
+    expect(lineasQueCasan('"IVA del flete por devolución a origen"', NOMBRE_RETIRADO)).toEqual([]);
+    expect(lineasQueCasan('"Flete por devolución a origen"', NOMBRE_VIGENTE)).toEqual([1]);
     // Lo que NO se persigue: identificadores internos y columnas de base (dato histórico).
     expect(lineasQueCasan("ingreso_iva_flete_devolucion: dec,", NOMBRE_RETIRADO)).toEqual([]);
     expect(lineasQueCasan("const fleteDevolucion = ing.fleteDevolucion;", NOMBRE_RETIRADO)).toEqual(
@@ -140,7 +152,8 @@ describe("338 — censo: ningún texto visible de `app/` dice «flete de devoluc
   it("no queda ni una etiqueta con el nombre retirado", () => {
     expect(
       censar(NOMBRE_RETIRADO),
-      "este cobro sólo lo genera un RECHAZO (ficha 301). Se llama «Flete por rechazo»: " +
+      "este cobro sólo lo genera una Devolución a origen por rechazo (ficha 301). Se llama " +
+        "«Flete por devolución a origen» (ficha 466): " +
         "nombrarlo por la devolución dice justo el caso que NO cobra.",
     ).toEqual([]);
   });

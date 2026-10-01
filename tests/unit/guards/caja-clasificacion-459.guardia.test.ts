@@ -145,7 +145,7 @@ function problemasDeClasificacion(t: Tablas): string[] {
     ...WALLET_INGRESO_CONCEPTO_SEED,
     "ingreso_cobro_tienda",
     "egreso_reverso_cobro_tienda",
-    // Ficha 458-B (design §2.3): los dos reversos de cargo de la anulacion del cobro por rechazo.
+    // Ficha 458-B (design §2.3): los dos reversos de cargo de la anulacion del cobro por devolución a origen.
     "egreso_reverso_flete_devolucion",
     "egreso_reverso_iva_flete_devolucion",
   ].sort();
@@ -175,7 +175,7 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
     ).toEqual(["ajuste_debito"]);
   });
 
-  it("(4) literal del contrato: los diez cargos a una tienda (seis del feed, el cobro y su reverso, y los dos reversos del cobro por rechazo de la 458-B)", () => {
+  it("(4) literal del contrato: los diez cargos a una tienda (seis del feed, el cobro y su reverso, y los dos reversos del cobro por devolución a origen de la 458-B)", () => {
     expect(
       WALLET_MOVIMIENTO_CATEGORIA_SEED.filter(
         (c) => LIQUIDEZ_POR_CATEGORIA[c] === "cargo_a_tienda",
@@ -205,7 +205,7 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
     expect(TIPO_POR_CATEGORIA_TIENDA.cobro_tienda_anulado).toBe("credito");
   });
 
-  it("⭑ 458-B (R68/R91, design §2.3): los dos reversos del cobro por rechazo son propios, reversos de cargo y suben «De las tiendas»", () => {
+  it("⭑ 458-B (R68/R91, design §2.3): los dos reversos del cobro por devolución a origen son propios, reversos de cargo y suben «De las tiendas»", () => {
     for (const c of ["egreso_reverso_flete_devolucion", "egreso_reverso_iva_flete_devolucion"] as const) {
       expect(NATURALEZA_POR_CATEGORIA[c]).toBe("propio");
       expect(LIQUIDEZ_POR_CATEGORIA[c]).toBe("cargo_a_tienda");
@@ -218,7 +218,7 @@ describe("459 — guardia de la clasificacion de la caja y del libro de las tien
     expect(TIPO_POR_CATEGORIA_TIENDA.iva_flete_devolucion_anulado).toBe("credito");
   });
 
-  it("⭑ 458-B contraprueba (mutacion 4 de design §8.2): un reverso del flete por rechazo como EFECTIVO → rojo", () => {
+  it("⭑ 458-B contraprueba (mutacion 4 de design §8.2): un reverso del flete por devolución a origen como EFECTIVO → rojo", () => {
     const comoEfectivo: Tablas = {
       ...REALES,
       liquidez: { ...LIQUIDEZ_POR_CATEGORIA, egreso_reverso_flete_devolucion: "efectivo" },

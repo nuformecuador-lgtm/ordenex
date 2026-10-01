@@ -136,7 +136,7 @@ describe("updated_at · el modelo declara el DEFAULT que el SQL creo", () => {
       // propondra un `DROP DEFAULT` sobre ella.
       // (`push_envio_dia` NO entra: no tiene `updated_at` — es una fila que se escribe una vez.)
       "push_suscripcion",
-      // FICHA 337 (segunda mitad, 2026-08-31) - la cola de cobros por rechazo de tienda. Su
+      // FICHA 337 (segunda mitad, 2026-08-31) - la cola de cobros por devolución a origen de tienda. Su
       // `CREATE TABLE` (`20260831120000_rechazo_tienda_cobro/migration.sql`) escribe
       // `"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP` -- copiado del de la 333,
       // que es su molde--, asi que cae sola en el censo; el modelo `RechazoTiendaCobro` lo declara

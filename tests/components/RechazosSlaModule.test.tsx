@@ -131,7 +131,7 @@ describe("RechazosSlaModule", () => {
 
     // total 25 / pageSize 10: la pagina 2 cubre los elementos 11 al 20.
     expect(
-      screen.getByRole("navigation", { name: "Paginación de rechazos por plazo vencido" }),
+      screen.getByRole("navigation", { name: "Paginación de órdenes con devolución a origen por plazo vencido" }),
     ).toBeInTheDocument();
     expect(screen.getByText("11-20 de 25")).toBeInTheDocument();
   });
@@ -183,6 +183,10 @@ describe("RechazosSlaModule", () => {
     );
 
     await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    // FICHA 466 (E11): el permiso nombra las ÓRDENES con devolución a origen, no «los rechazos».
+    expect(errorMock).toHaveBeenCalledWith(
+      "No tenés permiso para ver las órdenes con devolución a origen por plazo vencido.",
+    );
     // La fila original sigue presente (no se limpió por el error).
     expect(screen.getByText("Ana Cliente")).toBeInTheDocument();
   });

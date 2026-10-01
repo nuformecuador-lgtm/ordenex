@@ -45,7 +45,7 @@ describe("R17 — el pago al MENSAJERO no cobra por un incidente", () => {
 });
 
 describe("R17 — el ingreso de BODEGA por rechazo no se cobra por un incidente", () => {
-  it("ingresoBodegaPorResultado('incidente') = 0.00 aunque el cobro por rechazo sea 2500", () => {
+  it("ingresoBodegaPorResultado('incidente') = 0.00 aunque el cobro por devolución a origen sea 2500", () => {
     expect(ingresoBodegaPorResultado("incidente", TARIFA_MENSAJERO)).toBe("0.00");
     // Control de discriminacion: con la MISMA tarifa, `rechazada` SI genera ingreso.
     expect(ingresoBodegaPorResultado("devolucion_a_origen_por_rechazo", TARIFA_MENSAJERO)).toBe("2500.00");

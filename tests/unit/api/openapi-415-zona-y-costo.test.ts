@@ -250,10 +250,12 @@ describe("415/R15 — el contrato dice que `costoReal` NO es la linea de la wall
     expect(d).toMatch(/NO «la línea que entró en tu wallet»/i);
   });
 
-  it("y remite al escenario `devuelto` de la cotizacion para el rechazo", () => {
+  it("y remite al escenario `devuelto` de la cotizacion para la devolucion a origen", () => {
     const d = (props.costoReal as Nodo).description as string;
-    expect(d).toMatch(/RECHAZADA/);
-    expect(d).toMatch(/flete de DEVOLUCIÓN/i);
+    // FICHA 466 (R16): el resultado por su codigo vigente y el concepto por su nombre nuevo.
+    expect(d).toMatch(/terminó en Devolución a origen\s+por rechazo \(`devolucion_a_origen_por_rechazo`\)/);
+    expect(d).toMatch(/flete por\s+devolución a origen y su IVA/i);
+    expect(d).not.toMatch(/RECHAZADA/);
     expect(d).toMatch(/escenario `devuelto` de la cotización/i);
   });
 

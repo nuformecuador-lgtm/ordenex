@@ -835,7 +835,7 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
         screen.getByRole("region", { name: "Pago a mensajeros a consolidar" }),
       ).getByText(money(AGREGADOS.pagoMensajero)),
       ingreso: within(
-        screen.getByRole("region", { name: "Ingreso de bodega por rechazos a consolidar" }),
+        screen.getByRole("region", { name: "Ingreso de bodega por devoluciones a origen a consolidar" }),
       ).getByText(money(AGREGADOS.ingresoBodega)),
       centralDebe: within(
         screen.getByRole("region", { name: "Central debe" }),

@@ -100,7 +100,7 @@ const TIPO_LEGITIMO_POR_CATEGORIA: Record<WalletMovimientoCategoria, WalletMovim
   // de la migracion `20260927120100`; lo prueba `abono-tienda-457-migration.test.ts`.
   ingreso_abono_tienda: "ingreso",
   egreso_reverso_abono_tienda: "egreso",
-  // Ficha 458-B: los dos reversos de cargo del cobro por rechazo. El CHECK que los admite es el de la
+  // Ficha 458-B: los dos reversos de cargo del cobro por devolución a origen. El CHECK que los admite es el de la
   // migracion `20260928120100`; lo prueba `wallet-458-migration.test.ts`.
   egreso_reverso_flete_devolucion: "egreso",
   egreso_reverso_iva_flete_devolucion: "egreso",
@@ -130,7 +130,7 @@ const AGREGADAS_459: readonly string[] = [
   // POSTERIORES a la foto de la 173. Mismo criterio.
   "ingreso_abono_tienda",
   "egreso_reverso_abono_tienda",
-  // Ficha 458-B (2026-09-26): los dos reversos de cargo del cobro por rechazo, tambien POSTERIORES a
+  // Ficha 458-B (2026-09-26): los dos reversos de cargo del cobro por devolución a origen, tambien POSTERIORES a
   // la foto de la 173. Mismo criterio.
   "egreso_reverso_flete_devolucion",
   "egreso_reverso_iva_flete_devolucion",

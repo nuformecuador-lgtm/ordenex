@@ -81,7 +81,7 @@ const ROTULO_POR_RESULTADO: Record<string, string> = {
 
 /** La nota de R9, palabra por palabra. */
 const NOTA_TOPE =
-  "A esta orden le queda el último intento de entrega: ya no se puede reprogramar ni devolver. Registra cómo terminó ahora — entregada o rechazada. Si el paquete se dañó, se perdió o te lo robaron, repórtalo como incidente.";
+  "A esta orden le queda el último intento de entrega: ya no se puede reprogramar ni devolver. Registra cómo terminó ahora — Entregado o Devolución a origen por rechazo. Si el paquete se dañó, se perdió o te lo robaron, repórtalo como incidente.";
 
 function makeOrden(over: Partial<MiAsignacionDTO> = {}): MiAsignacionDTO {
   return {
@@ -244,7 +244,7 @@ describe("276/R9 — el hueco se explica con palabras, no con un color", () => {
     // No es una fórmula vaga («no disponible»): nombra los dos desenlaces retirados y los tres
     // que quedan. Si alguien lo cambia por «Acción no permitida», estas cinco caen.
     expect(nota).toHaveTextContent("ya no se puede reprogramar ni devolver");
-    expect(nota).toHaveTextContent("entregada o rechazada");
+    expect(nota).toHaveTextContent("Entregado o Devolución a origen por rechazo");
     expect(nota).toHaveTextContent("repórtalo como incidente");
   });
 

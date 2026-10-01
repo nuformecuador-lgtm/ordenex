@@ -78,7 +78,7 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     // contrato completo del repo.
     findParaCorreccion: vi.fn().mockResolvedValue(null),
     findDistritoParaCorreccion: vi.fn().mockResolvedValue(null),
-    // Ficha 337: la lectura que CONGELA las entradas del cobro por rechazo desde novedades.
+    // Ficha 337: la lectura que CONGELA las entradas del cobro por devolución a origen desde novedades.
     // Mismo motivo que las dos de arriba: ningun servicio de este archivo la invoca, el doble
     // esta para satisfacer el contrato completo del repo.
     findBaseCobroDevolucion: vi.fn().mockResolvedValue(null),

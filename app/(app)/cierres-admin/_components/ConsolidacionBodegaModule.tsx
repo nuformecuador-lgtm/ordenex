@@ -348,7 +348,7 @@ export function ConsolidacionBodegaModule({
           {/* Feature 56/R17: agregado del ingreso de bodega por rechazos, separado. */}
           <IngresoBodegaRechazosTotal
             value={totalIngresoBodegaRechazosAgregado}
-            ariaLabel="Ingreso de bodega por rechazos a consolidar"
+            ariaLabel="Ingreso de bodega por devoluciones a origen a consolidar"
           />
 
           {/* El efectivo no cubrió todos los pagos: el resto lo debe la central. Solo se

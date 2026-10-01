@@ -235,8 +235,8 @@ type DetalleOk = Extract<CierreDetalleAdminServiceResult, { status: "ok" }>;
 
 /**
  * EL CIERRE DE LA CAPTURA: recaudó 285.275,00, Ordenex le facturó 70.946,67 (60.098,67 sobre lo
- * recaudado + 10.848,00 de flete por rechazo), hoy se le pagan 225.176,33 y en total gana
- * 214.328,33. Estado `vencido`, que es el de la captura: el cargo del flete por rechazo TODAVÍA
+ * recaudado + 10.848,00 de flete por devolución a origen), hoy se le pagan 225.176,33 y en total gana
+ * 214.328,33. Estado `vencido`, que es el de la captura: el cargo del flete por devolución a origen TODAVÍA
  * no se ha hecho.
  */
 const CON_RECHAZO: DetalleOk = {
@@ -266,7 +266,7 @@ const CON_RECHAZO: DetalleOk = {
 };
 
 /**
- * SIN un solo rechazo: el flete por rechazo vale "0.00" y la línea puente TIENE que salir igual.
+ * SIN un solo rechazo: el flete por devolución a origen vale "0.00" y la línea puente TIENE que salir igual.
  * Aquí lo que gana la tienda y lo que se le paga coinciden EXACTAMENTE, y aun así son dos líneas
  * distintas: si un día divergen, la pantalla ya sabe decirlo.
  */
@@ -303,7 +303,7 @@ const SIN_RECHAZO: DetalleOk = {
 };
 
 /**
- * PUROS RECHAZOS: no se recaudó nada y aun así Ordenex facturó el flete por rechazo. La tienda
+ * PUROS RECHAZOS: no se recaudó nada y aun así Ordenex facturó el flete por devolución a origen. La tienda
  * GANA un negativo y el neto de Ordenex también lo es. Ninguno de los dos se recorta a cero: un
  * cero diría algo falso.
  */
@@ -457,7 +457,7 @@ describe("395 — «Gana la tienda» y «Pago a tienda» son DOS preguntas, no u
     expect(within(factura()).getByText(PAGO_TIENDA_HOY_NOTA)).toBeInTheDocument();
   });
 
-  it("la diferencia entre las dos es EXACTAMENTE el flete por rechazo, y se lee en pantalla", async () => {
+  it("la diferencia entre las dos es EXACTAMENTE el flete por devolución a origen, y se lee en pantalla", async () => {
     await abrirDetalle();
 
     const pago = importeTras(factura(), PAGO_TIENDA_LABEL);
@@ -472,7 +472,7 @@ describe("395 — «Gana la tienda» y «Pago a tienda» son DOS preguntas, no u
 });
 
 describe("395 — el desglose de lo que Ordenex factura, y por qué hoy se paga otra cifra", () => {
-  it("la línea puente más el flete por rechazo dan lo facturado", async () => {
+  it("la línea puente más el flete por devolución a origen dan lo facturado", async () => {
     await abrirDetalle();
     const region = factura();
 
@@ -497,7 +497,7 @@ describe("395 — el desglose de lo que Ordenex factura, y por qué hoy se paga 
     laCuentaCierra([recaudado, puenteSustraendo], pago, "el pago a la tienda de hoy");
   });
 
-  it("la línea puente sale IGUAL cuando el flete por rechazo es cero: no es condicional", async () => {
+  it("la línea puente sale IGUAL cuando el flete por devolución a origen es cero: no es condicional", async () => {
     await abrirDetalle(SIN_RECHAZO);
     const region = factura();
 
@@ -597,7 +597,7 @@ describe("395 — los negativos salen CON SU SIGNO, nunca recortados", () => {
   });
 });
 
-describe("395 — el tiempo verbal del cargo del flete por rechazo (la trampa)", () => {
+describe("395 — el tiempo verbal del cargo del flete por devolución a origen (la trampa)", () => {
   it("cierre VENCIDO: dice que TODAVÍA no se ha cargado, nunca que ya se cargó", async () => {
     // Éste es el cierre de la captura del humano. El cargo se escribe al APROBAR, así que aquí
     // «se le cargó» sería mentira.
@@ -644,7 +644,7 @@ describe("395 — el tiempo verbal del cargo del flete por rechazo (la trampa)",
     expect(within(factura()).getByText(FLETE_RECHAZO_AUN_NO_COBRADO_NOTA)).toBeInTheDocument();
   });
 
-  it("sin flete por rechazo NO se escribe ninguna de las tres: no hay cargo del que hablar", async () => {
+  it("sin flete por devolución a origen NO se escribe ninguna de las tres: no hay cargo del que hablar", async () => {
     await abrirDetalle(SIN_RECHAZO);
     const region = factura();
 

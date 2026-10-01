@@ -101,7 +101,7 @@ const MOTIVO = "El cliente cambió de dirección y no lo vamos a reintentar";
 const TEXTO = {
   titulo: "Rechazar la orden",
   aviso:
-    "Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».",
+    "Esto le cobra a tu tienda el flete por devolución a origen y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».",
   motivoLabel: "Motivo del rechazo",
   bloqueo: "Escribí el motivo para poder rechazar.",
   exito: "La orden pasó a Devolución a origen por rechazo. El paquete vuelve a tu bodega.",
@@ -248,13 +248,13 @@ describe("240/R28 — el precio y el «no se puede deshacer», ANTES de confirma
 
     const dialog = await abrir(user);
 
-    // ⚠️ Los dos importes de un rechazo tienen DUEÑOS DISTINTOS: el «cobro por rechazo» es INGRESO
+    // ⚠️ Los dos importes de un rechazo tienen DUEÑOS DISTINTOS: el «cobro por devolución a origen» es INGRESO
     // DE LA BODEGA (tarifa de zona + vehículo del mensajero) y NO está en el ledger de la tienda;
     // lo que la tienda paga es el flete de devolución, de su propia tarifa. Decirle que se cobra a
     // sí misma el primero sería falso — y la 237 ya tuvo que corregir esa misma frase en su diseño
     // el 2026-08-20. Este par positivo/negativo es lo que impide que se vuelva a escribir al revés.
-    expect(dialog).toHaveTextContent("flete por rechazo");
-    expect(dialog).not.toHaveTextContent(/cobro por rechazo/i);
+    expect(dialog).toHaveTextContent("flete por devolución a origen");
+    expect(dialog).not.toHaveTextContent(/cobro por devolución a origen/i);
     // Y la irreversibilidad, dicha con palabras y no con un icono (D6: no hay deshacer).
     expect(dialog).toHaveTextContent("no se puede deshacer");
   });

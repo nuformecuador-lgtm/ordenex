@@ -906,7 +906,7 @@ describe("396 · D3 · R17 — lo que NO está repartido, dicho en cada desglose
     }
     // Y dicen lo aprobado, con todas las letras.
     expect(DESGLOSE_NO_REPARTIDO_NOTA).toBe(
-      "El pago al mensajero y el ingreso de bodega por rechazos son del cierre completo: no están repartidos entre las tiendas.",
+      "El pago al mensajero y el ingreso de bodega por devoluciones a origen son del cierre completo: no están repartidos entre las tiendas.",
     );
   });
 
@@ -1028,7 +1028,7 @@ describe("396 · D3 — el desglose no devuelve a esta pantalla un rótulo que l
       "Ingreso bruto",
       "Ganancia",
       "Pago a tienda",
-      "Ingreso de bodega por rechazos",
+      "Ingreso de bodega por devoluciones a origen",
       "Total a pagar a mensajeros",
     ]) {
       expect(

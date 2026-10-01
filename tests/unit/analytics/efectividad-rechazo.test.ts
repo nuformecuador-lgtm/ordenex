@@ -4,7 +4,7 @@
 // proceso y el porcentaje de rechazo).
 //
 // LOS CASOS SON LOS MEDIDOS EN PRODUCCIÓN, no cifras redondas inventadas: `Spray Protector` con
-// 37,5 % de rechazo sobre 16 órdenes y `Bálsamo Tensor` con 0 % sobre 29. El segundo es el que
+// 37,5 % de devolución a origen sobre 16 órdenes y `Bálsamo Tensor` con 0 % sobre 29. El segundo es el que
 // justifica que el tipo sea `number | null` y no `number`: **0 no es null**, y confundirlos
 // borraría la diferencia entre «29 órdenes y ni un rechazo» y «no hubo órdenes».
 //

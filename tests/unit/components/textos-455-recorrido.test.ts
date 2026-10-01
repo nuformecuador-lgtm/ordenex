@@ -48,7 +48,7 @@ describe("455/F5 — analítica", () => {
       "Cada orden cuenta en un solo grupo: Entregado, Devolución a origen por rechazo, los demás resultados y Sin desenlace todavía suman la columna Órdenes.",
     );
     expect(DETALLE_DINERO_TEXTOS.totales.retornoPista).toBe(
-      "Flete por rechazo + IVA de las órdenes en Devolución a origen por rechazo. Fuera del reparto",
+      "Flete por devolución a origen + IVA de las órdenes en Devolución a origen por rechazo. Fuera del reparto",
     );
   });
   it("el panel de `novedad_interna` y su nota", () => {

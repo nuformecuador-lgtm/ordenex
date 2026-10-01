@@ -411,7 +411,7 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.ajusteCajaAnulacion\.createMany\(/,
   },
   {
-    // ⭑ FICHA 458-B (D7, R64) — la ANULACION de un cobro por rechazo aprobado. `recibe_tx`; los
+    // ⭑ FICHA 458-B (D7, R64) — la ANULACION de un cobro por devolución a origen aprobado. `recibe_tx`; los
     // reversos de la caja y los creditos de la tienda los escribe `RechazoTiendaCobroService` en la
     // misma transaccion. La mutacion exigida es la constancia.
     tipos: ["cobro_rechazo_tienda_anulado"],

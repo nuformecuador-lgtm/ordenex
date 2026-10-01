@@ -280,7 +280,7 @@ congeló al cerrar y ya no cambia: archivá ese.
 campos responden a la misma pregunta —«¿cuánto cuesta este paquete si se entrega?»— y difieren solo
 en qué tarifa los alimenta.
 
-Si la orden terminó en **`devolucion_a_origen_por_rechazo`**, lo que se te factura es el **flete de devolución y su IVA**, que
+Si la orden terminó en **`devolucion_a_origen_por_rechazo`**, lo que se te factura es el **flete por devolución a origen y su IVA**, que
 son conceptos distintos y que **no** son estos importes. Ese escenario lo sirve la cotización
 (`POST /api/ordenes/api-key/cotizacion`), en su bloque `devuelto`.
 

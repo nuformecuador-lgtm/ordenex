@@ -80,7 +80,7 @@ import { clienteConSavepoint, serializarEscriturasReales, type TxDeTest } from "
 //   · el cierre del dia: `CierreDiaService.solicitarCierre` + `CierresAdminService.aprobarCierre`
 //     (dos tiendas, comision con centimos, una prepagada, una rechazada de calle y un incidente
 //     con indemnizacion), con los CUATRO feeds reales;
-//   · el cobro por rechazo (337): `RechazoTiendaCobroRepository.crearPendiente` + `aprobar`;
+//   · el cobro por devolución a origen (337): `RechazoTiendaCobroRepository.crearPendiente` + `aprobar`;
 //   · pago a tienda y su anulacion, pago a otra tienda (`LiquidacionService`);
 //   · reparto a mensajero, anulacion de su pago y un pago contra el cierre (`LiquidacionService`);
 //   · cobro de un costo a una tienda (`CobroTiendaService`);
@@ -128,7 +128,7 @@ function diaDelPremio(): string {
   return new Date(base + siembras459 * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Reloj de las decisiones de cola (gasto fijo, cobro por rechazo). */
+/** Reloj de las decisiones de cola (gasto fijo, cobro por devolución a origen). */
 const AHORA_DECISION = new Date("2026-09-24T18:00:00.000Z");
 
 export interface Catalogo459 {
@@ -281,7 +281,7 @@ export function montarServicios459(tx: TxDeTest) {
       tiendaRepo,
       c,
       (fn) => c.$transaction((t) => fn(t as never)),
-      // Ficha 458-B (D7): la anulacion del cobro por rechazo, cableada como su `buildService()`.
+      // Ficha 458-B (D7): la anulacion del cobro por devolución a origen, cableada como su `buildService()`.
       {
         repo: new RechazoTiendaCobroAnulacionRepository(c),
         caja: new CajaRechazoTiendaCobroFeedService(cajaRepo),
@@ -592,7 +592,7 @@ export async function sembrarEscenario459(
   );
   afirmarOk(pasos, "aprobarCierre", aprobacion);
 
-  // ── Cobro por rechazo de tienda (337), fuera de todo cierre ───────────────────────────────
+  // ── Cobro por devolución a origen de tienda (337), fuera de todo cierre ───────────────────────────────
   const o6 = await sembrarOrden({
     tiendaId: tiendaA,
     estatus: "devolucion_a_origen_por_rechazo",

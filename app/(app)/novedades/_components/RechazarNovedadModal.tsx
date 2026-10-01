@@ -106,7 +106,7 @@ export const RECHAZO_TITULO = "Rechazar la orden";
  * «Rechazar».
  */
 export const RECHAZO_AVISO =
-  "Esto le cobra a tu tienda el flete por rechazo y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
+  "Esto le cobra a tu tienda el flete por devolución a origen y no se puede deshacer. Si preferís volver a intentar la entrega, usá «Reprogramar».";
 
 /** D10/D5: el motivo es OBLIGATORIO, y el rótulo lo dice sin la muleta del asterisco. */
 export const RECHAZO_MOTIVO_LABEL = "Motivo del rechazo";

@@ -38,8 +38,9 @@ tu cierre**, en ese mismo momento se aplica el estado real de cada orden y se re
 
 - **Si lo rechazan**, ninguna orden cambia de estado: siguen en reparto con su gestión pendiente hasta
   que lo vuelvas a solicitar y se apruebe.
-- **Si la oficina corrige una gestión** antes de aprobar —por ejemplo, una entrega que en realidad fue un
-  rechazo—, al aprobar se aplica el resultado corregido.
+- **Si la oficina corrige una gestión** antes de aprobar —por ejemplo, una entrega que en realidad el
+  destinatario rechazó pasa a **Devolución a origen por rechazo**—, al aprobar se aplica el resultado
+  corregido.
 
 ## Los estados que vas a ver
 

@@ -28,17 +28,17 @@ import type { WalletMovimientoCategoria, WalletOrigenTipo } from "@/lib/types/wa
 export const CATEGORIA_LABEL: Record<WalletMovimientoCategoria, string> = {
   // Los seis cargos del cierre dicen a quién se le cobran.
   ingreso_flete: "Flete cobrado a la tienda",
-  ingreso_flete_devolucion: "Flete por rechazo cobrado a la tienda",
+  ingreso_flete_devolucion: "Flete por devolución a origen cobrado a la tienda",
   ingreso_comision_cod: "Comisión de contra-entrega cobrada a la tienda",
   ingreso_iva_flete: "IVA del flete cobrado a la tienda",
-  ingreso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
+  ingreso_iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda",
   ingreso_iva_comision_cod: "IVA de la comisión cobrado a la tienda",
   // El cobro de Ordenex a una tienda (cargo, liquidez «cargo») y su reverso.
   ingreso_cobro_tienda: "Ordenex le cobra a una tienda",
   egreso_reverso_cobro_tienda: "Cobro a una tienda anulado",
   // Ficha 458-B (design §2.3, D7): la anulación de un cobro por rechazo, flete e IVA por separado.
-  egreso_reverso_flete_devolucion: "Flete por rechazo cobrado a la tienda anulado",
-  egreso_reverso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda anulado",
+  egreso_reverso_flete_devolucion: "Flete por devolución a origen cobrado a la tienda anulado",
+  egreso_reverso_iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda anulado",
   // El dinero de las tiendas que pasa por la caja.
   ingreso_cod_recaudado: "Contra-entrega cobrado a los clientes de la tienda",
   egreso_pago_tienda: "Ordenex le paga a una tienda",

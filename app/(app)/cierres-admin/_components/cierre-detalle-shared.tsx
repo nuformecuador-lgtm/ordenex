@@ -323,7 +323,7 @@ export function MensajeroBloqueadoBadge({
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---
-export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por rechazos";
+export const INGRESO_BODEGA_RECHAZOS_LABEL = "Ingreso de bodega por devoluciones a origen";
 // --- Feature 102 (R8): subtotales del ingreso de bodega por rechazos, particionado por ORIGEN.
 // El total combinado sigue siendo el de la 56 (`INGRESO_BODEGA_RECHAZOS_LABEL`); estos dos son
 // las sublíneas del desglose (SLA del cron 99 vs manual del mensajero). Texto i18n-ready. ---
@@ -333,9 +333,9 @@ export const INGRESO_BODEGA_RECHAZOS_MANUAL_LABEL = "Manual (mensajero)";
 // sea auditable. `SLA` = escalado por el cron de vencimiento (99); `Manual` = rechazo del
 // mensajero. Texto i18n-ready + nota accesible (`title`/`aria-label`). ---
 export const RECHAZO_SLA_BADGE_NOTA =
-  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
+  "Devolución a origen automática por vencerse el plazo de la novedad (no lo hizo el mensajero).";
 export const RECHAZO_MANUAL_BADGE_NOTA =
-  "Rechazo registrado manualmente por el mensajero.";
+  "Devolución a origen registrada manualmente por el mensajero.";
 // --- Neto DERIVADO (total general - lo pagado a mensajeros): texto separado, i18n-ready ---
 export const NETO_LABEL = "Total neto";
 /**
@@ -377,7 +377,7 @@ export const PAGO_TIENDA_LABEL = "Pago a tienda";
  * así que ese dinero nunca entró en el total general y no hay nada de donde restarlo.
  */
 export const PAGO_TIENDA_NOTA =
-  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete por rechazo: un rechazo no recauda contra entrega, así que ese dinero nunca entró en el total general.";
+  "Total general menos flete + IVA y comisión + IVA. No descuenta el flete por devolución a origen: una devolución a origen no recauda contra entrega, así que ese dinero nunca entró en el total general.";
 export const GANANCIA_NOTA = "Ingreso bruto menos el pago al mensajero.";
 export const GANANCIA_NOTA_BODEGA = "Ingreso bruto menos el pago a los mensajeros.";
 export const DESGLOSE_TITULO = "Desglose de ingreso";
@@ -466,8 +466,8 @@ export const TARIFA_ESPECIAL_DEV_LABEL = "Tarifa especial devuelta";
 // ningún archivo de `app/` vuelva a decir «flete de devolución» ni «flete devuelto».
 export const FLETE_LABEL = "Flete";
 export const IVA_FLETE_LABEL = "IVA flete";
-export const FLETE_RECHAZO_LABEL = "Flete por rechazo";
-export const IVA_FLETE_RECHAZO_LABEL = "IVA del flete por rechazo";
+export const FLETE_RECHAZO_LABEL = "Flete por devolución a origen";
+export const IVA_FLETE_RECHAZO_LABEL = "IVA del flete por devolución a origen";
 export const COMISION_COD_LABEL = "Comisión COD";
 export const IVA_COMISION_LABEL = "IVA comisión";
 /**
@@ -478,7 +478,7 @@ export const IVA_COMISION_LABEL = "IVA comisión";
  */
 export const VALOR_FLETE_LABEL = "Valor flete";
 export const VALOR_FLETE_GAM_LABEL = "Valor flete GAM";
-export const FLETE_RECHAZO_GAM_LABEL = "Flete por rechazo GAM";
+export const FLETE_RECHAZO_GAM_LABEL = "Flete por devolución a origen GAM";
 /** Origen del flete, en el `hint` de la fila del desglose. */
 export const HINT_TARIFA_ESPECIAL = "tarifa especial pactada";
 export const SIN_TARIFA_CONGELADA_NOTA =

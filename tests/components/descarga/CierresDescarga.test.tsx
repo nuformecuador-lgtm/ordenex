@@ -810,7 +810,7 @@ describe("Cierres · descarga", () => {
     const antes = [
       numero("Totales a consolidar"),
       numero("Pago a mensajeros a consolidar"),
-      numero("Ingreso de bodega por rechazos a consolidar"),
+      numero("Ingreso de bodega por devoluciones a origen a consolidar"),
     ];
 
     await abrirPestana(user, /^Solicitados/);
@@ -827,7 +827,7 @@ describe("Cierres · descarga", () => {
     expect([
       numero("Totales a consolidar"),
       numero("Pago a mensajeros a consolidar"),
-      numero("Ingreso de bodega por rechazos a consolidar"),
+      numero("Ingreso de bodega por devoluciones a origen a consolidar"),
     ]).toEqual(antes);
   });
 

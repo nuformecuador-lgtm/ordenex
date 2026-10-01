@@ -339,7 +339,7 @@ describe.skipIf(!HAY_BASE_DE_DATOS)("F.1-F.6 · la 127 contra Postgres, sin mock
       // bruto copiado. ⟨D12⟩ retiro esa copia; lo que se afirma ahora es la FORMA —que la clave
       // no esta— ademas de la cifra, que no cambia.
       // FICHA 458-B (revision B2): `ingreso_flete` vuelve a publicar neto porque su lista gana el
-      // reverso de la anulacion de un cobro por rechazo. Sin reverso sembrado, neto = bruto.
+      // reverso de la anulacion de un cobro por devolución a origen. Sin reverso sembrado, neto = bruto.
       const total = conNeto(vista.total, "ingreso_flete / total");
       expect(total.bruto).toBe("1500.00");
       expect(total.neto).toBe("1500.00");

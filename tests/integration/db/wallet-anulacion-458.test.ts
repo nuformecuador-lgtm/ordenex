@@ -34,7 +34,7 @@ import {
 // inyectar se ejercen en `wallet-anulacion-concurrencia.test.ts`, con filas commiteadas.
 //
 // Lo que se mide:
-//   · R63/R64/R68 — anular el cobro por rechazo (tienda A, 1 000 + 130) desde su linea en la caja:
+//   · R63/R64/R68 — anular el cobro por devolución a origen (tienda A, 1 000 + 130) desde su linea en la caja:
 //     2 reversos de cargo, 2 creditos espejo, constancia e historial; ganancia −1 130, «De las
 //     tiendas» +1 130, «Entro», «Salio» y la cifra principal SIN cambio (sobre `derivarCaja` de las
 //     filas reales, por `verResumenCaja`); R7 y R8 a 0,00.
@@ -121,7 +121,7 @@ describeSiHayBase("⭑ 458-B/TB.9 — la anulacion uniforme por las actions (Pos
     };
     const respuestas: Medida["respuestas"] = {};
 
-    // ── 1. El cobro por rechazo, desde su linea de FLETE en la caja ─────────────────────────
+    // ── 1. El cobro por devolución a origen, desde su linea de FLETE en la caja ─────────────────────────
     const antes = await leerCajaEntera(s, actor);
     const saldoAAntes = (await leerTienda(s, actor, esc.tiendaA)).saldo;
     const saldoBAntes = (await leerTienda(s, actor, esc.tiendaB)).saldo;
@@ -286,7 +286,7 @@ describeSiHayBase("⭑ 458-B/TB.9 — la anulacion uniforme por las actions (Pos
     });
   });
 
-  it("R64: el cobro por rechazo deja DOS reversos de cargo y DOS creditos espejo, cada uno por el monto de su original", () => {
+  it("R64: el cobro por devolución a origen deja DOS reversos de cargo y DOS creditos espejo, cada uno por el monto de su original", () => {
     expect(m().cajaDelRechazo).toEqual([
       "egreso|egreso_reverso_flete_devolucion|1000.00",
       "egreso|egreso_reverso_iva_flete_devolucion|130.00",

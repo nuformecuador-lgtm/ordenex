@@ -226,7 +226,7 @@ describeSiHayBase("458-B/TB.13 — «Cómo quedó» (Postgres real)", () => {
     expect(m().r.cobro).toEqual({ status: "ok", comoQuedo: m().esperado.cobro });
   });
 
-  it("R58 (458-B m2): el debito del cobro por rechazo (flete o IVA) da la caja tras la ULTIMA de sus dos lineas", () => {
+  it("R58 (458-B m2): el debito del cobro por devolución a origen (flete o IVA) da la caja tras la ULTIMA de sus dos lineas", () => {
     expect(m().empateRechazo).toBe(true);
     expect(m().r.rechazo0).toEqual({ status: "ok", comoQuedo: m().esperado.rechazo0 });
     expect(m().r.rechazo1).toEqual({ status: "ok", comoQuedo: m().esperado.rechazo1 });

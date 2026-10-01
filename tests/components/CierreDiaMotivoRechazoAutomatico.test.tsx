@@ -54,7 +54,7 @@ vi.mock("next/navigation", () => ({
 
 /** El texto autosuficiente, COMPLETO y tecleado a mano (R11). */
 const MOTIVO_LARGO =
-  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Dirección errada · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 
 /** La variante corta, para afirmar que en ESTA pantalla no aparece nunca. */
 const MOTIVO_CORTO = "Dirección errada";
@@ -181,8 +181,8 @@ describe("R11 — en el cierre del día, el motivo automático se sostiene solo"
 
     const celda = celdaDe("Devolución a origen por rechazo", "REM-SLA", "Motivo");
     expect(celda).not.toBe(MOTIVO_CORTO);
-    expect(celda).toContain("lo rechazó el sistema");
-    expect(celda).toContain("plazo de la devolución");
+    expect(celda).toContain("el sistema la pasó a devolución a origen");
+    expect(celda).toContain("plazo de la novedad");
   });
 
   it("y sigue sin sigla ni value del enum", () => {
@@ -240,7 +240,7 @@ describe("R2 y R3 en la pantalla del mensajero", () => {
     });
 
     expect(celdaDe("Novedad", "REM-DEV", "Motivo")).toBe(
-      "Cliente no localizado · lo rechazó el sistema al vencerse el plazo de la devolución",
+      "Cliente no localizado · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad",
     );
   });
 

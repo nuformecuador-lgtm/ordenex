@@ -60,7 +60,7 @@ const CONSECUENCIAS = [
 ] as const;
 
 const AVISO =
-  "La entrega pasa a ser un rechazo. Queda registrado quién la corrigió, cuándo y con qué motivo.";
+  `La entrega pasa a ser ${estatusLabel("devolucion_a_origen_por_rechazo")}. Queda registrado quién la corrigió, cuándo y con qué motivo.`;
 const CONSECUENCIAS_TITULO = "Al corregir:";
 
 const MOTIVO_LABEL = "Motivo de la corrección";
@@ -68,10 +68,10 @@ const MOTIVO_AYUDA =
   "Obligatorio. Es lo que queda escrito para explicar por qué cambió el dinero de este cierre.";
 const MOTIVO_ID = "motivo-correccion-resultado";
 
-const CONFIRMAR_LABEL = "Marcar como rechazada";
+const CONFIRMAR_LABEL = `Marcar como ${estatusLabel("devolucion_a_origen_por_rechazo")}`;
 const CERRAR_LABEL = "Cerrar";
 
-const OK_TOAST = "Resultado corregido: la entrega pasó a rechazo.";
+const OK_TOAST = `Resultado corregido: la entrega pasó a ${estatusLabel("devolucion_a_origen_por_rechazo")}.`;
 const HECHO_NOTA =
   "Listo. Así quedaron los totales del cierre, recalculados por el servidor:";
 const TOTALES_TITULO = "Totales del cierre tras la corrección";

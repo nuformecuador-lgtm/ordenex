@@ -1,3 +1,5 @@
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
+
 // Feature 46 (R2/R3, decision F1.4-c) — motivo TIPADO y compartido del bloqueo por
 // reprogramacion. Una orden en estatus `reprogramada` esta bloqueada hasta su
 // `fecha_reprogramacion`: no es reasignable por ningun rol. Se usa como `motivo` en el
@@ -102,10 +104,13 @@ export const MSG_MENSAJERO_CON_RECOLECCION =
  * tres a mano y no desde `RESULTADOS_PERMITIDOS_EN_EL_TOPE` a proposito: el vocabulario del enum
  * (`entregada`, `incidente`) no es el de la pantalla, y una frase generada del enum diria
  * «incidente» donde la persona lee «Reportar incidente».
+ *
+ * FICHA 466 (E6, R9/R11): los tres desenlaces se nombran con el nombre VIGENTE de su estado
+ * (`NOMBRE_ESTADO`, 455 R2/R4), no con el participio viejo («entregada, rechazada»).
  */
 export const MSG_TOPE_INTENTOS_GESTION =
-  "esta orden ya agoto sus intentos de entrega: solo se puede registrar como entregada, " +
-  "rechazada o como incidente";
+  "esta orden ya agoto sus intentos de entrega: solo se puede registrar como " +
+  `${NOMBRE_ESTADO.entregado}, ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} o ${NOMBRE_ESTADO.incidente}`;
 
 /**
  * R18/R20 — el rechazo de la SALIDA A REPARTO de una orden que ya alcanzo el umbral. Punto UNICO,

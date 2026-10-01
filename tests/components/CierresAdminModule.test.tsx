@@ -147,7 +147,7 @@ function emptyGrupos(): CierreGrupos {
 }
 
 /**
- * Feature 102 (T10/T11): desglose del ingreso de bodega por rechazos. Default en cero (los tests
+ * Feature 102 (T10/T11): desglose del ingreso de bodega por devoluciones a origen. Default en cero (los tests
  * que no lo están mirando solo lo necesitan para el typecheck); los tests del desglose lo
  * sobreescriben con montos reales para afirmar SLA separado del manual (R8).
  */
@@ -618,7 +618,7 @@ describe("CierresAdminModule", () => {
       (within(cobros).getByText(label).closest("div")?.lastElementChild?.textContent ?? "").trim();
     expect(filaDe("Valor flete GAM")).toBe("₡2.500");
     expect(filaDe("Valor flete")).toBe("₡0");
-    expect(filaDe("Flete por rechazo GAM")).toBe("₡0");
+    expect(filaDe("Flete por devolución a origen GAM")).toBe("₡0");
     expect(filaDe("Total cobrado")).toBe("₡3.672,50"); // el `total` del DTO, tal cual
     // El porcentaje NO se pierde: sigue explicando el cobro real en el desglose de al lado.
     expect(within(region).getAllByText("13.00 % de ₡2.500").length).toBeGreaterThan(0);
@@ -846,7 +846,7 @@ describe("CierresAdminModule", () => {
     expect(within(region).getByText("Sin tarifa")).toBeInTheDocument();
   });
 
-  it("feature 56/R12: una gestión rechazada expone su ingreso de bodega por rechazos (string, money-safe)", async () => {
+  it("feature 56/R12: una gestión rechazada expone su ingreso de bodega por devoluciones a origen (string, money-safe)", async () => {
     const user = userEvent.setup();
     const grupos = emptyGrupos();
     grupos.devolucion_a_origen_por_rechazo = [
@@ -887,7 +887,7 @@ describe("CierresAdminModule", () => {
   });
 
 
-  it("feature 102/R8: el ingreso de bodega por rechazos muestra el total y los subtotales SLA y manual separados", async () => {
+  it("feature 102/R8: el ingreso de bodega por devoluciones a origen muestra el total y los subtotales SLA y manual separados", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
       ordenesSinGestion: [],
@@ -921,7 +921,7 @@ describe("CierresAdminModule", () => {
       name: "Detalle del cierre",
     });
     const region = within(dialog).getByRole("region", {
-      name: "Ingreso de bodega por rechazos del cierre",
+      name: "Ingreso de bodega por devoluciones a origen del cierre",
     });
     // El total combinado (56) + las dos sublíneas del desglose por origen (102/R8).
     expect(within(region).getByText("₡9.200")).toBeInTheDocument();

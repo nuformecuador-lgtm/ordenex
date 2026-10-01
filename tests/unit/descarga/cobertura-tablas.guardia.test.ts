@@ -401,7 +401,7 @@ describe("guardia de cobertura del censo de tablas", () => {
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
     // FEATURE 304: 27 → 28, por la tabla del aviso de montos redondeados de la carga masiva.
     // FICHA 333 (H1): 28 → 29, por la cola de cobros de gasto fijo por aprobar.
-    // FICHA 337 (segunda mitad): 29 → 30, por la cola de cobros por rechazo de tienda.
+    // FICHA 337 (segunda mitad): 29 → 30, por la cola de cobros por devolución a origen de tienda.
     // FICHA 336: 30 → 29, por el desglose de pagos del mensajero, que se va con `/mis-pagos`.
     // FICHA 343 (B6.1): 29 → 30, por el desplegable de una fila de la tarjeta de la ganancia.
     // FICHA 344 (B8.3): 30 → 32, por los DOS desplegables de una fila del libro de movimientos

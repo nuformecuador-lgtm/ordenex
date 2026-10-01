@@ -575,7 +575,7 @@ describe("FICHA 346/442 · «En qué terminaron» suma la columna «Órdenes»",
     expect(PRODUCTOS_COLUMNAS.desenlaces).toBe("En qué terminaron");
   });
 
-  it("el % de rechazo de la captura sigue ahí: se lee al abrir la fila", async () => {
+  it("el % de devolución a origen de la captura sigue ahí: se lee al abrir la fila", async () => {
     const usuario = userEvent.setup();
     consultarMock.mockResolvedValue({ status: "ok", datos: datos([CREMA]) });
     renderTabla();

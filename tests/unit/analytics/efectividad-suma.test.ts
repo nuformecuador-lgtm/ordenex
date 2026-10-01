@@ -189,7 +189,7 @@ describe("FICHA 346 · un desenlace NUEVO del catálogo entra solo", () => {
 describe("FICHA 346 · `Crema Especial MLX`, la captura del 2026-08-29", () => {
   /**
    * Lo MEDIDO en la pantalla: Órdenes 24, Entregadas 3, Rechazadas 2, En proceso 13,
-   * Efectividad 12,5 % y % de rechazo 8,3 %. De ahí salen las seis órdenes que faltaban
+   * Efectividad 12,5 % y % de devolución a origen 8,3 %. De ahí salen las seis órdenes que faltaban
    * (24 − 3 − 2 − 13) y también el total, dos veces: 3/24 = 0,125 y 2/24 = 0,0833.
    *
    * ⚠ EL REPARTO DE ESAS SEIS ENTRE `devuelta` y `reprogramada` NO ES DATO MEDIDO y no se

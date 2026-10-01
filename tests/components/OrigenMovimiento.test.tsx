@@ -51,12 +51,12 @@ describe("OrigenMovimiento — la celda", () => {
         fila={{
           origenTipo: "gestion_orden",
           descripcion: "Rechazo del 12",
-          origen: { texto: "Gestión de orden · cobro por rechazo · guía 4321", enlace: null },
+          origen: { texto: "Gestión de orden · cobro por devolución a origen · guía 4321", enlace: null },
         }}
         rotulos={ORIGEN_LABEL}
       />,
     );
-    expect(screen.getByText("Gestión de orden · cobro por rechazo · guía 4321 · Rechazo del 12")).toBeInTheDocument();
+    expect(screen.getByText("Gestión de orden · cobro por devolución a origen · guía 4321 · Rechazo del 12")).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
   });
 

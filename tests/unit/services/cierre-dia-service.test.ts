@@ -729,9 +729,9 @@ describe("listarCierreDia — snapshot congelado del historico (R15)", () => {
   });
 });
 
-// --- Feature 56: ingreso de bodega por rechazos DERIVADO en vivo (R2/R7b/R9/R10/R20/R23) ---
+// --- Feature 56: ingreso de bodega por devoluciones a origen DERIVADO en vivo (R2/R7b/R9/R10/R20/R23) ---
 
-describe("listarCierreDia — ingreso de bodega por rechazos derivado (R9/R10)", () => {
+describe("listarCierreDia — ingreso de bodega por devoluciones a origen derivado (R9/R10)", () => {
   it("R9: expone ingresoBodegaRechazo por gestion (devolucion_a_origen_por_rechazo -> cobroRechazado; resto -> 0.00)", async () => {
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [
@@ -863,7 +863,7 @@ describe("listarCierreDia — flag tarifaFaltante server-side (R23)", () => {
   });
 });
 
-describe("solicitarCierre — snapshot del ingreso de bodega por rechazos (R8/R11/R12/R14/R20)", () => {
+describe("solicitarCierre — snapshot del ingreso de bodega por devoluciones a origen (R8/R11/R12/R14/R20)", () => {
   it("R11/R12: pasa a crearCierre el ingreso por gestion + el total, congelados con la tarifa vigente", async () => {
     const repo = fakeRepo({
       findGestionesPendientes: vi.fn(async () => [

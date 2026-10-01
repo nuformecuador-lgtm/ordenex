@@ -108,7 +108,7 @@ function gestion(
 
 /**
  * Un cierre de UN mensajero con órdenes de DOS tiendas. Está construido a propósito para que
- * **una tenga rechazos y la otra no**: si las dos tuvieran flete por rechazo cero, la CUARTA
+ * **una tenga rechazos y la otra no**: si las dos tuvieran flete por devolución a origen cero, la CUARTA
  * identidad daría `0.00 === 0.00` en las dos y el test pasaría sin comprobar nada.
  *
  *  · Tienda Norte — una entrega de 100.000,00 y UN RECHAZO (flete de devolución 1.500 + IVA 195)
@@ -286,11 +286,11 @@ describe("396/R12 — la suma de lo recaudado por tienda ES el total general", (
   });
 });
 
-describe("396 — LA CUARTA IDENTIDAD, por tienda: pagoTienda − ganaLaTienda === su flete por rechazo", () => {
+describe("396 — LA CUARTA IDENTIDAD, por tienda: pagoTienda − ganaLaTienda === su flete por devolución a origen", () => {
   /**
    * ⚠️ ES LA QUE MÁS PROTEGE. Hace imposible derivar una de las dos cifras de pago con el
    * subconjunto equivocado sin que se note: si `ganaLaTienda` de una tienda saliera del `total`
-   * AGREGADO en vez del suyo, esta resta dejaría de dar su flete por rechazo.
+   * AGREGADO en vez del suyo, esta resta dejaría de dar su flete por devolución a origen.
    *
    * Y necesita **una tienda con rechazos y otra sin ellos**: si las dos dieran cero, el test
    * pasaría sin comprobar nada. Por eso el fixture es el que es.
@@ -338,7 +338,7 @@ describe("396/R13 — lo recaudado por tienda usa EL MISMO criterio que el total
 
 describe("396/R9 — la tienda que sólo trajo RECHAZOS entra igual, y cuenta", () => {
   /**
-   * No recaudó nada y aun así se le factura el flete por rechazo. Es justo el caso donde el
+   * No recaudó nada y aun así se le factura el flete por devolución a origen. Es justo el caso donde el
    * desglose informa de algo que el agregado tapaba.
    */
   const ESTE_SOLO_RECHAZO = gestion(
@@ -489,7 +489,7 @@ describe("396 — la gestión SIN tarifa congelada (gap conocido de la feature 6
       tiendaNombre: "Tienda Sin Tarifa",
       recaudado: "7000.00",
       // Sin conceptos derivados no hay nada que descontar: se le paga todo lo recaudado, y las
-      // dos cifras coinciden porque tampoco hay flete por rechazo.
+      // dos cifras coinciden porque tampoco hay flete por devolución a origen.
       pagoTienda: "7000.00",
       ganaLaTienda: "7000.00",
     });

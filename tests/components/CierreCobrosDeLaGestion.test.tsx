@@ -108,7 +108,7 @@ const ENTREGADA_GAM = {
   total: "1469.00",
 } satisfies Partial<IngresoOrdenexDTO>;
 
-/** Lo que produce un RECHAZO en GAM: flete por rechazo + su IVA, y NADA más (400+52). */
+/** Lo que produce un RECHAZO en GAM: flete por devolución a origen + su IVA, y NADA más (400+52). */
 const RECHAZADA_GAM = {
   esCentral: true,
   fleteDevolucion: "400.00",
@@ -247,7 +247,7 @@ describe("💰 338 — «Cobros de esta gestión»: importes, ceros y un total q
     expect(cobroDe(COBROS_TOTAL_LABEL)).toBe(money("1469.00"));
   });
 
-  it("un RECHAZO en GAM cobra en «Flete por rechazo GAM» y deja en cero las de entrega", () => {
+  it("un RECHAZO en GAM cobra en «Flete por devolución a origen GAM» y deja en cero las de entrega", () => {
     render(<DesgloseIngresoOrdenex g={gestion(ingreso(RECHAZADA_GAM), "devolucion_a_origen_por_rechazo")} />);
 
     expect(cobroDe(FLETE_RECHAZO_GAM_LABEL)).toBe(money("400.00"));

@@ -36,8 +36,8 @@ function pintar() {
       open
       onOpenChange={onOpenChange}
       destino={DESTINO}
-      nombre="el cobro por rechazo a una tienda"
-      resumen="Flete por rechazo cobrado a la tienda · 2026-09-12 · ₡1.800"
+      nombre="el cobro por devolución a origen a una tienda"
+      resumen="Flete por devolución a origen cobrado a la tienda · 2026-09-12 · ₡1.800"
       montoPintado="₡1.800"
       onAnulado={onAnulado}
     />,
@@ -46,7 +46,7 @@ function pintar() {
 }
 
 async function dialogo() {
-  return screen.findByRole("dialog", { name: "Anular el cobro por rechazo a una tienda" });
+  return screen.findByRole("dialog", { name: "Anular el cobro por devolución a origen a una tienda" });
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -109,7 +109,7 @@ describe("458-C R65/R66 — lo que responde el servidor", () => {
     ["contra_asiento", "Este movimiento no se puede anular: es la anulación de otro movimiento."],
     ["nace_de_un_cierre", "Este movimiento no se puede anular: lo produjo la aprobación de un cierre."],
     ["reclasificado", "Este movimiento no se puede anular: se reclasificó como pago de un gasto de la tienda."],
-    ["no_aprobado", "Este movimiento no se puede anular: el cobro por rechazo no está aprobado."],
+    ["no_aprobado", "Este movimiento no se puede anular: el cobro por devolución a origen no está aprobado."],
     ["sin_linea_de_caja", "Este movimiento no se puede anular: no tiene su línea en la caja."],
     ["no_es_anulable", "Este movimiento no se puede anular: es un registro automático que no se anula desde aquí."],
   ] as const) {

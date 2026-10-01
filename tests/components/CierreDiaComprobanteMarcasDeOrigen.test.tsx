@@ -74,13 +74,13 @@ const TIENDA_NOTA =
 /** El distintivo de origen que esta audiencia ya no debe ver (R5). */
 const ORIGEN_AUTOMATICO_LABEL = "Automático";
 const ORIGEN_AUTOMATICO_NOTA =
-  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
+  "Devolución a origen automática por vencerse el plazo de la novedad (no lo hizo el mensajero).";
 const ORIGEN_MANUAL_LABEL = "Manual";
-const ORIGEN_MANUAL_NOTA = "Rechazo registrado manualmente por el mensajero.";
+const ORIGEN_MANUAL_NOTA = "Devolución a origen registrada manualmente por el mensajero.";
 
 /** El texto autosuficiente del motivo (408/R11), que aquí hace de control de no-vacuidad. */
 const MOTIVO_LARGO =
-  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Dirección errada · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 
 /** La cadena EXACTA que el cron de plazos vencidos deja guardada. */
 const MOTIVO_GUARDADO_DEL_CRON = "escalado SLA wrong_address";

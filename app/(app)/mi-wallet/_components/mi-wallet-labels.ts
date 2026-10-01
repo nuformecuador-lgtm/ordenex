@@ -104,10 +104,10 @@ export const TIPO_TIENDA_LABEL: Record<WalletTiendaMovimientoTipo, string> = {
 export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, string> = {
   cod_recaudado: "Cobrado a tus clientes en contra-entrega",
   flete: "Ordenex te cobró el flete",
-  flete_devolucion: "Ordenex te cobró el flete por rechazo",
+  flete_devolucion: "Ordenex te cobró el flete por devolución a origen",
   comision_cod: "Ordenex te cobró la comisión de contra-entrega",
   iva_flete: "Ordenex te cobró el IVA del flete",
-  iva_flete_devolucion: "Ordenex te cobró el IVA del flete por rechazo",
+  iva_flete_devolucion: "Ordenex te cobró el IVA del flete por devolución a origen",
   iva_comision_cod: "Ordenex te cobró el IVA de la comisión",
   // FICHA 381 (R33/R34): el cobro decidido por una persona, DISTINTO de una correccion.
   cobro_manual: "Ordenex te cobró",
@@ -121,8 +121,8 @@ export const CATEGORIA_MI_WALLET_LABEL: Record<WalletTiendaMovimientoCategoria, 
   abono_tienda: "Le pagaste a Ordenex",
   abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
   // Ficha 458-B (design §2.3, D7): la anulación de un cobro por rechazo, desde la tienda.
-  flete_devolucion_anulado: "Ordenex anuló el flete por rechazo y te lo devolvió",
-  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por rechazo y te lo devolvió",
+  flete_devolucion_anulado: "Ordenex anuló el flete por devolución a origen y te lo devolvió",
+  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por devolución a origen y te lo devolvió",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };

@@ -449,9 +449,9 @@ describe("CierreBodegaService — total neto y deuda de la central", () => {
   });
 });
 
-// --- Feature 56: ingreso de bodega por rechazos agregado (R17/R18) ---
+// --- Feature 56: ingreso de bodega por devoluciones a origen agregado (R17/R18) ---
 
-describe("CierreBodegaService — ingreso de bodega por rechazos agregado (R17/R18)", () => {
+describe("CierreBodegaService — ingreso de bodega por devoluciones a origen agregado (R17/R18)", () => {
   it("R17: listarConsolidacion expone totalIngresoBodegaRechazosAgregado = suma snapshot de los consolidables", async () => {
     const repo = fakeRepo({
       findCierresDiaConsolidables: vi.fn(async () => [

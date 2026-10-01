@@ -123,7 +123,7 @@ describe("458-B/TB.10 — adjuntar (D6, R75, R76, R79)", () => {
     expect(t.storage.upload).not.toHaveBeenCalled();
   });
 
-  it("D6: los documentos de la 459/457 lo llevan en SU documento; el cobro por rechazo, el premio y los contra-asientos no admiten", async () => {
+  it("D6: los documentos de la 459/457 lo llevan en SU documento; el cobro por devolución a origen, el premio y los contra-asientos no admiten", async () => {
     const casos: [Clase, unknown][] = [
       [{ status: "ruta", camino: "pago_por_cuenta_tienda", id: "d" }, { status: "no_admite", motivo: "en_su_documento" }],
       [{ status: "ruta", camino: "aporte_capital", id: "d" }, { status: "no_admite", motivo: "en_su_documento" }],
@@ -194,7 +194,7 @@ describe("458-B/TB.10 — ver (R77, R78, R80)", () => {
     }
   });
 
-  it("R77: la tienda NO puede sondear un cobro por rechazo por su documento (seria `sin_comprobante` = existe)", async () => {
+  it("R77: la tienda NO puede sondear un cobro por devolución a origen por su documento (seria `sin_comprobante` = existe)", async () => {
     const t = montar({ clase: { status: "ruta", camino: "rechazo_tienda_cobro", id: "cob-1" } });
     expect(await t.servicio.ver({ documento: "rechazo_tienda_cobro", id: CAJA_ID }, TIENDA)).toEqual({ status: "no_encontrado" });
     expect(t.clasificador.clasificar).not.toHaveBeenCalled();

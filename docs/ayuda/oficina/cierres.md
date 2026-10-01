@@ -70,7 +70,7 @@ estado.
 
 Con el cierre todavía abierto, el **maestro** y el **admin** tienen dos correcciones:
 
-- **Corregir el resultado**: una entrega que en realidad fue un rechazo pasa a rechazo. El cobro de esa
+- **Corregir el resultado**: una entrega que en realidad el destinatario rechazó pasa a **Devolución a origen por rechazo**. El cobro de esa
   entrega desaparece del cierre, el pago al mensajero por ella pasa a cero y los totales se recalculan.
   El motivo es obligatorio y queda registrado quién corrigió y cuándo. **La orden sigue En reparto**
   hasta que apruebes; al aprobar, pasa a **Devolución a origen por rechazo**.
@@ -104,4 +104,4 @@ escribiendo — se llega a él por su fecha y su mensajero, así que el campo de
 - **No se paga desde acá.** Aprobar acredita; pagar es **Wallet · Tiendas** y **Wallet · Mensajeros**.
 - **No se deshace la gestión de un mensajero.** Si una orden entró mal y el mensajero todavía no pidió
   el cierre, la devuelve a gestión él mismo desde su **Cierre del día**. Desde acá solo se corrige una
-  entrega a rechazo, o los métodos de pago.
+  entrega a **Devolución a origen por rechazo**, o los métodos de pago.
