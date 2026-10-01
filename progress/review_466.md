@@ -163,3 +163,87 @@ sobre `docs/ayuda` y `docs/api` (sin el CHANGELOG). Salen ~190 líneas en litera
 1. B1: una línea de `guia-integracion.html` y su test literal.
 2. B2: T3.2 ejecutada (o declarada inaplicable por el humano o el leader, con su sustituto) y `tasks.md` marcado.
 3. Recomendado en la misma pasada: m2, m3 y m4 (triviales).
+
+---
+
+# Segunda revisión (T4.1) — 2026-10-01
+
+**Revisado:** `origin/feature/466-rechazo-nombre-nuevo` @ `80592c25` (commits `e9bc04c4` y `80592c25` sobre `18078913`).
+**Alcance:** solo el delta `git diff 18078913..80592c25`. No se corrió `./init.sh` ni un dev server (había un gate
+corriendo en `dev`); se revisa el log del gate completo de las correcciones. El grafo `codebase-memory` no hizo
+falta: todo lo revisado son líneas concretas del diff, leídas con `git`/`grep`.
+
+## Veredicto: **OK (APROBADO)**
+
+B1 y B2 cerrados; m1-m5 cerrados. Un menor nuevo (m6), que no bloquea.
+
+## Checklist
+
+- [x] **B1** — `guia-integracion.html:617` dice ahora «Si la orden termina en Devolución a origen por rechazo
+  (`devolucion_a_origen_por_rechazo`), lo que se factura…». Ya no queda «rechazo» suelto en la guía (las demás
+  apariciones son el nombre vigente, el código o el verbo «rechaza»). La entrada del CHANGELOG lo recoge.
+- [x] **Test literal de B1 que muerde (mutaciones mías, revertidas, árbol limpio después):**
+  - volver a «Si la orden termina con rechazo, lo que se factura» → **ROJO**, 1 failed | 8 passed
+    (`466/R9 — la guia de integracion (HTML)…`);
+  - otra redacción, que esquiva «termina con rechazo» («Si la orden es rechazada, …») → **ROJO**, 1 failed (el
+    `toContain` del literal completo la caza también).
+- [x] **B2** — `tasks.md`: T0.1-T3.2 marcadas `[x]` (17); solo queda T4.1, que se marca al aceptar esta revisión.
+  T3.2 ejecutada con Playwright y documentada en `impl_466.md` (tabla por pantalla y por Excel, con la búsqueda
+  `/rechaz/i` en el `innerText` y en todas las celdas). Alcance parcial: ver m6.
+- [x] **m1** — `GestionarOrdenPanel.tsx`, `emitir.ts` y `CierresAdminService.ts` entran en `DICCIONARIOS`.
+  Mutación mía RB1 (E5 → «— entregada o rechazada.») → **ROJO en la guardia**
+  (`GestionarOrdenPanel.tsx:277 … entregada o rechazada. …`), 1 failed | 12 passed.
+  `RechazarNovedadModal.tsx` queda fuera, y está bien razonado: sus textos son el acto («Rechazar», «Motivo del
+  rechazo», R13) y el flete (C36, que ya vigila el brazo 2).
+- [x] **Las 3 excepciones nuevas de la guardia, justificadas.** Comprobé cada texto en su archivo:
+  - `GestionarOrdenPanel.tsx:1216` `ariaLabel="Foto de evidencia del rechazo"`: la foto del acto del
+    destinatario (§0.6). La primera revisión ya la daba por legítima.
+  - `emitir.ts:719` `` `${cual} fue rechazado. Revísalo, corrígelo…` ``: el aviso «Tu cierre del día fue
+    rechazado», es decir, el estado de un CIERRE (§0.6).
+  - `CierresAdminService.ts:99` «El motivo de rechazo es obligatorio.» y `:393` el error técnico «cierre … rechazado
+    sin resuelto_at»: el rechazo de un CIERRE (§0.6).
+  - Caducidad: mutación mía (`:99` → «El motivo del rechazo es obligatorio.») → **ROJO**, 2 failed (infractor nuevo
+    + «cada excepcion sigue haciendo falta con su texto exacto»). Las excepciones van por texto exacto, no por
+    comodín.
+- [x] **m2** — `GESTION_AYUDA_TOPE_NOTA` sin `.toLowerCase()`. Mutación mía (volver a ponerlo) → **ROJO**,
+  3 failed en `rechazo-nombre-466-app` + `GestionarDesdeAyudaModalTope`. Los dos tests llevan el literal escrito a
+  mano, no la constante: no se comparan contra su propia fuente.
+- [x] **m3** — R19 ya no exige «la primera»: comprueba el orden cronológico (las entradas de arriba con fecha ≥,
+  las de abajo con fecha ≤) y que haya más de 3 fechas (no-vacuidad).
+- [x] **m4** — título de `TarifasClaridadMontos.test.tsx` actualizado (solo el título; las aserciones no cambian).
+- [x] **m5** — `docs/ayuda/mensajero/cierre-del-dia.md` alineado: «…pasa a **Devolución a origen por rechazo**».
+- [x] **Tests del delta, corridos por mí:** `npx vitest run` de los 5 archivos tocados →
+  **5 files, 70 tests passed**, exit 0.
+- [x] **Gate de las correcciones** (`progress/gate_466_fix.log`): modo **completo**; arranca a las 16:44:32,
+  después de `e9bc04c4` (16:42:32). `Test Files 2332 passed`, `Tests 32407 passed | 26 skipped` (los 26 son los
+  `it.skip` de `AnaliticaPage`/`AnaliticaShell`), **0 fallidos**, `init OK`, **`INIT_EXIT=0`**. Integración
+  ejecutada: 423 líneas de `tests/integration/db` y ninguna saltada. («Logout failed: Error: boom» es el stderr
+  esperado de un test, no un fallo).
+- [x] El `progress/review_466.md` de la rama de feature es idéntico al de `review/466@5b57174d`: esta sección
+  se añade encima sin conflicto.
+
+## Hallazgos
+
+### BLOQUEANTE
+Ninguno.
+
+### menor
+- **m6 — T3.2 no cubre todo lo que pide su enunciado, y dos pantallas se omiten sin decirlo.** No se vieron
+  `/mi-wallet` ni su Excel (no se sembró sesión de tienda), el detalle de movimiento ni «Anular …» (el clic no
+  abrió y no se insistió), ni `/novedades` en la pestaña de plazo vencido (404 para el maestro). Esto está
+  declarado en «No cubierto». Pero **la cola de cobros y el diálogo de corregir resultado no aparecen ni en la
+  tabla ni en «No cubierto»**. Tampoco son imposibles de ver: es esfuerzo que no se hizo. No lo hago bloqueante
+  porque el riesgo que queda está cubierto por otras vías:
+  1. Todas sus fuentes de texto están en `DICCIONARIOS` (`mi-wallet-labels`, `detalle-movimiento-panel-labels`,
+     `cobro-rechazo-tienda-labels`, `CorregirResultadoDialog`, `RechazosSlaModule`), y RB2 de la primera
+     revisión demostró que la guardia muerde en `CorregirResultadoDialog`.
+  2. El brazo 2 recorre por AST **todo** `app/`, `lib/`, `components/` y `hooks/` buscando las frases de §0.5.
+  3. El texto que sale de la base («Motivo y origen») sí se miró, en los Excel de `/wallet` y del estado de cuenta
+     de la tienda Tania, que muestran los mismos movimientos que `/mi-wallet`.
+  4. Mi barrido estático de literales con «rechazo/rechazad\*» en `mi-wallet`, `wallet`, `novedades`,
+     `cierres-admin` y `components/shared/wallet`, fuera de los diccionarios, solo devuelve textos de §0.6: estado
+     de un cierre, «Rechazados por la tienda» / «Fecha del rechazo» (acto de la tienda), «Cobro rechazado» de un
+     gasto fijo, «Motivo del rechazo» (R13).
+
+  **Lo que pido:** que el leader acepte por escrito el alcance parcial, o que vea esas 5 pantallas la próxima vez
+  que levante la app con una sesión de tienda. No condiciona este OK.
