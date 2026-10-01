@@ -101,7 +101,7 @@ describeSiHayBase("458-A R5–R8 — el origen legible sale de la base, por la a
     await prisma.$disconnect();
   });
 
-  it("maestro: cierre con día CR y mensajero + enlace; flete por rechazo con su guía + enlace", async () => {
+  it("maestro: cierre con día CR y mensajero + enlace; flete por devolución a origen con su guía + enlace", async () => {
     const r = await enTransaccionRevertida(prisma, async (tx) => {
       const e = await sembrar(tx);
       const res = await listarMovimientosDeTiendaAction(

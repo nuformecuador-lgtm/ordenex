@@ -514,7 +514,7 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
       ),
     ).toBeInTheDocument();
     const bodega = screen.getByRole("region", {
-      name: "Ingreso de bodega por rechazos del cierre",
+      name: "Ingreso de bodega por devoluciones a origen del cierre",
     });
     expect(within(bodega).getByText("₡500")).toBeInTheDocument();
     expect(within(bodega).getByText("₡300")).toBeInTheDocument();
@@ -531,7 +531,7 @@ describe("feature 264 — el dinero del comprobante no se mueve por la sección 
 
     expect(texto("Ingreso de Ordenex")).toContain("Flete + IVA₡2.260");
     expect(texto("Ingreso de Ordenex")).toContain("Comisión + IVA₡800");
-    expect(texto("Ingreso de Ordenex")).toContain("Flete por rechazo + IVA₡0");
+    expect(texto("Ingreso de Ordenex")).toContain("Flete por devolución a origen + IVA₡0");
     expect(texto("Ingreso de Ordenex")).toContain("Total Ordenex₡3.060");
 
     // La ganancia NEGATIVA (la deuda de Ordenex con el mensajero).

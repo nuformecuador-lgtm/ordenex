@@ -51,7 +51,7 @@ interface Fotografia {
   mensajero: Awaited<ReturnType<typeof leerMensajero>>;
   /**
    * FICHA 458-B — lo que la 458 AÑADE: la foto se toma ENTERA primero (todo lo de arriba no cambia)
-   * y DESPUES se anula el cobro por rechazo del escenario y se vuelve a leer. Nada de lo anterior se
+   * y DESPUES se anula el cobro por devolución a origen del escenario y se vuelve a leer. Nada de lo anterior se
    * relee: los literales de la 459/461 siguen midiendo exactamente lo mismo.
    */
   trasAnularRechazo: {
@@ -113,7 +113,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
         tiendaB: await leerTienda(s, esc.maestro, esc.tiendaB),
         mensajero: await leerMensajero(s, esc.maestro, esc.mensajeroId),
       };
-      // FICHA 458-B — SOLO DESPUES de la foto: anular el cobro por rechazo aprobado del escenario.
+      // FICHA 458-B — SOLO DESPUES de la foto: anular el cobro por devolución a origen aprobado del escenario.
       const cobro = await tx.rechazoTiendaCobro.findFirstOrThrow({
         where: { tiendaId: esc.tiendaA, estado: "aprobado" },
         select: { id: true },
@@ -176,7 +176,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   //   − IVA flete                                          650,00  (2 × 325,00)
   //   − comision O1: 14 900 × 3,5 % = 521,50                521,50
   //   − IVA comision: 521,50 × 13 % = 67,795 → HALF_UP      67,80
-  //   − cobro por rechazo (337): flete 1 000,00 + IVA 130,00
+  //   − cobro por devolución a origen (337): flete 1 000,00 + IVA 130,00
   //   − pago a tienda 5 000,00, + su anulacion (ajuste_credito) 5 000,00
   //   aFavor = 14 900 + 5 000 = 19 900,00
   //   cargos = 5 000 + 650 + 521,50 + 67,80 + 1 000 + 130 = 7 369,30
@@ -348,7 +348,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
       "gasto|egreso|egreso_gasto_variable|12345.67",
       "gasto|egreso|egreso_sueldo|45000.00",
       "gasto|ingreso|ingreso_ajuste|45000.00",
-      // cobro por rechazo aprobado (337)
+      // cobro por devolución a origen aprobado (337)
       "gestion_orden|ingreso|ingreso_flete_devolucion|1000.00",
       "gestion_orden|ingreso|ingreso_iva_flete_devolucion|130.00",
       // ajustes manuales (42)
@@ -420,7 +420,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   // el mismo criterio (a mano). Las de la 459 eran: deTerceros 15 546,32 · deOrdenex −89 874,84.
   describe("lo que esta ficha cambia a proposito (cifras con la formula de la 459)", () => {
     it("«Entro», la cifra principal, «De las tiendas», capital y «De Ordenex»", () => {
-      // Cargos a tiendas del escenario (los seis conceptos del feed y del cobro por rechazo):
+      // Cargos a tiendas del escenario (los seis conceptos del feed y del cobro por devolución a origen):
       //   flete 8 000 + IVA flete 1 040 + comision 978,47 + IVA comision 127,21
       //   + devolucion 2 500 + IVA devolucion 325 = 12 970,68
       //   + (461) el cobro de Ordenex a la tienda B 2 500,50 → cargos 15 471,18
@@ -501,7 +501,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   });
 
   // ───────────────────────────────────────────────────────────────────────────────────────────
-  // ⭑ LO QUE LA FICHA 458 AÑADE A PROPOSITO (D7, R68/R91, design §8.1) — anular el cobro por rechazo
+  // ⭑ LO QUE LA FICHA 458 AÑADE A PROPOSITO (D7, R68/R91, design §8.1) — anular el cobro por devolución a origen
   // aprobado del escenario (tienda A: flete 1 000,00 + IVA 130,00 = 1 130,00). Es el UNICO bloque que
   // la 458-B escribe en esta fotografia; todo lo de arriba se mide ANTES de anular y no cambia.
   // Literales calculados A MANO (nunca con la funcion probada):
@@ -512,7 +512,7 @@ describeSiHayBase("⭑ 459/FASE 0 — la fotografia de lo que no puede cambiar (
   //   R7: −88 504,34 + 14 175,82 + 0 = −74 328,52 → diferencia 0,00
   //   R8: 14 175,82 − (8 660,70 + 5 515,12) = 0,00
   // ───────────────────────────────────────────────────────────────────────────────────────────
-  describe("⭑ lo que la 458 añade a proposito (anular el cobro por rechazo)", () => {
+  describe("⭑ lo que la 458 añade a proposito (anular el cobro por devolución a origen)", () => {
     const deltaAnulado = (lector: (l: LecturaCaja459) => string) =>
       menos(lector(foto().trasAnularRechazo.caja), lector(foto().antes));
 

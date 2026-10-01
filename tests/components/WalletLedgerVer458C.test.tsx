@@ -21,7 +21,7 @@ import type { DocumentoCajaDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
 //    ni «Reversar» ni «Anular…» sueltos en la tabla (D11);
 //  - «Anular…» (en el panel) solo en las filas cuyo `documento` del servidor está vigente (R63/R65/R71);
 //    y para TODOS los caminos —pago de un gasto, aporte, cobro (propio y completado), corrección, pago
-//    de la tienda, gasto/sueldo, indemnización, cobro por rechazo— la llamada es la MISMA:
+//    de la tienda, gasto/sueldo, indemnización, cobro por devolución a origen— la llamada es la MISMA:
 //    `anularMovimientoAction({ destino: { libro: "caja", movimientoId: <id de la PROPIA fila> }, motivo })`,
 //    sin monto; el servidor decide el camino (458-B, TB.9);
 //  - una fila anulada se pinta tachada y apagada y su panel dice «Anulado» (R71), sin mirar otras filas;
@@ -106,7 +106,7 @@ const ANULABLES: Array<[string, WalletMovimientoDTO]> = [
     fila({ categoria: "egreso_indemnizacion", origenTipo: "orden_incidente", origenId: uuid(), monto: "3000.00", documento: doc("indemnizacion") }),
   ],
   [
-    "flete del cobro por rechazo",
+    "flete del cobro por devolución a origen",
     fila({ tipo: "ingreso", categoria: "ingreso_flete_devolucion", origenTipo: "gestion_orden", origenId: uuid(), monto: "1800.00", documento: doc("rechazo_tienda_cobro") }),
   ],
   // B3 de la revisión: los dos egresos que el servidor ya anulaba desde la caja y que no traían documento.
@@ -273,12 +273,12 @@ describe("458-C — lo demás del panel desde el libro", () => {
     }
   });
 
-  it("R100: el cobro por rechazo dice en palabras que es un cargo a la tienda", async () => {
+  it("R100: el cobro por devolución a origen dice en palabras que es un cargo a la tienda", async () => {
     const m = ANULABLES[9][1];
     filasActuales = [m];
     const { user } = pintar(filasActuales);
     const panel = await abrirPanel(user, m);
-    expect(within(panel).getByText(/Es un cobro a la tienda por el flete de un rechazo/)).toBeTruthy();
+    expect(within(panel).getByText(/Es un cobro a la tienda por el flete de una devolución a origen/)).toBeTruthy();
   });
 });
 

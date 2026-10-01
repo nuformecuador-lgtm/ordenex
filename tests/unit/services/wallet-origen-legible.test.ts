@@ -148,7 +148,7 @@ describe("458-A R5/R6 — el origen de cada movimiento dice su entidad concreta"
     expect(o.texto).toBe("Cobro de Ordenex a una tienda");
   });
 
-  it("`gestion_orden` en el libro de la TIENDA: el flete por rechazo dice la guía (459/461 §7.3)", async () => {
+  it("`gestion_orden` en el libro de la TIENDA: el flete por devolución a origen dice la guía (459/461 §7.3)", async () => {
     const svc = new OrigenLegibleService(repoFalso());
     const [o] = await svc.resolver("tienda", [fila("gestion_orden", { categoria: "flete_devolucion" })], TIENDA);
     expect(o.texto).toBe("Gestión de orden · cobro por devolución a origen · guía 4321");

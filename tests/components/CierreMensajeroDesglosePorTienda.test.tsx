@@ -429,7 +429,7 @@ describe("396 · R4 — con dos tiendas, cada una con su nombre y sus TRES cifra
     await abrirDetalle();
 
     const norte = tienda("Tienda Norte");
-    // La diferencia es exactamente el flete por rechazo + IVA de ESA tienda: 10.848,00.
+    // La diferencia es exactamente el flete por devolución a origen + IVA de ESA tienda: 10.848,00.
     laCuentaCierra(
       [importeTras(norte, TIENDA_GANA_TOTAL_LABEL), "₡10.848"],
       importeTras(norte, TIENDA_PAGO_HOY_LABEL),
@@ -629,7 +629,7 @@ describe("396 · C2 — los dos rótulos de pago son IMPOSIBLES de confundir", (
     expect(nota).toBeInTheDocument();
     // Y dice la diferencia con todas las letras, no de forma decorativa.
     expect(DESGLOSE_POR_TIENDA_NOTA).toBe(
-      "«Se le paga hoy» y «Gana en total» no son la misma cifra: la diferencia es el flete por rechazo, que a la tienda se le cobra aparte, contra su saldo.",
+      "«Se le paga hoy» y «Gana en total» no son la misma cifra: la diferencia es el flete por devolución a origen, que a la tienda se le cobra aparte, contra su saldo.",
     );
   });
 
@@ -650,7 +650,7 @@ describe("396 · R17 — lo que NO está repartido, dicho mientras se enseña el
 
     expect(within(desglose()).getByText(DESGLOSE_NO_REPARTIDO_NOTA)).toBeInTheDocument();
     expect(DESGLOSE_NO_REPARTIDO_NOTA).toBe(
-      "El pago al mensajero y el ingreso de bodega por rechazos son del cierre completo: no están repartidos entre las tiendas.",
+      "El pago al mensajero y el ingreso de bodega por devoluciones a origen son del cierre completo: no están repartidos entre las tiendas.",
     );
   });
 

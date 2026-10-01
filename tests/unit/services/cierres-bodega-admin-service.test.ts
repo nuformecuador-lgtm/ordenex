@@ -495,7 +495,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle (R11/R12/R13/R14/R19/
     expect(typeof r.cierre.totalPagoMensajero).toBe("string"); // R23
   });
 
-  it("R19: el detalle expone el ingreso de bodega por rechazos por cierre_dia y el agregado (snapshot)", async () => {
+  it("R19: el detalle expone el ingreso de bodega por devoluciones a origen por cierre_dia y el agregado (snapshot)", async () => {
     const repo = fakeRepo({
       findCierreBodegaConDetalle: vi.fn(async () => ({
         cierre: bodegaResumenRow({ totalIngresoBodegaRechazos: "9.00" }),
@@ -927,7 +927,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
       r.cierre.totales.general,
     );
 
-    // R7 — la linea puente mas el flete por rechazo = lo que Ordenex facturo.
+    // R7 — la linea puente mas el flete por devolución a origen = lo que Ordenex facturo.
     expect(r.cobradoSobreRecaudado).toBe("7233.51");
     expect(suma(r.cobradoSobreRecaudado, r.totalesIngreso.fleteDevolucionConIva)).toBe(
       r.totalesIngreso.total,
@@ -993,7 +993,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
       .toFixed(2);
     expect(brutoDelDia).toBe("36680.69");
     expect(brutoDelDia).not.toBe(cd2.pagoTienda);
-    // El hueco es, al centimo, el flete por rechazo + IVA: se factura pero no sale de lo
+    // El hueco es, al centimo, el flete por devolución a origen + IVA: se factura pero no sale de lo
     // recaudado, que es lo que la linea puente tiene que decir.
     expect(new Prisma.Decimal(cd2.pagoTienda).minus(brutoDelDia).toFixed(2)).toBe(
       cd2.totalesIngreso.fleteDevolucionConIva,
@@ -1106,7 +1106,7 @@ describe("CierresBodegaAdminService.verCierreBodegaDetalle — las dos cascadas 
     expect(r.ganancia).toBe("-5410.98");
     expect(r.cierres[0].ganancia).toBe("-3818.56"); // 4181.99 - 8000.55
     expect(r.cierres[1].ganancia).toBe("-1592.42"); // 4408.03 - 6000.45
-    // `pagoTienda` = recaudado - flete+IVA - comision+IVA (SIN el flete por rechazo).
+    // `pagoTienda` = recaudado - flete+IVA - comision+IVA (SIN el flete por devolución a origen).
     expect(r.pagoTienda).toBe("98855.66");
     expect(r.cierres[0].pagoTienda).toBe("60818.46");
     expect(r.cierres[1].pagoTienda).toBe("38037.20");
@@ -1310,7 +1310,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
     // Agregado: 165.000,00 − 14.633,50.
     expect(r.ganaLaTienda).toBe("150366.50");
 
-    // Y NO es `pagoTienda`: la diferencia es, al céntimo, el flete por rechazo de ese nivel.
+    // Y NO es `pagoTienda`: la diferencia es, al céntimo, el flete por devolución a origen de ese nivel.
     expect(
       new Prisma.Decimal(r.cierres[0].pagoTienda).minus(r.cierres[0].ganaLaTienda).toFixed(2),
     ).toBe("1695.00");
@@ -1415,7 +1415,7 @@ describe("396/D1 — `verCierreBodegaDetalle` emite el desglose por tienda en lo
     expect(r.cierre.totales.general).toBe("165000.00");
   });
 
-  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por rechazo", async () => {
+  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por devolución a origen", async () => {
     // Es la que hace imposible derivar una de las dos con el subconjunto equivocado sin que se
     // note. Norte tuvo un rechazo (1.695,00) y Sur no (0,00): si las dos dieran cero, este test
     // pasaría sin comprobar nada.

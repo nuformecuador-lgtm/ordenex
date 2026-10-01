@@ -19,7 +19,7 @@ const DIR_AYUDA = path.resolve(__dirname, "../../..", "docs", "ayuda");
  * el asistente tiene que poder explicar.
  *
  * Bloque B (458-B, revision m3): la hija deja VISIBLE en `/wallet` «Anular…» en la indemnizacion por
- * un incidente y en las dos lineas del cobro por rechazo a una tienda, y la analitica descuenta esa
+ * un incidente y en las dos lineas del cobro por devolución a origen a una tienda, y la analitica descuenta esa
  * anulacion (B2). Esas frases no llegan a la tienda, al mensajero ni a la bodega.
  */
 
@@ -70,7 +70,7 @@ describe("458-A (bloque A) — la tienda entiende sus filtros y sus orígenes en
   it("adminTienda: el origen con nombre; el filtro por concepto ya no se promete", () => {
     const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
     expect(wallet).toContain(
-      "El **origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».",
+      "El **origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por devolución a origen · guía 4321».",
     );
     expect(wallet).not.toContain("Solo aparecen los conceptos que **tienen movimientos**");
     expect(wallet).not.toContain("sigue elegido con **(0)**");
@@ -81,15 +81,15 @@ describe("458-A (bloque A) — la tienda entiende sus filtros y sus orígenes en
   });
 });
 
-// ── Bloque B — 458-B «Cimientos»: anulación del cobro por rechazo y de la indemnización ──
+// ── Bloque B — 458-B «Cimientos»: anulación del cobro por devolución a origen y de la indemnización ──
 
-describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del cobro por rechazo y de la indemnizacion", () => {
+describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del cobro por devolución a origen y de la indemnizacion", () => {
   it.each(OFICINA)("%s: la caja dice que se anulan, como, y que la analitica lo descuenta", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
-    expect(caja).toContain("Tampoco un **cobro por rechazo a una tienda** ni una **indemnización por un incidente**.");
+    expect(caja).toContain("Tampoco un **cobro por devolución a origen a una tienda** ni una **indemnización por un incidente**.");
     expect(caja).toContain("se anula desde **cualquiera de las dos** y se anulan **las dos juntas**");
-    expect(caja).toContain("**Flete por rechazo cobrado a la tienda anulado**");
-    expect(caja).toContain("**IVA del flete por rechazo cobrado a la tienda anulado**");
+    expect(caja).toContain("**Flete por devolución a origen cobrado a la tienda anulado**");
+    expect(caja).toContain("**IVA del flete por devolución a origen cobrado a la tienda anulado**");
     expect(caja).toContain(
       "En **Analítica**, «Ingreso por flete» e «Ingreso por IVA» descuentan la anulación: el **neto** vuelve a ser el de antes del cobro.",
     );

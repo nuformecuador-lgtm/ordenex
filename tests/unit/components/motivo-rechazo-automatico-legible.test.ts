@@ -24,11 +24,11 @@ const DIRECCION_ERRADA = "Dirección errada";
 
 /** Los tres textos autosuficientes, completos y tecleados enteros (R11). */
 const CLIENTE_NO_LOCALIZADO_LARGO =
-  "Cliente no localizado · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Cliente no localizado · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 const CELULAR_ERRADO_LARGO =
-  "Número de celular errado · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Número de celular errado · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 const DIRECCION_ERRADA_LARGO =
-  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Dirección errada · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 
 /** Las dos variantes, para recorrerlas en los casos que deben comportarse igual en ambas. */
 const LAS_DOS_VARIANTES = [
@@ -65,17 +65,17 @@ describe("R1 — la plantilla del cron se lee en castellano cuando la fila lleva
 });
 
 describe("R11 — sin marcador de origen, el texto se sostiene solo", () => {
-  it("«escalado SLA not_found» dice la causa Y que lo rechazó el sistema", () => {
+  it("«escalado SLA not_found» dice la causa Y que el sistema la pasó a devolución a origen", () => {
     expect(motivoGestionLegible("escalado SLA not_found", false)).toBe(
       CLIENTE_NO_LOCALIZADO_LARGO,
     );
   });
 
-  it("«escalado SLA wrong_number» dice la causa Y que lo rechazó el sistema", () => {
+  it("«escalado SLA wrong_number» dice la causa Y que el sistema la pasó a devolución a origen", () => {
     expect(motivoGestionLegible("escalado SLA wrong_number", false)).toBe(CELULAR_ERRADO_LARGO);
   });
 
-  it("«escalado SLA wrong_address» dice la causa Y que lo rechazó el sistema", () => {
+  it("«escalado SLA wrong_address» dice la causa Y que el sistema la pasó a devolución a origen", () => {
     expect(motivoGestionLegible("escalado SLA wrong_address", false)).toBe(DIRECCION_ERRADA_LARGO);
   });
 
@@ -83,8 +83,8 @@ describe("R11 — sin marcador de origen, el texto se sostiene solo", () => {
     // El límite declarado de la ficha: la nota del marcador vive en `title`/`aria-label` y en
     // táctil no existe. Por eso esto se afirma sobre el texto que SÍ se ve.
     const salida = motivoGestionLegible("escalado SLA wrong_address", false);
-    expect(salida).toContain("lo rechazó el sistema");
-    expect(salida).toContain("plazo de la devolución");
+    expect(salida).toContain("el sistema la pasó a devolución a origen");
+    expect(salida).toContain("plazo de la novedad");
     expect(salida).not.toContain("SLA");
   });
 

@@ -96,7 +96,7 @@ function ingreso(over: Partial<IngresoOrdenexDTO> = {}): IngresoOrdenexDTO {
 
 /** Lo que `derivarIngresoOrden` produce para una ENTREGA (flete + IVA, sin rechazo). */
 const ENTREGADA = { flete: "800.00", ivaFlete: "104.00", fleteConIva: "904.00", total: "904.00" };
-/** Lo que produce un RECHAZO (flete por rechazo + IVA, sin flete de entrega). */
+/** Lo que produce un RECHAZO (flete por devolución a origen + IVA, sin flete de entrega). */
 const RECHAZADA = {
   fleteDevolucion: "400.00",
   ivaFleteDevolucion: "52.00",
@@ -193,7 +193,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
   });
 
   // El espejo: un rechazo cobra el retorno y NADA de la entrega.
-  it("un RECHAZO en GAM cobra en «Flete por rechazo GAM» y en NINGUNA fila de entrega", () => {
+  it("un RECHAZO en GAM cobra en «Flete por devolución a origen GAM» y en NINGUNA fila de entrega", () => {
     render(
       <DesgloseIngresoOrdenex g={gestion(ingreso({ esCentral: true, ...RECHAZADA }), "devolucion_a_origen_por_rechazo")} />,
     );
@@ -201,7 +201,7 @@ describe("💰 337/338 — el panel de cobros carga el importe en la fila que DE
     expect(cobro(FLETE_RECHAZO_GAM_LABEL)).toBe(money("400.00"));
   });
 
-  it("un RECHAZO fuera de GAM cobra en «Flete por rechazo»", () => {
+  it("un RECHAZO fuera de GAM cobra en «Flete por devolución a origen»", () => {
     render(
       <DesgloseIngresoOrdenex
         g={gestion(

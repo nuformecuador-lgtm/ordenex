@@ -1930,7 +1930,7 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
     await completarYEnviar(user, dialog, "Rechazar");
 
     await waitFor(() =>
-      expect(successMock).toHaveBeenCalledWith("La orden quedó rechazada."),
+      expect(successMock).toHaveBeenCalledWith("La orden quedó en Devolución a origen por rechazo."),
     );
     await waitFor(() => expect(listarAyudaMock).toHaveBeenCalledWith({ page: 1 }));
     // La fila desaparece POR EL DATO: la lista de la pestaña ya no está y en su sitio queda el
@@ -1965,13 +1965,13 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
     await waitFor(() =>
       expect(successMock).toHaveBeenCalledWith("La orden quedó reprogramada."),
     );
-    expect(successMock).not.toHaveBeenCalledWith("La orden quedó rechazada.");
+    expect(successMock).not.toHaveBeenCalledWith("La orden quedó en Devolución a origen por rechazo.");
   });
 
   it("R25: con `conflict` NO afirma que resolvió, dice el texto del servidor y RECARGA", async () => {
     // La carrera: el mensajero recuperó la orden —o la cortó la noche— entre que la tienda abrió la
     // ventana y pulsó. NO se creó ninguna gestión, así que no hay intento ni cobro, y la pantalla
-    // no puede decir «La orden quedó rechazada». Es literalmente el defecto que 236/D8 arregló
+    // no puede decir «La orden quedó en Devolución a origen por rechazo». Es literalmente el defecto que 236/D8 arregló
     // sobre esta misma card, con dinero detrás esta vez.
     gestionarDesdeAyudaMock.mockResolvedValue({
       status: "conflict",

@@ -45,7 +45,7 @@ import {
  * estaban— no se lee ninguna.
  *
  * ── LA TRAMPA QUE ESTE ARCHIVO VIGILA
- * `recaudado − lo facturado ≠ para la tienda` en cuanto hay un rechazo: el flete por rechazo se
+ * `recaudado − lo facturado ≠ para la tienda` en cuanto hay un rechazo: el flete por devolución a origen se
  * le factura a la tienda pero NO sale de lo recaudado. Por eso existe la línea puente, y por eso
  * el fixture de aquí tiene un `cierre_dia` CON rechazo y otro SIN él.
  *
@@ -199,7 +199,7 @@ const CABECERA: CierreBodegaResumen = {
   ...marcaSinConciliar("100000.17"),
 };
 
-/** El día CON rechazo: su flete por rechazo es lo que hace que la línea puente importe. */
+/** El día CON rechazo: su flete por devolución a origen es lo que hace que la línea puente importe. */
 const DIA_ANA: CierreBodegaDetalleCierre = {
   cierreDiaId: "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
   mensajeroId: "m1",
@@ -224,7 +224,7 @@ const DIA_ANA: CierreBodegaDetalleCierre = {
   cobradoSobreRecaudado: "17500.35",
   netoOrdenex: "8750.55",
   // Ficha 396 (D1) — el agregado que le faltaba a este nivel: 80.000,10 - 18.001,10. Difiere
-  // de `pagoTienda` en exactamente su flete por rechazo (500,75), que es el dia CON rechazo.
+  // de `pagoTienda` en exactamente su flete por devolución a origen (500,75), que es el dia CON rechazo.
   ganaLaTienda: "61999.00",
   // Ficha 396 — este bloque es de la 393 y no pinta el desglose; el campo va porque el DTO lo
   // declara REQUERIDO. Los casos del desglose viven en su propio archivo.
@@ -235,7 +235,7 @@ const DIA_ANA: CierreBodegaDetalleCierre = {
   ...marcaSinConciliar("60000.10"),
 };
 
-/** El día SIN rechazo: su flete por rechazo vale "0.00" y la línea puente TIENE que salir igual. */
+/** El día SIN rechazo: su flete por devolución a origen vale "0.00" y la línea puente TIENE que salir igual. */
 const DIA_BETO: CierreBodegaDetalleCierre = {
   cierreDiaId: "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb",
   mensajeroId: "m2",
@@ -438,11 +438,11 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
     );
   });
 
-  it("la LÍNEA PUENTE explica la diferencia exacta que el flete por rechazo abre (R7/R10)", async () => {
+  it("la LÍNEA PUENTE explica la diferencia exacta que el flete por devolución a origen abre (R7/R10)", async () => {
     await abrirDetalle();
 
     // Sin la línea puente, la pantalla enseñaría «recaudado − facturado = para la tienda», que
-    // NO da: se queda corta por el flete por rechazo, que se factura pero no sale de lo
+    // NO da: se queda corta por el flete por devolución a origen, que se factura pero no sale de lo
     // recaudado. Se mide, en vez de razonarse.
     const recaudado = centimos(importeTras(dueno(), TOTAL_GENERAL_LABEL));
     const facturado = centimos(importeTras(dueno(), FACTURADO_ORDENEX_LABEL));
@@ -451,7 +451,7 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
     expect(recaudado - facturado).not.toBe(tienda);
     expect(tienda - (recaudado - facturado)).toBe(fleteRechazo);
 
-    // Y con la línea puente sí cierra: cobrado + flete por rechazo = lo facturado (R7).
+    // Y con la línea puente sí cierra: cobrado + flete por devolución a origen = lo facturado (R7).
     laCuentaCierra(
       [
         importeTras(dueno(), COBRADO_SOBRE_RECAUDADO_LABEL),
@@ -462,7 +462,7 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
     );
   });
 
-  it("la línea puente sale TAMBIÉN con el flete por rechazo en cero (R10)", async () => {
+  it("la línea puente sale TAMBIÉN con el flete por devolución a origen en cero (R10)", async () => {
     await abrirDetalle();
 
     // El día de Beto no tuvo ni un rechazo. Un cero explícito dice «aquí no hubo rechazos»; su
@@ -534,7 +534,7 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
       "Ingreso bruto",
       "Ganancia",
       "Pago a tienda",
-      "Ingreso de bodega por rechazos",
+      "Ingreso de bodega por devoluciones a origen",
       "Total a pagar a mensajeros",
     ]) {
       expect(
@@ -547,7 +547,7 @@ describe("393 · F6 — las dos cascadas del detalle", () => {
       "Ingreso bruto del cierre de bodega",
       "Pago a mensajeros del cierre de bodega",
       "Ganancia del cierre de bodega",
-      "Ingreso de bodega por rechazos del cierre de bodega",
+      "Ingreso de bodega por devoluciones a origen del cierre de bodega",
       "Pago a tienda del cierre de bodega",
     ]) {
       expect(screen.queryByRole("region", { name: nombre }), nombre).toBeNull();

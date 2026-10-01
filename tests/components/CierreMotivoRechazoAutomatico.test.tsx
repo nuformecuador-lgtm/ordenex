@@ -30,7 +30,7 @@ const DIRECCION_ERRADA = "Dirección errada";
 
 /** La nota accesible del marcador de origen, completa y sin recortar (R8). */
 const NOTA_MARCADOR_AUTOMATICO =
-  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
+  "Devolución a origen automática por vencerse el plazo de la novedad (no lo hizo el mensajero).";
 
 /** El motivo que un mensajero escribió a mano: no es plantilla y no se traduce (R2). */
 const MOTIVO_LIBRE = "El cliente no contesta el timbre";

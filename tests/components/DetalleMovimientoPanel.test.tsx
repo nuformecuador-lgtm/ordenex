@@ -15,7 +15,7 @@ import { SWRConfig } from "swr";
 //    «Cómo quedó» con las cifras DEL SERVIDOR (cargando y error sin cifras);
 //  - R63/R65: «Anular…» solo si la fila es `anulable` y no está anulada;
 //  - R71/R72: «Anulado» y «motivo no registrado» salen de la fila, no de ninguna otra;
-//  - R100/R73: el cobro por rechazo dice en palabras que es un cargo (y que se anuló).
+//  - R100/R73: el cobro por devolución a origen dice en palabras que es un cargo (y que se anuló).
 //  - H6: ningún id en el texto ni en los nombres accesibles.
 
 const comoQuedoMock = vi.fn();
@@ -146,7 +146,7 @@ describe("458-C R58 — lo que dice el panel", () => {
     });
     const p = await panel();
     expect(within(p).getByText("Tania Tienda · a Facebook")).toBeTruthy();
-    expect(within(p).getByText("Automático · Cobro por rechazo aprobado por Ana")).toBeTruthy();
+    expect(within(p).getByText("Automático · Cobro por devolución a origen aprobado por Ana")).toBeTruthy();
   });
 
   it("458-E B1 (R58): «Registró» dice quién Y cuándo (día y hora de Costa Rica), no la fecha del movimiento", async () => {
@@ -240,18 +240,18 @@ describe("458-C R63/R65/R71/R72 — el estado y «Anular…» los decide la fila
   });
 });
 
-describe("458-C R100/R73 — el cobro por rechazo dice que es un cargo", () => {
+describe("458-C R100/R73 — el cobro por devolución a origen dice que es un cargo", () => {
   it("vigente: la ganancia sube y el saldo de la tienda baja, sin dinero nuevo", async () => {
     pintar(movimiento({ nota: COBRO_RECHAZO_TEXTO.vigente }));
     expect(
       within(await panel()).getByText(
-        "Es un cobro a la tienda por el flete de un rechazo: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja.",
+        "Es un cobro a la tienda por el flete de una devolución a origen: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja.",
       ),
     ).toBeTruthy();
   });
 
   it("anulado: dice que se anuló, que la ganancia bajó y que no se vuelve a ofrecer", async () => {
     pintar(movimiento({ nota: COBRO_RECHAZO_TEXTO.anulado, estado: { anulado: true }, anulable: false }));
-    expect(within(await panel()).getByText(/Este cobro por rechazo se anuló: la ganancia de Ordenex bajó/)).toBeTruthy();
+    expect(within(await panel()).getByText(/Este cobro por devolución a origen se anuló: la ganancia de Ordenex bajó/)).toBeTruthy();
   });
 });

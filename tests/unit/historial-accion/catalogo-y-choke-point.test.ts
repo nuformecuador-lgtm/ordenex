@@ -448,7 +448,7 @@ describe("362/T0.1 (R14/R17) — el catalogo es cerrado y sus mapas son exhausti
     // 38 y no 37 desde la ficha 461: `cobro_tienda_anulado` devuelve dinero a la tienda y baja la
     // ganancia. 39 con `wallet_movimiento_manual_anulado` (auditoria D3): el contra-asiento de una
     // correccion de caja deshace su efecto en la ganancia.
-    // 43 desde la ficha 458-B: anular un cobro por rechazo y anular un egreso de caja mueven dinero.
+    // 43 desde la ficha 458-B: anular un cobro por devolución a origen y anular un egreso de caja mueven dinero.
     expect(accionesDeCategoria("mueve_dinero")).toHaveLength(43);
     expect(accionesDeCategoria("hace_desaparecer")).toHaveLength(10);
     expect(accionesDeCategoria("cambia_permisos")).toHaveLength(12);
@@ -719,7 +719,7 @@ describe("362/T0.5 (R4/R5) — `etiquetaDeEntidad`, un caso por entidad", () => 
     ).toBe("Tienda Uno");
   });
 
-  it("gestion, incidente y cobro por rechazo: la guia de su envio", () => {
+  it("gestion, incidente y cobro por devolución a origen: la guia de su envio", () => {
     const envio = { numGuia: 100234, numRemision: "REM-1" };
     expect(etiquetaDeEntidad("gestion_orden", envio)).toBe("100234");
     expect(etiquetaDeEntidad("orden_incidente", envio)).toBe("100234");

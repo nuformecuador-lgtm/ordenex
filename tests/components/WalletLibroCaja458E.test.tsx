@@ -554,7 +554,7 @@ describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", (
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("458-E T E.4 — el cobro por rechazo anulado (R61, R73)", () => {
+describe("458-E T E.4 — el cobro por devolución a origen anulado (R61, R73)", () => {
   const GESTION_ANULADA = uuid();
   const FLETE_ANULADO = fila({
     tipo: "ingreso",
@@ -584,7 +584,7 @@ describe("458-E T E.4 — el cobro por rechazo anulado (R61, R73)", () => {
     const user = pintarModulo(filas, { items: [PENDIENTE], total: 1 });
 
     // La cola (sin cambios de comportamiento): una fila, la del pendiente, con sus dos decisiones.
-    const cola = screen.getByRole("region", { name: /cobros por rechazo/i });
+    const cola = screen.getByRole("region", { name: /cobros por devolución a origen/i });
     const filasCola = within(cola).getAllByRole("row").slice(1);
     expect(filasCola).toHaveLength(1);
     expect(filasCola[0].textContent).toContain("Tienda Luna");

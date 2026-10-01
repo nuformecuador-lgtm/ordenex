@@ -49,7 +49,7 @@ const BOTON_CERRAR = "Entendido";
 
 /** La nota de R9, palabra por palabra. */
 const NOTA_TOPE =
-  "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es el rechazo, y el mensajero todavía puede entregarla.";
+  "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es la devolución a origen por rechazo, y el mensajero todavía puede entregarla.";
 
 /**
  * Los dos modos y el `resultado` del contrato que cada uno manda. Escrito a mano; el componente lo
@@ -227,7 +227,7 @@ describe("276/R9 — la ventana explica el porqué con palabras", () => {
     montar("reprogramar", { enElTope: true });
     const nota = screen.getByRole("note");
     expect(nota).toHaveTextContent("ya no se puede reprogramar");
-    expect(nota).toHaveTextContent("podés registrar desde acá es el rechazo");
+    expect(nota).toHaveTextContent("podés registrar desde acá es la devolución a origen por rechazo");
   });
 
   it("R10: la nota no contiene NINGUNA cifra", () => {

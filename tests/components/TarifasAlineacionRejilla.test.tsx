@@ -36,9 +36,9 @@ import { Input } from "@/components/ui/input";
  *   | fila                                                        | antes | después |
  *   |-------------------------------------------------------------|-------|---------|
  *   | «Fulfillment» / «Comisión por cobro contra entrega (%)» en 0 | 60 px | 0 px    |
- *   | «Valor flete GAM» / «Flete por rechazo GAM» en 0             | 60 px | 0 px    |
+ *   | «Valor flete GAM» / «Flete por devolución a origen GAM» en 0             | 60 px | 0 px    |
  *   | «IVA flete (%)» / «IVA de la comisión…» (rótulo de dos)      | 14 px | 0 px    |
- *   | «Entregado» / «Rechazado por el cliente» (ayudas desiguales)  | 40 px | 0 px    |
+ *   | «Entregado» / «Devolución a origen por rechazo» (ayudas desiguales)  | 40 px | 0 px    |
  *
  * De ahí salen los campos que se usan abajo, que no están elegidos al azar: en esa medición
  * «Comisión por cobro contra entrega (%)» ocupa dos renglones (28 px de rótulo) y
@@ -189,7 +189,7 @@ describe("Los dos montos del pago — ayudas de uno y de dos renglones", () => {
     );
 
     const entregado = screen.getByLabelText("Entregado");
-    const rechazado = screen.getByLabelText("Rechazado por el cliente");
+    const rechazado = screen.getByLabelText("Devolución a origen por rechazo");
 
     expect(ayudaDe(rechazado)).toHaveTextContent("Sin configurar");
     expect(ayudaDe(entregado)).not.toHaveTextContent("Sin configurar");

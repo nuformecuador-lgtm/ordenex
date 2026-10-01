@@ -136,7 +136,7 @@ describeSiHayBase("458-B/TB.7 — «A quien» y «Registro» del libro de la caj
     }
   });
 
-  it("R56: el pago a una tienda → ESA tienda; el cobro por rechazo → la tienda cobrada; el cobro de Ordenex → la tienda; R57: el maestro", () => {
+  it("R56: el pago a una tienda → ESA tienda; el cobro por devolución a origen → la tienda cobrada; el cobro de Ordenex → la tienda; R57: el maestro", () => {
     const tiendas = m().porOrigen.pago_tienda.map((f) => f.aQuien.nombre).sort();
     expect(tiendas).toEqual([m().nombres.tiendaA, m().nombres.tiendaA, m().nombres.tiendaB].sort());
     for (const f of m().porOrigen.gestion_orden) {

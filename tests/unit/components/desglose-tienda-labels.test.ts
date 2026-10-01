@@ -50,9 +50,9 @@ const DESDE_ORDENEX: Record<WalletTiendaMovimientoCategoria, string> = {
   // Ficha 457 (design §2, D10): el nombre reservado por la 461 y el patron de «… de la tienda anulado».
   abono_tienda: "La tienda le paga a Ordenex",
   abono_tienda_anulado: "Pago de la tienda a Ordenex anulado",
-  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, desde Ordenex.
-  flete_devolucion_anulado: "Cobro por rechazo anulado",
-  iva_flete_devolucion_anulado: "IVA del cobro por rechazo anulado",
+  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por devolución a origen, desde Ordenex.
+  flete_devolucion_anulado: "Cobro por devolución a origen anulado",
+  iva_flete_devolucion_anulado: "IVA del cobro por devolución a origen anulado",
   ajuste_credito: "Corrección a favor de la tienda",
   ajuste_debito: "Corrección en contra de la tienda",
 };

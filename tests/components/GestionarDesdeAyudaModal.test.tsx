@@ -569,7 +569,7 @@ describe("237/R25 — un `conflict` sube al padre TAL CUAL, sin traducirlo a éx
 
     // El texto lo redacta el SERVIDOR y la pantalla no lo reescribe: dos redacciones de la misma
     // carrera son dos verdades. Y el `status` llega distinto de `ok`, que es lo que impide que el
-    // módulo diga «la orden quedó rechazada» sobre una orden que nadie movió (236/D8).
+    // módulo diga «la orden quedó en Devolución a origen por rechazo» sobre una orden que nadie movió (236/D8).
     await waitFor(() =>
       expect(onResuelto).toHaveBeenCalledWith({
         status: "conflict",

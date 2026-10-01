@@ -48,7 +48,7 @@ const SUFIJO = `c337${Date.now().toString(36)}`;
 
 type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
-describeSiHayBase("💰 337 — el cobro por rechazo desde novedades, contra Postgres", () => {
+describeSiHayBase("💰 337 — el cobro por devolución a origen desde novedades, contra Postgres", () => {
   let prisma: PrismaClient;
   let fks: NonNullable<Awaited<ReturnType<typeof fksDeOrden>>>;
   /** Un usuario cualquiera de la base: sirve de mensajero de la gestion y de actor que decide. */

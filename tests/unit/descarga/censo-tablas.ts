@@ -466,13 +466,13 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     ],
   },
   {
-    // FICHA 337 (segunda mitad) -- la cola de decision del cobro por rechazo desde novedades. Va
+    // FICHA 337 (segunda mitad) -- la cola de decision del cobro por devolución a origen desde novedades. Va
     // entre `CobrosGastoFijoPendientesPanel` y `GastosFijosPlantillasPanel` porque la guardia
     // recorre el arbol en orden alfabetico.
     ruta: "app/(app)/wallet/_components/CobrosRechazoTiendaPendientesPanel.tsx",
     tablas: [
       {
-        nombre: "Cobros por rechazo de tienda por aprobar",
+        nombre: "Cobros por devolución a origen de tienda por aprobar",
         estado: "fuera",
         nota:
           "cola de DECISIÓN efímera dentro de /wallet, mismo criterio -- y mismo motivo-- que su " +

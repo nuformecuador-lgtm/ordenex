@@ -160,7 +160,7 @@ describe("457/T2.2 — R7 por construccion: identidad sobre 500 subconjuntos con
     fila("egreso_ajuste", "500.10"),
     fila("egreso_gasto_fijo", "80000.00"),
     fila("egreso_gasto", "1.00"),
-    // Ficha 458-B: los dos reversos de cargo de la anulacion de un cobro por rechazo.
+    // Ficha 458-B: los dos reversos de cargo de la anulacion de un cobro por devolución a origen.
     fila("egreso_reverso_flete_devolucion", "1000.00"),
     fila("egreso_reverso_iva_flete_devolucion", "130.00"),
   ];

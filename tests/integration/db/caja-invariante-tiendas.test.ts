@@ -78,7 +78,7 @@ const COBRO_GRANDE_B = "20000.00";
 const PAGO_DE_B = "4000.00";
 /** FICHA 458-B (TB.9): la indemnizacion por incidente que se siembra y se anula en los pasos 15–16. */
 const INDEMNIZACION_458 = "700.00";
-/** FICHA 458-B (TB.9): el cobro por rechazo del escenario (tienda A): flete 1 000,00 + IVA 130,00. */
+/** FICHA 458-B (TB.9): el cobro por devolución a origen del escenario (tienda A): flete 1 000,00 + IVA 130,00. */
 const COBRO_RECHAZO_458 = "1130.00";
 
 interface Paso {
@@ -322,7 +322,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     await foto("anulacion del saldo inicial");
 
     // ── FICHA 458-B (TB.9, R68/R91) ──────────────────────────────────────────────────────────
-    // 14 — ANULAR el cobro por rechazo aprobado del escenario (tienda A: flete 1 000,00 + IVA 130,00):
+    // 14 — ANULAR el cobro por devolución a origen aprobado del escenario (tienda A: flete 1 000,00 + IVA 130,00):
     // dos reversos de cargo en la caja y dos creditos espejo en la tienda (el escenario debita).
     const cobroRechazo = await tx.rechazoTiendaCobro.findFirstOrThrow({
       where: { tiendaId: esc.tiendaA, estado: "aprobado" },
@@ -331,7 +331,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     respuestas.anularCobroRechazo = (
       await s.rechazoCobro.anular({ cobroId: cobroRechazo.id, motivo: "Se cobró por error" }, esc.maestro, new Date())
     ).status;
-    await foto("anulacion del cobro por rechazo");
+    await foto("anulacion del cobro por devolución a origen");
 
     // 15 — una indemnizacion por incidente como la deja la aprobacion del incidente (158): egreso
     // PROPIO y efectivo con origen `orden_incidente`. INSERT directo: el camino del incidente del admin
@@ -495,7 +495,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       ["anulacion del pago de la tienda B", 1],
       ["anulacion del saldo inicial", 1],
       // Ficha 458-B: los DOS reversos de cargo (flete e IVA); la indemnizacion; su contra-asiento.
-      ["anulacion del cobro por rechazo", 2],
+      ["anulacion del cobro por devolución a origen", 2],
       ["indemnizacion de un incidente", 1],
       ["indemnizacion anulada", 1],
     ]);
@@ -632,7 +632,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
     expect(pasos[12].saldoTiendaB).toBe("-12984.38");
     expect(cambio(13)).toEqual({ ...nada, enCaja: "-1000000.00", capital: "-1000000.00" });
     // ── Ficha 458-B (R68, design §4.3) ──
-    // 14 — la anulacion del cobro por rechazo: lo contrario exacto de su aprobacion. «De las tiendas» y el
+    // 14 — la anulacion del cobro por devolución a origen: lo contrario exacto de su aprobacion. «De las tiendas» y el
     // saldo de A suben 1 130,00; la ganancia baja lo mismo; la cifra principal, «Entro» y «Salio» NO se
     // mueven (son reversos de cargo). Mutacion 4 de §8.2 (reverso como efectivo) → «Salio» sube aqui.
     expect(cambio(14)).toEqual({
@@ -665,7 +665,7 @@ describeSiHayBase("⭑ 459/T B.14 → 461/T B.12 — R7 y R8 al centimo tras cad
       "pago de la tienda B a Ordenex": "saldo",
       "anulacion del pago de la tienda B": "saldo",
       "anulacion del saldo inicial": "flujo",
-      "anulacion del cobro por rechazo": "flujo", // ficha 458-B
+      "anulacion del cobro por devolución a origen": "flujo", // ficha 458-B
       "indemnizacion de un incidente": "flujo",
       "indemnizacion anulada": "flujo",
     });

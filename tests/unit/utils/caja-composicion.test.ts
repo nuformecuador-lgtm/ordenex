@@ -356,7 +356,7 @@ describe("derivarComposicionGanancia — la ganancia concepto por concepto (R23/
     expect(nombrados.gt(0)).toBe(true);
     // El pago a la tienda es de TERCEROS: nunca entra en la columna de egresos de la ganancia.
     // Ficha 458-B: antes se decia con `salidas > totalEgresos`, que solo valia por los importes del
-    // conjunto; con los dos reversos de cargo del cobro por rechazo (propios, fuera de «Salio», y con
+    // conjunto; con los dos reversos de cargo del cobro por devolución a origen (propios, fuera de «Salio», y con
     // los importes MAYORES del catalogo) dejo de valer sin que nada cambiara en el pago a la tienda.
     // Se dice ahora directamente: quitar el pago a la tienda no mueve la columna ni un centimo.
     const sinPagoATienda = filas.filter((f) => f.categoria !== "egreso_pago_tienda");

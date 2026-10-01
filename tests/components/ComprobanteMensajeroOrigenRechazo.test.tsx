@@ -49,9 +49,9 @@ import type {
 /** El distintivo de origen del ADMIN, con sus dos rótulos y sus dos notas (R2). */
 const ORIGEN_AUTOMATICO_LABEL = "Automático";
 const ORIGEN_AUTOMATICO_NOTA =
-  "Rechazo automático por vencerse el plazo de la devolución (no lo hizo el mensajero).";
+  "Devolución a origen automática por vencerse el plazo de la novedad (no lo hizo el mensajero).";
 const ORIGEN_MANUAL_LABEL = "Manual";
-const ORIGEN_MANUAL_NOTA = "Rechazo registrado manualmente por el mensajero.";
+const ORIGEN_MANUAL_NOTA = "Devolución a origen registrada manualmente por el mensajero.";
 
 /** La marca que el mensajero SÍ puede leer (R7/R9), la misma de su tabla en vivo. */
 const TIENDA_LABEL = "La tienda";
@@ -60,12 +60,12 @@ const TIENDA_NOTA =
 
 /** El texto autosuficiente del motivo (408/R11): la variante que se lee SIN distintivo al lado. */
 const MOTIVO_LARGO =
-  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Dirección errada · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 /** La variante corta: la que se lee CUANDO el distintivo acompaña al motivo (408/R9). */
 const MOTIVO_CORTO = "Dirección errada";
 
 /** El renglón vecino del distintivo, que este arreglo NO puede llevarse por delante (R3). */
-const INGRESO_BODEGA_LABEL = "Ingreso de bodega por rechazos";
+const INGRESO_BODEGA_LABEL = "Ingreso de bodega por devoluciones a origen";
 const INGRESO_BODEGA_MONTO = "₡1.500";
 
 /** La cadena EXACTA que el cron de plazos vencidos deja guardada en `gestion_orden.motivo`. */
@@ -292,7 +292,7 @@ describe("R2 — en el comprobante del admin el distintivo sigue exactamente igu
 // ── R3 ──────────────────────────────────────────────────────────────────────────────────────
 
 describe("R3 — ocultar el distintivo no se lleva por delante a su vecino", () => {
-  it("el renglón «Ingreso de bodega por rechazos» sigue con su monto, y el motivo entero", async () => {
+  it("el renglón «Ingreso de bodega por devoluciones a origen» sigue con su monto, y el motivo entero", async () => {
     // El renglón vive en el MISMO fragmento `rechazada` del que sale el distintivo. Es deuda
     // heredada de la 408 y está fuera de alcance por decisión del humano: este caso existe para
     // que el arreglo no la resuelva por accidente ni la empeore.

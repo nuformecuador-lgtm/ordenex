@@ -186,7 +186,7 @@ describe("FICHA 345 · la descarga de productos", () => {
     await screen.findByText("Spray Protector");
     // Lo que la PANTALLA muestra, para que el contraste sea explícito y no de memoria.
     //
-    // ⚠ FICHA 442 — «% de rechazo» dejó de ser una columna y se lee al abrir la fila. El
+    // ⚠ FICHA 442 — «% de devolución a origen» dejó de ser una columna y se lee al abrir la fila. El
     // contraste que este caso mide —pantalla con signo y coma, archivo con punto y sin signo—
     // no cambia; lo que cambia es dónde está la mitad de pantalla.
     await user.click(

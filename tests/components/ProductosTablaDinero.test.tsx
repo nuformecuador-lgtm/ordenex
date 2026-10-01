@@ -218,7 +218,7 @@ describe("FICHA 347 · R6 — sin la concesión no hay NADA de dinero en la pant
 
     // ⚠ FICHA 442 — EL CONTROL DE ABRIR SÍ EXISTE AHORA, Y NO ES UNA FUGA. Hasta esta ficha la
     // fila solo se abría para el dinero; ahora lleva también el volumen que bajó de la cabecera
-    // (unidades, otros resultados, % de rechazo), que existe para todo el mundo. Lo que este
+    // (unidades, otros resultados, % de devolución a origen), que existe para todo el mundo. Lo que este
     // caso afirma es que al abrirla no aparece ni un importe y NO se consulta el detalle.
     await usuario.click(
       screen.getByRole("button", {
@@ -296,7 +296,7 @@ describe("FICHA 442 · las cinco columnas, y el dinero al final", () => {
     // Y lo primero que se veía eran las TRES columnas de dinero, las tres en «—» en las 25 filas.
     //
     // La 347 puso el dinero el segundo a propósito: con trece columnas algo se quedaba fuera
-    // pase lo que pase, y prefirió que lo arrastrado fuera «% de rechazo». Con cinco columnas esa
+    // pase lo que pase, y prefirió que lo arrastrado fuera «% de devolución a origen». Con cinco columnas esa
     // disyuntiva ya no existe —no se queda fuera nada— así que el orden vuelve a ser el de las
     // preguntas: qué producto, cuántas órdenes, cómo acabaron, cuánto llegó, cuánto se recaudó.
     expect(encabezados()).toEqual([
@@ -1294,7 +1294,7 @@ describe("FICHA 449 · el fulfillment en el detalle de la fila", () => {
     // ⚠ CONTRA OTRA FUENTE, no contra sí misma. `FULFILLMENT_COL` es la constante con la que
     // esta cifra se lee en el cierre y en las cinco descargas de gestiones; la ficha nace de
     // que la misma orden la enseñaba allí y la escondía aquí, así que bautizarla de nuevo
-    // dejaría el defecto en pie con otra cara. Es la lección de la 338 con «Flete por rechazo».
+    // dejaría el defecto en pie con otra cara. Es la lección de la 338 con «Flete por devolución a origen».
     expect(PRODUCTOS_COLUMNAS.fulfillment).toBe(FULFILLMENT_COL);
     expect(DETALLE_DINERO_TEXTOS.totales.fulfillment).toBe(FULFILLMENT_COL);
   });

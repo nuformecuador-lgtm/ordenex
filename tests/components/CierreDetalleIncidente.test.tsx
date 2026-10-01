@@ -201,7 +201,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       "Origen", // 102/R9: un incidente no es un rechazo escalado
       "Pago mensajero", // R17: no se paga
       "Ingreso bodega", // R17: no hay ingreso de bodega por rechazo
-      "Flete por rechazo + IVA", // el incidente no deriva ningún concepto
+      "Flete por devolución a origen + IVA", // el incidente no deriva ningún concepto
       "Total Ordenex",
     ]) {
       expect(cabeceras, `sobra la columna "${ausente}"`).not.toContain(ausente);
@@ -235,7 +235,7 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       "Origen",
       "Pago mensajero",
       "Ingreso bodega",
-      "Flete por rechazo + IVA",
+      "Flete por devolución a origen + IVA",
       "Total Ordenex",
       "Evidencia",
     ]) {

@@ -262,3 +262,104 @@ Los 26 `skipped` son `it.skip` preexistentes de `tests/components/AnaliticaPage.
 `tests/components/AnaliticaShell.test.tsx` (9); **0 en `tests/integration`**.
 
 Veredicto: Fase 1 de la 466 hecha y verde; la guardia vigila desde hoy con `PENDIENTES` medido para la Fase 2.
+
+---
+
+# impl_466 — Fase 2 (frontend_dev)
+
+> Rama local `fe/466-rechazo-nombre-nuevo` (la `feature/466-rechazo-nombre-nuevo` estaba tomada por el worktree
+> del backend) sobre `cbb5f30f`, empujada a `origin/feature/466-rechazo-nombre-nuevo`. Sin esquema, sin migraciones.
+> Búsqueda: el MCP `codebase-memory` NO estaba en mi conjunto de herramientas; se usó `grep` (texto plano) y la
+> propia guardia de la 466 como censo.
+
+## Decisión del leader aplicada
+
+`GestionarDesdeAyudaModal.tsx` `GESTION_AYUDA_TOPE_NOTA` **cambia**: «… Lo que sí podés registrar desde acá es la
+devolución a origen por rechazo, y el mensajero todavía puede entregarla.» (con
+`NOMBRE_ESTADO.devolucion_a_origen_por_rechazo.toLowerCase()`, voseo conservado). Su excepción del brazo 1 se
+**retiró** de la guardia (la guardia la habría pedido sola por caducada, R22).
+
+## Tareas
+
+| Tarea | Hecho |
+|---|---|
+| T2.1 wallet | `wallet-labels.ts` (C16), `composicion-detalle-labels.ts` (C5, C6), `cobro-rechazo-tienda-labels.ts` (C21-C24; «La tienda rechazó…» y «Cobro descartado…» se conservan, R13), `desglose-tienda-labels.ts` (C9, C10), `mi-wallet-labels.ts` (C11-C14), `detalle-movimiento-panel-labels.ts` (C17-C20) |
+| T2.2 cierres y tarifas | `tarifas-labels.ts` (C29, C30, C32; C31 = `nombreDeResultado("devolucion_a_origen_por_rechazo")`), `cierre-labels.ts` (C33, C35, E10; `ESTADO_LABEL.rechazado` y «Este cierre se rechazó…» se conservan), `cierre-detalle-shared.tsx` (C33-C35, E8, E9; «Un cierre rechazado…» se conserva), `CorregirResultadoDialog.tsx` (E1-E3 con `estatusLabel`), `ConsolidacionBodegaModule.tsx` y `cierre-factura.tsx` (aria C34; «Rechazados por la tienda», «Fecha del rechazo», «Motivo de rechazo» se conservan, Pregunta 7) |
+| T2.2b guardia 338 | `NOMBRE_VIGENTE = /flete\s+por\s+devoluci[oó]n\s+a\s+origen/iu`; `NOMBRE_RETIRADO` intacto; casos nuevos: «Flete por devolución a origen» e «IVA del flete por devolución a origen» NO casan el retirado y SÍ el vigente; mensaje de error con el nombre nuevo. Censo vacío |
+| T2.3 mensajero y novedades | `GestionarOrdenPanel.tsx` (E5 con `estatusLabel("entregado")`/`estatusLabel("devolucion_a_origen_por_rechazo")`), `GestionarDesdeAyudaModal.tsx` (E7 + nota del tope), `RechazarNovedadModal.tsx` (C36), `RechazosSlaModule.tsx` (E11). «Rechazar», «Motivo del rechazo», «Rechazar la orden» intactos |
+| T2.4 analítica | `ProductosTabla.tsx` (K3), `DineroProductoDetalle.tsx` (C37 ×3), `analitica-productos-descarga-columnas.ts` (K4, C38; claves `rechazo`/`retorno` intactas). K1 ya venía de la Fase 1 |
+| T2.5 ayuda | `docs/ayuda/oficina/wallet-caja.md` (7 líneas), `tienda/mi-wallet.md` (C11, C15), `oficina/cierres.md` (corregir resultado → «Devolución a origen por rechazo», ×2) |
+| T2.6 | `PENDIENTES = {}` + `it` nuevo «T2.6: la Fase 2 dejo `PENDIENTES` vacio» (`toEqual({})`); umbral de no-vacuidad sube solo a >15; ninguna excepción añadida (una retirada). Guardias 455 (G2, G3, catálogo) y 461 verdes sin tocar sus listas |
+| T2.7 tests | 72 + 34 archivos de `tests/` llevados al literal nuevo (asserts, nombres accesibles, negativos que habrían quedado vacuos, títulos de `it`). Ninguno pasó a comparar contra su propia fuente; ningún importe cambió (solo cadenas de texto) |
+
+**`estado-con-info.guardia` (456):** los dos archivos que ahora componen el nombre del estado
+(`tarifas-labels.ts`, `GestionarDesdeAyudaModal.tsx`) se declararon en `USOS_PERMITIDOS` como clase `frase` con
+motivo; se amplió el motivo de `GestionarOrdenPanel.tsx` y `CorregirResultadoDialog.tsx` y se corrigió el de
+`DineroProductoDetalle.tsx` (citaba «Flete por rechazo + IVA…»). Es una guardia de la 456, no de las de R27.
+
+## Mutaciones ejecutadas (Fase 2)
+
+| # | Mutación | Resultado |
+|---|---|---|
+| M5 | `cierre-detalle-shared.tsx:469` `FLETE_RECHAZO_LABEL` vuelve a «Flete por rechazo» | ROJO: guardia brazo 1 (`…cierre-detalle-shared.tsx:469 Flete por rechazo`), brazo 2 (ídem) y `rechazo-nombre-466-app.test.ts` › «cierres: flete, IVA, GAM y con IVA (C33)». 3 failed / 24 passed |
+| M6 | `docs/ayuda/tienda/mi-wallet.md:104` vuelve a «cobro por rechazo» | ROJO: brazo 2 (`docs/ayuda/tienda/mi-wallet.md:104 cobro por rechazo`) y brazo 3 (`maestro:`, `admin:`, `adminTienda:`). 2 failed / 11 passed |
+
+Restaurados por copia desde el scratchpad (no `git checkout`).
+
+## Mapa R1–R28 → test (COMPLETO; sustituye las celdas «Fase 2» del mapa de arriba)
+
+| R | Test |
+|---|---|
+| R1 | `tests/unit/types/rechazo-nombre-466-lib.test.ts` (C1-C4, C15, C25-C28); `tests/unit/components/rechazo-nombre-466-app.test.ts` › «composicion: los dos reversos del cobro (C5, C6)», «libro de la tienda desde la oficina (C7-C10)», «Mi wallet, la lectura desde la tienda (C11-C14)», ««Anular …» y el detalle del movimiento (C16-C20)», «la cola de cobros (C21-C24)…», «tarifas: …(C29-C32)», «cierres: flete, IVA, GAM y con IVA (C33)», «cierres: el ingreso de bodega y las notas (C34, C35)», «el aviso del modal de rechazo… (C36)», «la tabla y el detalle de dinero (K3, C37)»; `tests/components/DetalleMovimientoPanel.test.tsx`, `WalletLedgerVer458C.test.tsx` › «R100: el cobro por devolución a origen dice en palabras…» |
+| R2 | `tests/unit/components/wallet-labels.test.ts` › «el filtro por concepto ofrece los 27 con SU nombre»; `tests/unit/components/desglose-tienda-labels.test.ts` y `mi-wallet-labels.test.ts` › «dice exactamente los N textos aprobados…» (mismos diccionarios que la descarga); `tests/unit/services/wallet-origen-legible.test.ts` (columna «Motivo y origen») |
+| R3 | `tests/integration/db/wallet-origen-legible.test.ts` (fila sembrada, texto derivado al leer); `tests/unit/services/wallet-origen-legible.test.ts:154` |
+| R4 | `rechazo-nombre-466-app.test.ts` › «cierres: el ingreso de bodega y las notas (C34, C35)»; `tests/components/CierresAdminModule.test.tsx` › «feature 102/R8: el ingreso de bodega por devoluciones a origen muestra el total…»; `ComprobanteMensajeroOrigenRechazo.test.tsx` › «R3 — … el renglón «Ingreso de bodega por devoluciones a origen» sigue con su monto»; `CierreBodegaDesglosePorTienda.test.tsx`, `descarga/CierresDescarga.test.tsx` (nombre accesible) |
+| R5 | `rechazo-nombre-466-app.test.ts` › «tarifas: los dos fletes y el pago por zona junto a «Entregado» (C29-C32)»; `tests/components/TarifasClaridadMontos.test.tsx` › «nombra el resultado que REALMENTE paga: «Devolución a origen por rechazo»», «explica los dos destinatarios…» |
+| R6 | `rechazo-nombre-466-lib.test.ts` › «`rechazos` se rotula…»; `tests/unit/analytics/etiquetas-visibles.guardia.test.ts` |
+| R7 | `rechazo-nombre-466-lib.test.ts` (mismo `it`); `etiquetas-visibles.guardia.test.ts:62` |
+| R8 | `rechazo-nombre-466-app.test.ts` › «la tabla y el detalle de dinero (K3, C37)», «la descarga: encabezados nuevos con sus CLAVES de siempre (K4, C38; R26)»; `tests/unit/descarga/analitica-productos-descarga-columnas.test.ts` › «los ONCE encabezados…», «los VEINTIUN encabezados…» |
+| R9 | E1-E3: `tests/components/CorregirResultadoCierre.test.tsx` › «466: el aviso, el botón y la confirmación nombran «Devolución a origen por rechazo»»; E4: `tests/unit/services/cierres-admin-corregir-resultado.test.ts` › «466/R11 (E4)…»; E5: `tests/components/GestionarOrdenPanelTope.test.tsx` › «en el tope aparece la nota, TAL CUAL», «dice las dos cosas…»; E6: `tope-intentos-pii.guardia.test.ts`; E7 + nota del tope: `rechazo-nombre-466-app.test.ts` › «la gestion desde ayuda…», `GestionarDesdeAyudaModalTope.test.tsx` › «la nota se lee TAL CUAL»; E8-E10: `rechazo-nombre-466-app.test.ts` › «cierres: los marcadores de origen y el motivo automatico (E8-E10)», `tests/unit/components/motivo-rechazo-automatico-legible.test.ts`, `CierreMotivoRechazoAutomatico.test.tsx`; E11: `tests/components/RechazosSlaModule.test.tsx` › «R22: renderiza la Pagination…» (nombre accesible) y «al paginar con error muestra toast…» (texto del permiso) |
+| R10 | `tests/unit/notificaciones/novedades-sin-gestionar-aviso.test.ts` › «(a) …cinco dias», «(b) … 24 horas» |
+| R11 | E4 y E6 como en R9 |
+| R12 | `rechazo-nombre-466-lib.test.ts` › «466/R12» |
+| R13 | `rechazo-nombre-466-lib.test.ts` › «R13: la decision sobre OTRAS entidades…»; `rechazo-nombre-466-app.test.ts` › «la cola de cobros… (R13: el acto de la tienda)», «R13: el estado de un CIERRE rechazado no cambia», «el aviso del modal de rechazo… conserva la accion y el motivo (R13)», «…boton «Rechazar» (R13)»; excepciones del brazo 1 |
+| R14 | guardia › «466/R21 (brazo 2)» sobre `docs/ayuda` con `PENDIENTES` vacío (M6) |
+| R15 | guardia › «466/R15 (brazo 3)» (M6); `tests/unit/asistente/contexto-458.test.ts` con el literal nuevo |
+| R16 | `tests/unit/api/openapi-466-descripciones.test.ts` › «466/R16…» |
+| R17 | `openapi-466-descripciones.test.ts` › «466/R17…» |
+| R18 | `openapi-466-descripciones.test.ts` › «466/R18…» |
+| R19 | `openapi-466-descripciones.test.ts` › «466/R19…»; `changelog-455.test.ts` |
+| R20, R22 | guardia › «466/R20 · R22 (brazo 1)» (M5) + «MUTACION (R22)…»; «T2.6: la Fase 2 dejo `PENDIENTES` vacio» |
+| R21 | guardia › «466/R21 (brazo 2)» (M5, M6) |
+| R23 | guardia › tests «MUTACION…» + M1-M6 ejecutadas |
+| R24 | `tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts` › «el MISMO extractor encuentra el nombre VIGENTE en `app/`» (ahora «Flete por devolución a origen», >5), «el detector marca el literal y NO marca el comentario» (casos 466: el vigente no casa el retirado) y el censo |
+| R25 | suite de dinero verde sin tocar ningún importe esperado (los cambios de `tests/` son solo cadenas de rótulo) |
+| R26 | `rechazo-nombre-466-lib.test.ts` › «466/R26…»; `rechazo-nombre-466-app.test.ts` › «la descarga: … CLAVES de siempre»; `git diff --stat cbb5f30f` sin `db/`, `prisma/` ni migraciones |
+| R27 | `nombres-estado-retirados.guardia`, `fuente-unica-nombre-estado.guardia`, `nombres-wallet-461.guardia`, `openapi-nombres-455.guardia` verdes sin tocar sus listas |
+| R28 | sin cambios en `lib/auth/**` ni `middleware.ts` |
+
+## Gate (Fase 2)
+
+`./init.sh` COMPLETO, salida entera en `progress/gate_466_frontend.log` con `INIT_EXIT` dentro:
+
+```
+✓ typecheck paso
+✓ lint paso
+ Test Files  2332 passed (2332)
+      Tests  32406 passed | 26 skipped (32432)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2332 ejecutado(s), todos en el baseline conocido)
+== init OK ==
+INIT_EXIT=0
+```
+
+Los 26 `skipped` son los `it.skip` preexistentes de `AnaliticaPage` (17) y `AnaliticaShell` (9); **0 en
+`tests/integration`** (con `.env` copiado al worktree).
+
+Corridas previas, rojas, contadas aquí para no esconderlas:
+1. 3 rojos: `NovedadesModule.test.tsx` (MÍO: afirmaba E7 viejo «La orden quedó rechazada.» — el `grep` con
+   `[oó]` no lo vio en este terminal; corregido junto con un comentario de `GestionarDesdeAyudaModal.test.tsx`),
+   y `CierresAdminFiltros` + `BajoRiesgoPaginacion` (timeout/carga; verdes aislados, ajenos al diff).
+2. 2 rojos en `tests/integration/recuperar-contrasena-form.test.tsx` (ajeno al diff; 11/11 verde aislado).
+3. Esta: verde.
+
+Veredicto: Fase 2 de la 466 hecha; `PENDIENTES` vacío, guardia 338 apuntando al nombre vigente, R1-R28 con test.

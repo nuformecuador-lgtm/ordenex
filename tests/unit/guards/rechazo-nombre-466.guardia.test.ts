@@ -23,6 +23,7 @@
 // desde HOY sin fingir verde, lo pendiente vive en `PENDIENTES`, archivo por archivo y con el NUMERO
 // EXACTO de hallazgos de cada brazo: uno mas es una infraccion nueva; uno menos deja la entrada
 // caducada y la guardia pide retirarla. La Fase 2 termina cuando `PENDIENTES` esta VACIO (T2.6).
+// ✅ FASE 2 HECHA (2026-10-01): `PENDIENTES` vacio.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -183,56 +184,22 @@ export const EXCEPCIONES: Record<string, { textos: readonly string[]; motivo: st
     ],
     motivo: "nombra un CIERRE rechazado (§0.6, otra entidad; design §3.1)",
   },
-  "app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx": {
-    textos: [
-      "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es el rechazo, y el mensajero todavía puede entregarla.",
-    ],
-    motivo:
-      "`GESTION_AYUDA_TOPE_NOTA`: el ACTO de la tienda (su boton «Rechazar»); design §2.2 lo clasifica " +
-      "«Se conserva» (linea 208). Elevado al leader en `progress/impl_466.md` por si se prefiere el nombre vigente",
-  },
+  // `GestionarDesdeAyudaModal.tsx` (`GESTION_AYUDA_TOPE_NOTA`) YA NO es excepcion: el leader decidio
+  // el 2026-10-01 que «es el rechazo» nombraba el RESULTADO que la tienda registra, y la nota pasa a
+  // decir «… es la devolución a origen por rechazo» con `NOMBRE_ESTADO` (Fase 2).
 };
 
 /**
- * ⏳ Lo que la FASE 2 tiene que cambiar (T2.1-T2.5), medido el 2026-10-01 sobre este arbol:
- * archivo -> numero EXACTO de hallazgos del brazo 1 (`diccionario`) y del brazo 2 (`frases`). La Fase 2
- * retira cada entrada al corregir su archivo; no puede anadir ninguna.
+ * Lo que la FASE 2 tenia que cambiar (T2.1-T2.5): archivo -> numero EXACTO de hallazgos del brazo 1
+ * (`diccionario`) y del brazo 2 (`frases`). VACIO desde el 2026-10-01 (T2.6): cualquier hallazgo
+ * nuevo es una infraccion. Queda la estructura para que un pendiente futuro se declare igual, con
+ * su numero, y no con una excepcion por texto.
  */
-export const PENDIENTES: Record<string, { diccionario?: number; frases?: number }> = {
-  // T2.1 — wallet
-  "app/(app)/wallet/_components/wallet-labels.ts": { diccionario: 1, frases: 1 },
-  "app/(app)/wallet/_components/composicion-detalle-labels.ts": { diccionario: 2, frases: 2 },
-  "app/(app)/wallet/_components/cobro-rechazo-tienda-labels.ts": { diccionario: 5, frases: 4 },
-  // C7/C8 ya van en la Fase 1: `desglose-tienda-labels.test.ts` exige que digan lo MISMO que C1/C2.
-  "app/(app)/wallet/tiendas/_components/desglose-tienda-labels.ts": { diccionario: 2, frases: 2 },
-  "app/(app)/mi-wallet/_components/mi-wallet-labels.ts": { diccionario: 4, frases: 4 },
-  "components/shared/wallet/detalle-movimiento-panel-labels.ts": { diccionario: 4, frases: 3 },
-  // T2.2 — cierres y tarifas
-  "app/(app)/configuracion/tarifas/_components/tarifas-labels.ts": { diccionario: 4, frases: 3 },
-  "app/(app)/cierres-admin/_components/cierre-labels.ts": { diccionario: 9, frases: 6 },
-  "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx": { diccionario: 7, frases: 5 },
-  "app/(app)/cierres-admin/_components/CorregirResultadoDialog.tsx": { diccionario: 3, frases: 2 },
-  "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx": { frases: 1 },
-  "app/(app)/cierres-admin/_components/cierre-factura.tsx": { frases: 1 },
-  // T2.3 — mensajero y novedades
-  "app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx": { diccionario: 1, frases: 1 },
-  "app/(app)/novedades/_components/RechazosSlaModule.tsx": { diccionario: 2, frases: 2 },
-  "app/(app)/novedades/_components/RechazarNovedadModal.tsx": { frases: 1 },
-  // T2.4 — analitica. La leyenda `catalogo-paneles.ts` (K1) ya va en la Fase 1: la guardia
-  // `etiquetas-visibles` exige que diga lo MISMO que la metrica (design §3.6).
-  "app/(app)/analitica/_components/entregas/ProductosTabla.tsx": { diccionario: 1, frases: 1 },
-  "app/(app)/analitica/_components/entregas/DineroProductoDetalle.tsx": { diccionario: 3, frases: 3 },
-  "app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts": { diccionario: 2, frases: 2 },
-  // T2.5 — ayuda
-  "docs/ayuda/oficina/wallet-caja.md": { frases: 7 },
-  "docs/ayuda/tienda/mi-wallet.md": { frases: 2 },
-  "docs/ayuda/oficina/cierres.md": { frases: 2 },
-};
+export const PENDIENTES: Record<string, { diccionario?: number; frases?: number }> = {};
 
 /**
  * R23 (no-vacuidad): cuantos textos con «devolución a origen» tiene que encontrar el brazo 1. Con la
- * Fase 2 hecha (`PENDIENTES` vacio) son mas de 15 (design §3.4); mientras tanto solo esta puesto lo de
- * `lib/` (medido: 15 el 2026-10-01), y el umbral de la Fase 1 lo exige.
+ * Fase 2 hecha (`PENDIENTES` vacio) son mas de 15 (design §3.4); durante la Fase 1 bastaban 10.
  */
 const MINIMO_TEXTOS_NUEVOS = Object.keys(PENDIENTES).length > 0 ? 10 : 15;
 
@@ -425,6 +392,10 @@ describe("466 — autocomprobacion del detector (una guardia estatica rota no fa
 
 describe("466/R20 · R22 (brazo 1) — los diccionarios de rotulos", () => {
   const { leidos, hallazgos, vigentes } = censoDiccionarios();
+
+  it("T2.6: la Fase 2 dejo `PENDIENTES` vacio (nada queda tolerado por numero)", () => {
+    expect(PENDIENTES).toEqual({});
+  });
 
   it("no-vacuidad (R23): lee TODOS los diccionarios y encuentra el texto nuevo", () => {
     expect(leidos).toBe(DICCIONARIOS.length);

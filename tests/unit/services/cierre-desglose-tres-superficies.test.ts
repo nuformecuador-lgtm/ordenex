@@ -40,7 +40,7 @@ import { efectivoCubreDescuentos, paraLaCentral } from "@/lib/utils/ingreso-orde
  *     correcto y no reordenar ni recortar lo que reciben.
  *
  * El corpus tiene **una tienda CON rechazo y otra SIN él** a propósito: si las dos tuvieran el
- * flete por rechazo en cero, la diferencia entre «lo que se le paga» y «lo que gana» sería la
+ * flete por devolución a origen en cero, la diferencia entre «lo que se le paga» y «lo que gana» sería la
  * misma en las dos y una derivación con el subconjunto equivocado pasaría desapercibida.
  *
  * Los importes son el CONTRATO: están escritos a mano y no salen de llamar a la función bajo
@@ -182,7 +182,7 @@ const INGRESO_BODEGA = "500.00";
  *
  *   Norte · recaudado 100.000,00 · se le paga 100.000,00 − 2.825,00 − 3.390,00 = 93.785,00
  *                                · gana      100.000,00 − (6.215,00 + 1.695,00) = 92.090,00
- *                                · diferencia = 1.695,00, su flete por rechazo
+ *                                · diferencia = 1.695,00, su flete por devolución a origen
  *   Sur   · recaudado  40.000,00 · se le paga  40.000,00 − 2.260,00 − 1.356,00 = 36.384,00
  *                                · gana        40.000,00 − 3.616,00            = 36.384,00
  *                                · diferencia = 0,00, no trajo rechazos

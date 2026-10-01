@@ -25,7 +25,7 @@ const migrationDir = migrationDirFor("_ingreso_bodega_rechazos");
 const upSql = fs.readFileSync(path.join(migrationDir, "migration.sql"), "utf8");
 const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
 
-describe("UP — columnas de snapshot del ingreso de bodega por rechazos (R21)", () => {
+describe("UP — columnas de snapshot del ingreso de bodega por devoluciones a origen (R21)", () => {
   it("R21: gestion_orden.ingreso_bodega_rechazo DECIMAL(12,2) NULLABLE (gestion sin cerrar)", () => {
     expect(upSql).toMatch(
       /ALTER TABLE "gestion_orden"\s+ADD COLUMN "ingreso_bodega_rechazo" DECIMAL\(12,2\);/,

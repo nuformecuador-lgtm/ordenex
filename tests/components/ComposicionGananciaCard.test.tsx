@@ -379,9 +379,9 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       { rotulo: "Correcciones de caja (resta)", importe: "₡45,75" },
       // Ficha 461 (R27): la fila de los cobros anulados; en este fixture vale 0,00.
       { rotulo: "Cobros a una tienda anulados", importe: "₡0" },
-      // Ficha 458-B (design §2.3): las dos filas de la anulacion de un cobro por rechazo; aqui 0,00.
-      { rotulo: "Fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
-      { rotulo: "IVA de fletes por rechazo cobrados a una tienda anulados", importe: "₡0" },
+      // Ficha 458-B (design §2.3): las dos filas de la anulacion de un cobro por devolución a origen; aqui 0,00.
+      { rotulo: "Fletes por devolución a origen cobrados a una tienda anulados", importe: "₡0" },
+      { rotulo: "IVA de fletes por devolución a origen cobrados a una tienda anulados", importe: "₡0" },
       { rotulo: "Otros gastos de Ordenex", importe: "₡194,25" },
       { rotulo: "Total de egresos", importe: "₡2.190,75" },
     ]);
@@ -481,8 +481,8 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461: tercer nombrado, antes de «Otros»
-      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
-      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "Fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
       "Otros gastos de Ordenex",
       "Total de egresos",
     ]);
@@ -676,8 +676,8 @@ describe("Ficha 339 — «Otros» sólo cuando de verdad queda algo (R7/R8/R9/R1
       "Pagos de Ordenex a mensajeros",
       "Correcciones de caja (resta)",
       "Cobros a una tienda anulados", // ficha 461
-      "Fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
-      "IVA de fletes por rechazo cobrados a una tienda anulados", // ficha 458-B
+      "Fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
+      "IVA de fletes por devolución a origen cobrados a una tienda anulados", // ficha 458-B
       "Total de egresos",
     ]);
   });
