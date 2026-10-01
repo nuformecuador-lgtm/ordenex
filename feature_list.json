@@ -5554,11 +5554,11 @@
       "title": "tarifas: excel de cobertura",
       "description": "Descargar desde tarifas un Excel por distrito que diga si hay cobertura, con que zona y donde no llegamos.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec.",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. || HECHA 2026-10-01, en dev por PR #837 (bfe1d458). NO desplegada. Revision: B1 (GAM vs tarifa general sin test que los distinga) cerrado y mutado. Gate completo verde 32458 (progress/gate_465_merge.log). T10: 494 filas = count distrito; 297 con cobertura; 197 sin (194 sin zona + 3 varias). Gate post-merge en dev pendiente (se corre tras el de la 466 para no solapar carga).",
       "branch": "feature/465-tarifas-excel-cobertura"
     },
     {
