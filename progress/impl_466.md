@@ -363,3 +363,55 @@ Corridas previas, rojas, contadas aquí para no esconderlas:
 3. Esta: verde.
 
 Veredicto: Fase 2 de la 466 hecha; `PENDIENTES` vacío, guardia 338 apuntando al nombre vigente, R1-R28 con test.
+
+## Correcciones de la revisión (review_466, 2026-10-01)
+
+- **B1:** `docs/api/guia-integracion/guia-integracion.html` §5.3, nota del `costoReal`: «Si la orden termina en
+  Devolución a origen por rechazo (`devolucion_a_origen_por_rechazo`), lo que se factura…». Test literal en
+  `tests/unit/api/openapi-466-descripciones.test.ts` («466/R9 — la guia de integracion (HTML)…»). Mutación
+  ejecutada (volver a «termina con rechazo») → **ROJO**, 1 failed. Añadida también a la entrada del CHANGELOG.
+- **m1:** `GestionarOrdenPanel.tsx`, `lib/notificaciones/emitir.ts` y `lib/services/CierresAdminService.ts` entran en
+  `DICCIONARIOS`, con 3 excepciones medidas (aria «Foto de evidencia del rechazo» = acto del destinatario;
+  «Tu cierre … fue rechazado» y «El motivo de rechazo es obligatorio.» / error técnico = un CIERRE).
+  `RechazarNovedadModal.tsx` NO entra: sus textos visibles nombran el acto («Rechazar», «Motivo del rechazo», R13)
+  y el flete (C36, ya en el brazo 2), no el estado de la orden. Mutación RB1 (E5 → «— entregada o rechazada.»)
+  → **ROJO** en la guardia: `GestionarOrdenPanel.tsx:277 … entregada o rechazada. …`.
+- **m2:** `GESTION_AYUDA_TOPE_NOTA` sin `.toLowerCase()`: «… es la Devolución a origen por rechazo, …» (literales de
+  `rechazo-nombre-466-app` y `GestionarDesdeAyudaModalTope` ajustados).
+- **m3:** R19 ya no exige «la primera» entrada: orden cronológico, mismo criterio que `changelog-455`.
+- **m4:** título de `TarifasClaridadMontos.test.tsx` actualizado. **m5:** `docs/ayuda/mensajero/cierre-del-dia.md`
+  alineado con `oficina/cierres.md`.
+
+## Gate (correcciones) — `./init.sh` COMPLETO
+
+`progress/gate_466_fix.log`: `Test Files 2332 passed`, `Tests 32407 passed | 26 skipped` (los 26 son los `it.skip`
+de AnaliticaPage/AnaliticaShell, como en el gate anterior; `.env` presente, integración ejecutada), `init OK`,
+**`INIT_EXIT=0`**. Sin rojos.
+
+## T3.2 — Ver la app (Playwright, 2026-10-01)
+
+Dev server propio en el worktree (`:3012`), maestro local `maestro.qa466@ordenex.test` (OTP del log). Se buscó
+`/rechaz/i` en el `innerText` de cada pantalla y en TODAS las celdas de cada Excel descargado (exceljs).
+Datos locales: SÍ hay flete por devolución a origen (1 fila de flete + 1 de IVA en caja y en la tienda Tania
+Tienda, cierre del 2026-09-24 de Quino QUEPOS) y 13 gestiones en Devolución a origen por rechazo.
+
+| Pantalla | «rechaz» encontrado | Clasificación | Textos nuevos vistos |
+|---|---|---|---|
+| `/wallet` (pantalla) | ninguno | — | «Flete por devolución a origen cobrado a la tienda», «IVA del flete por devolución a origen cobrado a la tienda», «Fletes por devolución a origen cobrados a una tienda anulados», «IVA de fletes … anulados» |
+| `/wallet` Excel «Libro de movimientos» (37 filas) | ninguno | — | Columna **Movimiento**: «Flete por devolución a origen cobrado a la tienda» / «IVA del flete …»; **Motivo y origen**: «Cierre del día · 2026-09-24 · Quino QUEPOS» |
+| `/wallet/tiendas/<Tania>` (pantalla y Excel «Estado de cuenta», 29 filas) | ninguno | — | Excel: «Flete por devolución a origen cobrado a la tienda» 1000.00 y su IVA 130.00 |
+| `/wallet/tiendas` Excel «Saldos de tiendas» | ninguno | — | — |
+| `/cierres-admin` (lista) | «…aprobalo o rechazalo», «Motivo de rechazo: Faltan comprobantes…» | legítimo: rechazo de un CIERRE (§0.6) | — |
+| `/cierres-admin` detalle de los 7 cierres resueltos | solo «Devolución a origen por rechazo» | legítimo: nombre vigente (R12) | «Flete por devolución a origen + IVA», «…incluido el flete por devolución a origen…», «una devolución a origen no cobra contra entrega» |
+| `/configuracion/tarifas` (lista y diálogo de edición) | ninguno | — | «Flete por devolución a origen*», «Flete por devolución a origen GAM*» |
+| `/analitica` (KPIs, detalle gestión/órdenes, productos) | solo «Devolución a origen por rechazo» | legítimo: nombre vigente | «Efectividad de la gestión (Entregado y Devolución a origen por rechazo de 85 órdenes)» |
+| `/analitica` Excel «Productos» (54 filas) | encabezado «Devolución a origen por rechazo» | legítimo: nombre vigente del resultado | «Devolución a origen (%)», «Flete por devolución a origen (no sumar: …)» |
+
+**Cero frases de §0.5** en pantallas y Excel. Sin olvidos encontrados.
+
+No cubierto (y por qué): los paneles operativos de analítica (K1/K2 «Devoluciones a origen») no se montan en
+`/analitica` hoy (regiones del shell comentadas), así que no hay pantalla que mirar; `/novedades` da 404 al maestro
+y `/mi-wallet` es de `adminTienda` (no se sembró sesión de tienda); el detalle de movimiento de `/wallet` no abrió
+con un click en la fila (no se persiguió); dos descargas («Plantillas de gasto fijo», «Pagos registrados de Tania
+Tienda») no emitieron archivo en 60 s — ajenas a la 466, no investigadas. El cierre del 2026-09-24 con el flete es
+de bodega satélite y no aparece en la lista de cierres del día del maestro.

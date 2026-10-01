@@ -102,7 +102,7 @@
   R26 → test de T1.5 + `git diff --stat` del SHA de partida sin `db/`, sin `prisma/`, sin migraciones; R28 →
   ningún cambio en `lib/auth/**` ni en `middleware`. Dep: Fase 2. **Hecho:** sin R sin test.
 
-- [ ] **T3.2 — Ver la app** (memorias «Ver la app encuentra lo que la suite no», «Verificar lo que el usuario
+- [x] **T3.2 — Ver la app** (memorias «Ver la app encuentra lo que la suite no», «Verificar lo que el usuario
   ve»). Con Playwright y la base local sembrada: `/wallet` (libro y su Excel abierto y leído: columnas
   «Movimiento» y «Motivo y origen» de una fila de flete por devolución a origen), `/wallet/tiendas` y su Excel,
   `/mi-wallet` y su Excel, detalle de movimiento y «Anular …» de un cobro, cola de cobros, detalle de un cierre
