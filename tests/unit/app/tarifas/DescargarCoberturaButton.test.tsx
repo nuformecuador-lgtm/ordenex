@@ -50,7 +50,9 @@ const ITEM: CoberturaDistritoDTO = {
   cobertura: true,
   motivo: null,
   zonas: ["Central"],
-  zonaUnica: { nombre: "Central", esCentral: true, tieneTarifaGeneral: true },
+  // GAM y tarifa general DISTINTOS a propósito: si el botón cruzara las dos columnas, el
+  // archivo diría «No»/«Sí» y este test lo vería (revisión 465, B1).
+  zonaUnica: { nombre: "Central", esCentral: true, tieneTarifaGeneral: false },
   zonaEspecial: null,
 };
 
@@ -135,7 +137,7 @@ describe("465/R4 + R17 — lee al pulsar y nombra el archivo", () => {
         zona: "Central",
         gam: "Sí",
         zona_especial: "Sin definir",
-        tarifa_general: "Sí",
+        tarifa_general: "No",
       },
     ]);
   });

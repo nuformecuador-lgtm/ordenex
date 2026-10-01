@@ -144,11 +144,58 @@ nuevo.») y delega el resto (forbidden, límite, ok) en `filasDesdeResultado`.
 Quitar `ambitoColumnas`, ofrecer `["xlsx","csv"]` y anular el caso `unauthenticated` en el botón →
 13 casos rojos de `DescargarCoberturaButton.test.tsx` (selector, orden, nombre, R3…). Revertido desde copia.
 
-### T10 (verificación visible) — NO hecha
+### T10 (verificación visible) — hecha por el reviewer
 
-No se levantó dev server (riesgo de pisar otro en `.next` compartido). Queda abierta para el leader:
-descargar como maestro en `/configuracion/tarifas` y comparar total de filas con
-`SELECT count(*) FROM distrito` y filas «Cobertura = Sí» con los disponibles de exactamente una zona.
+El frontend no levantó dev server (riesgo de pisar otro en `.next` compartido). La hizo el reviewer
+(`progress/review_465.md` §T10) como maestro en `/configuracion/tarifas`, Playwright, base local:
+
+- Archivo `cobertura-por-distrito-2026-10-01.xlsx`, 1 hoja, **10 columnas en el orden de R5**, tildes
+  correctas.
+- **494 filas** de datos = `SELECT count(*) FROM distrito` (494).
+- **297 «Sí»** en Cobertura = provincia, cantón y distrito activos con exactamente 1 zona (297).
+- **197 «No»** = 194 sin zona + 3 en varias zonas (motivos «Sin zona asignada» 194 y «Asignado a varias
+  zonas» 3, coinciden con SQL).
+- **Tarifa general «Sí» = 0** (297 «No», 197 vacías) = SQL (distritos de zona única cuya zona tiene
+  tarifa con tienda NULL: 0).
+- Ningún distrito retirado en la base local: los motivos de retiro quedan cubiertos por la integración.
+
+## Arreglo de la revisión (`progress/review_465.md`)
+
+### B1 — GAM y tarifa general no se distinguían (R12, R14)
+
+Añadidos en `tests/unit/descarga/cobertura-descarga-columnas.test.ts` dos casos de zona única con los
+datos DISTINTOS: `esCentral: true, tieneTarifaGeneral: false` → GAM «Sí», tarifa «No»; y
+`esCentral: false, tieneTarifaGeneral: true` → GAM «No», tarifa «Sí». El `ITEM` de
+`DescargarCoberturaButton.test.tsx` pasa a `esCentral: true, tieneTarifaGeneral: false` (fila
+esperada: `gam: "Sí"`, `tarifa_general: "No"`).
+
+Mutaciones en `filaCobertura` (secuenciales, revertidas con `git checkout`; diff del archivo vacío):
+
+| Mutación | Resultado (`cobertura-descarga-columnas.test.ts` + `DescargarCoberturaButton.test.tsx`) |
+| --- | --- |
+| `gam` lee `tieneTarifaGeneral` en vez de `esCentral` | **ROJO**: 3 failed / 31 passed (los 2 casos nuevos + «emite las filas con los textos de la proyección») |
+| `tarifa_general` lee `esCentral` en vez de `tieneTarifaGeneral` | **ROJO**: 3 failed / 31 passed (los mismos 3) |
+| Sin mutación | verde, 34/34 |
+
+### M4 — R2 con el rol admin
+
+El spec (R2) dice que solo maestro accede. `CoberturaService.test.ts` «465/R2» añade `admin` a los roles
+que reciben `forbidden` sin tocar el repositorio (10/10 verde).
+
+### M1–M3
+
+tasks.md T1–T11 marcadas `[x]` (T10 por el reviewer); números de T10 arriba; entrada en
+`progress/history.md`.
+
+### Gate del arreglo
+
+`./init.sh --rapido` se negó (el diff de la rama toca `lib/types/cobertura.ts`) y mandó al completo.
+`./init.sh` completo, log íntegro en `progress/gate_465_fix.log`: typecheck limpio; lint `0 errors,
+220 warnings`; `Test Files 1 failed | 2336 passed (2337)` · `Tests 1 failed | 32457 passed | 26 skipped`;
+`cobertura-repository.test.ts` ejecutado (424 líneas de `integration/db`); `INIT_EXIT=1`. El único rojo
+es `tests/components/descarga/CierresDescargaColumnas.test.tsx` «cada superficie ofrece su selector…»
+por `Test timed out in 20000ms` (archivo ajeno a la 465, fuera del diff); aislado 3 veces: 10/10 verde
+las 3. Flake de timeout bajo carga.
 
 ## Mapa R → test COMPLETO (R1–R21)
 

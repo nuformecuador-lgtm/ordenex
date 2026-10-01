@@ -103,6 +103,27 @@ describe("465/R7-R14 — textos de cada celda", () => {
     expect(fila.zona).toBe("Norte");
   });
 
+  // B1 de la revisión: con los dos datos iguales, cruzar qué dato alimenta cada columna pasa
+  // en verde. Estos dos casos los ponen DISTINTOS en ambos sentidos.
+  it("R12/R14 — zona central SIN tarifa general: GAM «Sí», tarifa general «No»", () => {
+    const fila = filaCobertura(
+      dto({ zonaUnica: { nombre: "Central", esCentral: true, tieneTarifaGeneral: false } }),
+    );
+    expect(fila.gam).toBe("Sí");
+    expect(fila.tarifa_general).toBe("No");
+  });
+
+  it("R12/R14 — zona NO central CON tarifa general: GAM «No», tarifa general «Sí»", () => {
+    const fila = filaCobertura(
+      dto({
+        zonas: ["Norte"],
+        zonaUnica: { nombre: "Norte", esCentral: false, tieneTarifaGeneral: true },
+      }),
+    );
+    expect(fila.gam).toBe("No");
+    expect(fila.tarifa_general).toBe("Sí");
+  });
+
   it.each([
     ["provincia_retirada", "Provincia retirada del catálogo"],
     ["canton_retirado", "Cantón retirado del catálogo"],

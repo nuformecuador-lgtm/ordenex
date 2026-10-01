@@ -25,7 +25,7 @@ function repoDoble(): ICoberturaRepository & {
 }
 
 describe("465/R2 — solo maestro, y la puerta va ANTES de leer", () => {
-  it.each(["adminTienda", "mensajero", "adminSatelite", "apiKey"] as const)(
+  it.each(["admin", "adminTienda", "mensajero", "adminSatelite", "apiKey"] as const)(
     "rol %s -> forbidden con 0 llamadas al repositorio",
     async (rol) => {
       const repo = repoDoble();

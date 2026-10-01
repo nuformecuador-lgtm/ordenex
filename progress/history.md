@@ -5670,3 +5670,15 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
   (`progress/review_458-final.md`). Gate `progress/gate_458E_merge.log`: `INIT_EXIT=0`, 32329 verdes.
 - Recorrido completo por rol en `dev`: 93 OK, 3 FALLO (F1–F3), 13 N/A; R7/R8 = 0,00 en las 46 medidas.
   Los tres fallos y las observaciones baratas se arreglan en `fix/458-final`.
+
+## 2026-10-01 — 465: Excel de cobertura por distrito en Tarifas
+- Botón «Descargar cobertura» (solo maestro) en `/configuracion/tarifas`: un Excel con cada distrito,
+  si llegamos a él (misma regla que `resolveGeo`, probada en 24 combinaciones), su zona, GAM, zona
+  especial y si la zona tiene tarifa general; selector de columnas recordado y solo lectura.
+- Requisitos cubiertos: R1–R21; mapa R→test en `progress/impl_465.md`.
+- Revisión RECHAZADA (`progress/review_465.md`) y cerrada: B1 las columnas GAM y tarifa general no se
+  distinguían (cruzarlas pasaba en verde); casos con los datos distintos en ambos sentidos y las dos
+  mutaciones en rojo. M4 R2 prueba también el rol admin. T10 por el reviewer: 494 filas = distritos,
+  297 «Sí», 197 «No» (194 sin zona + 3 varias zonas), tarifa general «Sí» = 0 = SQL.
+- Deuda: M5/M6 de la revisión (fecha CR probada en la función común; ambigüedad por tildes no modelada,
+  0 casos medidos).
