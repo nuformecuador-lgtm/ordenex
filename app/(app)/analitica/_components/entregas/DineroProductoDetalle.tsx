@@ -96,10 +96,13 @@ export const DETALLE_DINERO_TEXTOS = {
      * estaba cobrando a una tienda por una devolución. Lo vigila
      * `tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts`, y esta pantalla se vio caer
      * en él antes de corregirlo.
+     *
+     * FICHA 466 (2026-10-01): pasa a «Flete por devolución a origen», alineado con el nombre
+     * vigente del estado; sigue sin decir «flete de devolución» (la 338 lo sigue vigilando).
      */
-    retorno: "Flete por rechazo",
+    retorno: "Flete por devolución a origen",
     // FICHA 455 (2026-09-24): el grupo por su nombre vigente (antes «las rechazadas»).
-    retornoPista: `Flete por rechazo + IVA de las órdenes en ${etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")}. Fuera del reparto`,
+    retornoPista: `Flete por devolución a origen + IVA de las órdenes en ${etiquetaDeDesenlace("devolucion_a_origen_por_rechazo")}. Fuera del reparto`,
     /**
      * FICHA 449 — EL SERVICIO DE BODEGA, y se llama «Fulfillment» PORQUE YA SE LLAMA ASÍ.
      *
@@ -132,7 +135,7 @@ export const DETALLE_DINERO_TEXTOS = {
     recaudado: "Recaudado",
     ordenex: "Cobró Ordenex",
     tienda: "Para la tienda",
-    retorno: "Flete por rechazo",
+    retorno: "Flete por devolución a origen",
   },
   estado: {
     liquidada: "Liquidada",

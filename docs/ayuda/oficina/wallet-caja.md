@@ -92,7 +92,7 @@ Cada concepto del libro se lee desde Ordenex y dice quién le paga a quién. Los
 | **Corrección de caja (suma)** / **Corrección de caja (resta)** | Una corrección hecha a mano para cuadrar la caja |
 | **Aporte de dinero a la caja** / **Aporte de dinero a la caja anulado** | El saldo inicial o un aporte de Ordenex, y su anulación |
 | **Una tienda le paga a Ordenex** / **Pago de una tienda a Ordenex anulado** | Lo que una tienda con saldo en contra le paga a Ordenex, y su anulación. Es dinero de la tienda: sube lo que Ordenex les debe a las tiendas |
-| **Flete por rechazo cobrado a la tienda** / **Flete por rechazo cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
+| **Flete por devolución a origen cobrado a la tienda** / **Flete por devolución a origen cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
 | **Indemnización que Ordenex paga por un incidente** | Lo que Ordenex paga cuando un envío sufre un incidente. Si se anula, aparece una **Corrección de caja (suma)** por el mismo monto |
 
 Debajo del concepto, en **Movimiento y motivo**, se dice de dónde nace cada línea con el mismo criterio: **Cierre del día**,
@@ -204,7 +204,7 @@ el maestro ve en cada fila **Aprobar** y **Rechazar**; el **admin ve la misma li
 y no puede aprobar ni rechazar ningún cobro de gasto fijo. Si sos admin y hay uno esperando, avisale
 al maestro. Mientras nadie decida, ese dinero **no sale** de la caja.
 
-**Cobros de rechazos de tienda** tienen también su panel de pendientes.
+**Cobros por devolución a origen de tienda** tienen también su panel de pendientes.
 
 ## Ordenex le cobra a una tienda: se descuenta de su saldo y es ganancia
 
@@ -332,14 +332,14 @@ como «Aprobación del cierre»— y **cuándo**: el día y la hora de Costa Ric
 motivo y cómo se anuló) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
 saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
 
-Un **cobro por rechazo** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
+Un **cobro por devolución a origen** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
 de la tienda baja, sin dinero nuevo en la caja.
 
 ## Anular: con motivo, y sin borrar nada
 
 Un **sueldo**, un **gasto de Ordenex**, un **gasto fijo cobrado**, un **pago de un gasto de una tienda**,
 un **aporte de dinero a la caja**, un **cobro de Ordenex a una tienda**, un **pago de una tienda a
-Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por rechazo a una tienda** ni una
+Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por devolución a origen a una tienda** ni una
 **indemnización por un incidente**. Ni un **pago de Ordenex a una tienda** o un **premio del ranking**. Si hubo un error, se anulan desde el detalle de su fila: **Ver** y
 luego **Anular…**. Es la misma forma para todos:
 
@@ -358,11 +358,11 @@ luego **Anular…**. Es la misma forma para todos:
   cambia. En la caja aparece **Pago de una tienda a Ordenex anulado**; en el libro de la tienda, «Pago
   de la tienda a Ordenex anulado».
 - Al anular una corrección de caja, aparece la corrección contraria por el mismo monto.
-- Un **cobro por rechazo** tiene dos líneas en la caja, el flete y su IVA: se anula desde **cualquiera de
+- Un **cobro por devolución a origen** tiene dos líneas en la caja, el flete y su IVA: se anula desde **cualquiera de
   las dos** y se anulan **las dos juntas**. La **ganancia baja** en el flete más el IVA, **lo que Ordenex
   les debe a las tiendas** y el saldo de la tienda **vuelven a subir** en lo mismo (si al cobrarlo se le
   descontó a la tienda), y **Entró**, **Salió** y la cifra grande no cambian. En la caja aparecen
-  **Flete por rechazo cobrado a la tienda anulado** y **IVA del flete por rechazo cobrado a la tienda
+  **Flete por devolución a origen cobrado a la tienda anulado** y **IVA del flete por devolución a origen cobrado a la tienda
   anulado**. En **Analítica**, «Ingreso por flete» e «Ingreso por IVA» descuentan la anulación: el
   **neto** vuelve a ser el de antes del cobro.
 - Al anular una **indemnización**, aparece una **Corrección de caja (suma)** por el mismo monto: la
@@ -439,7 +439,7 @@ quién** y **Registró** incluidas), para cuadrar fuera.
 - **No muestra lo que le debés a cada mensajero.** Eso es **Wallet · Mensajeros**.
 - **No es el saldo del banco**, salvo que alguien haya registrado el saldo inicial real.
 - **No se editan movimientos.** Un sueldo, un gasto, un pago de un gasto, un aporte, un cobro a una
-  tienda, un pago de una tienda a Ordenex, una corrección, un cobro por rechazo o una indemnización se
+  tienda, un pago de una tienda a Ordenex, una corrección, un cobro por devolución a origen o una indemnización se
   anulan con motivo; los demás son inmutables.
 - **No se corrigen cifras de entregas.** Un movimiento que nació de un cierre se arregla en el cierre,
   no acá.

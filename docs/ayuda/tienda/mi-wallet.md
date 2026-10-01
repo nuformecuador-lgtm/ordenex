@@ -91,7 +91,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Le pagaste a Ordenex** — lo que le pagaste a Ordenex cuando tu saldo estaba en contra.
 
 **Lo que resta**
-- **Ordenex te cobró el flete**, **Ordenex te cobró el flete por rechazo**, **Ordenex te cobró la
+- **Ordenex te cobró el flete**, **Ordenex te cobró el flete por devolución a origen**, **Ordenex te cobró la
   comisión de contra-entrega** y su **IVA** — el servicio de Ordenex.
 - **Ordenex te cobró** — un cobro que la oficina te hace a mano, por ejemplo material de despacho. Se
   descuenta de tu saldo a favor.
@@ -101,7 +101,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Ordenex anuló el pago que le hiciste** — la anulación de un pago tuyo registrado por error: tu saldo vuelve a bajar.
 
 Cada línea dice **de dónde viene**: el cierre, el pago, la guía… El **origen** lo dice con nombre, por
-ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321». Las órdenes
+ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por devolución a origen · guía 4321». Las órdenes
 de un cierre se ven desplegando su fila; los pagos, cobros y correcciones no vienen de una orden.
 
 Un movimiento anulado **no desaparece**: sigue en su lugar, tachado, con la leyenda **Anulado por

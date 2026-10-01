@@ -93,7 +93,7 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS: DescargaColumna[] = [
   // pregunta si se prefiere lo contrario; mientras no se responda, el archivo se parece a la
   // pantalla, que es lo que espera quien acaba de pulsar el boton.
   { clave: "efectividad", encabezado: "Efectividad de entrega (%)" },
-  { clave: "rechazo", encabezado: "Rechazo (%)" },
+  { clave: "rechazo", encabezado: "Devolución a origen (%)" },
 ];
 
 /**
@@ -157,7 +157,7 @@ export const COLUMNAS_DESCARGA_ANALITICA_PRODUCTOS_DINERO: DescargaColumna[] = [
     encabezado: `Pendiente de cierre ${MARCA_NO_SUMABLE_ARCHIVO}`,
   },
   { clave: "pendiente_ordenes", encabezado: "Órdenes pendientes de cierre" },
-  { clave: "retorno", encabezado: `Flete por rechazo ${MARCA_NO_SUMABLE_ARCHIVO}` },
+  { clave: "retorno", encabezado: `Flete por devolución a origen ${MARCA_NO_SUMABLE_ARCHIVO}` },
   // FICHA 449 — el servicio de bodega, LA DECIMA y la ULTIMA. Ver el bloque de arriba.
   { clave: "fulfillment", encabezado: `Fulfillment ${MARCA_NO_SUMABLE_ARCHIVO}` },
 ];

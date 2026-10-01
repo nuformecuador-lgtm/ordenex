@@ -61,7 +61,7 @@ export const PANEL_TEXTO = {
 export const ACCION_AUTOMATICA_LABEL: Record<NonNullable<RegistroDTO["automatico"]>["accion"], string> = {
   aprobacion_cierre: "Aprobación del cierre",
   plantilla_gasto_fijo: "Plantilla de gasto fijo",
-  cobro_por_rechazo: "Cobro por rechazo aprobado",
+  cobro_por_rechazo: "Cobro por devolución a origen aprobado",
   incidente: "Incidente resuelto",
   premio_del_ranking: "Premio del ranking",
   sistema: "Registro del sistema",
@@ -141,7 +141,7 @@ export const MOTIVO_NO_ANULABLE_TEXTO: Record<MotivoNoAnulable, string> = {
   contra_asiento: "es la anulación de otro movimiento",
   nace_de_un_cierre: "lo produjo la aprobación de un cierre",
   reclasificado: "se reclasificó como pago de un gasto de la tienda",
-  no_aprobado: "el cobro por rechazo no está aprobado",
+  no_aprobado: "el cobro por devolución a origen no está aprobado",
   sin_linea_de_caja: "no tiene su línea en la caja",
   no_es_anulable: "es un registro automático que no se anula desde aquí",
 };
@@ -152,7 +152,7 @@ export const MOTIVO_NO_ANULABLE_TEXTO: Record<MotivoNoAnulable, string> = {
  */
 export const COBRO_RECHAZO_TEXTO = {
   vigente:
-    "Es un cobro a la tienda por el flete de un rechazo: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja.",
+    "Es un cobro a la tienda por el flete de una devolución a origen: la ganancia de Ordenex sube y el saldo de la tienda baja, sin dinero nuevo en la caja.",
   anulado:
-    "Este cobro por rechazo se anuló: la ganancia de Ordenex bajó y el saldo de la tienda volvió a subir. El cobro sigue aprobado en su cola y no se vuelve a ofrecer.",
+    "Este cobro por devolución a origen se anuló: la ganancia de Ordenex bajó y el saldo de la tienda volvió a subir. El cobro sigue aprobado en su cola y no se vuelve a ofrecer.",
 } as const;

@@ -44,7 +44,7 @@ const VACIO_TITULO = "No tenés órdenes con devolución a origen por plazo venc
 const VACIO_DETALLE =
   `Cuando una de tus órdenes en ${NOMBRE_ESTADO.novedad} pase a ` +
   `${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} por vencerse el plazo, aparecerá acá.`;
-const PAGINACION_ARIA_LABEL = "Paginación de rechazos por plazo vencido";
+const PAGINACION_ARIA_LABEL = "Paginación de órdenes con devolución a origen por plazo vencido";
 
 export interface RechazosSlaModuleProps {
   items: RechazoSlaTiendaDTO[];
@@ -73,7 +73,7 @@ export function RechazosSlaModule({
       const res = await listarRechazosSlaTiendaAction({ page: nextPage });
       if (res.status !== "ok") {
         if (res.status === "forbidden") {
-          toast.error("No tenés permiso para ver los rechazos por plazo vencido.");
+          toast.error("No tenés permiso para ver las órdenes con devolución a origen por plazo vencido.");
         } else if (res.status === "unauthenticated") {
           toast.error("Tu sesión expiró. Iniciá sesión de nuevo.");
         } else {

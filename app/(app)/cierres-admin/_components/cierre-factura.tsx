@@ -2386,7 +2386,7 @@ export function CierreFacturaDetalle({
         <TarjetaTotal
           icon={<Undo2 size={15} aria-hidden="true" />}
           label={INGRESO_BODEGA_RECHAZOS_LABEL}
-          ariaLabel="Ingreso de bodega por rechazos del cierre"
+          ariaLabel="Ingreso de bodega por devoluciones a origen del cierre"
           value={money(desgloseIngresoBodegaRechazos.total)}
           // Feature 102/R8: las dos sublíneas del desglose por origen, cada rótulo en su
           // propio elemento (el total NO se recomputa acá: `sla + manual === total`).
