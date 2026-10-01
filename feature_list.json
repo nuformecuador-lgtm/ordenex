@@ -5546,7 +5546,7 @@
       "sdd": true,
       "complexity": "alta",
       "depends_on": 463,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 2). Decision por defecto del leader: segunda hoja 'Detalle por orden' enlazada al movimiento. Falta lectura en lote (hoy verDetalleDeMovimiento/verOrdenesDeFila son de una fila).",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 2). Decision por defecto del leader: segunda hoja 'Detalle por orden' enlazada al movimiento. Falta lectura en lote (hoy verDetalleDeMovimiento/verOrdenesDeFila son de una fila). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con las decisiones por defecto (detalle largo en 2a hoja, arranca con detalle, montos como texto en ficha aparte). Arranca con la 463 done.",
       "branch": null
     },
     {
