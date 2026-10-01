@@ -4,6 +4,7 @@ import { listarArbolGeografico } from "@/lib/actions/geografia";
 import { listarVehiculos } from "@/lib/actions/vehiculos";
 import { listarZonas } from "@/lib/actions/zonas";
 
+import { DescargarCoberturaButton } from "./_components/DescargarCoberturaButton";
 import { ZonasTarifasModule } from "./_components/ZonasTarifasModule";
 
 /**
@@ -11,6 +12,9 @@ import { ZonasTarifasModule } from "./_components/ZonasTarifasModule";
  * `/configuracion`: SOLO el rol `maestro`. Pre-carga el catálogo geográfico, el
  * de vehículos y el listado de zonas, y los pasa al módulo cliente de "Costos
  * por zona" (lista con editar/eliminar + formulario de crear/editar).
+ *
+ * Ficha 465 (R1) — bloque «Cobertura» con la descarga del Excel de cobertura por distrito. Solo
+ * llega aquí el maestro; la action vuelve a autorizar por su cuenta (R2/R3).
  */
 export default async function TarifasPage() {
   const actor = await resolveActorFromSession();
@@ -42,6 +46,16 @@ export default async function TarifasPage() {
           No se pudo cargar el catálogo geográfico.
         </p>
       ) : null}
+
+      <section
+        aria-labelledby="tarifas-cobertura-titulo"
+        className="flex flex-col gap-2"
+      >
+        <h2 id="tarifas-cobertura-titulo" className="text-base font-semibold">
+          Cobertura
+        </h2>
+        <DescargarCoberturaButton />
+      </section>
 
       <ZonasTarifasModule
         initialZonas={zonas}

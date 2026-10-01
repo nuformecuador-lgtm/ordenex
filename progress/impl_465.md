@@ -107,3 +107,79 @@ El worktree no traía `.env`: se copió el del checkout principal (gitignored, n
 - `== init OK ==` · `INIT_EXIT=0`.
 
 Veredicto: backend de la 465 (T1–T6) hecho y verificado con gate completo verde; falta el frontend (T7–T10).
+
+---
+
+# impl 465 — parte FRONTEND (T7–T9)
+
+Búsqueda de código: lectura directa de los archivos que cita el design (`DescargarDatasetButton`,
+`descarga-resultado.ts`, `descarga-dataset.ts`, guardias de `tests/unit/descarga/`); no se usó el grafo.
+Worktree en rama local `fe/465-tarifas-excel-cobertura` (la `feature/465-…` estaba tomada por el
+worktree del backend), empujada a `origin/feature/465-tarifas-excel-cobertura`.
+
+## Archivos
+
+| Archivo | Tarea |
+| --- | --- |
+| `app/(app)/configuracion/tarifas/_components/cobertura-descarga-columnas.ts` (nuevo) | T7 — `AMBITO_DESCARGA_COBERTURA = "tarifas-cobertura"`, `COLUMNAS_DESCARGA_COBERTURA` (orden R5), `MOTIVO_SIN_COBERTURA_LABEL`, `filaCobertura` (único sitio con los textos R7–R14) |
+| `app/(app)/configuracion/tarifas/_components/DescargarCoberturaButton.tsx` (nuevo) | T8 — envuelve `DescargarDatasetButton` (`titulo="Cobertura por distrito"`, `formatos={["xlsx"]}`, `ambitoColumnas`, `label="Descargar cobertura"`) + línea de ayuda (`aria-describedby`) |
+| `app/(app)/configuracion/tarifas/page.tsx` (editado) | T9 — `<section aria-labelledby>` «Cobertura» entre el aviso del catálogo y `<ZonasTarifasModule>` |
+| `lib/actions/cobertura.ts` (editado) | borrada la anotación transitoria `@sin-superficie` (la guardia `superficie-de-uso` queda verde con la action ya alcanzable) |
+| `tests/unit/descarga/cobertura-descarga-columnas.test.ts` (nuevo) | T7 — vive en `tests/unit/descarga/` (no en `tests/unit/app/tarifas/` como decía tasks.md) porque la guardia `columnas-asercion-de-orden` exige allí una aserción `COLUMNAS_DESCARGA_COBERTURA.map(...)` |
+| `tests/unit/app/tarifas/DescargarCoberturaButton.test.tsx` (nuevo) | T8 — con el control común REAL; se doblan action, `buildXlsxRows`, `descargarBlob` y toast |
+| `tests/unit/app/tarifas/TarifasPage.cobertura.test.tsx` (nuevo) | T9 — `page.tsx` real |
+
+No se tocó `TiendasModule`, `CrearTiendaForm`, `ZonasTarifasModule` ni nada de `components/shared/`.
+
+### Desviación del design (§3.6), anotada
+
+`obtenerFilas` NO es `filasDesdeResultado(listarCoberturaDistritos(), filaCobertura)` a secas: el
+adaptador común traduce `unauthenticated` a «No hay una sesion valida. Vuelve a intentarlo; el
+listado no cambió.», que NO pide volver a iniciar sesión como exige R3. El botón intercepta ese caso
+con `MENSAJE_SESION_COBERTURA` («Tu sesión ya no es válida. Vuelve a iniciar sesión y descarga de
+nuevo.») y delega el resto (forbidden, límite, ok) en `filasDesdeResultado`.
+
+### Mutación medida
+
+Quitar `ambitoColumnas`, ofrecer `["xlsx","csv"]` y anular el caso `unauthenticated` en el botón →
+13 casos rojos de `DescargarCoberturaButton.test.tsx` (selector, orden, nombre, R3…). Revertido desde copia.
+
+### T10 (verificación visible) — NO hecha
+
+No se levantó dev server (riesgo de pisar otro en `.next` compartido). Queda abierta para el leader:
+descargar como maestro en `/configuracion/tarifas` y comparar total de filas con
+`SELECT count(*) FROM distrito` y filas «Cobertura = Sí» con los disponibles de exactamente una zona.
+
+## Mapa R → test COMPLETO (R1–R21)
+
+| R | Test |
+| --- | --- |
+| R1 | `tests/unit/app/tarifas/TarifasPage.cobertura.test.tsx` «el maestro ve «Descargar cobertura» con su línea de ayuda…», «otro rol no ve el control», «sin sesión tampoco»; `DescargarCoberturaButton.test.tsx` «465/R1 — muestra «Descargar cobertura» y la línea…» |
+| R2 | `tests/unit/services/CoberturaService.test.ts` «465/R2 — solo maestro…»; `tests/unit/actions/cobertura.test.ts` «forbidden llega tal cual» |
+| R3 | `tests/unit/actions/cobertura.test.ts` «465/R3 — sin sesion»; `DescargarCoberturaButton.test.tsx` «R3 — sesión no válida: pide volver a iniciar sesión, sin archivo» (texto literal, sin `buildXlsxRows` ni `descargarBlob`) |
+| R4 | integración `cobertura-repository.test.ts` «listDistritos: activos e inactivos…»; `CoberturaService.test.ts` «lee en CADA llamada»; `DescargarCoberturaButton.test.tsx` «cada clic vuelve a llamar a la action…» (2 clics → 2 llamadas; montar no lee) |
+| R5 | `tests/unit/descarga/cobertura-descarga-columnas.test.ts` «orden de las claves» y «claves y encabezados exactos»; `DescargarCoberturaButton.test.tsx` «sin preferencia guardada salen las 10 columnas en el orden de R5» |
+| R6 | `tests/unit/utils/cobertura-distrito.test.ts` «465/R6 — orden…»; `CoberturaService.test.ts` «una fila por distrito, en orden…» |
+| R7 | `cobertura-distrito.test.ts` «distrito activo bajo canton retirado: NO disponible»; integración «Bajo Cantón Retirado»; `cobertura-descarga-columnas.test.ts` «R7/R11 — distrito NO disponible…» (Activo «No») |
+| R8 | `cobertura-distrito.test.ts` «465/R7-R8»; `cobertura-descarga-columnas.test.ts` «distrito con cobertura: Sí/Sí…» y R9 (Cobertura «No») |
+| R9 | `cobertura-distrito.test.ts` «465/R9 — el PRIMER motivo»; `cobertura-descarga-columnas.test.ts` «R9 — motivo X → «texto»» (los 5 literales) |
+| R10 | `cobertura-distrito.test.ts` (`motivo: null`); `cobertura-descarga-columnas.test.ts` «distrito con cobertura… motivo vacío (R10)» (`motivo: null`) |
+| R11 | `cobertura-distrito.test.ts` (varias/sin zona/no disponible); integración «Dos Zonas»; `cobertura-descarga-columnas.test.ts` «sin zona: «Sin zona»», «varias zonas: «Varias zonas: A, B»», «NO disponible… la zona igual se nombra» |
+| R12 | `cobertura-distrito.test.ts` central/no central; integración «En La Central»; `cobertura-descarga-columnas.test.ts` GAM «Sí»/«No»/vacía |
+| R13 | `cobertura-distrito.test.ts` «465/R13»; integración «Cero Zonas»/«Una Zona»; `cobertura-descarga-columnas.test.ts` «R13 — zona especial true/false/null → Sí/No/Sin definir» |
+| R14 | integración «listZonaIdsConTarifaGeneral…»; `cobertura-distrito.test.ts` «la tarifa de OTRA zona no cuenta»; `cobertura-descarga-columnas.test.ts` tarifa general «Sí»/«No»/vacía |
+| R15 | `tests/unit/utils/cobertura-vs-resolve-geo.test.ts` |
+| R16 | `DescargarCoberturaButton.test.tsx` «ofrece el selector de columnas», «con la preferencia guardada: solo las marcadas y en el orden fijado», «desmarcar en el selector se guarda en el ámbito propio y aplica a la descarga»; `cobertura-descarga-columnas.test.ts` «ámbito propio» |
+| R17 | `DescargarCoberturaButton.test.tsx` «cada clic… entrega un .xlsx con el nombre de R17» (regex `cobertura-por-distrito-AAAA-MM-DD.xlsx`, MIME xlsx) y «la fecha del nombre es el día de Costa Rica» (04:30Z → 2026-10-01) |
+| R18 | `DescargarCoberturaButton.test.tsx` «la lectura falla» (forbidden), «la action lanza» (sin filtrar el error crudo), «supera el tope» — todos con toast «vuelve a intentarlo»/total y sin archivo |
+| R19 | `DescargarCoberturaButton.test.tsx` «catálogo sin distritos: avisa que no hay datos, sin archivo» |
+| R20 | `DescargarCoberturaButton.test.tsx` «dos clics mientras la primera lectura no termina → una sola lectura» (botón deshabilitado en vuelo) |
+| R21 | `CoberturaService.test.ts` «465/R21 — la descarga no escribe»; la interfaz del repo solo tiene 2 lecturas |
+
+## Gate frontend — salida real
+
+`./init.sh` COMPLETO, log íntegro en `progress/gate_465_frontend.log`: typecheck limpio; lint
+`✖ 220 problems (0 errors, 220 warnings)` (preexistentes); `Test Files 2337 passed (2337)` ·
+`Tests 32455 passed | 26 skipped (32481)` — los 26 skipped son los de siempre (`AnaliticaPage` 17,
+`AnaliticaShell` 9); `cobertura-repository.test.ts` ejecutado (integración no saltada);
+`== init OK ==` · `INIT_EXIT=0`.

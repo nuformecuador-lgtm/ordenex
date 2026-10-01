@@ -31,7 +31,7 @@ function buildCoberturaService(): ICoberturaService {
  * llamada. Sin sesion -> `unauthenticated` sin construir el servicio (R3); rol distinto de
  * maestro -> `forbidden` (R2).
  *
- * @sin-superficie FICHA 465 (transitorio, solo backend): el boton «Descargar cobertura» (T7-T9, `DescargarCoberturaButton` en `/configuracion/tarifas`) la monta en esta MISMA rama; el frontend_dev debe BORRAR esta anotacion al cablearlo, y la guardia `superficie-de-uso` lo exige en cuanto la accion sea alcanzable.
+ * Superficie: `DescargarCoberturaButton` en `/configuracion/tarifas` (ficha 465, T8-T9).
  */
 export async function listarCoberturaDistritos(
   deps: CoberturaActionDeps = {},
