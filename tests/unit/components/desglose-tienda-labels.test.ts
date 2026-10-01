@@ -37,10 +37,10 @@ import {
 const DESDE_ORDENEX: Record<WalletTiendaMovimientoCategoria, string> = {
   cod_recaudado: "Contra-entrega cobrado a los clientes de la tienda",
   flete: "Flete cobrado a la tienda",
-  flete_devolucion: "Flete por rechazo cobrado a la tienda",
+  flete_devolucion: "Flete por devolución a origen cobrado a la tienda",
   comision_cod: "Comisión de contra-entrega cobrada a la tienda",
   iva_flete: "IVA del flete cobrado a la tienda",
-  iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
+  iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda",
   iva_comision_cod: "IVA de la comisión cobrado a la tienda",
   cobro_manual: "Ordenex le cobra a la tienda",
   cobro_tienda_anulado: "Cobro de Ordenex a la tienda anulado",

@@ -43,10 +43,10 @@ export { SALDO_SIGNO_LABEL } from "./saldo-tienda-signo-label";
 export const CATEGORIA_TIENDA_LABEL: Record<WalletTiendaMovimientoCategoria, string> = {
   cod_recaudado: "Contra-entrega cobrado a los clientes de la tienda",
   flete: "Flete cobrado a la tienda",
-  flete_devolucion: "Flete por rechazo cobrado a la tienda",
+  flete_devolucion: "Flete por devolución a origen cobrado a la tienda",
   comision_cod: "Comisión de contra-entrega cobrada a la tienda",
   iva_flete: "IVA del flete cobrado a la tienda",
-  iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
+  iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda",
   iva_comision_cod: "IVA de la comisión cobrado a la tienda",
   // FICHA 381 (R33/R34): el cobro decidido por una persona, DISTINTO de una corrección.
   cobro_manual: "Ordenex le cobra a la tienda",

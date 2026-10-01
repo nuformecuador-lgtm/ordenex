@@ -265,6 +265,21 @@ describe("398/R4 — solo una `entregada` se corrige a rechazo", () => {
     },
   );
 
+  it("466/R11 (E4): el mensaje nombra el resultado destino con su nombre vigente — literal escrito a mano", async () => {
+    const repo = fakeRepo({
+      findGestionEditableEnCierre: vi.fn(async () => editable({ resultado: "novedad" })),
+    });
+    const r = await newService(repo).corregirResultadoGestion({ gestionId: GESTION, motivo: MOTIVO }, MAESTRO);
+    expect(r).toEqual({
+      status: "validation_error",
+      fieldErrors: {
+        resultado: [
+          "Solo una entrega se puede corregir a Devolución a origen por rechazo: los demás resultados no cobran nada.",
+        ],
+      },
+    });
+  });
+
   it("una entrega SIN cobro TAMBIEN se corrige: lo que se arregla es si hubo entrega", async () => {
     // Diferencia deliberada con la correccion del DESGLOSE, que exige `monto_recibido > 0`: alli
     // lo que se reparte es un cobro y sin cobro no hay nada que repartir. Aqui lo que se corrige

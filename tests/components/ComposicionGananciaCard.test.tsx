@@ -346,10 +346,10 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
 
     expect(pares(listaIngresos())).toEqual([
       { rotulo: "Flete cobrado a la tienda", importe: "₡150" },
-      { rotulo: "Flete por rechazo cobrado a la tienda", importe: "₡4.000" },
+      { rotulo: "Flete por devolución a origen cobrado a la tienda", importe: "₡4.000" },
       { rotulo: "Comisión de contra-entrega cobrada a la tienda", importe: "₡900" },
       { rotulo: "IVA del flete cobrado a la tienda", importe: "₡19,50" },
-      { rotulo: "IVA del flete por rechazo cobrado a la tienda", importe: "₡520" },
+      { rotulo: "IVA del flete por devolución a origen cobrado a la tienda", importe: "₡520" },
       { rotulo: "IVA de la comisión cobrado a la tienda", importe: "₡30,25" },
       { rotulo: "Corrección de caja (suma)", importe: "₡90" },
       // Ficha 461 (R27): la fila del cobro de Ordenex a una tienda; en este fixture vale 0,00.

@@ -35,10 +35,10 @@ import {
 /** design §7.2 — los 23 conceptos del libro de la caja, tal como se leen. */
 const CONCEPTOS_ESPERADOS: Record<WalletMovimientoCategoria, string> = {
   ingreso_flete: "Flete cobrado a la tienda",
-  ingreso_flete_devolucion: "Flete por rechazo cobrado a la tienda",
+  ingreso_flete_devolucion: "Flete por devolución a origen cobrado a la tienda",
   ingreso_comision_cod: "Comisión de contra-entrega cobrada a la tienda",
   ingreso_iva_flete: "IVA del flete cobrado a la tienda",
-  ingreso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda",
+  ingreso_iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda",
   ingreso_iva_comision_cod: "IVA de la comisión cobrado a la tienda",
   ingreso_cobro_tienda: "Ordenex le cobra a una tienda",
   egreso_reverso_cobro_tienda: "Cobro a una tienda anulado",
@@ -61,8 +61,8 @@ const CONCEPTOS_ESPERADOS: Record<WalletMovimientoCategoria, string> = {
   ingreso_abono_tienda: "Una tienda le paga a Ordenex",
   egreso_reverso_abono_tienda: "Pago de una tienda a Ordenex anulado",
   // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, flete e IVA por separado.
-  egreso_reverso_flete_devolucion: "Flete por rechazo cobrado a la tienda anulado",
-  egreso_reverso_iva_flete_devolucion: "IVA del flete por rechazo cobrado a la tienda anulado",
+  egreso_reverso_flete_devolucion: "Flete por devolución a origen cobrado a la tienda anulado",
+  egreso_reverso_iva_flete_devolucion: "IVA del flete por devolución a origen cobrado a la tienda anulado",
 };
 
 /** design §7.3 — los 13 origenes del libro de la caja (+ el de la 457: 14). */

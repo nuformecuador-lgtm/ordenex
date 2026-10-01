@@ -75,9 +75,12 @@ describe("276/R38 — los textos fijos de la ficha no llevan PII", () => {
     // esa orden ya no sale a reparto. Un solo texto para las dos cosas obligaria a mentir en una.
     expect(MSG_TOPE_INTENTOS_GESTION).not.toBe(MSG_TOPE_INTENTOS_ASIGNACION);
     // El de gestion es accionable: enumera los desenlaces que quedan (R6).
-    expect(MSG_TOPE_INTENTOS_GESTION).toMatch(/entregada/);
-    expect(MSG_TOPE_INTENTOS_GESTION).toMatch(/rechazada/);
-    expect(MSG_TOPE_INTENTOS_GESTION).toMatch(/incidente/);
+    // FICHA 466 (E6, R11): con el nombre VIGENTE de cada estado, literal escrito a mano.
+    expect(MSG_TOPE_INTENTOS_GESTION).toBe(
+      "esta orden ya agoto sus intentos de entrega: solo se puede registrar como Entregado, " +
+        "Devolución a origen por rechazo o Incidente",
+    );
+    expect(MSG_TOPE_INTENTOS_GESTION).not.toMatch(/rechazada/);
   });
 });
 

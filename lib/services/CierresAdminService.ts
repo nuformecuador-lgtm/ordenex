@@ -71,6 +71,7 @@ import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-s
 // FICHA 398: el destino de la orden corregida sale del PUNTO UNICO de la regla `resultado ->
 // estado` (239/R3), no de un literal escrito en el servicio.
 import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
+import { NOMBRE_ESTADO } from "@/lib/types/order-status";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
@@ -111,8 +112,10 @@ const msgDescuadre = (total: string) => `El desglose debe sumar exactamente ${to
 // FICHA 398 — mensajes de la CORRECCION DEL RESULTADO. Texto fijo, i18n-ready y SIN PII: dicen
 // QUE esta mal, que es lo unico que el admin necesita para arreglarlo. Nunca nombran al
 // mensajero, al destinatario ni al monto.
+// FICHA 466 (E4, R9/R11): el resultado destino se nombra con su nombre VIGENTE (455), no «rechazo».
 const MSG_CORRECCION_SOLO_ENTREGA =
-  "Solo una entrega se puede corregir a rechazo: los demás resultados no cobran nada.";
+  `Solo una entrega se puede corregir a ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}: ` +
+  "los demás resultados no cobran nada.";
 const MSG_MOTIVO_CORRECCION = "El motivo de la corrección es obligatorio.";
 
 // Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto

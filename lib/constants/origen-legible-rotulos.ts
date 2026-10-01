@@ -18,7 +18,7 @@ export const METODO_ORIGEN_LABEL = METODO_LABEL;
 
 export const ORIGEN_ENTIDAD_LABEL = {
   /** Una fila de caja del cobro por rechazo (flete o IVA del flete por rechazo). */
-  cobroPorRechazo: "cobro por rechazo",
+  cobroPorRechazo: "cobro por devolución a origen",
   guia: (guia: string) => `guía ${guia}`,
   remision: (remision: string) => `remisión ${remision}`,
   podio: (dia: string) => `podio del ${dia}`,
