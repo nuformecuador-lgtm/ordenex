@@ -174,7 +174,7 @@ describe("466 · R9, R13 — novedades (C36, E7 y la nota del tope)", () => {
   it("la gestion desde ayuda: confirmacion (E7), nota del tope (decision del leader) y boton «Rechazar» (R13)", () => {
     expect(GESTION_AYUDA_EXITO.rechazar).toBe("La orden quedó en Devolución a origen por rechazo.");
     expect(GESTION_AYUDA_TOPE_NOTA).toBe(
-      "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es la devolución a origen por rechazo, y el mensajero todavía puede entregarla.",
+      "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es la Devolución a origen por rechazo, y el mensajero todavía puede entregarla.",
     );
     expect(GESTION_AYUDA_CONFIRMAR.rechazar).toBe("Rechazar");
   });

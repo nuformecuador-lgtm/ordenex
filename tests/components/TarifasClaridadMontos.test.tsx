@@ -330,7 +330,7 @@ describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
 });
 
 describe("Tarifas de zona/tienda — rótulos (TarifaCampos)", () => {
-  it("el flete se llama «por rechazo», que es el único resultado que lo cobra", () => {
+  it("el flete se llama «Flete por devolución a origen» (466), el único resultado que lo cobra", () => {
     renderGrid();
 
     // ⏳ FICHA 338 (2026-08-31): el nombre DEFINITIVO, para toda la app. «Flete de retorno (solo

@@ -45,6 +45,10 @@ antes del 2026-08-31, «Flete de devolución»).
 Y en `docs/api/manual-metricas-por-mensajero.md`, la misma frase del `costoReal`: «flete por
 devolución a origen y su IVA».
 
+Y en la guía de integración (`docs/api/guia-integracion/guia-integracion.html`, §5.3), la nota del
+`costoReal`: «Si la orden termina en Devolución a origen por rechazo (`devolucion_a_origen_por_rechazo`),
+lo que se factura es el escenario `devuelto` de la cotización…» (antes: «Si la orden termina con rechazo…»).
+
 **Lo que NO cambia:** los campos `flete` e `iva` del escenario `devuelto`, sus importes, el código de
 resultado `devolucion_a_origen_por_rechazo`, y los ids de métrica `rechazos` y `tasa_rechazo` (sus
 rótulos en la aplicación pasan a «Devoluciones a origen» y «Tasa de devolución a origen», pero el id

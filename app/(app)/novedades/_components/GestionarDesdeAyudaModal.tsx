@@ -206,7 +206,7 @@ export const GESTION_AYUDA_FALTA_FECHA = "la nueva fecha";
  * pida `reprogramada` en el tope, antes de subir ninguna evidencia.
  */
 export const GESTION_AYUDA_TOPE_NOTA =
-  `A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es la ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo.toLowerCase()}, y el mensajero todavía puede entregarla.`;
+  `A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es la ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo}, y el mensajero todavía puede entregarla.`;
 
 /** El rótulo del único botón que queda cuando el desenlace no está disponible: cerrar y volver. */
 export const GESTION_AYUDA_TOPE_CERRAR = "Entendido";

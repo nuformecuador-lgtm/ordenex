@@ -78,12 +78,31 @@ describe("466/R18 — el manual de metricas por mensajero", () => {
   });
 });
 
+describe("466/R9 — la guia de integracion (HTML) nombra el resultado por su nombre vigente", () => {
+  const GUIA = leer("docs/api/guia-integracion/guia-integracion.html");
+
+  it("la nota del `costoReal` dice «termina en Devolución a origen por rechazo», no «termina con rechazo»", () => {
+    expect(GUIA).toContain(
+      "Si la orden termina en Devolución a origen por rechazo (<code>devolucion_a_origen_por_rechazo</code>), lo que se factura es el escenario <code>devuelto</code> de la cotización, no estos importes.",
+    );
+    expect(GUIA).not.toMatch(/termina con rechazo/i);
+  });
+});
+
 describe("466/R19 — la entrada del CHANGELOG", () => {
   const i = CHANGELOG.indexOf("## 2026-10-01 — Sin ruptura — El flete de una devolución a origen");
   const entrada = CHANGELOG.slice(i, CHANGELOG.indexOf("\n## ", i + 1));
 
-  it("existe, esta fechada, es la primera y se marca SIN ruptura", () => {
-    expect(i).toBe(CHANGELOG.indexOf("\n## ") + 1);
+  it("existe, esta fechada, va en orden cronologico (mas nueva arriba) y se marca SIN ruptura", () => {
+    expect(i).toBeGreaterThan(0);
+    // No se exige «la primera»: se romperia con la proxima entrada (review_466 m3). Mismo criterio que
+    // changelog-455: por encima solo entradas de fecha posterior o igual, por debajo solo anteriores o iguales.
+    const fechas = [...CHANGELOG.matchAll(/^## (\d{4}-\d{2}-\d{2}) /gm)].map((m) => ({ fecha: m[1], en: m.index ?? 0 }));
+    expect(fechas.length).toBeGreaterThan(3);
+    for (const { fecha, en } of fechas) {
+      if (en < i) expect(fecha >= "2026-10-01", `entrada ${fecha} por encima de la 466`).toBe(true);
+      if (en > i) expect(fecha <= "2026-10-01", `entrada ${fecha} por debajo de la 466`).toBe(true);
+    }
     expect(entrada).toContain("**Sin ruptura.**");
   });
 

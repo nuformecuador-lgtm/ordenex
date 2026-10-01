@@ -152,6 +152,13 @@ export const DICCIONARIOS = [
   "app/(app)/analitica/_components/entregas/analitica-productos-descarga-columnas.ts",
   "app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx",
   "app/(app)/novedades/_components/RechazosSlaModule.tsx",
+  // review_466 m1: archivos con textos de ESTADO de la orden fuera de los diccionarios (E4, E5, E12,
+  // E13). Sin ellos, devolver E5 a «— entregada o rechazada.» solo lo paraba el test del componente.
+  // `RechazarNovedadModal.tsx` NO entra: sus textos visibles nombran el ACTO de la tienda («Rechazar»,
+  // «Motivo del rechazo», R13) y el flete (C36, ya vigilado por el brazo 2), nunca el estado de la orden.
+  "app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx",
+  "lib/notificaciones/emitir.ts",
+  "lib/services/CierresAdminService.ts",
 ] as const;
 
 /**
@@ -184,9 +191,22 @@ export const EXCEPCIONES: Record<string, { textos: readonly string[]; motivo: st
     ],
     motivo: "nombra un CIERRE rechazado (§0.6, otra entidad; design §3.1)",
   },
+  // Medido el 2026-10-01 (review_466 m1), al sumar estos tres archivos a `DICCIONARIOS`.
+  "app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx": {
+    textos: ["Foto de evidencia del rechazo"],
+    motivo: "aria de la foto que prueba el ACTO del destinatario (§0.6; review_466 lo clasifica como legitimo)",
+  },
+  "lib/notificaciones/emitir.ts": {
+    textos: ["fue rechazado. Revísalo, corrígelo y vuelve a enviarlo a aprobación."],
+    motivo: "«Tu cierre del día fue rechazado»: el estado de un CIERRE (§0.6, otra entidad)",
+  },
+  "lib/services/CierresAdminService.ts": {
+    textos: ["El motivo de rechazo es obligatorio.", "rechazado sin resuelto_at: no se puede fechar el aviso"],
+    motivo: "el rechazo de un CIERRE por el admin (motivo obligatorio) y un error tecnico del cierre (§0.6, otra entidad)",
+  },
   // `GestionarDesdeAyudaModal.tsx` (`GESTION_AYUDA_TOPE_NOTA`) YA NO es excepcion: el leader decidio
   // el 2026-10-01 que «es el rechazo» nombraba el RESULTADO que la tienda registra, y la nota pasa a
-  // decir «… es la devolución a origen por rechazo» con `NOMBRE_ESTADO` (Fase 2).
+  // decir «… es la Devolución a origen por rechazo» con `NOMBRE_ESTADO` (Fase 2; con su mayúscula, review_466 m2).
 };
 
 /**
