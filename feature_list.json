@@ -5572,6 +5572,30 @@
       "depends_on": null,
       "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado. || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Confirmado: revierte la eleccion de la 338 (Flete por devolucion a origen). || HECHA 2026-10-01, en dev por PR #838 (a42d7bc3). NO desplegada. Dos revisiones (la 1a rechazo por la guia de integradores y faltar ver la app; la 2a APROBADA). Gate completo verde 32407 (progress/gate_466_fix.log). Ver la app: /wallet, estado de cuenta, cierres, tarifas y analitica sin rechazo olvidado. Pendiente aceptado: mirar /mi-wallet y 4 pantallas mas con sesion de tienda la proxima vez. || Gate completo post-merge de dev (465+466) VERDE: 32504 tests (progress/gate_dev_tras_838.log). El rojo previo (ajuste-caja-anulacion-461) fue por base local compartida con la 463: aislado 3/3.",
       "branch": "feature/466-rechazo-nombre-nuevo"
+    },
+    {
+      "id": 467,
+      "title": "barra del libro de la wallet igual a la de ordenes",
+      "description": "Una sola barra sobre el libro (orden en iconos, buscador, Filtros con casillas, Descargar, Columnas) con los componentes de ordenes, en caja y estados de cuenta.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 463 en la app. Decidido: una sola barra; Periodo, A quien, Entra/Sale y Concepto dentro de Filtros; desaparece la tarjeta de filtros con Aplicar. Periodo y A quien siguen moviendo las tarjetas. Solo componentes existentes (BuscadorFiltros, FilterComponent, SegmentedToggle soloIcono).",
+      "branch": null
+    },
+    {
+      "id": 468,
+      "title": "Excel del libro de la wallet: kardex y detalle por guia que cuadran",
+      "description": "Hoja 1 en kardex (Entra, Sale, Saldo corrido, saldo inicial y final, montos numericos); hoja 2 agrupada por guia con todos los conceptos y total igual al de la hoja 1.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 464. Decidido: detalle agrupado por guia con subtotal; los movimientos sin guia en seccion final; total hoja 2 = total hoja 1, siempre. Medido en prod: COD (206/206), pago mensajero (207/207) e indemnizacion (1/1) cuadran con gestion_orden.monto_recibido/pago_mensajero/indemnizacion. Si algo no cuadra, fila visible de diferencia.",
+      "branch": null
     }
   ]
 }
