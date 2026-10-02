@@ -64,3 +64,10 @@ export function textoAQuien(a: AQuienDTO): string {
   if (a.nombre === null) return PANEL_TEXTO.sinDato;
   return a.beneficiario === null ? a.nombre : `${a.nombre} · ${PANEL_TEXTO.aTercero(a.beneficiario)}`;
 }
+
+/**
+ * FICHA 463 (R23/R25) — el placeholder del buscador del libro de la caja. Es la documentación de lo que
+ * el campo alcanza: la descripción, el nombre y la referencia anotados y quién registró.
+ */
+export const BUSCADOR_LIBRO_CAJA_PLACEHOLDER =
+  "Buscar por descripción, nombre o referencia anotada, o quién registró";

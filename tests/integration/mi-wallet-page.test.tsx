@@ -234,15 +234,17 @@ describe("MiWalletPage — pre-fetch del adminTienda (R18/R21, 458-D R34/R36)", 
   });
 });
 
-describe("458-D R34 — el estado de cuenta de la tienda: saldo inicial arriba y saldo corrido", () => {
-  it("la primera fila es el saldo inicial y el corrido de la ÚLTIMA fila es el saldo de la tarjeta", async () => {
-    sembrar(estadoTienda([COD, FLETE, PAGO]));
+// FICHA 463 (R34/R39) — REESCRITO: `/mi-wallet` llega en «Más recientes» (el servidor devuelve la fila
+// más nueva primero) y el saldo inicial cierra la última página, donde cae en el tiempo.
+describe("458-D R34 + 463 R39 — el estado de cuenta de la tienda: saldo inicial al final y saldo corrido", () => {
+  it("la ÚLTIMA fila es el saldo inicial y el corrido de la PRIMERA (la más reciente) es el saldo de la tarjeta", async () => {
+    // El saldo de la tarjeta es el corrido de la fila MÁS RECIENTE, que en «Más recientes» es la primera.
+    sembrar(estadoTienda([PAGO, FLETE, COD], { saldoActual: PAGO.saldoCorrido, saldoFinal: PAGO.saldoCorrido, signo: "positivo", sentido: "ordenex_debe" }));
     await verMiWallet();
 
     const filas = within(tabla()).getAllByRole("row").slice(1);
-    expect(filas[0]).toHaveTextContent("Saldo inicial");
-    const ultima = filas[filas.length - 1];
-    expect(ultima).toHaveTextContent("₡28.800");
+    expect(filas[filas.length - 1]).toHaveTextContent("Saldo inicial");
+    expect(filas[0]).toHaveTextContent("₡28.800");
     expect(within(tarjetas()).getAllByText("₡28.800").length).toBeGreaterThan(0);
   });
 
@@ -252,7 +254,8 @@ describe("458-D R34 — el estado de cuenta de la tienda: saldo inicial arriba y
     for (const chip of ["Todo", "Cierres", "Pagos", "Cobros", "Correcciones"]) {
       expect(within(screen.getByRole("group", { name: "Filtrar el estado de cuenta de Tania Tienda" })).getByRole("button", { name: chip })).toBeInTheDocument();
     }
-    expect(screen.getByLabelText("Desde")).toHaveAttribute("type", "date");
+    // FICHA 463: el periodo es el calendario de la zona de la wallet.
+    expect(screen.getByRole("button", { name: "Periodo" })).toBeInTheDocument();
     expect(tabla().textContent ?? "").not.toContain("Registró");
   });
 

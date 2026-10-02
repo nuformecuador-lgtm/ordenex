@@ -130,6 +130,15 @@ export const ESTADO_CUENTA_TEXTO = {
   aplicar: "Aplicar",
   limpiar: "Quitar periodo",
   periodoInvalido: "«Desde» no puede ser posterior a «hasta».",
+  /**
+   * FICHA 463 (R23/R26/R27) — el placeholder del buscador del extracto. En la oficina alcanza la
+   * descripción y quién registró; en `/mi-wallet` SOLO la descripción (la tienda no ve los nombres de
+   * la gente de Ordenex, R27), así que no la nombra.
+   */
+  buscarPlaceholder: {
+    oficina: "Buscar por descripción o quién registró",
+    tienda: "Buscar por descripción",
+  },
   acciones: (nombre: string) => `Acciones sobre la cuenta de ${nombre}`,
   volver: "Volver al listado",
   /** FICHA 458-D (R19, 172/457/459) — el método y la referencia del pago de la fila, en palabras. */

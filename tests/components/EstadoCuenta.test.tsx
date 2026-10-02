@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
+import userEvent from "@testing-library/user-event";
+import { diaDelMesActual, elegirPeriodo } from "@/tests/fixtures/periodo-calendario";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { EstadoCuentaDTO } from "@/lib/types/estado-cuenta";
@@ -128,27 +130,29 @@ describe("R19–R21/R23 — el extracto: saldo inicial arriba, orden y saldo cor
     fila({ n: 3, fecha: "2026-09-09", abono: "50.00", saldoCorrido: "750.00" }),
   ];
 
-  it("la primera línea es el saldo inicial; las demás, en el orden del servidor con SU saldo corrido", () => {
+  // FICHA 463 (R34/R39) — REESCRITO: se entra en «Más recientes» y ahí el saldo inicial cae AL FINAL
+  // (la última línea de la última página), donde cae en el tiempo. Antes era siempre la primera.
+  it("463 R39: el saldo inicial es la ÚLTIMA línea; las demás, en el orden del servidor con SU saldo corrido", () => {
     montarTienda(estado({ saldoInicial: "0.00", filas: TRES, total: 3 }));
     const filas = filasDeLaTabla();
     expect(filas).toHaveLength(4);
-    expect(filas[0].textContent).toContain("Saldo inicial");
-    expect(filas[0].textContent).toContain("₡0");
-    expect(filas[1].textContent).toContain("2026-09-10");
-    expect(filas[1].textContent).toContain("Contra-entrega cobrado a los clientes de la tienda");
-    expect(filas[1].textContent).toContain("₡1.000");
-    expect(filas[2].textContent).toContain("Ordenex le cobra a la tienda");
-    expect(filas[2].textContent).toContain("Cobro de etiquetas");
-    expect(filas[2].textContent).toContain("Registró: Ana Admin");
-    expect(filas[2].textContent).toContain("Con comprobante");
-    expect(filas[2].textContent).toContain("₡700");
-    expect(filas[3].textContent).toContain("2026-09-09");
-    expect(filas[3].textContent).toContain("₡750");
+    expect(filas[3].textContent).toContain("Saldo inicial");
+    expect(filas[3].textContent).toContain("₡0");
+    expect(filas[0].textContent).toContain("2026-09-10");
+    expect(filas[0].textContent).toContain("Contra-entrega cobrado a los clientes de la tienda");
+    expect(filas[0].textContent).toContain("₡1.000");
+    expect(filas[1].textContent).toContain("Ordenex le cobra a la tienda");
+    expect(filas[1].textContent).toContain("Cobro de etiquetas");
+    expect(filas[1].textContent).toContain("Registró: Ana Admin");
+    expect(filas[1].textContent).toContain("Con comprobante");
+    expect(filas[1].textContent).toContain("₡700");
+    expect(filas[2].textContent).toContain("2026-09-09");
+    expect(filas[2].textContent).toContain("₡750");
   });
 
   it("lo automático dice qué lo produjo y quién lo decidió (R57)", () => {
     montarTienda(estado({ filas: [TRES[0]], total: 1 }));
-    expect(filasDeLaTabla()[1].textContent).toContain("Registró: Automático · Aprobación del cierre por Ana Admin");
+    expect(filasDeLaTabla()[0].textContent).toContain("Registró: Automático · Aprobación del cierre por Ana Admin");
   });
 
   it("R21: con un chip, el saldo corrido sigue siendo el de la cuenta ENTERA (el que manda el servidor)", async () => {
@@ -160,12 +164,14 @@ describe("R19–R21/R23 — el extracto: saldo inicial arriba, orden y saldo cor
     fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
     await waitFor(() => {
       expect(filasDeLaTabla()).toHaveLength(2);
-      expect(filasDeLaTabla()[1].textContent).toContain("Ordenex le cobra a la tienda");
+      expect(filasDeLaTabla()[0].textContent).toContain("Ordenex le cobra a la tienda");
     });
-    expect(filasDeLaTabla()[1].textContent).toContain("₡700");
+    expect(filasDeLaTabla()[0].textContent).toContain("₡700");
   });
 
-  it("la página 2 no repite la línea del saldo inicial", async () => {
+  // FICHA 463 (R39) — REESCRITO: con «Más recientes» el saldo inicial va en la ÚLTIMA página y en
+  // ninguna otra. 21 movimientos de 20 en 20: la página 1 no lo lleva y la 2 lo cierra.
+  it("463 R39: la página 1 no lleva el saldo inicial; la última lo lleva al final, una sola vez", async () => {
     const muchas = Array.from({ length: 20 }, (_, i) => fila({ n: i + 1 }));
     verEstadoCuentaMock.mockImplementation(async (input: { page: number }) => ({
       status: "ok",
@@ -175,16 +181,18 @@ describe("R19–R21/R23 — el extracto: saldo inicial arriba, orden y saldo cor
           : estado({ filas: muchas, total: 21 }),
     }));
     montarTienda(estado({ filas: muchas, total: 21 }));
+    expect(filasDeLaTabla()).toHaveLength(20);
+    for (const f of filasDeLaTabla()) expect(f.textContent).not.toContain("Saldo inicial");
     fireEvent.click(screen.getByRole("button", { name: /siguiente/i }));
     await waitFor(() => {
-      expect(filasDeLaTabla()).toHaveLength(1);
+      expect(filasDeLaTabla()).toHaveLength(2);
       expect(filasDeLaTabla()[0].textContent).toContain("2026-09-30");
     });
     expect(verEstadoCuentaMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ cuenta: { tipo: "tienda", id: UUID_TIENDA }, page: 2 }),
     );
-    expect(filasDeLaTabla()[0].textContent).toContain("2026-09-30");
     expect(filasDeLaTabla()[0].textContent).not.toContain("Saldo inicial");
+    expect(filasDeLaTabla()[1].textContent).toContain("Saldo inicial");
   });
 });
 
@@ -229,32 +237,39 @@ describe("R24 — los chips por tipo de cuenta (D10)", () => {
   });
 });
 
+// FICHA 463 — REESCRITO: el periodo es el calendario de la ZONA DE LA WALLET con «Aplicar» (antes, dos
+// `input[type=date]`). Con el calendario un «desde» posterior a «hasta» no se puede elegir: los
+// extremos se ordenan solos; el aviso de R18 lo mide `filter-component-aplicar-463.test.tsx`.
 describe("R16 — el periodo: días de Costa Rica tal como se eligen", () => {
   it("aplicar manda `desde` y `hasta` como YYYY-MM-DD y vuelve a la página 1", async () => {
+    const user = userEvent.setup();
     montarTienda(estado());
-    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-09-01" } });
-    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-09-15" } });
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await elegirPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 15);
+    expect(verEstadoCuentaMock).not.toHaveBeenCalled(); // 463 R15: editar no lee
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
     await waitFor(() =>
       expect(verEstadoCuentaMock).toHaveBeenLastCalledWith({
         cuenta: { tipo: "tienda", id: UUID_TIENDA },
-        desde: "2026-09-01",
-        hasta: "2026-09-15",
+        desde: diaDelMesActual(1),
+        hasta: diaDelMesActual(15),
         page: 1,
         pageSize: 20,
       }),
     );
-    // R20: con periodo, la primera línea es el saldo inicial DEL PERIODO, fechado el primer día.
-    await waitFor(() => expect(filasDeLaTabla()[0].textContent).toContain("Saldo inicial del periodo"));
-    expect(filasDeLaTabla()[0].textContent).toContain("2026-09-01");
+    expect(verEstadoCuentaMock).toHaveBeenCalledTimes(1); // 463 R16: una sola lectura
+    // R20: con periodo, la línea del saldo inicial es la DEL PERIODO, fechada el primer día. Con «Más
+    // recientes» (463 R39) cierra la última página.
+    await waitFor(() => {
+      const filas = filasDeLaTabla();
+      expect(filas[filas.length - 1].textContent).toContain("Saldo inicial del periodo");
+    });
+    const filas = filasDeLaTabla();
+    expect(filas[filas.length - 1].textContent).toContain(diaDelMesActual(1));
   });
 
-  it("«desde» posterior a «hasta» se avisa y no se pide nada", () => {
+  it("463 R17: «Aplicar» nace deshabilitado y no se lee nada hasta pulsarlo", () => {
     montarTienda(estado());
-    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-09-20" } });
-    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-09-10" } });
-    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }));
-    expect(screen.getByRole("alert").textContent).toBe("«Desde» no puede ser posterior a «hasta».");
+    expect(screen.getByRole("button", { name: "Aplicar" })).toBeDisabled();
     expect(verEstadoCuentaMock).not.toHaveBeenCalled();
   });
 });
@@ -286,7 +301,7 @@ describe("«Ver» → el panel de la 458-C, y H6", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: /^Ver / })).toBeNull();
-    expect(filasDeLaTabla("Bodega")[1].textContent).toContain("Consolidación declarada");
+    expect(filasDeLaTabla("Bodega")[0].textContent).toContain("Consolidación declarada");
   });
 
   it("H6: ningún uuid en el texto ni en los nombres accesibles", () => {

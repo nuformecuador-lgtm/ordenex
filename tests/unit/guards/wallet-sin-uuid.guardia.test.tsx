@@ -82,7 +82,7 @@ vi.mock("@/hooks/useToast", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
+import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
 import { DetalleFilaComposicion } from "@/app/(app)/wallet/_components/DetalleFilaComposicion";
 import { FILTROS_VACIOS } from "@/app/(app)/wallet/_components/WalletFiltros";
 import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
@@ -299,9 +299,9 @@ const SUPERFICIES: { nombre: string; montar: () => Promise<void> }[] = [
     },
   },
   {
-    nombre: "/wallet · filtros (categoría abierta)",
+    nombre: "/wallet · filtros del libro (categoría abierta)",
     montar: async () => {
-      conSWR(<WalletFiltros onAplicar={vi.fn()} onLimpiar={vi.fn()} />);
+      conSWR(<LibroCajaBarraControlada />);
       await waitFor(() => expect(H.conceptos).toHaveBeenCalled());
     },
   },

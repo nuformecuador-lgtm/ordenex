@@ -14,12 +14,16 @@
 /** Prefijo de la clave. Identifica esta lectura entre todas las de la app. */
 export const CLAVE_SALDOS_TIENDAS = "wallet-tiendas:saldos";
 
-/** La clave de UNA página de la tabla de saldos. */
+/**
+ * La clave de UNA página de la tabla de saldos. FICHA 463 (R45): lleva también el término del buscador
+ * (`""` sin búsqueda), para que dos búsquedas no compartan caché. El refresco por predicado no cambia.
+ */
 export function claveSaldosTiendas(
   page: number,
   pageSize: number,
-): readonly [string, number, number] {
-  return [CLAVE_SALDOS_TIENDAS, page, pageSize] as const;
+  busqueda = "",
+): readonly [string, number, number, string] {
+  return [CLAVE_SALDOS_TIENDAS, page, pageSize, busqueda] as const;
 }
 
 /** Filtro de `mutate`: alcanza la tabla de saldos en cualquier página y tamaño, y nada más. */

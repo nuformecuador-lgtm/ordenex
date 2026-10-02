@@ -1,53 +1,28 @@
-"use client";
-
-import { useState } from "react";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-
-import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
-import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
-import { CONCEPTOS_FILTRO_AVISO, opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
-import { useConceptosConMovimientos } from "@/components/shared/wallet/use-conceptos-con-movimientos";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
-import type { WalletMovimientoTipo } from "@/lib/types/wallet";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
+import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
+import { ORDEN_LIBRO_POR_DEFECTO } from "@/components/shared/wallet/zonas-filtros-labels";
 
-import {
-  A_QUIEN_FILTRO,
-  A_QUIEN_SELECTOR_TEXTOS,
-  aQuienDeValor,
-  valorDeAQuien,
-} from "./a-quien-selector";
-import { useQuienesDelLibroCaja } from "./use-quienes-del-libro-caja";
-
-import { FILTRO_DIRECCION, type DireccionFiltro } from "./libro-caja-labels";
-import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "./wallet-labels";
-
-// Feature 42 (T12, R20) — filtros del libro: tipo, categoría y rango de fechas (desde/hasta).
-// Mantiene un BORRADOR local; al pulsar "Aplicar" emite los filtros al módulo, que recarga
-// libro + cifras de la caja por Server Action (la cabecera refleja el conjunto filtrado, R20).
-// "Limpiar" resetea a sin filtros.
+// Feature 42 (T12, R20) — los filtros del libro de la caja: tipo, categoría y rango de fechas.
 //
-// FICHA 458-E (TE.2, design §5.2, R54): el `Select` de tipo pasa a un filtro SEGMENTADO Todo / Entra
-// / Sale (`SegmentedToggle`). Es un conmutador, así que se APLICA al pulsarlo —con el resto del
-// borrador— y no espera a «Aplicar»; el valor sigue siendo el mismo `tipo` del borde (`ingreso` /
-// `egreso`, vacío = todo), así que el servidor, las tarjetas y la descarga no cambian (R54: «como hoy»).
+// FICHA 463 (T7, design §5.2) — los filtros se PARTEN EN DOS NIVELES y este archivo deja de pintar
+// nada: es el ÚNICO sitio que traduce los filtros de la caja a un input de borde.
 //
-// Ficha 458-A (TA.3, R13–R15): la categoría ofrece SOLO los conceptos con movimientos en el
-// periodo y el tipo del borrador, cada uno con su número, leídos del servidor
-// (`conceptosConMovimientosAction`). Ninguna categoría se nombra aquí: la lista es la del
-// servidor, con los rótulos de `CATEGORIA_LABEL`. La elegida se conserva con 0 si el periodo
-// cambia y se queda sin movimientos (R15).
+//  - **Zona de la wallet** (`FiltrosWallet`): el periodo y «A quién». Mueven TODA la wallet —resumen,
+//    composición, desglose, detalle de una fila de la composición— y el libro. La pinta
+//    `WalletFiltrosCaja.tsx`, encima de las cifras.
+//  - **Zona del libro** (`FiltrosLibro`): Entra/Sale, la categoría, el término y el orden. Filtran
+//    SOLO el libro y su descarga (R9/R12). La pinta `LibroCajaBarra.tsx`, encima de la tabla.
 //
-// Feature 200 (tanda 3) — de BLOQUE a BARRA. Antes eran cuatro campos con su rótulo encima
-// y dos botones en `flex-wrap items-end gap-4`: dos alturas de pantalla para cuatro
-// controles, empujando la tabla —que es lo que se viene a mirar— hacia abajo. Ahora es una
-// sola línea en pantallas grandes que envuelve limpio en las chicas, y vive dentro de la
-// tarjeta del libro como su banda superior. Ni el contrato (`onAplicar`/`onLimpiar`/
-// `disabled`), ni el borrador local, ni los cuatro campos cambian.
+// El componente de una sola banda que vivía aquí (con su borrador, «Aplicar» y «Limpiar» al pie del
+// libro) se retiró: movía las cifras con filtros que el usuario leía como del libro.
 
+/**
+ * Los filtros de la caja tal como los entiende un borde de CIFRAS (`listarMovimientosSchema`): tipo,
+ * categoría, periodo y «A quién». Lo usan la composición y el detalle de una fila, que desde la 463
+ * reciben SIEMPRE tipo y categoría vacíos (`filtrosDeWallet`): las cifras no se filtran por la zona
+ * del libro (R12).
+ */
 export interface WalletFiltrosValue {
   tipo: string;
   categoria: string;
@@ -68,15 +43,9 @@ export const FILTROS_VACIOS: WalletFiltrosValue = {
 };
 
 /**
- * Ficha 339 (T5.6, design §5.4) — los filtros VIGENTES traducidos al input de un borde, con los
- * vacios FUERA. Una cadena vacia no es «no filtres»: seria un filtro que no filtra nada… o un
- * `validation_error`, segun el campo.
- *
- * Vive aqui —junto al tipo y al valor vacio que ya viven aqui— y no dentro de `WalletModule`
- * porque la usan TRES caminos: la descarga del libro completo, el listado paginado (compuesta
- * con la pagina) y el detalle de una fila de la tarjeta de la ganancia. Dos constructores
- * distintos de los mismos filtros es exactamente como el detalle acabaria enseñando un conjunto
- * que no es el del importe de su fila (R20).
+ * Ficha 339 (T5.6, design §5.4) — los filtros traducidos al input de un borde, con los vacíos FUERA.
+ * Una cadena vacía no es «no filtres»: sería un filtro que no filtra nada… o un `validation_error`,
+ * según el campo.
  */
 export function inputDeFiltros(filtros: WalletFiltrosValue): Record<string, unknown> {
   const input: Record<string, unknown> = {};
@@ -84,204 +53,69 @@ export function inputDeFiltros(filtros: WalletFiltrosValue): Record<string, unkn
   if (filtros.categoria) input.categoria = filtros.categoria;
   if (filtros.desde) input.desde = filtros.desde;
   if (filtros.hasta) input.hasta = filtros.hasta;
-  // FICHA 458-E (R59): la MISMA clave en los seis bordes del libro (libro, tarjetas + composición,
-  // desglose, descarga, detalle de una fila de la composición) y en los conceptos.
+  // FICHA 458-E (R59): la MISMA clave en todos los bordes de la caja y en los conceptos.
   if (filtros.aQuien) input.aQuien = filtros.aQuien;
   return input;
 }
 
-export interface WalletFiltrosProps {
-  /** Emite los filtros aplicados (recarga con page reseteada a 1). */
-  onAplicar: (value: WalletFiltrosValue) => void;
-  /** Emite el reset a sin filtros. */
-  onLimpiar: () => void;
-  /** Deshabilita los controles mientras corre una recarga. */
-  disabled?: boolean;
+/** FICHA 463 — la zona de la WALLET: lo que mueve toda la caja (R3). */
+export interface FiltrosWallet {
+  desde: string;
+  hasta: string;
+  aQuien?: AQuienFiltro;
 }
 
-/** El `tipo` del borrador ↔ la opción del filtro segmentado («» = todo). */
-function direccionDe(tipo: string): DireccionFiltro {
-  return tipo === "ingreso" || tipo === "egreso" ? tipo : "todo";
+/** FICHA 463 — la zona del LIBRO: lo que filtra solo el libro (R5). */
+export interface FiltrosLibro {
+  /** `ingreso` / `egreso`; vacío = Todo. */
+  tipo: string;
+  categoria: string;
+  /** El término YA recortado y con el mínimo cumplido, o vacío (sin búsqueda). */
+  termino: string;
+  sortDir: DireccionOrden;
 }
 
-export function WalletFiltros({ onAplicar, onLimpiar, disabled = false }: WalletFiltrosProps) {
-  const [draft, setDraft] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
+export const FILTROS_WALLET_VACIOS: FiltrosWallet = { desde: "", hasta: "" };
 
-  function set<K extends keyof WalletFiltrosValue>(key: K, value: string) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+/** R34 — se entra sin filtros del libro y en «Más recientes». */
+export const FILTROS_LIBRO_INICIALES: FiltrosLibro = {
+  tipo: "",
+  categoria: "",
+  termino: "",
+  sortDir: ORDEN_LIBRO_POR_DEFECTO,
+};
+
+/**
+ * R12 — los filtros de las CIFRAS: solo la zona de la wallet. Tipo y categoría van vacíos a propósito,
+ * así que `inputDeFiltros` los deja fuera y el borde de las cifras nunca los recibe.
+ */
+export function filtrosDeWallet(fw: FiltrosWallet): WalletFiltrosValue {
+  return { ...FILTROS_VACIOS, desde: fw.desde, hasta: fw.hasta, ...(fw.aQuien ? { aQuien: fw.aQuien } : {}) };
+}
+
+/** R12/R14 — el input de resumen, desglose y detalle de fila: sin tipo, categoría, término ni orden. */
+export function inputDeWallet(fw: FiltrosWallet): Record<string, unknown> {
+  return inputDeFiltros(filtrosDeWallet(fw));
+}
+
+/**
+ * R8/R9/R42 — el input del LIBRO (paginado y descarga): la zona de la wallet + la del libro. El término
+ * solo viaja con el mínimo cumplido (el borde rechaza uno más corto) y el orden solo cuando no es el
+ * de por defecto: «Más recientes» es lo que el borde aplica sin que nadie lo pida (R34), así que no
+ * mandarlo es pedir exactamente eso.
+ */
+export function inputDeLibro(fw: FiltrosWallet, fl: FiltrosLibro): Record<string, unknown> {
+  const input = inputDeFiltros({ ...filtrosDeWallet(fw), tipo: fl.tipo, categoria: fl.categoria });
+  const termino = fl.termino.trim();
+  if (termino.length >= BUSQUEDA_LIBRO_MIN_CHARS) input.q = termino;
+  if (fl.sortDir !== ORDEN_LIBRO_POR_DEFECTO) {
+    input.sortBy = "fecha";
+    input.sortDir = fl.sortDir;
   }
+  return input;
+}
 
-  /** R54 — Todo / Entra / Sale se aplica al pulsarlo (con el resto del borrador). */
-  function elegirDireccion(direccion: DireccionFiltro) {
-    if (disabled) return;
-    const siguiente = { ...draft, tipo: direccion === "todo" ? "" : direccion };
-    setDraft(siguiente);
-    onAplicar(siguiente);
-  }
-
-  /**
-   * FICHA 458-E (R59) — «A quién» se aplica al elegirlo, como la dirección: es una elección de una
-   * lista, no algo que se teclea y se confirma. Viaja con el resto del borrador.
-   */
-  function elegirAQuien(valor: string | null) {
-    if (disabled) return;
-    const aQuien = aQuienDeValor(valor);
-    const siguiente: WalletFiltrosValue = { ...draft, aQuien };
-    if (aQuien === undefined) delete siguiente.aQuien;
-    setDraft(siguiente);
-    onAplicar(siguiente);
-  }
-
-  const tipoBorrador = (draft.tipo || undefined) as WalletMovimientoTipo | undefined;
-
-  // R59: las opciones de «A quién» son las del periodo y la dirección que se están eligiendo.
-  const quienes = useQuienesDelLibroCaja({
-    tipo: tipoBorrador,
-    desde: draft.desde || undefined,
-    hasta: draft.hasta || undefined,
-  });
-
-  // R13: los conceptos del periodo y del tipo que se están eligiendo (el borrador), no del SEED.
-  // 458-E (R59): y de «A quién», si hay uno elegido.
-  const conceptos = useConceptosConMovimientos({
-    libro: "caja",
-    tipo: tipoBorrador,
-    desde: draft.desde || undefined,
-    hasta: draft.hasta || undefined,
-    aQuien: draft.aQuien,
-  });
-  const opcionesCategoria = opcionesDeConceptos(
-    conceptos.conceptos,
-    CATEGORIA_LABEL,
-    draft.categoria,
-    CATEGORIA_TODAS_OPTION,
-  );
-
-  return (
-    <form
-      aria-label="Filtros del libro"
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onAplicar(draft);
-      }}
-    >
-      {/* FICHA 458-E (R54): Todo / Entra / Sale. El grupo se nombra por su `aria-label` y cada
-          opción anuncia si está elegida con `aria-pressed` (primitiva `SegmentedToggle`). */}
-      <SegmentedToggle
-        options={FILTRO_DIRECCION.opciones}
-        valor={direccionDe(draft.tipo)}
-        onChange={elegirDireccion}
-        ariaLabel={FILTRO_DIRECCION.nombre}
-      />
-
-      {/* FICHA 458-E (R59): «A quién», con búsqueda en el servidor por nombre de tienda, de mensajero
-          o por el nombre anotado. El rótulo corto es visible y el nombre accesible del disparador
-          dice además qué está elegido («A quién: Todos»). */}
-      <div className="flex w-full items-center gap-2 sm:w-auto">
-        <Label
-          htmlFor="wallet-filtro-a-quien"
-          className="shrink-0 text-xs font-normal text-muted-foreground"
-        >
-          {A_QUIEN_FILTRO.rotulo}
-        </Label>
-        <SelectorBuscable
-          id="wallet-filtro-a-quien"
-          etiqueta={A_QUIEN_FILTRO.etiqueta}
-          opciones={quienes.opciones}
-          valor={draft.aQuien ? valorDeAQuien(draft.aQuien) : null}
-          onCambiar={elegirAQuien}
-          onBuscar={quienes.buscar}
-          estado={quienes.estado}
-          hayMas={quienes.hayMas}
-          textos={A_QUIEN_SELECTOR_TEXTOS}
-          disabled={disabled}
-          className="w-full sm:w-56"
-        />
-      </div>
-
-      {/* El `Select` de categoría dice su nombre en el PLACEHOLDER («Todas las categorías»), que
-          informa mejor que el rótulo: dice qué se está viendo ahora. Por eso el rótulo pasa a
-          `sr-only` en vez de desaparecer; el nombre accesible lo da su `aria-label`. */}
-      <Label htmlFor="wallet-filtro-categoria" className="sr-only">
-        Categoría
-      </Label>
-      <Select
-        id="wallet-filtro-categoria"
-        aria-label="Filtrar por categoría"
-        value={draft.categoria}
-        onValueChange={(v) => set("categoria", v)}
-        options={opcionesCategoria}
-        placeholder={CATEGORIA_TODAS_OPTION.label}
-        disabled={disabled}
-        className="h-9 w-full sm:w-56"
-      />
-      {conceptos.error ? (
-        <span className="text-xs text-destructive">{CONCEPTOS_FILTRO_AVISO.error}</span>
-      ) : null}
-
-      {/* Las dos fechas NO tienen placeholder que las nombre (`input[type=date]` pinta su
-          propio `dd/mm/aaaa`), así que conservan un rótulo CORTO y visible pegado al campo.
-          Ese rótulo es también su nombre accesible: no se le superpone ningún `aria-label`,
-          que taparía la palabra que se ve en pantalla con otra distinta. */}
-      <div className="flex w-full items-center gap-2 sm:w-auto">
-        <Label
-          htmlFor="wallet-filtro-desde"
-          className="shrink-0 text-xs font-normal text-muted-foreground"
-        >
-          Desde
-        </Label>
-        <Input
-          id="wallet-filtro-desde"
-          type="date"
-          value={draft.desde}
-          onChange={(e) => set("desde", e.target.value)}
-          disabled={disabled}
-          className="h-9 w-full sm:w-40"
-        />
-      </div>
-
-      <div className="flex w-full items-center gap-2 sm:w-auto">
-        <Label
-          htmlFor="wallet-filtro-hasta"
-          className="shrink-0 text-xs font-normal text-muted-foreground"
-        >
-          Hasta
-        </Label>
-        <Input
-          id="wallet-filtro-hasta"
-          type="date"
-          value={draft.hasta}
-          onChange={(e) => set("hasta", e.target.value)}
-          disabled={disabled}
-          className="h-9 w-full sm:w-40"
-        />
-      </div>
-
-      {/* `sm:ml-auto`: los dos botones se van al extremo derecho de la barra en cuanto hay
-          ancho para una sola línea. En móvil quedan al principio de su propia fila.
-
-          «Limpiar» se queda en `outline` y no baja a `ghost`: la barra vive sobre un fondo
-          tintado (`bg-muted/30`) y un botón sin borde ahí se lee como texto suelto, no como
-          algo que se pueda pulsar. El foco visible de los dos lo trae la primitiva
-          (`focus-visible:ring-3 ring-ring/50`). */}
-      <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-        <Button type="submit" disabled={disabled} className="h-9">
-          Aplicar
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          className="h-9"
-          onClick={() => {
-            setDraft(FILTROS_VACIOS);
-            onLimpiar();
-          }}
-        >
-          Limpiar
-        </Button>
-      </div>
-    </form>
-  );
+/** ¿Hay algún filtro de la zona del libro puesto (sin contar el orden)? */
+export function hayFiltrosDeLibro(fl: FiltrosLibro): boolean {
+  return fl.tipo !== "" || fl.categoria !== "" || fl.termino !== "";
 }

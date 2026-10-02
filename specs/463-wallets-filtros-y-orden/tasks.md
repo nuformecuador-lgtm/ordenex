@@ -52,7 +52,7 @@ aprobar, este desglose se ajusta primero.
 
 ## Frontend
 
-- [ ] **T5 — `FilterComponent`: modo «Aplicar»** (deps: ninguna; puede empezar en paralelo al backend) [P]
+- [x] **T5 — `FilterComponent`: modo «Aplicar»** (deps: ninguna; puede empezar en paralelo al backend) [P]
   - Prop `aplicarConBoton` (design §5.1).
   - **Hecho:** tests de componente: R21 (editar no emite; pulsar emite una vez y sin debounce), R17
     (botón deshabilitado con borrador = aplicado), R18 (rango invertido ⇒ botón deshabilitado y
@@ -60,12 +60,12 @@ aprobar, este desglose se ajusta primero.
     emisiones que antes: test que fije la secuencia de llamadas con temporizadores falsos). Suites
     existentes de `FilterComponent` y de sus consumidores verdes sin tocarlas.
 
-- [ ] **T6 — Etiquetas** (deps: ninguna) [P]
+- [x] **T6 — Etiquetas** (deps: ninguna) [P]
   - Textos de design §5.5 en los `*-labels.ts` de caja, estado de cuenta y tiendas.
   - **Hecho:** test que afirma como LITERAL los textos de contrato (R2 alcance de las dos zonas, R33
     «Más recientes»/«Más antiguas») y que ningún texto nuevo contiene «SLA» (R48).
 
-- [ ] **T7 — Caja: dos zonas** (deps: T4, T5, T6)
+- [x] **T7 — Caja: dos zonas** (deps: T4, T5, T6)
   - Partir el estado de `WalletModule` en `FiltrosWallet`/`FiltrosLibro`, `inputDeWallet`/
     `inputDeLibro`, `recargarTodo`/`recargarLibro` (design §5.2).
   - `WalletFiltrosCaja.tsx` (zona de la wallet, encima de `CajaResumenCard`) y `LibroCajaBarra.tsx`
@@ -80,7 +80,7 @@ aprobar, este desglose se ajusta primero.
     aplicados), R15/R16/R19, R29, R30, R31 (`leerDeUrl` apagado: entrar con `?q=x` no filtra), R32,
     R34, R35, R42 (la descarga recibe filtros de las dos zonas, término y orden), R49.
 
-- [ ] **T8 — Estado de cuenta: dos zonas y orden** (deps: T4, T5, T6) [P con T7]
+- [x] **T8 — Estado de cuenta: dos zonas y orden** (deps: T4, T5, T6) [P con T7]
   - `EstadoCuenta.tsx`: zona de la wallet arriba con `FilterComponent` en modo «Aplicar»; zona del
     libro con `BuscadorFiltros` + orden + chips + cierre en el selector (design §5.3).
   - Clave SWR con término y orden; `posicionSaldoInicial`; `filasDelPeriodo` con término y orden.
@@ -92,11 +92,11 @@ aprobar, este desglose se ajusta primero.
     `MiEstadoCuenta`) montan las dos zonas (un test por superficie que encuentre las dos por nombre
     accesible).
 
-- [ ] **T9 — Listado de tiendas** (deps: T4, T6) [P con T7 y T8]
+- [x] **T9 — Listado de tiendas** (deps: T4, T6) [P con T7 y T8]
   - `SaldosTiendasTable` con `BuscadorFiltros` (design §5.4).
   - **Hecho:** test de componente R45 (término ⇒ página 1, en la clave SWR y en la descarga).
 
-- [ ] **T10 — Cierre y verificación** (deps: T7, T8, T9)
+- [x] **T10 — Cierre y verificación** (deps: T7, T8, T9)
   - Mapa `R<n> → test` completo en `progress/impl_463.md` (R1–R49, sin huecos).
   - `./init.sh` completo verde (toca `lib/types/`); revisar `skipped` de `tests/integration/db`, no solo
     el código de salida.

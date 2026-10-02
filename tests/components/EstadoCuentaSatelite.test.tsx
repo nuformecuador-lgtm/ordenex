@@ -113,8 +113,9 @@ describe("el extracto de la bodega: Declarado / Recibido / Por entregar", () => 
     const cabeceras = within(tabla).getAllByRole("columnheader").map((c) => c.textContent);
     expect(cabeceras).toEqual(["Fecha", "Movimiento", "Declarado", "Recibido", "Por entregar", "Ver"]);
     const filas = within(tabla).getAllByRole("row");
-    expect(filas[2].textContent).toContain("Consolidación declarada");
-    expect(filas[2].textContent).toContain("₡115.000");
+    // FICHA 463 (R39): con «Más recientes» la primera fila es el movimiento; el saldo inicial, la última.
+    expect(filas[1].textContent).toContain("Consolidación declarada");
+    expect(filas[1].textContent).toContain("₡115.000");
     expect(within(tabla).queryByRole("button", { name: /^Ver / })).toBeNull();
     expect(screen.getByText("FGAM Puntarenas tiene ₡115.000 por entregar")).toBeTruthy();
     expect(container.textContent ?? "").not.toMatch(FORMA_UUID);

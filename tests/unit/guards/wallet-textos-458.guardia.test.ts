@@ -51,7 +51,8 @@ export const AFIRMACIONES: readonly Afirmacion[] = [
   // justificaba pegar el identificador del cierre. Se retiran en el mismo commit que el código.
   {
     id: "T5-caja",
-    archivo: "app/(app)/wallet/_components/WalletFiltros.tsx",
+    // FICHA 463: el filtro de concepto de la caja vive ahora en la zona del libro.
+    archivo: "app/(app)/wallet/_components/LibroCajaBarra.tsx",
     patron: /pobla\w*\s+(?:desde\s+el|del)\s+SEED|se\s+puebla\w*\s+del\s+SEED|la lista sigue siendo el SEED/i,
     conComentarios: true,
   },

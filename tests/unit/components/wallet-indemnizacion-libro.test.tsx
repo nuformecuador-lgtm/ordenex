@@ -28,7 +28,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
+// FICHA 463: la barra de una sola banda se retiró; la categoría vive en la zona del libro.
+import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
 
 const EGRESO_INDEMNIZACION: WalletMovimientoDTO = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -119,7 +120,7 @@ function renderFiltros(ui: React.ReactElement) {
 describe("R31 — el concepto es una opción del filtro por categoría", () => {
   it("al abrir el filtro de categoría, la indemnización está entre las opciones", async () => {
     const user = userEvent.setup();
-    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
 
@@ -131,7 +132,7 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
 
   it("458-A (R13/R14): las opciones son los conceptos CON movimientos, con su número; ninguno sin movimientos", async () => {
     const user = userEvent.setup();
-    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
     const lista = await screen.findByRole("listbox");
@@ -150,17 +151,15 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
     expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
   });
 
-  it("elegir la indemnización y aplicar emite ese filtro tal cual", async () => {
+  it("elegir la indemnización emite ese filtro tal cual (FICHA 463: se aplica al elegirla)", async () => {
     const user = userEvent.setup();
     const onAplicar = vi.fn();
-    renderFiltros(<WalletFiltros onAplicar={onAplicar} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada onCambiar={onAplicar} />);
 
     await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
     await user.click(
       await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente (2)" }),
     );
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-
     expect(onAplicar).toHaveBeenCalledWith(
       expect.objectContaining({ categoria: "egreso_indemnizacion" }),
     );

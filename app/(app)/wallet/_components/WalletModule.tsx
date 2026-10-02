@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
 import {
@@ -41,11 +41,18 @@ import {
 import { WalletLedger, type AutoriaDelLibro } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import {
-  WalletFiltros,
-  FILTROS_VACIOS,
-  inputDeFiltros,
-  type WalletFiltrosValue,
+  FILTROS_LIBRO_INICIALES,
+  FILTROS_WALLET_VACIOS,
+  filtrosDeWallet,
+  hayFiltrosDeLibro,
+  inputDeLibro,
+  inputDeWallet,
+  type FiltrosLibro,
+  type FiltrosWallet,
 } from "./WalletFiltros";
+import { WalletFiltrosCaja, seleccionDePeriodo } from "./WalletFiltrosCaja";
+import { LibroCajaBarra } from "./LibroCajaBarra";
+import type { FilterSelection } from "@/components/shared/FilterComponent";
 import { RegistrarMovimientoDialog } from "@/components/shared/wallet/RegistrarMovimientoDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
@@ -137,25 +144,25 @@ export interface WalletModuleProps {
 }
 
 /**
- * Construye el input de las actions PAGINADAS: los filtros vigentes más la página.
+ * FICHA 463 (design §5.2) — los dos inputs de la caja, compuestos con la paginación.
  *
- * Ficha 339 (T5.6, design §5.4) — los cuatro filtros ya no se copian aquí campo a campo: los
- * pone `inputDeFiltros`, la ÚNICA función que traduce el estado de los filtros a un input de
- * borde, y esta se limita a COMPONERLA con la paginación. Antes había dos copias del mismo
- * bucle en este archivo (`buildInput` y `buildInputCompleto`) y el detalle de la tarjeta habría
- * sido la tercera; dos constructores distintos de los mismos filtros es exactamente cómo el
- * detalle de una fila acabaría enseñando otro conjunto que el importe de esa fila (R20).
+ * - `inputDeWallet` (resumen, composición, desglose): SOLO la zona de la wallet (R12). Sus bordes son
+ *   `.strict()` y rechazan término y orden (R14), así que aquí no pueden colarse.
+ * - `inputDeLibro` (libro paginado y descarga): la zona de la wallet + la del libro (R8/R9/R42).
  *
- * Feature 170 (T C.4, R10/R18) — el modo COMPLETO usa `inputDeFiltros` A SECAS, sin componer
- * nada: su schema es `.strict()` y una paginación colada devolvería `validation_error` en vez
- * de un archivo. Por eso la composición vive aquí y no dentro de la función compartida.
+ * Feature 170 (T C.4, R10/R18) — la DESCARGA usa `inputDeLibro` A SECAS, sin paginación: su schema es
+ * `.strict()` y una paginación colada devolvería `validation_error` en vez de un archivo.
  */
-function buildInput(
-  filtros: WalletFiltrosValue,
-  page: number,
-  pageSize: number,
-): Record<string, unknown> {
-  return { ...inputDeFiltros(filtros), page, pageSize };
+function paginado(input: Record<string, unknown>, page: number, pageSize: number): Record<string, unknown> {
+  return { ...input, page, pageSize };
+}
+
+const CLAVES_LIBRO = ["tipo", "categoria", "termino", "sortDir"] as const satisfies readonly (keyof FiltrosLibro)[];
+
+/** ¿Dos juegos de filtros del libro piden lo mismo? */
+function mismoLibro(a: FiltrosLibro, b: FiltrosLibro): boolean {
+  // Campo a campo por sus claves: los filtros del libro son cuatro cadenas y ninguna se interpreta aquí.
+  return CLAVES_LIBRO.every((clave) => a[clave] === b[clave]);
 }
 
 /** El tope de ids por lectura de autoría: el del borde (`autoriaLibroCajaSchema`, = página máxima). */
@@ -230,8 +237,33 @@ export function WalletModule({
   const [resumen, setResumen] = useState(initialResumen);
   const [desglose, setDesglose] = useState(initialDesglose);
   const [composicion, setComposicion] = useState(initialComposicion);
-  const [filtros, setFiltros] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
-  const [loading, setLoading] = useState(false);
+  // FICHA 463 (design §5.2) — los filtros APLICADOS, partidos en sus dos zonas. Solo cambian cuando la
+  // lectura llegó bien (R49): si falla, la pantalla sigue diciendo lo que de verdad está pintado.
+  const [filtrosWallet, setFiltrosWallet] = useState<FiltrosWallet>(FILTROS_WALLET_VACIOS);
+  const [filtrosLibro, setFiltrosLibro] = useState<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
+  // R9 — el conteo de la tarjeta es de la WALLET: no lo mueven el término ni los filtros del libro.
+  const [totalWallet, setTotalWallet] = useState(initialTotal);
+  const [cargandoWallet, setCargandoWallet] = useState(false);
+  const [cargandoLibro, setCargandoLibro] = useState(false);
+  // R49 — si una lectura falla, el control del periodo vuelve a decir el periodo APLICADO.
+  const [siembraPeriodo, setSiembraPeriodo] = useState<{ senal: number; seleccion: FilterSelection } | undefined>(
+    undefined,
+  );
+
+  /**
+   * Lo último PEDIDO en cada zona (no lo aplicado): el buscador avisa con su propia espera y los
+   * conmutadores pueden pulsarse mientras viaja una lectura, así que el siguiente cambio se compone
+   * sobre lo pedido y no sobre un estado que aún no llegó. Si la lectura falla vuelven a lo aplicado.
+   */
+  const pedidoWallet = useRef<FiltrosWallet>(FILTROS_WALLET_VACIOS);
+  const pedidoLibro = useRef<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
+  /**
+   * Turnos de lectura: solo pinta la ÚLTIMA pedida. Una respuesta lenta de un término viejo no puede
+   * pisar la del término nuevo. El libro tiene su turno y la wallet el suyo: releer la wallet entera
+   * también relee el libro, así que toma turno en los dos.
+   */
+  const turnoLibro = useRef(0);
+  const turnoWallet = useRef(0);
 
   // FICHA 458-E (R56/R57) — la autoría de la página que se está viendo. La clave son los ids de la
   // página: cambiar de filtro, de página o releer tras registrar/anular trae filas nuevas y la
@@ -266,64 +298,119 @@ export function WalletModule({
     }
   }
 
+  /** R49 — la lectura falló: lo pedido vuelve a lo aplicado y el periodo del control también. */
+  function deshacerPedido() {
+    pedidoWallet.current = filtrosWallet;
+    pedidoLibro.current = filtrosLibro;
+    setSiembraPeriodo((s) => ({
+      senal: (s?.senal ?? 0) + 1,
+      seleccion: seleccionDePeriodo(filtrosWallet.desde, filtrosWallet.hasta),
+    }));
+  }
+
   /**
-   * Recarga libro + las dos cifras + desglose + composición para los filtros/página dados
-   * (R20/R11 de la 45/173; T6.3 de la 231). La composición NO viaja en una acción propia: llega
-   * en la MISMA respuesta que el resumen, así que un cambio de filtro refresca las dos a la vez
-   * y por construcción no pueden discrepar.
+   * FICHA 463 (R8/R20) — relee TODA la wallet: libro + las dos cifras + desglose + composición (R20/R11
+   * de la 45/173; T6.3 de la 231). La composición llega en la MISMA respuesta que el resumen, así que
+   * por construcción no pueden discrepar. Las cifras se piden SOLO con la zona de la wallet (R12).
+   *
+   * El conteo de la tarjeta (R9) es el del libro sin filtros del libro: si hay alguno puesto, se pide
+   * aparte una página de una fila con la zona de la wallet, que trae el `total` del conjunto.
    */
-  async function recargar(next: WalletFiltrosValue, nextPage: number) {
-    const input = buildInput(next, nextPage, pageSize);
-    setLoading(true);
+  async function recargarTodo(fw: FiltrosWallet, fl: FiltrosLibro, nextPage: number) {
+    const miLibro = ++turnoLibro.current;
+    const miWallet = ++turnoWallet.current;
+    const entradaWallet = paginado(inputDeWallet(fw), nextPage, pageSize);
+    const conFiltrosDeLibro = hayFiltrosDeLibro(fl);
+    setCargandoWallet(true);
     try {
-      const [movRes, resRes, desRes] = await Promise.all([
-        listarMovimientosAction(input),
-        verResumenCajaAction(input),
-        verDesgloseEgresosAction(input),
+      const [movRes, resRes, desRes, totRes] = await Promise.all([
+        listarMovimientosAction(paginado(inputDeLibro(fw, fl), nextPage, pageSize)),
+        verResumenCajaAction(entradaWallet),
+        verDesgloseEgresosAction(entradaWallet),
+        conFiltrosDeLibro ? listarMovimientosAction(paginado(inputDeWallet(fw), 1, 1)) : Promise.resolve(null),
       ]);
+      if (miWallet !== turnoWallet.current) return; // llegó otra lectura de la wallet después
 
-      if (movRes.status !== "ok") {
-        manejarError(movRes.status);
-        return;
+      for (const r of [movRes, resRes, desRes, totRes]) {
+        if (r !== null && r.status !== "ok") {
+          manejarError(r.status);
+          deshacerPedido();
+          return;
+        }
       }
-      if (resRes.status !== "ok") {
-        manejarError(resRes.status);
-        return;
-      }
-      if (desRes.status !== "ok") {
-        manejarError(desRes.status);
-        return;
-      }
+      if (movRes.status !== "ok" || resRes.status !== "ok" || desRes.status !== "ok") return;
 
-      setMovimientos(movRes.data.movimientos);
-      setTotal(movRes.data.total);
-      setPage(movRes.data.page);
       setResumen(resRes.resumen);
       setComposicion(resRes.composicion);
       setDesglose(desRes.desglose);
-      setFiltros(next);
+      setTotalWallet(totRes !== null && totRes.status === "ok" ? totRes.data.total : movRes.data.total);
+      setFiltrosWallet(fw);
+      // El libro de esta respuesta solo se pinta si nadie pidió otro libro mientras tanto.
+      if (miLibro === turnoLibro.current) {
+        setMovimientos(movRes.data.movimientos);
+        setTotal(movRes.data.total);
+        setPage(movRes.data.page);
+        setFiltrosLibro(fl);
+      }
     } finally {
-      setLoading(false);
+      if (miWallet === turnoWallet.current) setCargandoWallet(false);
     }
   }
 
-  function aplicarFiltros(value: WalletFiltrosValue) {
-    void recargar(value, 1); // nuevos filtros → vuelve a la primera página
+  /**
+   * FICHA 463 (R9/R29/R35) — relee SOLO el libro: término, Entra/Sale, categoría, orden o página. Las
+   * cifras de la wallet ni se piden ni se tocan.
+   */
+  async function recargarLibro(fl: FiltrosLibro, nextPage: number) {
+    const miLibro = ++turnoLibro.current;
+    setCargandoLibro(true);
+    try {
+      const movRes = await listarMovimientosAction(paginado(inputDeLibro(pedidoWallet.current, fl), nextPage, pageSize));
+      if (miLibro !== turnoLibro.current) return;
+      if (movRes.status !== "ok") {
+        manejarError(movRes.status);
+        pedidoLibro.current = filtrosLibro;
+        return;
+      }
+      setMovimientos(movRes.data.movimientos);
+      setTotal(movRes.data.total);
+      setPage(movRes.data.page);
+      setFiltrosLibro(fl);
+    } finally {
+      if (miLibro === turnoLibro.current) setCargandoLibro(false);
+    }
   }
 
-  function limpiarFiltros() {
-    void recargar(FILTROS_VACIOS, 1);
+  /** R8/R19/R20 — la zona de la wallet: periodo aplicado o quitado, «A quién» elegido o quitado. */
+  function cambiarWallet(fw: FiltrosWallet) {
+    pedidoWallet.current = fw;
+    void recargarTodo(fw, pedidoLibro.current, 1); // R8: vuelve a la primera página
+  }
+
+  /** R9/R29 — un control de la zona del libro: se compone con lo PEDIDO y vuelve a la página 1. */
+  function cambiarLibro(cambio: Partial<FiltrosLibro>) {
+    const siguiente = { ...pedidoLibro.current, ...cambio };
+    if (mismoLibro(siguiente, pedidoLibro.current)) return;
+    pedidoLibro.current = siguiente;
+    void recargarLibro(siguiente, 1);
+  }
+
+  /** R30 — «Limpiar todo» del libro: fuera término, dirección y categoría; el orden se queda. */
+  function limpiarLibro() {
+    cambiarLibro({ tipo: "", categoria: "", termino: "" });
   }
 
   function cambiarPagina(nextPage: number) {
-    void recargar(filtros, nextPage);
+    void recargarLibro(filtrosLibro, nextPage);
   }
 
   /** R60 — tras registrar, anular o adjuntar: relee todo con los filtros vigentes Y la autoría. */
   async function recargarTrasCambio() {
-    await recargar(filtros, page);
+    await recargarTodo(filtrosWallet, filtrosLibro, page);
     setVersionAutoria((v) => v + 1);
   }
+
+  const loading = cargandoWallet || cargandoLibro;
 
   return (
     <div className="flex flex-col gap-6">
@@ -347,7 +434,15 @@ export function WalletModule({
           />
         </div>
 
-        <CajaResumenCard resumen={resumen} movimientos={total} />
+        {/* FICHA 463 (R1–R3) — la ZONA DE LA WALLET, antes de las cifras: el periodo y «A quién». */}
+        <WalletFiltrosCaja
+          aplicado={filtrosWallet}
+          onCambiar={cambiarWallet}
+          siembra={siembraPeriodo}
+          disabled={cargandoWallet}
+        />
+
+        <CajaResumenCard resumen={resumen} movimientos={totalWallet} />
       </section>
 
       {/* Ficha 333 (G2, design §7 · R37/R38/R42) — LA COLA DE COBROS DE GASTO FIJO POR APROBAR,
@@ -411,7 +506,7 @@ export function WalletModule({
         composicion={composicion}
         desglose={desglose}
         resumen={resumen}
-        filtros={filtros}
+        filtros={filtrosDeWallet(filtrosWallet)}
       />
 
       <section id="gastos-fijos" aria-label="Gastos fijos" className="scroll-mt-4">
@@ -435,19 +530,6 @@ export function WalletModule({
             <CardTitle>Libro de movimientos</CardTitle>
           </CardHeader>
 
-          {/* La barra de filtros es una BANDA a lo ancho de la tarjeta: hija directa del
-              `Card` (sin `CardContent`, que solo aporta el padding lateral) para que el fondo
-              y el `border-b` lleguen a los dos bordes. El padding horizontal se repone con
-              `px-(--card-spacing)`, que es el mismo que usan la cabecera y el cuerpo, así que
-              los controles quedan alineados con el título. */}
-          <div className="border-b bg-muted/30 px-(--card-spacing) py-3">
-            <WalletFiltros
-              onAplicar={aplicarFiltros}
-              onLimpiar={limpiarFiltros}
-              disabled={loading}
-            />
-          </div>
-
           <CardContent>
             {/* Feature 170 (T C.4, R9/R10): la descarga trae el libro ENTERO con los filtros
                 VIGENTES, no la página pintada. El callback se construye EN EL RENDER (design
@@ -459,10 +541,21 @@ export function WalletModule({
               // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
               onCambio={() => void recargarTrasCambio()}
               autoria={autoria}
+              // FICHA 463 (R42): las dos zonas, el término y el orden vigentes.
               obtenerFilasDescarga={() =>
-                filasDesdeResultado(listarConAutoria(inputDeFiltros(filtros)), (f) =>
+                filasDesdeResultado(listarConAutoria(inputDeLibro(filtrosWallet, filtrosLibro)), (f) =>
                   filaDescargaMovimientoCaja(f.movimiento, f.autoria),
                 )
+              }
+              // FICHA 463 (R1/R5) — la ZONA DEL LIBRO, encima de la tabla y junto a la descarga.
+              filtros={
+                <LibroCajaBarra
+                  filtrosWallet={filtrosWallet}
+                  valor={filtrosLibro}
+                  onCambiar={cambiarLibro}
+                  onLimpiar={limpiarLibro}
+                  disabled={loading}
+                />
               }
             />
           </CardContent>

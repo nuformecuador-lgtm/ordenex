@@ -44,3 +44,9 @@ export const ENLACE_ESTADO_CUENTA_TIENDA = {
   visible: "Ver estado de cuenta",
   nombre: (tienda: string) => `Ver estado de cuenta de ${tienda}`,
 } as const;
+
+/** FICHA 463 (R45) — el buscador del listado de saldos de tiendas: por nombre de tienda. */
+export const BUSCADOR_SALDOS_TIENDAS = {
+  label: "Buscar por tienda",
+  placeholder: "Buscar por nombre de la tienda",
+} as const;
