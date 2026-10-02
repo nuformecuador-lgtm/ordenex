@@ -125,66 +125,13 @@ export interface FilterComponentProps {
    * **Ausente, el orquestador se comporta exactamente como antes** (R31).
    */
   siembra?: { senal: number; seleccion: FilterSelection };
-  /**
-   * FICHA 463 (design §5.1, R15–R22) — MODO «APLICAR», el hueco 2 de la ficha 328.
-   *
-   * **Ausente, el orquestador es exactamente el de antes** (R22): mismo debounce, mismas emisiones.
-   *
-   * **Presente,** lo que el usuario toca en los controles es un BORRADOR: `onChange` NO se emite
-   * mientras edita (R21) y se emite UNA vez, en el acto y sin debounce, al pulsar el botón «Aplicar»
-   * que el propio orquestador pinta al final de la fila. Hace falta para los filtros cuyo cambio
-   * recalcula agregados de dinero: elegir un periodo son dos clics (desde y hasta) y con debounce el
-   * primero dispararía una lectura intermedia con solo «desde».
-   *
-   * - «Aplicar» está deshabilitado si el borrador es igual a lo último emitido (R17) o si un rango de
-   *   fechas está invertido, que además se avisa (R18).
-   * - Con algo aplicado aparece «Quitar», que vacía borrador y aplicado y emite `{}` en el acto (R19).
-   * - `siembra` reemplaza borrador Y aplicado, sin emitir: lo impuesto desde fuera queda en reposo.
-   * - «Limpiar todo» (`showClearAll`) vacía solo el borrador: es otra edición, que se confirma con
-   *   «Aplicar».
-   */
-  aplicarConBoton?: {
-    /** Texto del botón que confirma el borrador. Default `"Aplicar"`. */
-    etiqueta?: string;
-    /** Texto del botón que quita lo aplicado. Default `"Quitar"`. */
-    etiquetaQuitar?: string;
-    /** Aviso del rango invertido. Default `RANGO_INVERTIDO_AVISO`. */
-    avisoRangoInvertido?: string;
-  };
   className?: string;
 }
 
-/** FICHA 463 (R18) — el aviso por defecto de un rango con «Desde» posterior a «Hasta». */
-export const RANGO_INVERTIDO_AVISO = "«Desde» no puede ser posterior a «Hasta».";
-
-/**
- * FICHA 463 (R17) — ¿dos selecciones dicen lo mismo? Por CLAVES y por VALORES en orden, sin mirar
- * la identidad de los objetos: el borrador y lo aplicado son copias distintas del mismo estado.
- */
-export function mismaSeleccion(a: FilterSelection, b: FilterSelection): boolean {
-  const ka = Object.keys(a).sort();
-  const kb = Object.keys(b).sort();
-  if (ka.length !== kb.length) return false;
-  return ka.every((k, i) => {
-    if (k !== kb[i]) return false;
-    const va = a[k];
-    const vb = b[k];
-    return va.length === vb.length && va.every((v, j) => v === vb[j]);
-  });
-}
-
-/**
- * FICHA 463 (R18) — ¿alguna terna de fecha del borrador tiene «Desde» posterior a «Hasta»? El
- * calendario de `DateRangeFilter` ya ordena los extremos y nunca la emite; puede llegar por `siembra`
- * o por la URL, y en modo «Aplicar» no se confirma.
- */
-function hayRangoInvertido(filtros: FilterDef[], seleccion: FilterSelection): boolean {
-  return filtros.some((f) => {
-    if (f.kind !== "dateRange") return false;
-    const [, desde = "", hasta = ""] = seleccion[f.key] ?? [];
-    return desde !== "" && hasta !== "" && desde > hasta;
-  });
-}
+// FICHA 467 (design §4.4) — el modo «Aplicar» de la 463 (su prop, su borrador, su botón, el aviso de
+// rango invertido y la comparación de selecciones) se RETIRÓ: sus dos consumidores (la tarjeta de filtros de
+// la caja y la sección de periodo del estado de cuenta) pasaron a la barra única, sin «Aplicar». Si
+// vuelve a hacer falta, está en el historial (commit de la 463).
 
 const KINDS_SOPORTADOS = new Set<string>([
   "multi",
@@ -448,11 +395,8 @@ export function FilterComponent({
   debounceMs = DEBOUNCE_MS_DEFAULT,
   leerDeUrl = true,
   siembra,
-  aplicarConBoton,
   className,
 }: FilterComponentProps) {
-  const modoAplicar = aplicarConBoton !== undefined;
-  const idAvisoRango = useId();
   // R13: un `kind` no soportado no se renderiza ni entra en la salida, y el resto de
   // filtros sigue funcionando.
   const montados = useMemo(
@@ -562,13 +506,6 @@ export function FilterComponent({
    * una vista, así que lo que traiga la dirección no tiene ningún derecho a reponerse
    * encima.
    */
-  /**
-   * FICHA 463 (R17) — en modo «Aplicar», lo ÚLTIMO EMITIDO. Arranca igual que la selección (lo que
-   * trajo la siembra o la URL): con el borrador igual a lo aplicado, «Aplicar» nace deshabilitado.
-   * Fuera de ese modo no se lee.
-   */
-  const [aplicado, setAplicado] = useState<FilterSelection>(seleccion);
-
   const [siembraCerrada, setSiembraCerrada] = useState(siembraInicial !== null);
   const siembraCerradaRef = useRef(siembraInicial !== null);
 
@@ -593,8 +530,6 @@ export function FilterComponent({
     setSenalSembrada(siembra.senal);
     const sembrada = podarSeleccion(montados, siembra.seleccion);
     setSeleccion(sembrada);
-    // FICHA 463 — en modo «Aplicar» lo impuesto queda también como APLICADO: el botón, en reposo.
-    setAplicado(sembrada);
     setSiembraCerrada(true);
   }
 
@@ -638,8 +573,6 @@ export function FilterComponent({
    * anterior: una racha de clics se resuelve en UNA sola emision, la del estado final.
    */
   function emitir(seleccionFinal: FilterSelection) {
-    // FICHA 463 (R21) — en modo «Aplicar» editar NO avisa: la emisión es la del botón.
-    if (modoAplicar) return;
     if (temporizador.current) {
       clearTimeout(temporizador.current);
       temporizador.current = null;
@@ -741,12 +674,6 @@ export function FilterComponent({
       for (const clave of Object.keys(leidasAlEntrar)) sembradas.current.add(clave);
     }
     if (Object.keys(precargaInicial.current).length === 0) return;
-    // FICHA 463 — en modo «Aplicar» lo que trajo la URL ya ES lo aplicado (así arranca `aplicado`):
-    // se avisa una vez y en el acto, como lo haría el botón.
-    if (modoAplicar) {
-      onChangeRef.current(precargaInicial.current);
-      return;
-    }
     emitir(precargaInicial.current);
     // Corre UNA sola vez, al montar: `emitir` se recrea en cada render y depender de el
     // reemitiria la precarga en todos.
@@ -824,26 +751,6 @@ export function FilterComponent({
     setResetSignal((n) => n + 1);
     emitir({}); // R22: una sola emision, vacia
   }
-
-  /** FICHA 463 (R16/R21) — confirma el borrador: UNA emisión, en el acto y sin debounce. */
-  function confirmarBorrador() {
-    cerrarSiembra();
-    const podada = podarSeleccion(montados, seleccion);
-    setAplicado(podada);
-    onChange(podada);
-  }
-
-  /** FICHA 463 (R19) — quita lo aplicado: borrador y aplicado vacíos, y `{}` en el acto. */
-  function quitarAplicado() {
-    cerrarSiembra();
-    setSeleccion({});
-    setAplicado({});
-    setResetSignal((n) => n + 1);
-    onChange({});
-  }
-
-  const rangoInvertido = modoAplicar && hayRangoInvertido(montados, seleccion);
-  const borradorSinCambios = mismaSeleccion(seleccion, aplicado);
 
   /**
    * FICHA 453 (design §7, detalle 2) — LA `key` DE LOS CONTROLES NO CONTROLADOS.
@@ -1014,38 +921,6 @@ export function FilterComponent({
         </Button>
       ) : null}
 
-      {/* FICHA 463 (R16–R19) — el modo «Aplicar»: el botón que confirma el borrador y, con algo
-          aplicado, el que lo quita. El aviso del rango invertido vive SIEMPRE en el árbol (un
-          `aria-live` que aparece con su texto dentro no se anuncia) y solo cambia su contenido. */}
-      {aplicarConBoton !== undefined ? (
-        <>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8"
-            disabled={disabled || borradorSinCambios || rangoInvertido}
-            aria-describedby={rangoInvertido ? idAvisoRango : undefined}
-            onClick={confirmarBorrador}
-          >
-            {aplicarConBoton.etiqueta ?? "Aplicar"}
-          </Button>
-          {Object.keys(aplicado).length > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8"
-              disabled={disabled}
-              onClick={quitarAplicado}
-            >
-              {aplicarConBoton.etiquetaQuitar ?? "Quitar"}
-            </Button>
-          ) : null}
-          <p id={idAvisoRango} role="status" className="w-full text-xs text-destructive empty:hidden">
-            {rangoInvertido ? (aplicarConBoton.avisoRangoInvertido ?? RANGO_INVERTIDO_AVISO) : ""}
-          </p>
-        </>
-      ) : null}
     </div>
   );
 }
