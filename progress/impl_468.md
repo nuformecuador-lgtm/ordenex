@@ -204,3 +204,147 @@ INIT_EXIT=0
 - No hay migraciones ni tablas nuevas: la base local compartida no se tocó.
 
 **Veredicto:** Bloque A implementado y verde con el gate completo; el Bloque B tiene sus contratos arriba.
+
+---
+
+# Ficha 468 — Bloque B (frontend) y verificación en la app (Bloque C, T15)
+
+> Mismo worktree aislado, rama local `fe-468` empujada a `origin/feature/468-wallet-excel-kardex-por-guia`
+> (la rama con su nombre estaba tomada por el worktree del backend). Búsqueda de código: grafo
+> `codebase-memory` disponible pero se trabajó sobre los archivos leídos (`grep`/lectura): todos los símbolos
+> citados se confirmaron en el archivo real.
+
+## Lo hecho (T10–T15)
+
+| Tarea | Qué | Archivos |
+| --- | --- | --- |
+| T10 | Contrato del control: `DataTableDescargaDetalle` pierde `columnaEnlace`/`columnaEstado` y gana `columnasFijas`; `DataTableDescarga` gana `columnasFijas` (R51); `ColumnasPopover` prop `fijas` (marcadas, deshabilitadas y atenuadas, reordenables); el botón añade las fijas al archivo aunque una preferencia vieja las ocultara (R52) y pasa `filasDestacadas` por hoja (R23/R47); aviso del tope: «detalle por guía». | `components/shared/{DataTable,DescargarDatasetButton,ColumnasPopover}.tsx`, `descarga-resultado.ts` |
+| T11 | Adaptador `filasKardex` / `filasDetallePorGuia` / `filaCabeceraDeGuia` (solo coloca: no suma, no resta, no convierte) y textos. | `components/shared/wallet/libro-kardex-descarga.ts`, `libro-kardex-labels.ts` |
+| T12 | Catálogos R1/R2/R3 y R29–R32 con `formato: "monto"`, columnas fijas, ámbito `wallet-mensajero-detalle-guia`; textos de la caja en `libro-caja-kardex.ts`; `filaBaseCuenta` proyecta la `LineaEstadoCuenta` que pinta la tabla. | `wallet-ledger-descarga-columnas.ts`, `libro-caja-kardex.ts`, `estado-cuenta-descarga-columnas.ts`, `estado-cuenta-{tienda,mensajero}-descarga-columnas.ts`, `mi-estado-cuenta-descarga-columnas.ts` |
+| T13 | Cableado: `/wallet` (`descargaLibroCaja` → `libroCajaKardex{,ConDetalle}Action`), `EstadoCuenta` (`leerKardex` / `leerKardexConDetalle`: tienda, **mensajero nuevo**, `/mi-wallet`; bodega sin detalle), orden forzado ascendente en la entrada (R7), autoría de la caja como hoy (R20). Retirada de la 464 (acciones, orquestadores, interfaces, tipos, `descarga-con-detalle.ts`, `detalle-por-orden-descarga.ts`). `@sin-superficie` borrados en las seis acciones del kardex. Comentarios con «snapshot» de `ordenes-de-fila-cuenta.ts` y `EstadoCuentaMensajero.tsx`, reescritos. | `WalletModule.tsx`, `WalletLedger.tsx`, `EstadoCuenta.tsx`, `EstadoCuentaMensajero.tsx`, `MiEstadoCuenta.tsx`, `lib/actions/{wallet,estado-cuenta}.ts`, `lib/types/detalle-en-lote.ts` |
+| T14 | Barrido de textos (R19/R60) en el test de la 468. | `tests/unit/descarga/libro-kardex-468.test.ts` |
+| T15 | Gate completo y recorrido en la app real con los `.xlsx` descargados. | `progress/recorrido_468/`, `progress/gate_468_frontend.log` |
+
+Commits: `6f1c1dca` (T10), `6d618a8e` (T11/T12/T14), `f8c340cd` (T13 + retirada 464), `5710f88e` (T15 +
+atenuado de casillas fijas). T10–T13 se compilan entre sí (el contrato del control y sus consumidores): solo
+el último de los tres compila solo, igual que T4–T9 del backend.
+
+## Mapa R → test (frontend)
+
+| R | Test |
+| --- | --- |
+| R1, R2, R3, R4 | `tests/unit/descarga/libro-kardex-468.test.ts` «R1…», «R2…», «R3/R49…», «R4…»; `wallet-caja-descarga-columnas.test.ts` (contrato); `estado-cuenta-descarga-columnas.test.ts` «468 R2/R3…» |
+| R5, R8, R16, R23 | `libro-kardex-468.test.ts` «468 R5/R8/R16/R23…» (6 casos); `tests/components/WalletCaja468.test.tsx` «R5/R8/R10/R22/R23…» |
+| R6, R7 | `WalletCaja468` «468 R7/R53…» (2 casos: «Más recientes» y «Más antiguas» salen asc); `EstadoCuenta468` «R7/R26/R53…»; `EstadoCuenta463` «468 R7 (antes 463 R43)…»; `estado-cuenta-descarga-columnas` «R7: pide el kardex…» |
+| R9, R10 | `libro-kardex-468` «R6/R9/R10…»; `WalletCaja468` (Entra/Sale/Cobrado a tiendas) |
+| R17, R18, R20, R21 | `libro-kardex-468` «468 R17/R18/R20/R21…»; `WalletDescarga.test.tsx` «R34 (231) / 458-E R56/R57…» (Es dinero de, A quién, Registró = la tabla); `wallet-*-descarga-columnas` |
+| R19, R60 | `libro-kardex-468` «R19/R60…» |
+| R22 | `DescargarDatasetDetalle468.test.tsx` «R22…» (exceljs: `number` y `toFixed(2)`); `WalletCaja468`; recorrido (celdas numéricas: 77 caja, 58 tienda, 24 mensajero; ninguna de texto) |
+| R24, R25 | `DescargarDatasetDetalle468` «468 R24…»; `EstadoCuenta468` «R24…» (tienda, mensajero, /mi-wallet), «R25…»; `WalletCaja468` «468 R24…»; `estado-cuenta-descarga-columnas` «R25…» |
+| R26 | `DescargarDatasetDetalle468` «R26…»; `WalletCaja468`; `EstadoCuenta468` |
+| R28 (pantalla) | recorrido: el contra-entrega de la caja lista su guía (no el párrafo «tienda por tienda»); el pago devengado del mensajero lista 7 órdenes con su tienda, y la hoja 2 dice lo mismo (+ su diferencia) |
+| R29–R32 | `libro-kardex-468` (encabezados y claves literales); `EstadoCuenta468` (tienda y mensajero) |
+| R33–R44, R47 | `libro-kardex-468` «468 R33–R47…» (7 casos); `WalletCaja468` «R34–R44/R47…»; `EstadoCuenta468` (tienda) |
+| R45 | `WalletCaja468`; recorrido (TOTAL GENERAL = «Total del periodo» en las tres superficies) |
+| R49 | `libro-kardex-468` «R3/R49…»; `EstadoCuenta468` «/mi-wallet…» |
+| R50, R51, R52 | `DescargarDatasetDetalle468` «468 R50/R51/R52…» (4 casos: fijas deshabilitadas, reordenables, ámbito por hoja, preferencia de la 464 con fija oculta); `libro-kardex-468` «468 R50/R51/R52…»; `EstadoCuenta468` (bodega, R51) |
+| R56 | `WalletCaja468` «R56…»; `EstadoCuenta468` «468 R56…» (mensajero); `libro-kardex-468` «464 R39 → 468 R56…» |
+| R57, R61 | `DescargarDatasetDetalle468` «R57…»; `WalletCaja468` «468 R57/R61…»; `EstadoCuenta468` «468 R57/R61…»; recorrido (hoja 1 idéntica celda a celda en las tres) |
+
+## Tests de la 464 que afirmaban lo retirado — sustituidos (ninguno borrado sin sustituto)
+
+| Antes | Ahora |
+| --- | --- |
+| `tests/unit/descarga/detalle-por-orden-464.test.ts` (enlazarHojas, «N.º», «Detalle por orden», catálogos R25–R27, R30 sin ids, ámbitos, textos, aviso del tope) | `tests/unit/descarga/libro-kardex-468.test.ts`: kardex, hoja por guía, «lanza si la hoja 2 habla de un movimiento ausente» (antes R36), «ninguna celda con id» (antes R30), catálogos R29–R32, ámbitos con el del mensajero, textos, aviso del tope |
+| `tests/components/descarga/DescargarDatasetDetalle464.test.tsx` | `DescargarDatasetDetalle468.test.tsx` (renombrado): R41, R6/R8, R12, R24/R36/R43 se conservan; R15/R16/R17 (columnas fijas fuera del catálogo) → R51/R52 (fijas del catálogo) + R22/R23/R26/R57 |
+| `tests/components/WalletCaja464.test.tsx` | `WalletCaja468.test.tsx`: una petición con los filtros (R7 asc), dos hojas kardex/guía, «Solo los movimientos» idéntica (R57), avisos R56/R43 y autoría |
+| `tests/components/EstadoCuenta464.test.tsx` | `EstadoCuenta468.test.tsx`: qué ofrece cada superficie (mensajero gana detalle), ámbitos (464 R2), una petición asc, R57, R56 |
+| `tests/unit/actions/libro-con-detalle-464.test.ts` / `.composition-root.test.ts` | `libro-kardex-468.action.test.ts` (roots, unauthenticated, strict, R25, R24/R31) + 2 casos nuevos: «el ok lleva origen en cada fila con kardex y porGuia» y, en `services/libro-kardex-468.test.ts`, «/mi-wallet pide el lote mi_wallet sin tienda» y «el tope de la hoja de movimientos lleva hoja y no pide lote» |
+| `tests/integration/db/detalle-en-lote-464.test.ts` (orquestadores 464) | el mismo archivo: el diferencial lote = fila (R21/R22/R34) se mide pidiendo al lote REAL lo que pide hoy `LibroKardexService`; el de topes usa `CajaKardexService` real |
+| `filaDescargaMovimientoCaja` / `filaDescargaEstadoCuenta` en 457/459/461/459-fecha/OrigenMovimiento/WalletDescarga/mi-wallet-page/columnas | `tests/fixtures/libro-kardex.ts` (`filaDeLibroCaja` / `filaDeLibroCuenta`: la fila de la hoja «Movimientos» que coloca la descarga real); campos `categoria→concepto`, `origen→detalle`, `dueno→esDineroDe`, `monto→entra` |
+
+Guardias tocadas (con motivo en el propio archivo): `wallet-origen-total` (6 → 5 bordes con origen en
+`wallet.ts`), `mi-wallet-335` (lista NOMINAL de las dos lecturas `miEstadoCuentaKardex*`, que no empiezan por
+un prefijo de lectura), `tablero-dia/primitivas` (excepción NOMINAL del adaptador: el campo `mensajeroNombre`
+del cierre no es el tablero), `ControlDescargaTransversal` (la caja coloca el kardex con `descargaLibroCaja`,
+tope en el servidor; NOMINAL), `datatable-descarga-contrato` (`columnasFijas`), `wallet-actions` (censo sin la
+acción de la 464), `columnas-asercion-de-orden` (claves literales de los cuatro catálogos de la hoja 2).
+
+## Desviaciones (técnicas, decididas aquí)
+
+1. **`columnasFijas` en las dos configuraciones, no `fijasPrincipal`/`fijasDetalle` dentro del detalle**
+   (design §6): la bodega no tiene hoja de detalle y también necesita sus fijas (R51).
+2. **Las funciones de texto de la caja viven en `libro-caja-kardex.ts`** y `filaBaseCuenta` proyecta la
+   `LineaEstadoCuenta`: la guardia de columnas sensibles exige que todo lo que exporta un
+   `*-descarga-columnas` proyecte un DTO a una FILA con un argumento. Por la misma guardia, cada superficie
+   expone `filaCabeceraGuia*` (la cabecera de un bloque con su etiqueta de resultados), que el adaptador usa.
+3. **Tres acciones quedan sin pantalla y se anotan `@sin-superficie`** (comentario en servidor, con motivo):
+   `listarMovimientosCompletoAction`, `verEstadoCuentaCompletoAction`, `verMiEstadoCuentaCompletoAction`. La
+   descarga ya no las usa (lee el kardex). Retirarlas arrastra sus tests y es trabajo de servidor: lo decide
+   el leader.
+4. **Filas con texto en «Concepto»**: «Saldo al inicio del periodo», «Total del periodo», el aviso de
+   filtros, «Total de la guía», «Movimientos sin guía», «Diferencia sin repartir» y «TOTAL GENERAL» van en
+   Concepto, que es fija (nunca desaparece del archivo). La fecha del saldo inicial es el inicio del periodo
+   (vacía sin periodo).
+5. **«0 guías»**: un movimiento repartible al que ninguna guía aporta dice «0 guías» en Detalle (y su monto
+   entero sale como «Diferencia sin repartir», R42). Es lo que dice el servidor (`ordenes: 0`).
+6. Los montos dentro de un texto (detalle de una diferencia) van con `money` (₡10.200, sin decimales, el
+   formato de la app); en las celdas de monto, número de Excel con dos decimales.
+7. En las filas de concepto de la hoja 2, «Detalle» va vacío y «Resultado» lleva el de la gestión de ese
+   cierre (la cabecera junta los de todos sus cierres).
+
+## Verificación en la app real (T15)
+
+Dev server propio en el worktree, Playwright como `admin.qa@ordenex.test`; descargados los dos modos en
+`/wallet`, en la tienda `773e9313…` (Tania) y en el mensajero `9cbcccb6…` (Marco); leídos con exceljs
+(`progress/recorrido_468/comprobaciones-xlsx.json`, volcados `*.txt`, capturas `*.png`).
+
+| Superficie | Movs. | Saldo inicial → final | Total hoja 1 (Entra / Sale / Cobrado) | TOTAL GENERAL hoja 2 | Bloques / sin guía / diferencias | Hoja 1 idéntica sin detalle |
+| --- | --- | --- | --- | --- | --- | --- |
+| Caja `/wallet` | 36 | 0,00 → 13.483.932,72 (= tarjeta «Flujo de dinero registrado») | 13.524.733,22 / 40.800,50 / 43.729,90 | 13.524.733,22 / 40.800,50 / 43.729,90 | 17 / 3 / 17 | sí |
+| Tienda (Tania) | 27 | 0,00 → 147.670,10 | 191.400,00 / 43.729,90 | 191.400,00 / 43.729,90 | 15 / 0 / 14 | sí |
+| Mensajero (Marco) | 10 | 0,00 → 5.100,00 (= tarjeta «Saldo actual») | 20.700,00 / 15.600,00 | 20.700,00 / 15.600,00 | 9 / 7 / 2 | sí |
+
+En las tres: todas las celdas de monto son números (ninguna de texto), una sola columna de monto por fila,
+Σ de cada columna = «Total del periodo», saldo corrido fila a fila = anterior + Entra − Sale (en la caja sin
+«Cobrado a tiendas») y saldo final = inicial + Σ, cada «Total de la guía» = Σ de su bloque, Σ de la hoja 2
+(sin los totales de guía) = TOTAL GENERAL = total de la hoja 1, negritas en su sitio, ninguna columna de R4.
+El pago tomado del efectivo del mensajero sale en «Movimientos sin guía» con «Se tomó del efectivo que el
+mensajero entregó en el cierre de ese día» (R43).
+
+Pantalla: el selector ofrece las dos opciones (R24) con Concepto, montos y Saldo (hoja 1) y Guía, Concepto y
+montos (hoja 2) marcados y deshabilitados (5 / 4 / 4 casillas fijas); el detalle de «Contra-entrega cobrado
+a los clientes de la tienda» (cierre 2026-09-24) lista su guía 38589325 (₡6.000), no el párrafo «se arma
+tienda por tienda»; el pago devengado del mensajero del 2026-08-12 lista 7 órdenes con su tienda.
+
+Las diferencias de la base LOCAL son de sus datos sembrados (gestiones de agosto sin tarifa congelada o sin
+`pago_mensajero`, y un cierre donde 7 × 1.700 = 11.900 ≠ 10.200 del movimiento): el archivo las muestra como
+«Diferencia sin repartir» y aun así cuadra. La medición en producción es la T16 (leader, tras la release).
+
+Gate: ver la sección siguiente.
+
+## Gate (salida real)
+
+`./init.sh` COMPLETO con `.env` copiado al worktree (`progress/gate_468_frontend.log`, no versionado):
+
+```
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 328 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2374 passed (2374)
+      Tests  32950 passed | 26 skipped (32976)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2374 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at   (preexistente, ajeno)
+== init OK ==
+INIT_EXIT=0
+```
+
+- Los 26 `skipped` son de `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9): ninguno de
+  integración.
+- Tercera corrida. Las dos anteriores dieron un rojo cada una, distinto y ajeno al diff, y verdes en aislado:
+  `notificacion-evento-webhook-suscripcion-migration` (deadlock 40P01 en el DOWN, 22/22 aislado) y
+  `correccion-dia-reparto.int` (FK `orden_zona_id_fkey` por una zona compartida, 18/18 aislado): los modos de
+  flake de la base local compartida.
+
+**Veredicto:** Bloque B implementado, cableado en las cinco superficies, verificado con los archivos reales y
+verde con el gate completo.
