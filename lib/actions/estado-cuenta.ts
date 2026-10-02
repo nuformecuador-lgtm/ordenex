@@ -18,9 +18,9 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
-import { EstadoCuentaConDetalleService } from "@/lib/services/LibroConDetalleService";
-import type { IEstadoCuentaConDetalleService } from "@/lib/interfaces/services/IEstadoCuentaConDetalleService";
-import type { EstadoCuentaConDetalleServiceResult } from "@/lib/types/detalle-en-lote";
+import { CuentaKardexService } from "@/lib/services/LibroKardexService";
+import type { ICuentaKardexService } from "@/lib/interfaces/services/ICuentaKardexService";
+import type { CuentaKardexConDetalleServiceResult, CuentaKardexServiceResult } from "@/lib/types/libro-kardex";
 import { EstadoCuentaService } from "@/lib/services/EstadoCuentaService";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import {
@@ -87,33 +87,43 @@ function buildDetalleService(): IDetalleMovimientoService {
 }
 
 /**
- * Ficha 464 (design §4) — el composition root de la descarga del estado de cuenta CON detalle por
- * orden: el servicio del estado de cuenta de SIEMPRE (`buildService`, la misma hoja que sin detalle,
- * R14) y el detalle en lote sobre sus dos repositorios reales. Sin dependencias opcionales.
+ * Ficha 468 — el lote del detalle por guia sobre sus TRES repositorios reales (aportes, libro de la
+ * tienda y libro del mensajero). Lo usa el composition root del kardex (el de la 464 se retiro en el
+ * bloque B, al cablear la descarga a las acciones del kardex).
  */
-function buildConDetalleService(): IEstadoCuentaConDetalleService {
-  const prisma = getPrismaClient();
-  return new EstadoCuentaConDetalleService(
-    buildService(),
-    new DetalleEnLoteService(new CierreAporteRepository(prisma), new WalletTiendaMovimientoRepository(prisma)),
+function buildDetalleEnLote(prisma: ReturnType<typeof getPrismaClient>): DetalleEnLoteService {
+  return new DetalleEnLoteService(
+    new CierreAporteRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new EstadoCuentaRepository(prisma),
   );
 }
 
-/** Ficha 464 — dependencias de la descarga con detalle, inyectables en test. */
-export interface EstadoCuentaConDetalleDeps {
-  service?: IEstadoCuentaConDetalleService;
+/**
+ * Ficha 468 (design §4.3) — el composition root del estado de cuenta como KARDEX: el servicio de SIEMPRE
+ * (`buildService`: la misma hoja, el mismo guard y el mismo tope) y el lote real, con el repositorio del
+ * MENSAJERO incluido. Sin dependencias opcionales.
+ */
+function buildCuentaKardexService(): ICuentaKardexService {
+  return new CuentaKardexService(buildService(), buildDetalleEnLote(getPrismaClient()));
+}
+
+/** Ficha 468 — dependencias del kardex del estado de cuenta, inyectables en test. */
+export interface CuentaKardexDeps {
+  service?: ICuentaKardexService;
   getActor?: () => Promise<Actor | null>;
 }
 
-/** Ficha 464 (R35/R36/R38/R39) — `ok` con `estado` + `detalle`; `limite_excedido` con `hoja`. */
-export type VerEstadoCuentaConDetalleResult = EstadoCuentaConDetalleServiceResult | ErrorDeBorde;
+export type CuentaKardexActionResult = CuentaKardexServiceResult | ErrorDeBorde;
+export type CuentaKardexConDetalleActionResult = CuentaKardexConDetalleServiceResult | ErrorDeBorde;
 
 /**
- * Ficha 464 (R7) — el borde de la oficina: el del completo de SIEMPRE (con lo de la 463) y, ademas, la
- * cuenta TIENE que ser una tienda. El mensajero y la bodega no tienen detalle por orden.
+ * Ficha 468 (R25) — el borde del detalle por guia en la oficina: el del completo de SIEMPRE y, ademas, la
+ * cuenta NO puede ser una bodega satelite (su libro son consolidaciones, sin guias). Tienda y mensajero
+ * si (R24, R31).
  */
-const estadoCuentaTiendaCompletoSchema = estadoCuentaCompletoSchema.refine((v) => v.cuenta.tipo === "tienda", {
-  message: "El detalle por orden solo existe en el estado de cuenta de una tienda.",
+const estadoCuentaConGuiasCompletoSchema = estadoCuentaCompletoSchema.refine((v) => v.cuenta.tipo !== "bodega", {
+  message: "El detalle por guía no existe en el estado de cuenta de una bodega satélite.",
   path: ["cuenta"],
 });
 
@@ -158,7 +168,7 @@ export async function verEstadoCuentaAction(
  * filtros que la pagina sin `page`/`pageSize`; el tope (`descargaConfig.MAX_FILAS`) lo aplica el
  * servidor: por encima, `limite_excedido` con los conteos y ninguna fila.
  *
- * Superficie (FICHA 458-D): la descarga de `components/shared/estado-cuenta/EstadoCuenta.tsx` (`filasDelPeriodo`) en las tres paginas de la oficina.
+ * @sin-superficie FICHA 468 (bloque B): la descarga del estado de cuenta de la oficina paso a `estadoCuentaKardexAction` (kardex); esta accion queda sin pantalla y su retirada (con sus tests) la decide el leader.
  */
 export async function verEstadoCuentaCompletoAction(
   input: unknown,
@@ -199,7 +209,7 @@ export async function verMiEstadoCuentaAction(
 /**
  * FICHA 458-D (servidor, R32/R36) — el de `/mi-wallet` con el periodo ENTERO, tope en el servidor.
  *
- * Superficie (FICHA 458-D): la descarga del estado de cuenta de `/mi-wallet` (`MiEstadoCuenta.tsx`).
+ * @sin-superficie FICHA 468 (bloque B): la descarga de `/mi-wallet` paso a `miEstadoCuentaKardexAction` (kardex); esta accion queda sin pantalla y su retirada (con sus tests) la decide el leader.
  */
 export async function verMiEstadoCuentaCompletoAction(
   input: unknown,
@@ -215,48 +225,12 @@ export async function verMiEstadoCuentaCompletoAction(
   return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
 }
 
-/**
- * Ficha 464 (design §2.3, R14/R36/R38/R39) — la descarga «Movimientos y detalle por orden» del estado
- * de cuenta de UNA TIENDA, en la oficina, en una sola peticion: la hoja del completo de siempre con los
- * mismos filtros, termino y orden, y el detalle por orden de ESAS filas, acotado a esa tienda (R34).
- *
- * Superficie (ficha 464, T9): la descarga con detalle del estado de cuenta de una tienda
- * (`lectorDeLaCuenta` de `EstadoCuenta.tsx`, montado por `EstadoCuentaTienda.tsx`).
+/*
+ * Ficha 464 — `verEstadoCuentaCompletoConDetalleAction` y `verMiEstadoCuentaCompletoConDetalleAction`
+ * («Movimientos y detalle por orden») se RETIRARON en la 468 (bloque B), junto con su orquestador
+ * `EstadoCuentaConDetalleService`: las sustituyen `estadoCuentaKardexConDetalleAction` (tienda y, nuevo,
+ * mensajero) y `miEstadoCuentaKardexConDetalleAction`.
  */
-export async function verEstadoCuentaCompletoConDetalleAction(
-  input: unknown,
-  deps: EstadoCuentaConDetalleDeps = {},
-): Promise<VerEstadoCuentaConDetalleResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = estadoCuentaTiendaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildConDetalleService();
-    return service.tiendaConDetalle(data, actor);
-  });
-  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
-}
-
-/**
- * Ficha 464 (design §2.3, R33/R35/R36) — la descarga con detalle de `/mi-wallet`: la tienda es la de
- * la SESION. Mismo borde que `verMiEstadoCuentaCompletoAction` (`.strict()`): una `cuenta` o un
- * `tiendaId` en la entrada es `validation_error` sin leer nada (R35).
- *
- * Superficie (ficha 464, T9): la descarga con detalle de `/mi-wallet` (`LECTOR_MI_TIENDA`, `MiEstadoCuenta.tsx`).
- */
-export async function verMiEstadoCuentaCompletoConDetalleAction(
-  input: unknown,
-  deps: EstadoCuentaConDetalleDeps = {},
-): Promise<VerEstadoCuentaConDetalleResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = miEstadoCuentaCompletoSchema.parse(input ?? {});
-    const service = deps.service ?? buildConDetalleService();
-    return service.miTiendaConDetalle(data, actor);
-  });
-  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
-}
 
 /** R19 — `ok` / `sin_reparto` / `not_found` / `forbidden` del dominio, mas los dos del borde. */
 export type VerOrdenesDeFilaResult = VerDetalleMovimientoServiceResult | ErrorDeBorde;
@@ -278,6 +252,96 @@ export async function verOrdenesDeFilaAction(
     const data = ordenesDeFilaSchema.parse(input);
     const service = deps.service ?? buildDetalleService();
     return service.verDetalleDeFilaDeCuenta(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (design §3.3, R2, R5–R16, R53, R57, R61) — la descarga «Solo los movimientos · una hoja» del
+ * estado de cuenta de una tienda, un mensajero o una bodega satelite (oficina) como KARDEX: la MISMA
+ * entrada que `verEstadoCuentaCompletoAction`, con el orden FORZADO a cronologico ascendente (R7), y el
+ * `kardex` junto al `estado` (saldo inicial y final de la tarjeta, la columna y el saldo corrido de cada
+ * fila, totales y el «N guía(s)» de los conteos, sin leer ninguna orden).
+ *
+ * Superficie (ficha 468, bloque B): la descarga «Solo los movimientos» de `components/shared/estado-cuenta/
+ * EstadoCuenta.tsx` (`lectorDeLaCuenta`: tienda, mensajero y bodega de la oficina). Su `@sin-superficie`
+ * se borro al cablearla.
+ */
+export async function estadoCuentaKardexAction(
+  input: unknown,
+  deps: CuentaKardexDeps = {},
+): Promise<CuentaKardexActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = estadoCuentaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCuentaKardexService();
+    return service.kardex(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (R24–R26, R30, R31, R33–R46, R55, R56) — la descarga «Movimientos y detalle por guía · dos
+ * hojas» del estado de cuenta de una TIENDA o de un MENSAJERO en la oficina, en una sola peticion. La
+ * bodega satelite es `validation_error` en el borde, sin leer nada (R25). Acceso total antes de leer
+ * (R55); el tope del detalle es el de la 464 (R56).
+ *
+ * Superficie (ficha 468, bloque B): la descarga con detalle de `EstadoCuenta.tsx` (`lectorDeLaCuenta`,
+ * tienda y mensajero). Su `@sin-superficie` se borro al cablearla.
+ */
+export async function estadoCuentaKardexConDetalleAction(
+  input: unknown,
+  deps: CuentaKardexDeps = {},
+): Promise<CuentaKardexConDetalleActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = estadoCuentaConGuiasCompletoSchema.parse(input); // bodega -> VALIDATION_ERROR (R25)
+    const service = deps.service ?? buildCuentaKardexService();
+    return service.kardexConDetalle(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (R3, R5–R16) — «Solo los movimientos» de `/mi-wallet` como KARDEX. La tienda es la de la
+ * SESION (`.strict()`: una `cuenta` o un `tiendaId` es `validation_error` sin leer nada).
+ *
+ * Superficie (ficha 468, bloque B): la descarga de `/mi-wallet` (`LECTOR_MI_TIENDA`, `MiEstadoCuenta.tsx`).
+ * Su `@sin-superficie` se borro al cablearla.
+ */
+export async function miEstadoCuentaKardexAction(
+  input: unknown,
+  deps: CuentaKardexDeps = {},
+): Promise<CuentaKardexActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = miEstadoCuentaCompletoSchema.parse(input ?? {});
+    const service = deps.service ?? buildCuentaKardexService();
+    return service.miKardex(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (R26, R32, R48, R49) — las dos hojas de `/mi-wallet`: solo guias de la tienda de la sesion y
+ * ningun nombre de Ordenex ni de un mensajero.
+ *
+ * Superficie (ficha 468, bloque B): la descarga con detalle de `/mi-wallet` (`LECTOR_MI_TIENDA`,
+ * `MiEstadoCuenta.tsx`). Su `@sin-superficie` se borro al cablearla.
+ */
+export async function miEstadoCuentaKardexConDetalleAction(
+  input: unknown,
+  deps: CuentaKardexDeps = {},
+): Promise<CuentaKardexConDetalleActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = miEstadoCuentaCompletoSchema.parse(input ?? {});
+    const service = deps.service ?? buildCuentaKardexService();
+    return service.miKardexConDetalle(data, actor);
   });
   return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
 }

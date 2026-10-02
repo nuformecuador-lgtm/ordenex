@@ -29,6 +29,7 @@ import {
   AMBITO_DESCARGA_WALLET_CAJA,
   COLUMNAS_DESCARGA_WALLET_CAJA,
   DETALLE_DESCARGA_WALLET_CAJA,
+  FIJAS_DESCARGA_WALLET_CAJA,
 } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
@@ -422,6 +423,8 @@ export function WalletLedger({
                 obtenerFilas: obtenerFilasDescarga,
                 // FICHA 464 (R1/R2/R6) — selector de columnas con su ámbito y la hoja de detalle.
                 ambitoColumnas: AMBITO_DESCARGA_WALLET_CAJA,
+                // FICHA 468 (R51) — Concepto, montos y Saldo no se pueden desmarcar.
+                columnasFijas: FIJAS_DESCARGA_WALLET_CAJA,
                 detalle: DETALLE_DESCARGA_WALLET_CAJA,
               }
             : undefined

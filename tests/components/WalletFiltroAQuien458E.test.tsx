@@ -29,7 +29,8 @@ const completoMock = vi.fn();
 const resumenMock = vi.fn();
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => listarMock(...a),
-  listarMovimientosCompletoAction: (...a: unknown[]) => completoMock(...a),
+  // Ficha 468: la descarga del libro lee el KARDEX.
+  libroCajaKardexAction: (...a: unknown[]) => completoMock(...a),
   verResumenCajaAction: (...a: unknown[]) => resumenMock(...a),
   listarMovimientosDeFilaAction: vi.fn(),
   registrarMovimientoManualAction: vi.fn(),
@@ -401,7 +402,10 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
     // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
     await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
-    await waitFor(() => expect(completoMock).toHaveBeenCalledWith({ aQuien: { tipo: "tienda", id: TIENDA_ID } }));
+    // Ficha 468 (R7): el archivo va siempre en orden cronológico ascendente.
+    await waitFor(() =>
+      expect(completoMock).toHaveBeenCalledWith({ aQuien: { tipo: "tienda", id: TIENDA_ID }, sortBy: "fecha", sortDir: "asc" }),
+    );
   });
 
   // FICHA 463 (R12) — la dirección se suma en el LIBRO; las cifras reciben solo «A quién».

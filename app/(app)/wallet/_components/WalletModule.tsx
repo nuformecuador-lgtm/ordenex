@@ -12,28 +12,20 @@ import {
 } from "@/components/ui/card";
 import { Pagination } from "@/components/shared/Pagination";
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
-import { enlazarHojas } from "@/components/shared/descarga-con-detalle";
-import {
-  SUFIJO_REINTENTO,
-  filasDesdeResultado,
-  mensajeLimite,
-  mensajeLimiteDetalle,
-} from "@/components/shared/descarga-resultado";
-import {
-  COLUMNA_DETALLE_POR_ORDEN,
-  COLUMNA_NUMERO_MOVIMIENTO,
-  textoDetallePorOrden,
-} from "@/components/shared/wallet/detalle-por-orden-descarga";
+import { SUFIJO_REINTENTO, mensajeLimite, mensajeLimiteDetalle } from "@/components/shared/descarga-resultado";
+import { filasDetallePorGuia, filasKardex } from "@/components/shared/wallet/libro-kardex-descarga";
 import { useToast } from "@/hooks/useToast";
 import {
+  libroCajaKardexAction,
+  libroCajaKardexConDetalleAction,
   listarMovimientosAction,
-  listarMovimientosCompletoAction,
-  listarMovimientosCompletoConDetalleAction,
   verResumenCajaAction,
+  type LibroCajaKardexActionResult,
+  type LibroCajaKardexConDetalleActionResult,
 } from "@/lib/actions/wallet";
+import type { DetallePorGuiaDTO, KardexDTO } from "@/lib/types/libro-kardex";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
-import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { messageFromActionError } from "@/lib/utils/action-error-message";
 import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type {
@@ -53,8 +45,9 @@ import {
   type CobrosRechazoTiendaPendientes,
 } from "./CobrosRechazoTiendaPendientesPanel";
 import { WalletLedger, type AutoriaDelLibro } from "./WalletLedger";
-import { DETALLE_MOVIMIENTO_SIN_REPARTO } from "./detalle-movimiento-labels";
-import { filaDescargaMovimientoCaja, filaDetallePorOrdenCaja } from "./wallet-ledger-descarga-columnas";
+import { resultadosTexto } from "./detalle-movimiento-labels";
+import { conceptoDeCaja, detalleDeCaja, fechaDeCaja } from "./libro-caja-kardex";
+import { filaBaseCaja, filaCabeceraGuiaCaja } from "./wallet-ledger-descarga-columnas";
 import { LECTURA_CAJA_FALLO } from "./wallet-labels";
 import {
   FILTROS_LIBRO_INICIALES,
@@ -216,71 +209,83 @@ async function leerAutoria(ids: readonly string[]): Promise<Map<string, AutoriaD
   return porMovimiento;
 }
 
-/** Una fila del libro con su autoría, tal como la proyecta la descarga. */
-interface MovimientoConAutoria {
-  movimiento: WalletMovimientoDTO;
-  autoria: AutoriaDeFilaDTO | undefined;
-}
-
 /**
- * FICHA 458-E (T E.1, R3/R55–R57) — el libro ENTERO con los filtros vigentes y, para CADA fila, «A
- * quién» y «Registró» (la misma lectura que la tabla), en la forma de un listado completo para que
- * el adaptador común (`filasDesdeResultado`) siga siendo quien aplica el tope y redacta los errores.
- * Si la autoría no se puede leer, su error ES el resultado: sin archivo, porque una hoja con esas dos
- * columnas vacías diría «nadie» donde el dato existe.
+ * FICHA 468 (T13; R5–R8, R16, R18, R20, R21, R24, R26, R53, R57) — la descarga del libro de la caja como
+ * KARDEX. «Solo los movimientos» llama a `libroCajaKardexAction`; con el detalle, a
+ * `libroCajaKardexConDetalleAction`: la MISMA entrada de la descarga de siempre (filtros y término) en
+ * UNA petición, con el orden forzado a cronológico ascendente aunque la pantalla diga «Más recientes»
+ * (R7; el servidor lo fuerza también). La hoja «Movimientos» sale de la MISMA función en los dos modos
+ * (R57). «A quién» y «Registró» se leen como en la tabla, en tramos del tope del borde (458-E). Si algo
+ * falla —tope, rol, autoría—, aviso y ningún archivo: una hoja con esas columnas vacías diría «nadie»
+ * donde el dato existe.
  */
-async function listarConAutoria(
-  input: Record<string, unknown>,
-): Promise<ListarCompletoResult<MovimientoConAutoria>> {
-  const res = await listarMovimientosCompletoAction(input);
-  if (res.status !== "ok") return res;
-  const porMovimiento = new Map<string, AutoriaDeFilaDTO>();
-  for (let i = 0; i < res.items.length; i += TOPE_IDS_AUTORIA) {
-    const tramo = res.items.slice(i, i + TOPE_IDS_AUTORIA).map((m) => m.id);
-    const r = await autoriaDelLibroCajaAction({ movimientoIds: tramo });
-    if (r.status !== "ok") return r;
-    for (const fila of r.filas) porMovimiento.set(fila.movimientoId, fila);
+async function descargaLibroCaja(input: Record<string, unknown>, conDetalle: boolean): Promise<DescargaFilasResult> {
+  const entrada = { ...input, sortBy: "fecha", sortDir: "asc" };
+  const desde = typeof input.desde === "string" ? input.desde : null;
+  if (conDetalle) {
+    const res = await libroCajaKardexConDetalleAction(entrada);
+    if (res.status !== "ok") return errorDeDescargaCaja(res);
+    return colocarLibroCaja(res.items, res.kardex, res.porGuia, desde);
   }
-  return {
-    ...res,
-    items: res.items.map((m) => ({ movimiento: m, autoria: porMovimiento.get(m.id) })),
-  };
+  const res = await libroCajaKardexAction(entrada);
+  if (res.status !== "ok") return errorDeDescargaCaja(res);
+  return colocarLibroCaja(res.items, res.kardex, undefined, desde);
 }
 
-/**
- * FICHA 464 (T8; R10, R13–R16, R36, R38, R39, R43) — la descarga «Movimientos y detalle por orden» de la
- * caja: UNA petición (`listarMovimientosCompletoConDetalleAction`, misma entrada que el completo de
- * siempre) trae el libro y el detalle de ESOS movimientos; la autoría se lee como hoy, en tramos; y
- * `enlazarHojas` numera y enlaza las dos hojas. Cualquier fallo es un aviso y ningún archivo.
- */
-async function listarConAutoriaYDetalle(input: Record<string, unknown>): Promise<DescargaFilasResult> {
-  const res = await listarMovimientosCompletoConDetalleAction(input);
+/** R56 / 464 R38–R39 — el tope (con el aviso de SU hoja) y cualquier otro fallo: aviso y ningún archivo. */
+function errorDeDescargaCaja(
+  res: Exclude<LibroCajaKardexActionResult | LibroCajaKardexConDetalleActionResult, { status: "ok" }>,
+): DescargaFilasResult {
   if (res.status === "limite_excedido") {
     return {
       status: "error",
       mensaje: res.hoja === "detalle" ? mensajeLimiteDetalle(res.total, res.limite) : mensajeLimite(res.total, res.limite),
     };
   }
-  if (res.status !== "ok") return { status: "error", mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}` };
+  return { status: "error", mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}` };
+}
+
+/** Coloca las dos hojas (la segunda solo con `porGuia`) con la autoría de cada fila. */
+async function colocarLibroCaja(
+  items: WalletMovimientoDTO[],
+  kardex: KardexDTO,
+  porGuia: DetallePorGuiaDTO | undefined,
+  desde: string | null,
+): Promise<DescargaFilasResult> {
   const porMovimiento = new Map<string, AutoriaDeFilaDTO>();
-  for (let i = 0; i < res.items.length; i += TOPE_IDS_AUTORIA) {
-    const tramo = res.items.slice(i, i + TOPE_IDS_AUTORIA).map((m) => m.id);
+  for (let i = 0; i < items.length; i += TOPE_IDS_AUTORIA) {
+    const tramo = items.slice(i, i + TOPE_IDS_AUTORIA).map((m) => m.id);
     const r = await autoriaDelLibroCajaAction({ movimientoIds: tramo });
     if (r.status !== "ok") return { status: "error", mensaje: `${messageFromActionError(r)} ${SUFIJO_REINTENTO}` };
     for (const fila of r.filas) porMovimiento.set(fila.movimientoId, fila);
   }
-  const hojas = enlazarHojas({
-    lineas: res.items,
-    numerada: () => true,
-    idDe: (m) => m.id,
-    filaDe: (m) => filaDescargaMovimientoCaja(m, porMovimiento.get(m.id)),
-    detalle: res.detalle,
-    filaDetalleDe: filaDetallePorOrdenCaja,
-    textoEstado: (d) => textoDetallePorOrden(d, DETALLE_MOVIMIENTO_SIN_REPARTO),
-    claveEnlace: COLUMNA_NUMERO_MOVIMIENTO.clave,
-    claveEstado: COLUMNA_DETALLE_POR_ORDEN.clave,
+  const hoja1 = filasKardex({
+    movimientos: items,
+    kardex,
+    filaBase: (m, ordenes) => filaBaseCaja(m, porMovimiento.get(m.id), ordenes),
+    variante: "caja",
+    fechaInicial: desde,
   });
-  return { status: "ok", ...hojas };
+  if (porGuia === undefined) return { status: "ok", filas: hoja1.filas, filasDestacadas: hoja1.filasDestacadas };
+  // El «N guía(s)» de la hoja 1 viaja en el kardex, alineado por índice: el Detalle de un movimiento en
+  // «Movimientos sin guía» es el MISMO texto que en la hoja 1 (R40).
+  const ordenesDe = new Map(items.map((m, i) => [m.id, kardex.filas[i].ordenes]));
+  const hoja2 = filasDetallePorGuia({
+    porGuia,
+    cabeceraDe: filaCabeceraGuiaCaja,
+    movimientoPorId: new Map(items.map((m) => [m.id, m])),
+    conceptoDe: conceptoDeCaja,
+    fechaDe: fechaDeCaja,
+    detalleDe: (m) => detalleDeCaja(m, ordenesDe.get(m.id) ?? null),
+    resultadosTexto,
+  });
+  return {
+    status: "ok",
+    filas: hoja1.filas,
+    filasDestacadas: hoja1.filasDestacadas,
+    filasDetalle: hoja2.filas,
+    filasDestacadasDetalle: hoja2.filasDestacadas,
+  };
 }
 
 export function WalletModule({
@@ -725,15 +730,11 @@ export function WalletModule({
               // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
               onCambio={() => void recargarTrasCambio()}
               autoria={autoria}
-              // FICHA 463 (R42): las dos zonas, el término y el orden vigentes.
-              // FICHA 464 (R13/R36): «Solo los movimientos» es la descarga de SIEMPRE; con el detalle, UNA
-              // petición con la MISMA entrada.
+              // FICHA 463 (R42): las dos zonas y el término vigentes.
+              // FICHA 468 (R7/R53/R57): las dos opciones son UNA petición cada una con la MISMA entrada; el
+              // orden del archivo es siempre cronológico ascendente (lo fuerza `descargaLibroCaja`).
               obtenerFilasDescarga={(opciones) =>
-                opciones?.conDetalle
-                  ? listarConAutoriaYDetalle(inputDeLibro(filtrosWallet, filtrosLibro))
-                  : filasDesdeResultado(listarConAutoria(inputDeLibro(filtrosWallet, filtrosLibro)), (f) =>
-                      filaDescargaMovimientoCaja(f.movimiento, f.autoria),
-                    )
+                descargaLibroCaja(inputDeLibro(filtrosWallet, filtrosLibro), opciones?.conDetalle === true)
               }
               // FICHA 467 (R1/R2) — la BARRA ÚNICA, encima de la tabla y en la fila de «Descargar».
               filtros={

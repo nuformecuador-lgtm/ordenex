@@ -111,6 +111,14 @@ describe("335 / R11 — la ficha no anade ninguna migracion ni objeto de esquema
 /** Prefijos de LECTURA. Todo lo que `/mi-wallet` importe de `lib/actions/` tiene que empezar asi. */
 const PREFIJOS_DE_LECTURA = /^(listar|ver|obtener|consultar|buscar)/;
 
+/**
+ * FICHA 468 — lecturas cuyo nombre no empieza por un prefijo de lectura, NOMINALES (no un patrón, para
+ * que una escritora no se cuele por parecido): las dos descargas del kardex de `/mi-wallet`. Las dos
+ * solo leen (`CuentaKardexService.miKardex{,ConDetalle}` sobre `leerMiTiendaCompleto` y el lote del
+ * detalle); ninguna escribe.
+ */
+const LECTURAS_SIN_PREFIJO: readonly string[] = ["miEstadoCuentaKardexAction", "miEstadoCuentaKardexConDetalleAction"];
+
 /** Los simbolos que un archivo importa de `@/lib/actions/...`, ya sin comentarios. */
 function actionsImportadas(rutaRelativa: string): string[] {
   const fuente = codigo(rutaRelativa);
@@ -138,7 +146,9 @@ describe("335 / R17 — `/mi-wallet` es de SOLO LECTURA: ninguna action que escr
     const escritoras: string[] = [];
     for (const ruta of ARCHIVOS_MI_WALLET) {
       for (const simbolo of actionsImportadas(ruta)) {
-        if (!PREFIJOS_DE_LECTURA.test(simbolo)) escritoras.push(`${ruta}: ${simbolo}`);
+        if (!PREFIJOS_DE_LECTURA.test(simbolo) && !LECTURAS_SIN_PREFIJO.includes(simbolo)) {
+          escritoras.push(`${ruta}: ${simbolo}`);
+        }
       }
     }
     // El rediseno de esta ficha NO puede ser la puerta por la que entre un boton que escriba:

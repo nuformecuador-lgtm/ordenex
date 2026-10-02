@@ -53,7 +53,7 @@ function orden(cierreId: string, n: number, valorFlete = "1000.00"): OrdenAporte
       cobraComision: false,
       tarifa: { ...TARIFA, valorFlete },
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "5000.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "5000.00", pagoMensajero: null, indemnizacion: null }],
   };
 }
 
@@ -112,11 +112,14 @@ function montar(opciones: {
   const listarPorIdsDeTienda = vi.fn<(ids: readonly string[], tiendaId: string) => Promise<WalletTiendaMovimientoDTO[]>>(async (ids) =>
     (opciones.movimientosDeTienda ?? []).filter((m) => ids.includes(m.id)),
   );
+  // FICHA 468: el libro del mensajero (su superficie se prueba en detalle-en-lote-468.test.ts).
+  const listarPorIdsDeMensajero = vi.fn(async () => []);
   const servicio = new DetalleEnLoteService(
     { contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres },
     { listarPorIdsDeTienda },
+    { listarPorIdsDeMensajero },
   );
-  return { servicio, contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres, listarPorIdsDeTienda };
+  return { servicio, contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres, listarPorIdsDeTienda, listarPorIdsDeMensajero };
 }
 
 function llamadasALaBase(m: ReturnType<typeof montar>): number {
@@ -312,7 +315,9 @@ describe("464 — R37: las consultas no crecen con el numero de movimientos", ()
 });
 
 describe("464 — R18/R20/R24: forma y orden de la salida", () => {
-  it("un detalle por movimiento, en el orden recibido; las ordenes en el orden del repositorio", async () => {
+  // FICHA 468 (R27): el pago al mensajero de la caja ya se reparte; la fila «sin reparto de un cierre» es
+  // ahora la indemnizacion que nace de un incidente.
+  it("468 R27 (antes 464): un detalle por movimiento, en el orden recibido; las ordenes en el orden del repositorio", async () => {
     const filas = [orden("c-1", 7), orden("c-1", 3), orden("c-2", 9)];
     const m = montar({ filas });
     const r = await m.servicio.detallar(
@@ -322,7 +327,7 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
           movCaja({ id: "z", origenId: "c-2", monto: "1000.00" }),
           movCaja({ id: "gasto", categoria: "egreso_gasto", origenTipo: "gasto", origenId: "x" }),
           movCaja({ id: "a", origenId: "c-1", monto: "2000.00" }),
-          movCaja({ id: "pago", categoria: "egreso_pago_mensajero", origenId: "c-1" }),
+          movCaja({ id: "pago", categoria: "egreso_indemnizacion", origenTipo: "orden_incidente", origenId: "i-1" }),
           movCaja({ id: "manual", origenTipo: "manual", origenId: null }),
         ],
       },
@@ -335,18 +340,20 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
     const a = r.detalle[2];
     expect(a.modo === "ordenes" && a.ordenes.map((o) => o.remision)).toEqual(["REM-7", "REM-3"]);
     expect(r.detalle[1]).toEqual({ movimientoId: "gasto", modo: "sin_reparto", motivo: "no_nace_de_un_cierre" });
-    expect(r.detalle[3]).toEqual({ movimientoId: "pago", modo: "sin_reparto", motivo: "snapshot_del_cierre" });
+    expect(r.detalle[3]).toEqual({ movimientoId: "pago", modo: "sin_reparto", motivo: "no_nace_de_un_cierre" });
     expect(r.detalle[4]).toEqual({ movimientoId: "manual", modo: "sin_reparto", motivo: "no_nace_de_un_cierre" });
   });
 
-  it("R24 (servidor): si nada tiene reparto, cero consultas y un detalle solo de motivos", async () => {
+  // FICHA 468 (R27): el contra-entrega de la caja ya se reparte; el caso «nada tiene reparto» usa ahora la
+  // indemnizacion que nace de un INCIDENTE (sigue sin reparto, fuera de alcance de la 468).
+  it("R24 (servidor) + 468 R27: si nada tiene reparto, cero consultas y un detalle solo de motivos", async () => {
     const m = montar({});
     const r = await m.servicio.detallar(
       {
         superficie: "caja",
         movimientos: [
           movCaja({ id: "g", categoria: "egreso_gasto", origenTipo: "gasto" }),
-          movCaja({ id: "cod", categoria: "ingreso_cod_recaudado" }),
+          movCaja({ id: "ind", categoria: "egreso_indemnizacion", origenTipo: "orden_incidente" }),
         ],
       },
       MAESTRO,
@@ -355,18 +362,22 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
       status: "ok",
       detalle: [
         { movimientoId: "g", modo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
-        { movimientoId: "cod", modo: "sin_reparto", motivo: "suma_del_libro_por_tienda" },
+        { movimientoId: "ind", modo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
       ],
     });
     expect(llamadasALaBase(m)).toBe(0);
   });
 
-  it("la orden sin guia congelada sale con guia null y su remision; ningun id interno en la DTO", async () => {
+  // FICHA 468 (design §4.1) — SUSTITUYE a «…ningun id interno en la DTO»: la orden viaja con `clave` (su id),
+  // el enlace del bloque de una orden sin guia en la hoja «Detalle por guía». Viaja y NUNCA se pinta: la
+  // guardia de columnas sensibles mide que no llega a una celda.
+  it("468 (antes 464 R30): la orden sin guia sale con guia null, su remision y su `clave` de enlace", async () => {
     const sinGuia = { ...orden("c-1", 1), numGuia: null };
     const m = montar({ filas: [sinGuia] });
     const r = await m.servicio.detallar({ superficie: "caja", movimientos: [movCaja({ id: "m" })] }, MAESTRO);
     if (r.status !== "ok" || r.detalle[0].modo !== "ordenes") throw new Error("se esperaba ok con ordenes");
     expect(r.detalle[0].ordenes[0]).toEqual({
+      clave: "o-c-1-1",
       guia: null,
       remision: "REM-1",
       destinatario: "Dest 1",
@@ -374,7 +385,9 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
       resultados: ["entregado"],
       aporte: "1000.00",
     });
-    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain("o-c-1-1");
+    // Y ningun OTRO identificador: ni el del cierre ni el del movimiento.
+    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain('"c-1"');
+    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain('"m"');
   });
 });
 
@@ -419,8 +432,8 @@ describe("464 — R21/R22/R23: aporte derivado y cuadre con Decimal en el servid
     const dos = {
       ...orden("c-1", 1),
       gestiones: [
-        { resultado: "entregado" as const, montoRecibido: "3000.00" },
-        { resultado: "entregado" as const, montoRecibido: "2000.50" },
+        { resultado: "entregado" as const, montoRecibido: "3000.00", pagoMensajero: null, indemnizacion: null },
+        { resultado: "entregado" as const, montoRecibido: "2000.50", pagoMensajero: null, indemnizacion: null },
       ],
     };
     const m = montar({ filas: [dos], movimientosDeTienda: [movTienda({ id: "m1", monto: "5000.50" })] });

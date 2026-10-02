@@ -59,6 +59,10 @@ function buildWhere(
           cierreId,
           resultado: { in: [...criterio.resultados] },
           ...(criterio.exigeMontoRecibido ? { montoRecibido: { gt: 0 } } : {}),
+          // FICHA 468 (design §2.2): la supresion de ceros de los dos snapshots por gestion, DENTRO del
+          // mismo `some` correlacionado con el cierre (la gestion que aporta es la de ESTE cierre).
+          ...(criterio.exigePagoMensajero ? { pagoMensajero: { gt: 0 } } : {}),
+          ...(criterio.exigeIndemnizacion ? { indemnizacion: { gt: 0 } } : {}),
         },
       },
     },
@@ -120,6 +124,8 @@ function aFilaDeAporte(
   gestiones: ReadonlyArray<{
     resultado: OrdenAporteRow["gestiones"][number]["resultado"];
     montoRecibido: Prisma.Decimal | null;
+    pagoMensajero: Prisma.Decimal | null;
+    indemnizacion: Prisma.Decimal | null;
   }>,
 ): OrdenAporteRow {
   return {
@@ -141,6 +147,9 @@ function aFilaDeAporte(
     gestiones: gestiones.map((g) => ({
       resultado: g.resultado,
       montoRecibido: g.montoRecibido === null ? null : g.montoRecibido.toFixed(2),
+      // FICHA 468: los dos snapshots que reparten el pago al mensajero y la indemnizacion.
+      pagoMensajero: g.pagoMensajero === null ? null : g.pagoMensajero.toFixed(2),
+      indemnizacion: g.indemnizacion === null ? null : g.indemnizacion.toFixed(2),
     })),
   };
 }
@@ -180,7 +189,7 @@ export class CierreAporteRepository implements ICierreAporteRepository {
                 // Ficha 464: + `id` como desempate (dos gestiones de la misma transaccion comparten
                 // `created_at`); el detalle en lote usa EXACTAMENTE este orden.
                 orderBy: [...ORDEN_GESTIONES],
-                select: { resultado: true, montoRecibido: true },
+                select: { resultado: true, montoRecibido: true, pagoMensajero: true, indemnizacion: true },
               },
             },
           },
@@ -233,7 +242,7 @@ export class CierreAporteRepository implements ICierreAporteRepository {
             gestiones: {
               where: { cierreId: { in: [...f.cierreIds] } },
               orderBy: [...ORDEN_GESTIONES],
-              select: { cierreId: true, resultado: true, montoRecibido: true },
+              select: { cierreId: true, resultado: true, montoRecibido: true, pagoMensajero: true, indemnizacion: true },
             },
           },
         },

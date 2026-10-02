@@ -22,28 +22,23 @@ import type { GestionResultado } from "@prisma/client";
  * construir un `Record` TOTAL de textos: un motivo nuevo sin frase rompe el build en vez de
  * pintar una fila muda.
  *
- * Los cuatro motivos, con su fuente REAL escrita al lado (esa frase es el requisito R48: la
- * fila se abre igual y dice de donde sale su importe):
+ * Los motivos, con su fuente REAL escrita al lado (esa frase es el requisito R48: la fila se abre
+ * igual y dice de donde sale su importe):
  *
  *  - `no_nace_de_un_cierre`      — ajustes manuales, gastos, sueldos, pagos a tienda y sus
- *                                  reversos. No hay cierre del que colgar ordenes.
- *  - `snapshot_del_cierre`       — `egreso_pago_mensajero`: su importe es la columna
- *                                  `cierre_dia.total_pago_mensajero`, un snapshot del cierre
- *                                  entero. Su productor NO acumula por orden.
- *  - `suma_del_libro_por_tienda` — `ingreso_cod_recaudado` de la caja: es la suma de los
- *                                  creditos que ese mismo cierre dejo en el libro POR TIENDA.
- *                                  Repartirlo por orden exigiria afirmar una invariante entre
- *                                  dos snapshots que esta ficha NO ha medido.
- *  - `otro_productor`            — `egreso_indemnizacion`: su reparto por orden SI esta
- *                                  disponible (`gestion_orden.indemnizacion`), pero lo emite un
- *                                  tercer productor y esta ficha se limita a los dos feeds que
- *                                  comparten `derivarIngresoOrden`. Es el follow-up mas barato.
+ *                                  reversos (y la indemnizacion que nace de un incidente). No hay
+ *                                  cierre del que colgar ordenes.
+ *  - `snapshot_del_cierre`       — FICHA 468: SOLO el `pago_efectivo` del libro del mensajero, que
+ *                                  vale `min(P, E)` del cierre. Repartirlo por guia exigiria decidir
+ *                                  a que guias se carga el faltante de efectivo (una formula nueva).
+ *
+ * FICHA 468 (design §2.4) — se RETIRAN `suma_del_libro_por_tienda` (el contra-entrega de la caja) y
+ * `otro_productor` (la indemnizacion del cierre): esos dos conceptos y el pago al mensajero se reparten
+ * ahora por guia con la columna de `gestion_orden` cuya suma ES su importe (R27, medido al 100 %).
  */
 export const MOTIVO_SIN_REPARTO_SEED = [
   "no_nace_de_un_cierre",
   "snapshot_del_cierre",
-  "suma_del_libro_por_tienda",
-  "otro_productor",
 ] as const;
 
 export type MotivoSinReparto = (typeof MOTIVO_SIN_REPARTO_SEED)[number];

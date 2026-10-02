@@ -15,9 +15,10 @@ import { DETALLE_MOVIMIENTO_ERROR, DETALLE_MOVIMIENTO_SIN_REPARTO } from "./deta
 // página y el movimiento de la fila), no lo que se ve.
 //
 // La cuenta y el movimiento viajan como ids y no se pintan (H6); el servidor lee el movimiento CON la
-// cuenta en el `WHERE` (uno de otra cuenta = inexistente) y, en la tienda, solo SUS órdenes. En el
-// mensajero responde siempre `sin_reparto: snapshot_del_cierre` (su pago es un total del cierre): el
-// panel lo dice en palabras, y el enlace a SU cierre es el del origen de la fila.
+// cuenta en el `WHERE` (uno de otra cuenta = inexistente) y, en la tienda, solo SUS órdenes. FICHA 468
+// (R27/R28): en el mensajero, el pago devengado lista sus órdenes (con su tienda); el pago tomado del
+// efectivo de un cierre no se reparte por guía y el panel lo dice en palabras, con el enlace a SU cierre
+// en el origen de la fila.
 
 export type CuentaConOrdenes = { tipo: "tienda" | "mensajero"; id: string };
 

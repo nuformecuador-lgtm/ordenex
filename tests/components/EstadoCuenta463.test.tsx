@@ -32,9 +32,12 @@ const H = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/estado-cuenta", () => ({
   verEstadoCuentaAction: (...a: unknown[]) => H.ver(...a),
-  verEstadoCuentaCompletoAction: (...a: unknown[]) => H.completo(...a),
+  // Ficha 468: la descarga lee el KARDEX (`estadoCuentaKardexAction` / `miEstadoCuentaKardexAction`).
+  estadoCuentaKardexAction: (...a: unknown[]) => H.completo(...a),
+  estadoCuentaKardexConDetalleAction: vi.fn(),
   verMiEstadoCuentaAction: (...a: unknown[]) => H.verMi(...a),
-  verMiEstadoCuentaCompletoAction: (...a: unknown[]) => H.completoMi(...a),
+  miEstadoCuentaKardexAction: (...a: unknown[]) => H.completoMi(...a),
+  miEstadoCuentaKardexConDetalleAction: vi.fn(),
   verOrdenesDeFilaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-filtros", () => ({
@@ -342,11 +345,21 @@ describe("463 R41 — el término y el orden van en la clave de caché", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("463 R43 — el Excel: filtros, término y orden vigentes; el saldo inicial donde cae", () => {
+// FICHA 468 (R7, decisión 2 del humano) — el archivo SIEMPRE va en orden cronológico ascendente: un saldo
+// corrido solo se lee de la más antigua a la más reciente. Sustituye a lo que la 463 (R43) prometía del
+// orden del archivo; el filtro y el término siguen viajando (463 R42).
+describe("468 R7 (antes 463 R43) — el Excel: filtros y término vigentes, SIEMPRE en orden cronológico", () => {
   const ESTADO = estado({ filas: TRES, total: 3, saldoInicial: "0.00" });
+  const KARDEX = {
+    saldoInicial: "0.00",
+    saldoFinal: "0.00",
+    totales: { entra: "0.00", sale: "0.00", cobradoATiendas: null },
+    conOtrosFiltros: true,
+    filas: TRES.map((f) => ({ monto: { columna: "entra" as const, monto: f.abono ?? f.cargo ?? "0.00" }, saldo: f.saldoCorrido, ordenes: null })),
+  };
 
   it("«Más antiguas»: la línea del saldo inicial es la PRIMERA fila del archivo", async () => {
-    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO });
+    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO, kardex: KARDEX });
     const r = await filasDelPeriodo(
       lectorDeLaCuenta({ tipo: "tienda", id: UUID_TIENDA }),
       { chip: "cobros", q: "etiquetas", sortBy: "fecha", sortDir: "asc" },
@@ -361,23 +374,25 @@ describe("463 R43 — el Excel: filtros, término y orden vigentes; el saldo ini
     });
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.filas).toHaveLength(4);
-    expect(r.filas[0].movimiento).toBe("Saldo inicial");
-    expect(r.filas[1].fecha).toBe("2026-09-13");
+    // Saldo inicial + 3 movimientos + total + aviso de filtros.
+    expect(r.filas).toHaveLength(6);
+    expect(r.filas[0].concepto).toBe("Saldo al inicio del periodo");
   });
 
-  it("«Más recientes» (sin orden en el filtro): la línea del saldo inicial es la ÚLTIMA fila", async () => {
-    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO });
+  it("«Más recientes» (sin orden en el filtro): TAMBIÉN pide ascendente y el saldo inicial es la PRIMERA fila", async () => {
+    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO, kardex: KARDEX });
     const r = await filasDelPeriodo(lectorDeLaCuenta({ tipo: "tienda", id: UUID_TIENDA }), {}, ROTULOS_TIENDA);
+    expect(H.completo).toHaveBeenCalledWith({ cuenta: { tipo: "tienda", id: UUID_TIENDA }, sortBy: "fecha", sortDir: "asc" });
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.filas[3].movimiento).toBe("Saldo inicial");
-    expect(r.filas[0].fecha).toBe("2026-09-13");
+    expect(r.filas[0].concepto).toBe("Saldo al inicio del periodo");
+    // Las filas, en el orden en que las devolvió el servidor (que las lee ascendentes).
+    expect(r.filas.slice(1, 4).map((f) => f.fecha)).toEqual(TRES.map((f) => f.fecha));
   });
 
-  it("la pantalla manda a la descarga el término y el orden vigentes", async () => {
+  it("la pantalla manda a la descarga el término vigente, con el orden ascendente", async () => {
     const user = userEvent.setup();
-    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO });
+    H.completo.mockResolvedValue({ status: "ok", estado: ESTADO, kardex: KARDEX });
     montarTienda();
     await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
     await user.type(buscador(), "etiquetas");

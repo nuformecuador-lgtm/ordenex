@@ -30,7 +30,8 @@ const H = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => H.listar(...a),
-  listarMovimientosCompletoAction: (...a: unknown[]) => H.completo(...a),
+  // Ficha 468: la descarga del libro lee el KARDEX.
+  libroCajaKardexAction: (...a: unknown[]) => H.completo(...a),
   verResumenCajaAction: (...a: unknown[]) => H.resumen(...a),
   listarMovimientosDeFilaAction: (...a: unknown[]) => H.fila(...a),
   registrarMovimientoManualAction: vi.fn(),

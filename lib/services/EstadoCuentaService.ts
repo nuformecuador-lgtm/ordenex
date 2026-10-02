@@ -45,6 +45,7 @@ import {
   paresDeChipMensajero,
   paresDeChipTienda,
   saldoAlFinal,
+  sentidoDelSaldo,
   totalesNetos,
 } from "@/lib/utils/estado-cuenta";
 import {
@@ -227,7 +228,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
       lectura.saldoInicial,
       lectura.abonos,
       lectura.cargos,
-      tipo === "bodega" ? "por_entregar" : "a_favor_del_titular",
+      sentidoDelSaldo(tipo), // ficha 468: el mismo sentido que la columna de cada fila del kardex
     );
     if (hastaUtc === undefined && saldoFinal !== lectura.saldoActual) {
       throw new Error(

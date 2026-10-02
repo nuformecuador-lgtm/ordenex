@@ -1,0 +1,14 @@
+== Hoja «Estado de cuenta de Marco Mens…» (12 filas de datos)
+Fecha | Concepto | Detalle | Entra | Sale | Saldo | Registró
+**  | Saldo al inicio del periodo |  |  |  | 0 (num) | 
+   2026-08-12 | Pago devengado | Cierre del día · 2026-08-12 · Marco Mensajero · 7 guías | 10200 (num) |  | 10200 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | Pago del efectivo | Cierre del día · 2026-08-12 · Marco Mensajero |  | 10200 (num) | 0 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante. |  | 1400 (num) | -1400 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 1400 (num) |  | 0 (num) | Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. |  | 3400 (num) | -3400 (num) | Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. |  | 600 (num) | -4000 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 600 (num) |  | -3400 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 3400 (num) |  | 0 (num) | Ana Admin
+   2026-08-13 | Pago devengado | Cierre del día · 2026-08-13 · Marco Mensajero · 2 guías | 3400 (num) |  | 3400 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Pago devengado | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías | 1700 (num) |  | 5100 (num) | Automático · Aprobación del cierre por Ana Admin
+**  | Total del periodo |  | 20700 (num) | 15600 (num) | 5100 (num) | 

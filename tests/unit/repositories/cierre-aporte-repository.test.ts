@@ -41,8 +41,9 @@ function filaCongelada(over: Partial<Record<string, unknown>> = {}) {
     tiendaNombre: "Tienda A",
     orden: {
       gestiones: [
-        { resultado: "entregado", montoRecibido: new Prisma.Decimal("14900.00") },
-        { resultado: "reprogramado", montoRecibido: null },
+        // FICHA 468: la gestion trae tambien sus dos snapshots (pago al mensajero e indemnizacion).
+        { resultado: "entregado", montoRecibido: new Prisma.Decimal("14900.00"), pagoMensajero: new Prisma.Decimal("1500.00"), indemnizacion: null },
+        { resultado: "reprogramado", montoRecibido: null, pagoMensajero: null, indemnizacion: null },
       ],
     },
     ...over,
@@ -231,8 +232,8 @@ describe("CierreAporteRepository — la forma de la consulta (R21/R22)", () => {
     expect(pagina.items[0].orden.tarifa?.valorFlete).toBe("1000.00");
     expect(pagina.items[0].orden.tarifa?.comisionCod).toBe("3.50");
     expect(pagina.items[0].gestiones).toEqual([
-      { resultado: "entregado", montoRecibido: "14900.00" },
-      { resultado: "reprogramado", montoRecibido: null },
+      { resultado: "entregado", montoRecibido: "14900.00", pagoMensajero: "1500.00", indemnizacion: null },
+      { resultado: "reprogramado", montoRecibido: null, pagoMensajero: null, indemnizacion: null },
     ]);
     expect(pagina.total).toBe(7); // el del `count`, no `items.length`
     expect(pagina.items).toHaveLength(1);

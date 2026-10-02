@@ -255,11 +255,13 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
     // uso lo exige en los dos sentidos.
     expect(Object.keys(acciones).sort()).toEqual([
       "anularAjusteCajaAction", // ficha 461 (R69–R71): anular una correccion de caja
+      "libroCajaKardexAction", // ficha 468 (R5–R16, R61): la hoja «Movimientos» como kardex (cableada en el bloque B)
+      "libroCajaKardexConDetalleAction", // ficha 468 (R26, R33–R46): las dos hojas (cableada en el bloque B)
       "listarMovimientosAction",
+      // Ficha 468 (bloque B): queda sin pantalla (`@sin-superficie`); su retirada la decide el leader.
       "listarMovimientosCompletoAction",
-      // Ficha 464 (T6): la descarga «Movimientos y detalle por orden» de la caja, deliberada; nace
-      // `@sin-superficie` hasta que el frontend de la 464 (T8) la cablee.
-      "listarMovimientosCompletoConDetalleAction",
+      // Ficha 464 (T6) → 468 (bloque B): `listarMovimientosCompletoConDetalleAction` se RETIRÓ con su
+      // orquestador; la sustituye `libroCajaKardexConDetalleAction`.
       "listarMovimientosDeFilaAction",
       "registrarMovimientoManualAction",
       "verDetalleDeMovimientoAction",

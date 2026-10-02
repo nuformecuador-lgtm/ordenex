@@ -39,8 +39,13 @@ import type { DataTableDescarga, DataTableDescargaDetalle } from "@/components/s
  * principal, o también la hoja de detalle) y, si van las dos, «Columnas de la hoja» (de cuál se eligen
  * las columnas que se listan debajo). Cada hoja guarda su elección en su propio ámbito (R2/R11); lo que
  * se descarga NO se guarda y arranca siempre con el detalle (R8). Con detalle el archivo es siempre
- * Excel (R12) y lleva las dos columnas FIJAS —enlace y estado—, que no están en el catálogo del
- * selector y por eso no se pueden desmarcar (R17). Sin `detalle`, nada de esto existe (R41).
+ * Excel (R12). Sin `detalle`, nada de esto existe (R41).
+ *
+ * FICHA 468 (design §6) — las dos columnas fijas de la 464 («N.º» y «Detalle por orden») desaparecen.
+ * En su lugar, cada hoja declara `columnasFijas`: claves de SU catálogo que el selector lista marcadas
+ * y deshabilitadas (R51) y que salen siempre en el archivo, en el orden elegido, aunque una preferencia
+ * guardada antes las ocultara (R52). Y la respuesta puede traer `filasDestacadas` por hoja (negritas,
+ * R23/R47), que se pasan tal cual al generador.
  */
 export interface DescargarDatasetButtonProps extends DataTableDescarga {
   /** Texto del botón (i18n por prop, sin literal fijo en el consumidor). */
@@ -101,19 +106,41 @@ const HOJA_PRINCIPAL = "principal";
 const HOJA_DETALLE = "detalle";
 type Hoja = typeof HOJA_PRINCIPAL | typeof HOJA_DETALLE;
 
+/** Sin columnas fijas: lista estable (dependencia de `useMemo`). */
+const SIN_FIJAS: readonly string[] = [];
+
 /**
- * Ficha 464 — la hoja de detalle, ya resuelta, que acompaña a la principal en el archivo. La columna
- * de enlace se pone aquí y no en el catálogo: así el selector no la lista y no se puede desmarcar (R17).
+ * Ficha 468 (R51/R52) — las columnas que salen en el archivo: las del orden efectivo del ámbito que
+ * estén marcadas O sean fijas. Sin fijas, exactamente las `visibles` del hook (el comportamiento de
+ * siempre). Sin ámbito, `ordenadas` es el catálogo tal cual y todas salen.
  */
+function columnasDelArchivo(
+  ordenadas: readonly DescargaColumna[],
+  visibles: DescargaColumna[],
+  fijas: readonly string[],
+): DescargaColumna[] {
+  if (fijas.length === 0) return visibles;
+  const marcadas = new Set(visibles.map(claveDeDescarga));
+  return ordenadas.filter((c) => marcadas.has(c.clave) || fijas.includes(c.clave));
+}
+
+/** Ficha 468 (R23) — las negritas de la hoja principal, solo si las hay: sin ellas, el archivo de siempre. */
+function destacadas(filas: readonly number[] | undefined): { filasDestacadas?: readonly number[] } {
+  return filas === undefined || filas.length === 0 ? {} : { filasDestacadas: filas };
+}
+
+/** Ficha 464 — la hoja de detalle, ya resuelta, que acompaña a la principal en el archivo. */
 function hojaDeDetalle(
   detalle: DataTableDescargaDetalle,
-  visiblesDetalle: readonly DescargaColumna[],
+  columnasDetalle: DescargaColumna[],
   filas: DescargaHoja["filas"],
+  filasDestacadas: readonly number[] | undefined,
 ): DescargaHoja {
   return {
     titulo: detalle.titulo,
-    columnas: [detalle.columnaEnlace, ...visiblesDetalle],
+    columnas: columnasDetalle,
     filas,
+    ...(filasDestacadas === undefined || filasDestacadas.length === 0 ? {} : { filasDestacadas }),
   };
 }
 
@@ -123,6 +150,7 @@ export function DescargarDatasetButton({
   obtenerFilas,
   formatos,
   ambitoColumnas,
+  columnasFijas = SIN_FIJAS,
   detalle: detalleDeclarado,
   label,
   className,
@@ -133,21 +161,24 @@ export function DescargarDatasetButton({
   // tal cual, así que las 24 tablas restantes no cambian ni una línea (R33).
   const claveColumnas =
     ambitoColumnas === undefined ? null : claveDeAmbitoDescarga(ambitoColumnas);
-  const { visibles } = usePreferenciaColumnas(
+  const { visibles: marcadas, ordenadas } = usePreferenciaColumnas(
     claveColumnas,
     columnas,
     claveDeDescarga,
   );
+  // Ficha 468 (R51/R52) — las fijas salen siempre; sin ámbito no hay selector y salen todas.
+  const visibles = claveColumnas === null ? marcadas : columnasDelArchivo(ordenadas, marcadas, columnasFijas);
   // Ficha 464 — la hoja de detalle solo se ofrece con el ámbito de la principal: las dos hojas se
   // eligen en el mismo selector, y sin ámbito no habría dónde guardar la elección de la principal.
   const detalle = claveColumnas === null ? undefined : detalleDeclarado;
   const claveDetalle =
     detalle === undefined ? null : claveDeAmbitoDescarga(detalle.ambitoColumnas);
-  const { visibles: visiblesDetalle } = usePreferenciaColumnas(
+  const { visibles: marcadasDetalle, ordenadas: ordenadasDetalle } = usePreferenciaColumnas(
     claveDetalle,
     detalle?.columnas ?? SIN_COLUMNAS,
     claveDeDescarga,
   );
+  const visiblesDetalle = columnasDelArchivo(ordenadasDetalle, marcadasDetalle, detalle?.columnasFijas ?? SIN_FIJAS);
   // R8 — arranca CON detalle y no se recuerda: es estado local, se pierde al desmontar.
   const [conDetalle, setConDetalle] = useState(true);
   const [hoja, setHoja] = useState<Hoja>(HOJA_PRINCIPAL);
@@ -204,17 +235,20 @@ export function DescargarDatasetButton({
       // bundle inicial de todas las pantallas que montan un `DataTable`.
       const { construirDescarga } = await import("@/lib/utils/descarga-dataset");
       if (descargaDetalle && detalle !== undefined) {
-        // Ficha 464 (R10/R17/R36) — las dos hojas, de la MISMA respuesta. Sin filas de detalle no
-        // hay archivo: una hoja vacía diría «ninguna orden» donde el consumidor no las leyó.
+        // Ficha 464 (R10/R36) — las dos hojas, de la MISMA respuesta. Sin filas de detalle no hay
+        // archivo: una hoja vacía diría «ninguna orden» donde el consumidor no las leyó.
         if (resultado.filasDetalle === undefined) {
           throw new Error("faltan las filas de la hoja de detalle");
         }
         const archivo = await construirDescarga({
           tipo: FORMATO_POR_DEFECTO,
           titulo,
-          columnas: [detalle.columnaEnlace, ...visibles, detalle.columnaEstado],
+          columnas: visibles,
           filas: resultado.filas,
-          hojasAdicionales: [hojaDeDetalle(detalle, visiblesDetalle, resultado.filasDetalle)],
+          ...destacadas(resultado.filasDestacadas),
+          hojasAdicionales: [
+            hojaDeDetalle(detalle, visiblesDetalle, resultado.filasDetalle, resultado.filasDestacadasDetalle),
+          ],
         });
         descargarBlob(archivo.contenido, archivo.mime, archivo.nombreArchivo);
         return;
@@ -227,6 +261,7 @@ export function DescargarDatasetButton({
         // los datos: las filas llegan enteras y el generador ignora las claves no declaradas.
         columnas: visibles,
         filas: resultado.filas,
+        ...destacadas(resultado.filasDestacadas),
       });
       // R32: el archivo nace y muere en el navegador; ni subida ni almacenamiento.
       descargarBlob(archivo.contenido, archivo.mime, archivo.nombreArchivo);
@@ -278,6 +313,7 @@ export function DescargarDatasetButton({
           tituloPrincipal={titulo}
           clavePrincipal={claveColumnas}
           columnasPrincipal={columnas}
+          fijasPrincipal={columnasFijas}
           conDetalle={conDetalle}
           onConDetalle={setConDetalle}
           hoja={hoja}
@@ -291,6 +327,7 @@ export function DescargarDatasetButton({
           etiquetaDe={etiquetaDeDescarga}
           titulo="Columnas del archivo"
           etiquetaDisparador="Elegir columnas de la descarga"
+          fijas={columnasFijas}
         />
       ) : null}
 
@@ -329,6 +366,7 @@ function SelectorConDetalle({
   tituloPrincipal,
   clavePrincipal,
   columnasPrincipal,
+  fijasPrincipal,
   conDetalle,
   onConDetalle,
   hoja,
@@ -338,6 +376,7 @@ function SelectorConDetalle({
   tituloPrincipal: string;
   clavePrincipal: string;
   columnasPrincipal: DescargaColumna[];
+  fijasPrincipal: readonly string[];
   conDetalle: boolean;
   onConDetalle: (v: boolean) => void;
   hoja: Hoja;
@@ -356,6 +395,7 @@ function SelectorConDetalle({
   const enDetalle = conDetalle && hoja === HOJA_DETALLE;
   const clave = enDetalle ? claveDeAmbitoDescarga(detalle.ambitoColumnas) : clavePrincipal;
   const publicadas = enDetalle ? detalle.columnas : columnasPrincipal;
+  const fijas = enDetalle ? (detalle.columnasFijas ?? SIN_FIJAS) : fijasPrincipal;
 
   const encabezado = (
     <div className="flex flex-col gap-3">
@@ -392,6 +432,7 @@ function SelectorConDetalle({
       titulo={SELECTOR_DETALLE_TITULO}
       etiquetaDisparador={SELECTOR_DETALLE_DISPARADOR}
       encabezado={encabezado}
+      fijas={fijas}
     />
   );
 }

@@ -114,6 +114,12 @@ export type DescargaFilasResult =
        * `conDetalle: true` y la configuración declara `detalle`. Ausente en todo lo demás.
        */
       filasDetalle?: DescargaFila[];
+      /**
+       * Ficha 468 (R23/R47) — índices (0 = la primera fila de datos) de las filas que van en negrita en
+       * la hoja principal y en la de detalle. Solo xlsx; el csv las ignora. Ausentes ⇒ ninguna.
+       */
+      filasDestacadas?: readonly number[];
+      filasDestacadasDetalle?: readonly number[];
     }
   | { status: "error"; mensaje: string };
 
@@ -130,16 +136,18 @@ export type DescargaFilasResult =
 export type DataTableDescargaDetalle = Required<Pick<DataTableDescarga, "ambitoColumnas">> & {
   /** Nombre de la hoja de detalle (se sanea y se hace distinto del de la principal). */
   titulo: string;
-  /** Catálogo ELEGIBLE de la hoja de detalle, sin la columna de enlace (que es fija). */
+  /** Catálogo de la hoja de detalle (ficha 468: ya no hay columnas fuera del catálogo). */
   columnas: DescargaColumna[];
   /** R6 — la opción que descarga las dos hojas; su texto dice cuántas hojas lleva. */
   etiquetaOpcion: string;
   /** R6 — la opción que descarga solo la hoja principal; su texto dice cuántas hojas lleva. */
   etiquetaSinDetalle: string;
-  /** R15/R17/R19 — columna FIJA, primera de las dos hojas: enlaza cada fila de detalle con su fila. */
-  columnaEnlace: DescargaColumna;
-  /** R16/R17 — columna FIJA, última de la hoja principal: qué detalle tiene cada fila. */
-  columnaEstado: DescargaColumna;
+  /**
+   * Ficha 468 (R51) — claves del catálogo de la hoja de detalle que el selector lista MARCADAS y sin
+   * poder desmarcar (se pueden reordenar). Sustituye a las dos columnas fijas de la 464 («N.º» y
+   * «Detalle por orden»), que ya no existen.
+   */
+  columnasFijas?: readonly string[];
 };
 
 /**
@@ -176,6 +184,13 @@ export interface DataTableDescarga {
    * un IDENTIFICADOR, y quien lee el almacenamiento es el control común.
    */
   ambitoColumnas?: string;
+  /**
+   * Ficha 468 (R51) — claves del catálogo que el selector lista MARCADAS y sin poder desmarcar (se
+   * pueden reordenar). Siempre salen en el archivo, también si una preferencia guardada antes las
+   * ocultaba (R52). Ausente ⇒ todas se pueden desmarcar, como en las demás tablas. Solo tiene efecto
+   * con `ambitoColumnas` (sin ámbito salen todas las columnas declaradas).
+   */
+  columnasFijas?: readonly string[];
   /**
    * Ficha 464 (R6–R13) — la hoja de detalle opcional. AUSENTE ⇒ el control es exactamente el de
    * siempre: una hoja, sin opciones nuevas (R41). Exige `ambitoColumnas` en la principal (las dos hojas
@@ -594,6 +609,7 @@ export function DataTable<T>({
               obtenerFilas={descarga.obtenerFilas}
               formatos={descarga.formatos}
               ambitoColumnas={descarga.ambitoColumnas}
+              columnasFijas={descarga.columnasFijas}
               detalle={descarga.detalle}
             />
           ) : null}

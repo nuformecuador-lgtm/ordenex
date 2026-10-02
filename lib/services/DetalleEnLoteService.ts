@@ -6,11 +6,13 @@ import type {
   OrdenAporteEnLoteRow,
 } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { IMovimientosTiendaEnLoteRepository } from "@/lib/interfaces/repositories/IMovimientosTiendaEnLoteRepository";
+import type { IMovimientosMensajeroEnLoteRepository } from "@/lib/interfaces/repositories/IMovimientosMensajeroEnLoteRepository";
 import type {
   DetallarEnLoteInput,
   IDetalleEnLoteService,
 } from "@/lib/interfaces/services/IDetalleEnLoteService";
 import type {
+  ContarEnLoteServiceResult,
   DetalleDeMovimientoLoteDTO,
   DetalleEnLoteServiceResult,
   OrdenDelLoteDTO,
@@ -20,6 +22,7 @@ import { detalleMovimientoConfig } from "@/lib/config/detalle-movimiento";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import {
   FUENTE_CAJA,
+  FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   aporteDeOrden,
   fuenteDeMovimiento,
@@ -44,6 +47,14 @@ interface MovimientoResuelto {
 interface GrupoDeConcepto {
   criterio: CriterioDeAporte;
   cierreIds: Set<string>;
+}
+
+/** Ficha 468 — los pasos 1–4 ya dados: movimientos resueltos, grupos y conteos (sin leer ni una orden). */
+interface LotePreparado {
+  movimientos: MovimientoResuelto[];
+  grupos: Map<string, GrupoDeConcepto>;
+  conteos: Map<string, Map<string, number>>;
+  tiendaId: string | undefined;
 }
 
 /**
@@ -78,38 +89,31 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
       "contarAportesPorCierre" | "listarAportesDeCierres" | "cabecerasDeCierres"
     >,
     private readonly movimientosDeTienda: IMovimientosTiendaEnLoteRepository,
+    // FICHA 468 (design §4.1, R31/R55): el detalle por guia del estado de cuenta de un MENSAJERO.
+    private readonly movimientosDeMensajero: IMovimientosMensajeroEnLoteRepository,
   ) {}
 
+  /**
+   * Ficha 468 (design §7.3, R18/R61) — SOLO los conteos: cuantas ordenes componen cada movimiento
+   * (`null` si no es repartible), alineado con los movimientos recibidos. Mismos pasos 1–4 que `detallar`
+   * —guard, re-lectura acotada, decision de fuente y `contarAportesPorCierre`—, y NUNCA lee una orden
+   * (`listarAportesDeCierres` no se llama en ningun caso). Sin tope: un conteo no es un archivo.
+   */
+  async contar(input: DetallarEnLoteInput, actor: Actor): Promise<ContarEnLoteServiceResult> {
+    const lote = await this.preparar(input, actor);
+    if (lote === "forbidden") return { status: "forbidden" };
+    return {
+      status: "ok",
+      ordenes: lote.movimientos.map((m) =>
+        m.decision.tipo === "reparto" ? (lote.conteos.get(claveDeFuente(m.fuente))?.get(m.decision.cierreId) ?? 0) : null,
+      ),
+    };
+  }
+
   async detallar(input: DetallarEnLoteInput, actor: Actor): Promise<DetalleEnLoteServiceResult> {
-    // 1. R32/R33 — el rol, ANTES de la base. No se fia de que quien leyo los movimientos ya lo mirara.
-    if (input.superficie === "mi_wallet") {
-      if (actor.rol !== ROL_TIENDA) return { status: "forbidden" };
-    } else if (!esAccesoTotal(actor.rol)) {
-      return { status: "forbidden" };
-    }
-
-    // 2–3. Los movimientos con su fuente. En la tienda, el `tiendaId` sale del ACTOR (/mi-wallet) o de
-    // la cuenta que la oficina ya leyo; nunca de una clave libre de la entrada (R35).
-    const tiendaId =
-      input.superficie === "mi_wallet"
-        ? actor.usuarioId
-        : input.superficie === "tienda_oficina"
-          ? input.tiendaId
-          : undefined;
-    const movimientos = await this.resolverMovimientos(input, tiendaId);
-
-    const grupos = agruparPorConcepto(movimientos);
-
-    // 4. R39/R40 — contar ANTES de leer. Una consulta por concepto y tramo.
-    const conteos = new Map<string, Map<string, number>>();
-    for (const [clave, grupo] of grupos) {
-      const porCierre = new Map<string, number>();
-      for (const tramo of enTramos(grupo.cierreIds)) {
-        const c = await this.aportes.contarAportesPorCierre({ criterio: grupo.criterio, cierreIds: tramo, tiendaId });
-        for (const [cierreId, n] of c) porCierre.set(cierreId, n);
-      }
-      conteos.set(clave, porCierre);
-    }
+    const lote = await this.preparar(input, actor);
+    if (lote === "forbidden") return { status: "forbidden" };
+    const { movimientos, grupos, conteos, tiendaId } = lote;
     let total = 0;
     for (const m of movimientos) {
       if (m.decision.tipo !== "reparto") continue;
@@ -142,8 +146,11 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
       for (const [id, cabecera] of await this.aportes.cabecerasDeCierres(tramo)) cabeceras.set(id, cabecera);
     }
 
-    const conMensajero = input.superficie !== "mi_wallet"; // R5: a la tienda no se le nombra
-    const conTienda = input.superficie === "caja"; // en las vistas de UNA tienda la columna no existe
+    // R5: a la tienda no se le nombra el mensajero; en el estado de cuenta del mensajero es su propia cuenta
+    // (468 R31: la columna no existe).
+    const conMensajero = input.superficie === "caja" || input.superficie === "tienda_oficina";
+    // En las vistas de UNA tienda la columna no existe; en la caja y en el mensajero si (468 R29/R31).
+    const conTienda = input.superficie === "caja" || input.superficie === "mensajero_oficina";
 
     // Cada (concepto, cierre) se deriva UNA vez aunque dos movimientos lo compartan.
     const derivados = new Map<string, { ordenes: OrdenDelLoteDTO[]; suma: Prisma.Decimal }>();
@@ -169,6 +176,7 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
           const aporte = aporteDeOrden(m.fuente, fila.orden, fila.gestiones) ?? new Prisma.Decimal(0);
           suma = suma.plus(aporte);
           return {
+            clave: fila.ordenId, // 468: el enlace del bloque de una orden sin guia; nunca se pinta
             guia: fila.numGuia === null ? null : String(fila.numGuia),
             remision: fila.numRemision,
             destinatario: fila.destinatario,
@@ -194,6 +202,46 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
     return { status: "ok", detalle };
   }
 
+  /**
+   * Los pasos 1–4, compartidos por `detallar` y `contar`: guard de rol ANTES de la base, re-lectura de las
+   * filas con su cuenta en el `WHERE`, decision de fuente y conteo por concepto y tramo. Ninguno lee una
+   * orden.
+   */
+  private async preparar(input: DetallarEnLoteInput, actor: Actor): Promise<LotePreparado | "forbidden"> {
+    // 1. R32/R33 (y 468 R55) — el rol, ANTES de la base. No se fia de que quien leyo los movimientos ya
+    // lo mirara.
+    if (input.superficie === "mi_wallet") {
+      if (actor.rol !== ROL_TIENDA) return "forbidden";
+    } else if (!esAccesoTotal(actor.rol)) {
+      return "forbidden";
+    }
+
+    // 2–3. Los movimientos con su fuente. En la tienda, el `tiendaId` sale del ACTOR (/mi-wallet) o de
+    // la cuenta que la oficina ya leyo; nunca de una clave libre de la entrada (R35). El mensajero no
+    // acota las ordenes: el cierre entero es SUYO.
+    const tiendaId =
+      input.superficie === "mi_wallet"
+        ? actor.usuarioId
+        : input.superficie === "tienda_oficina"
+          ? input.tiendaId
+          : undefined;
+    const movimientos = await this.resolverMovimientos(input, tiendaId);
+
+    const grupos = agruparPorConcepto(movimientos);
+
+    // 4. R39/R40 — contar ANTES de leer. Una consulta por concepto y tramo.
+    const conteos = new Map<string, Map<string, number>>();
+    for (const [clave, grupo] of grupos) {
+      const porCierre = new Map<string, number>();
+      for (const tramo of enTramos(grupo.cierreIds)) {
+        const c = await this.aportes.contarAportesPorCierre({ criterio: grupo.criterio, cierreIds: tramo, tiendaId });
+        for (const [cierreId, n] of c) porCierre.set(cierreId, n);
+      }
+      conteos.set(clave, porCierre);
+    }
+    return { movimientos, grupos, conteos, tiendaId };
+  }
+
   /** Los movimientos en el orden recibido, con su fuente y su decision de reparto. */
   private async resolverMovimientos(
     input: DetallarEnLoteInput,
@@ -203,6 +251,20 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
       return input.movimientos.map((m) => {
         const fuente = FUENTE_CAJA[m.categoria];
         return { id: m.id, monto: m.monto, fuente, decision: fuenteDeMovimiento(m, fuente) };
+      });
+    }
+    if (input.superficie === "mensajero_oficina") {
+      if (input.movimientoIds.length === 0) return [];
+      // 468 R55: el mensajero en el `WHERE` de ESTA lectura. Una fila de otro mensajero no vuelve.
+      const leidas = await this.movimientosDeMensajero.listarPorIdsDeMensajero(input.movimientoIds, input.mensajeroId);
+      const porId = new Map(leidas.map((f) => [f.id, f]));
+      return input.movimientoIds.map((id) => {
+        const fila = porId.get(id);
+        if (fila === undefined) {
+          throw new Error("detalle en lote: un movimiento de la hoja no pertenece al libro del mensajero");
+        }
+        const fuente = FUENTE_MENSAJERO[fila.categoria];
+        return { id: fila.id, monto: fila.monto, fuente, decision: fuenteDeMovimiento(fila, fuente) };
       });
     }
     if (input.movimientoIds.length === 0 || tiendaId === undefined) return [];
@@ -224,7 +286,9 @@ export class DetalleEnLoteService implements IDetalleEnLoteService {
 
 /** La clave de un concepto con reparto: dos movimientos del mismo concepto comparten consultas. */
 function claveDeFuente(fuente: FuenteDeAporte): string {
-  return fuente.tipo === "concepto_ordenex" ? fuente.concepto : fuente.tipo;
+  if (fuente.tipo === "concepto_ordenex") return fuente.concepto;
+  if (fuente.tipo === "snapshot_gestion") return `snapshot:${fuente.campo}`; // 468: un grupo por columna
+  return fuente.tipo;
 }
 
 function agruparPorConcepto(movimientos: readonly MovimientoResuelto[]): Map<string, GrupoDeConcepto> {

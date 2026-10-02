@@ -806,10 +806,20 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
     });
   });
 
-  it("458-D R19: la fila de cierre del mensajero se abre y dice que su importe es el total del cierre; la de otro mensajero, no encontrada", async () => {
+  // FICHA 468 (R27/R28) — SUSTITUYE al «458-D R19: la fila de cierre del mensajero ... dice que su importe
+  // es el total del cierre»: el pago devengado ya NO es `sin_reparto`; se reparte por `pago_mensajero`.
+  it("468 R27/R28: la fila de pago devengado del mensajero lista sus ordenes y su Σ es el importe; la de otro mensajero, no encontrada", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const s = await sembrar(tx);
       const { mensajeroId } = await tx.cierreDia.findUniqueOrThrow({ where: { id: s.cierreId }, select: { mensajeroId: true } });
+      // El snapshot por gestion que la aprobacion escribe: 750 por gestion del cierre.
+      const escritas = await tx.gestionOrden.updateMany({
+        where: { cierreId: s.cierreId },
+        data: { pagoMensajero: new Prisma.Decimal("750.00") },
+      });
+      expect(escritas.count, "el cierre no tiene gestiones: el caso no mediria nada").toBeGreaterThan(1);
+      const agregado = await tx.gestionOrden.aggregate({ where: { cierreId: s.cierreId }, _sum: { pagoMensajero: true } });
+      const importe = (agregado._sum.pagoMensajero ?? new Prisma.Decimal(0)).toFixed(2);
       const movimientoId = randomUUID();
       await tx.pagoMensajeroMovimiento.create({
         data: {
@@ -817,28 +827,37 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
           mensajeroId,
           tipo: "devengo",
           categoria: "pago_devengado",
-          monto: "4500.00",
+          monto: importe,
           origenTipo: "cierre_dia",
           origenId: s.cierreId,
           registradoPor: null,
         },
       });
-      const pedir = (cuentaId: string) =>
+      const pedir = (cuentaId: string, page = 1) =>
         s.servicio.verDetalleDeFilaDeCuenta(
-          { cuenta: { tipo: "mensajero", id: cuentaId }, movimientoId, page: 1, pageSize: 25 },
+          { cuenta: { tipo: "mensajero", id: cuentaId }, movimientoId, page, pageSize: 1 },
           MAESTRO,
         );
-      expect(await pedir(mensajeroId)).toEqual({ status: "sin_reparto", motivo: "snapshot_del_cierre" });
+      const { ordenes, total } = await todasLasPaginas(async (page) => {
+        const r = await pedir(mensajeroId, page);
+        if (r.status !== "ok") throw new Error(`pago devengado: esperado ok, llego ${r.status}`);
+        return r.data;
+      }, 1);
+      expect(total).toBeGreaterThan(0);
+      expect(sumar(ordenes.map((o) => o.aporte))).toBe(importe);
       // Otra cuenta (la tienda A pedida como mensajero) = inexistente.
       expect(await pedir(s.tiendaA)).toEqual({ status: "not_found" });
     });
   });
 
-  it("los tres conceptos sin reparto abren su detalle y dicen de donde sale su importe (R48)", async () => {
+  // FICHA 468 (R27) — SUSTITUYE a «los tres conceptos sin reparto ... (R48)»: el contra-entrega de la CAJA
+  // ya no es `sin_reparto`; lista las ordenes del cierre (todas las tiendas) por `monto_recibido`.
+  it("468 R27: el contra-entrega de la caja lista sus ordenes y su Σ es el Σ monto_recibido del cierre", async () => {
     await enTransaccionRevertida(prisma, async (tx) => {
       const s = await sembrar(tx);
-      // `ingreso_cod_recaudado` de la CAJA lo emite otro camino (la aprobacion del cierre), asi
-      // que aqui se siembra a mano un movimiento de ese origen para poder abrirlo.
+      const agregado = await tx.gestionOrden.aggregate({ where: { cierreId: s.cierreId }, _sum: { montoRecibido: true } });
+      const importe = (agregado._sum.montoRecibido ?? new Prisma.Decimal(0)).toFixed(2);
+      expect(new Prisma.Decimal(importe).gt(0), "el cierre no recaudo nada: el caso no mediria nada").toBe(true);
       const cliente = tx as unknown as PrismaClient;
       const id = randomUUID();
       await new WalletMovimientoRepository(cliente).crearMovimientos(cliente, [
@@ -846,20 +865,22 @@ describeSiHayBase("ficha 344 — el detalle de un movimiento contra Postgres", (
           id,
           tipo: "ingreso",
           categoria: "ingreso_cod_recaudado",
-          monto: "43150.00",
+          monto: importe,
           origenTipo: "cierre_dia",
           origenId: s.cierreId,
           descripcion: null,
           registradoPor: null,
         },
       ]);
-
-      const r = await s.servicio.verDetalleDeMovimiento(
-        { movimientoId: id, page: 1, pageSize: 25 },
-        MAESTRO,
-      );
-      // La fila SE ABRE —no calla— y dice de que fuente sale su importe.
-      expect(r).toEqual({ status: "sin_reparto", motivo: "suma_del_libro_por_tienda" });
+      const { ordenes, total } = await todasLasPaginas(async (page) => {
+        const r = await s.servicio.verDetalleDeMovimiento({ movimientoId: id, page, pageSize: 1 }, MAESTRO);
+        if (r.status !== "ok") throw new Error(`contra-entrega: esperado ok, llego ${r.status}`);
+        return r.data;
+      }, 1);
+      expect(total).toBeGreaterThan(1);
+      expect(sumar(ordenes.map((o) => o.aporte))).toBe(importe);
+      // De TODAS las tiendas del cierre (la caja no se acota por tienda).
+      expect(new Set(ordenes.map((o) => o.tiendaNombre)).size).toBeGreaterThan(1);
     });
   });
 });

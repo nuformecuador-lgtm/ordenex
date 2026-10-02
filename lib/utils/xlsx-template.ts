@@ -12,6 +12,7 @@
  * import dinámico de este módulo desde `BulkUpload`, exceljs queda fuera del bundle
  * inicial del componente.
  */
+import { celdaMonto, FORMATO_EXCEL_MONTO } from "@/lib/utils/xlsx-monto";
 
 /**
  * MIME de un libro XLSX (OpenXML), para el `Blob` de descarga en el navegador.
@@ -143,6 +144,11 @@ export interface XlsxColumn {
   header: string;
   /** Ancho fijo opcional; si se omite se calcula por contenido. */
   width?: number;
+  /**
+   * Ficha 468 (R22) — `"monto"`: la celda (un importe STRING escala 2 del servidor) se escribe como
+   * numero de Excel con `#,##0.00`, via `celdaMonto`. Ausente => la celda va tal cual, como siempre.
+   */
+  formato?: "monto";
 }
 
 /**
@@ -204,6 +210,7 @@ export async function buildXlsxRows(
   columns: XlsxColumn[],
   rows: Array<Record<string, XlsxCellValue>>,
   sheetName = "Datos",
+  destacadas?: readonly number[],
 ): Promise<ArrayBuffer> {
   if (columns.length === 0) {
     throw new Error(
@@ -211,7 +218,7 @@ export async function buildXlsxRows(
     );
   }
   // Ficha 464: UNA hoja es el caso particular del libro de varias. Misma firma, mismo resultado.
-  return buildXlsxLibro([{ nombre: sheetName, columns, rows }]);
+  return buildXlsxLibro([{ nombre: sheetName, columns, rows, ...(destacadas !== undefined ? { destacadas } : {}) }]);
 }
 
 /** Ficha 464 (design §2.1) — una hoja del libro: nombre ya valido, columnas y filas. */
@@ -219,6 +226,8 @@ export interface XlsxHoja {
   nombre: string;
   columns: XlsxColumn[];
   rows: Array<Record<string, XlsxCellValue>>;
+  /** Ficha 468 (R23/R47) — indices de `rows` (0 = la primera fila de datos) que van en negrita. */
+  destacadas?: readonly number[];
 }
 
 /**
@@ -249,7 +258,7 @@ export async function buildXlsxLibro(hojas: readonly XlsxHoja[]): Promise<ArrayB
   const ExcelJS = (await import("exceljs")).default;
 
   const workbook = new ExcelJS.Workbook();
-  for (const { nombre, columns, rows } of hojas) {
+  for (const { nombre, columns, rows, destacadas } of hojas) {
     const worksheet = workbook.addWorksheet(nombre);
 
     worksheet.columns = columns.map((column) => ({
@@ -260,12 +269,20 @@ export async function buildXlsxLibro(hojas: readonly XlsxHoja[]): Promise<ArrayB
 
     worksheet.getRow(1).font = { bold: true };
 
-    for (const row of rows) {
+    // Ficha 468 (R22): las columnas de monto, por su numero de columna (1 = la primera).
+    const columnasMonto = columns.flatMap((column, i) => (column.formato === "monto" ? [i + 1] : []));
+    const enNegrita = new Set(destacadas ?? []);
+
+    for (const [indice, row] of rows.entries()) {
       const celdas: Record<string, XlsxCellValue> = {};
       for (const column of columns) {
-        celdas[column.key] = row[column.key] ?? null;
+        const valor = row[column.key] ?? null;
+        // Solo un TEXTO se convierte (un importe del servidor); un numero o una celda vacia van tal cual.
+        celdas[column.key] = column.formato === "monto" && typeof valor === "string" ? celdaMonto(valor) : valor;
       }
-      worksheet.addRow(celdas);
+      const fila = worksheet.addRow(celdas);
+      for (const c of columnasMonto) fila.getCell(c).numFmt = FORMATO_EXCEL_MONTO;
+      if (enNegrita.has(indice)) fila.font = { bold: true };
     }
   }
 

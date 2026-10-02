@@ -14,6 +14,10 @@ import type {
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type {
+  IMovimientosMensajeroEnLoteRepository,
+  MovimientoDeMensajeroEnLoteRow,
+} from "@/lib/interfaces/repositories/IMovimientosMensajeroEnLoteRepository";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import { escaparComodinesLike } from "@/lib/utils/escapar-like";
@@ -164,7 +168,7 @@ const cierreDeMensajeroSql = (mensajeroId: string, cierreId?: string) =>
  * Mutacion 1 de design §8.2 (el signo del corrido al reves) y 2 (sin `created_at` en el ORDER BY de
  * la ventana) → rojas en `wallet-caracterizacion-458` y `estado-cuenta-saldo-corrido`.
  */
-export class EstadoCuentaRepository implements IEstadoCuentaRepository {
+export class EstadoCuentaRepository implements IEstadoCuentaRepository, IMovimientosMensajeroEnLoteRepository {
   constructor(private readonly prisma: Cliente) {}
 
   /**
@@ -488,6 +492,19 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
       select: { monto: true, categoria: true, origenTipo: true, origenId: true },
     });
     return fila === null ? null : { ...fila, monto: fila.monto.toFixed(2) };
+  }
+
+  /**
+   * Ficha 468 (design §4.1, R55) — varias filas del libro de UN mensajero por id, con el mensajero en el
+   * `WHERE` (una de otro mensajero no vuelve). Misma proyeccion que `movimientoDeMensajero`.
+   */
+  async listarPorIdsDeMensajero(ids: readonly string[], mensajeroId: string): Promise<MovimientoDeMensajeroEnLoteRow[]> {
+    if (ids.length === 0) return [];
+    const filas = await this.prisma.pagoMensajeroMovimiento.findMany({
+      where: { id: { in: [...ids] }, mensajeroId }, // `mensajeroId` AL FINAL: nada lo puede pisar
+      select: { id: true, monto: true, categoria: true, origenTipo: true, origenId: true },
+    });
+    return filas.map((f) => ({ ...f, monto: f.monto.toFixed(2) }));
   }
 
   async reversosDePremio(mensajeroId: string, dias: readonly Date[]): Promise<AnulacionLeida[]> {

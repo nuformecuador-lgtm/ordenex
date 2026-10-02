@@ -12,6 +12,7 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { ISaldoCorridoCajaRepository } from "@/lib/interfaces/repositories/ISaldoCorridoCajaRepository";
 import type {
   AgregadoCajaRow,
   WalletMovimientoCategoria,
@@ -24,6 +25,7 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { whereLibroCajaConTerminoSql, whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import { ordenTotal, type DireccionOrden } from "@/lib/types/ordenamiento-listado";
+import { derivarBalance } from "@/lib/utils/wallet-balance";
 
 /** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
 const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
@@ -155,7 +157,7 @@ async function categoriasConAQuien(
  * INMUTABLE (R3/R47): no expone `update` ni `delete`, y con la 173 sigue sin exponerlos —
  * una correccion es un movimiento compensatorio, no una edicion.
  */
-export class WalletMovimientoRepository implements IWalletMovimientoRepository {
+export class WalletMovimientoRepository implements IWalletMovimientoRepository, ISaldoCorridoCajaRepository {
   constructor(private readonly prisma: WalletPrismaClient) {}
 
   /** R6/R13: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
@@ -342,6 +344,47 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       tipo: g.tipo,
       total: (g._sum.monto ?? new Prisma.Decimal(0)).toFixed(2),
     }));
+  }
+
+  /**
+   * Ficha 468 (design §3.4, R12/R15) — el saldo de la caja ENTERA tras cada movimiento de la descarga.
+   *
+   * Molde de `EstadoCuentaRepository.paginaDeTienda`: la ventana corre sobre TODO el libro (hasta el
+   * corte), con el MISMO orden total que `listar` en ascendente (fecha, `created_at`, `id`), y la consulta
+   * exterior se queda con los ids pedidos (≤ tope de descarga). La suma la hace el motor: aqui no se suma
+   * ningun importe en JavaScript.
+   *
+   * El signo lo da el TIPO y la cubeta la lista `efectivo` que manda el servicio (derivada de
+   * `LIQUIDEZ_POR_CATEGORIA`, igual que `acumular` de `derivarCaja`): un cargo a tienda no mueve el saldo.
+   * El servicio AFIRMA que el saldo de la ultima fila es el `enCaja` de la tarjeta.
+   */
+  async saldosTrasMovimientos(
+    ids: readonly string[],
+    efectivo: readonly WalletMovimientoCategoria[],
+    hasta?: Date,
+  ): Promise<Map<string, string>> {
+    const saldos = new Map<string, string>();
+    if (ids.length === 0) return saldos;
+    const corte = hasta === undefined ? Prisma.sql`TRUE` : Prisma.sql`w."fecha_movimiento" < ${hasta}`;
+    // Las dos sumas son de `w."monto"` (guardia `caja-173-alcance`): lo que entro de verdad menos lo que
+    // salio de verdad, cada una con su FILTER. Mismo orden total en las dos ventanas.
+    const ventana = Prisma.sql`OVER (
+                 ORDER BY w."fecha_movimiento" ASC, w."created_at" ASC, w."id" ASC
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+               )`;
+    const filas = await this.prisma.$queryRaw<{ id: string; entro: Prisma.Decimal | null; salio: Prisma.Decimal | null }[]>(Prisma.sql`
+      SELECT t."id", t."entro", t."salio"
+      FROM (
+        SELECT w."id",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'ingreso') ${ventana} AS "entro",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'egreso') ${ventana} AS "salio"
+        FROM "wallet_movimiento" w
+        WHERE ${corte}
+      ) t
+      WHERE t."id" = ANY(${[...ids]}::text[])`);
+    // La resta la hace `derivarBalance` (la misma de la tarjeta), no este repositorio.
+    for (const f of filas) saldos.set(f.id, derivarBalance(f.entro ?? new Prisma.Decimal(0), f.salio ?? new Prisma.Decimal(0)).balance);
+    return saldos;
   }
 
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */

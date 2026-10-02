@@ -6,12 +6,18 @@ import {
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
 import {
+  CRITERIO_INDEMNIZACION,
+  CRITERIO_PAGO_MENSAJERO,
   FUENTE_CAJA,
+  FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   aporteDeOrden,
+  fuenteDeMovimiento,
   type GestionDelCierre,
   type OrdenCongelada,
 } from "@/lib/utils/aporte-por-orden";
+import { DETALLE_MOVIMIENTO_SIN_REPARTO } from "@/app/(app)/wallet/_components/detalle-movimiento-labels";
+import { DETALLE_MI_MOVIMIENTO_SIN_REPARTO } from "@/app/(app)/mi-wallet/_components/detalle-mi-movimiento-labels";
 import { conceptoIngresoADebitoTienda } from "@/lib/utils/mapeo-concepto-tienda";
 import {
   WALLET_INGRESO_CONCEPTO_SEED,
@@ -66,7 +72,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00", pagoMensajero: null, indemnizacion: null }],
   },
   // Entrega con el COD que redondea hacia arriba en el paso intermedio (581.644 -> 581.64).
   {
@@ -77,7 +83,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "16618.40" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "16618.40", pagoMensajero: null, indemnizacion: null }],
   },
   // R20: UNA orden con DOS gestiones que aportan al mismo concepto en el mismo cierre.
   {
@@ -89,8 +95,8 @@ const CONJUNTO: OrdenSintetica[] = [
       tarifa: TARIFA,
     },
     gestiones: [
-      { resultado: "entregado", montoRecibido: "3000.00" },
-      { resultado: "entregado", montoRecibido: "4333.33" },
+      { resultado: "entregado", montoRecibido: "3000.00", pagoMensajero: null, indemnizacion: null },
+      { resultado: "entregado", montoRecibido: "4333.33", pagoMensajero: null, indemnizacion: null },
     ],
   },
   // Un rechazo: aporta a los DOS conceptos de devolucion y a ninguno de entrega.
@@ -102,7 +108,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: TARIFA,
     },
-    gestiones: [{ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null }],
+    gestiones: [{ resultado: "devolucion_a_origen_por_rechazo", montoRecibido: null, pagoMensajero: null, indemnizacion: null }],
   },
   // R23: sin tarifa congelada no deriva NINGUN concepto, y su ausencia no altera la suma.
   {
@@ -113,7 +119,7 @@ const CONJUNTO: OrdenSintetica[] = [
       cobraComision: true,
       tarifa: null,
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "20000.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "20000.00", pagoMensajero: null, indemnizacion: null }],
   },
   // Resultados que no aportan a ningun concepto derivado, pero SI al COD recaudado.
   {
@@ -125,8 +131,8 @@ const CONJUNTO: OrdenSintetica[] = [
       tarifa: TARIFA,
     },
     gestiones: [
-      { resultado: "novedad", montoRecibido: null },
-      { resultado: "reprogramado", montoRecibido: "250.75" },
+      { resultado: "novedad", montoRecibido: null, pagoMensajero: null, indemnizacion: null },
+      { resultado: "reprogramado", montoRecibido: "250.75", pagoMensajero: null, indemnizacion: null },
     ],
   },
 ];
@@ -257,19 +263,15 @@ describe("ficha 344 — el aporte por orden (R22/R46/R49)", () => {
     }
   });
 
-  it("los tres conceptos de la caja que NO se reparten lo declaran con su motivo (R48)", () => {
-    expect(FUENTE_CAJA.egreso_pago_mensajero).toEqual({
-      tipo: "sin_reparto",
-      motivo: "snapshot_del_cierre",
-    });
-    expect(FUENTE_CAJA.ingreso_cod_recaudado).toEqual({
-      tipo: "sin_reparto",
-      motivo: "suma_del_libro_por_tienda",
-    });
-    expect(FUENTE_CAJA.egreso_indemnizacion).toEqual({
-      tipo: "sin_reparto",
-      motivo: "otro_productor",
-    });
+  // FICHA 468 (R27) — SUSTITUYE a «los tres conceptos de la caja que NO se reparten…»: ahora se reparten
+  // por la columna de `gestion_orden` cuya suma ES su importe (medido al 100 %).
+  it("468 R27 (antes 344 R48): los tres conceptos de cierre de la caja se reparten por su columna de la gestion", () => {
+    expect(FUENTE_CAJA.egreso_pago_mensajero).toEqual({ tipo: "snapshot_gestion", campo: "pago_mensajero" });
+    expect(FUENTE_CAJA.ingreso_cod_recaudado).toEqual({ tipo: "cod_recaudado" });
+    expect(FUENTE_CAJA.egreso_indemnizacion).toEqual({ tipo: "snapshot_gestion", campo: "indemnizacion" });
+    // Y en el libro del mensajero: el devengado se reparte, el pago tomado del efectivo NO (R43).
+    expect(FUENTE_MENSAJERO.pago_devengado).toEqual({ tipo: "snapshot_gestion", campo: "pago_mensajero" });
+    expect(FUENTE_MENSAJERO.pago_efectivo).toEqual({ tipo: "sin_reparto", motivo: "snapshot_del_cierre" });
     // Y los seis conceptos del feed SI se reparten: sin esto, un catalogo entero en
     // `sin_reparto` pasaria los tres `toEqual` de arriba.
     for (const concepto of WALLET_INGRESO_CONCEPTO_SEED) {
@@ -298,5 +300,106 @@ describe("ficha 344 — el aporte por orden (R22/R46/R49)", () => {
         orden.gestiones,
       ),
     ).toBeUndefined();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 468 (T3, design §2) — los snapshots por gestion (R27) y los textos de los motivos (R19).
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+const ORDEN_468: OrdenCongelada = {
+  esCentral: false,
+  esZonaEspecial: false,
+  montoCobrar: "5000.00",
+  cobraComision: true,
+  tarifa: null,
+};
+
+const gestion = (g: Partial<GestionDelCierre> & Pick<GestionDelCierre, "resultado">): GestionDelCierre => ({
+  montoRecibido: null,
+  pagoMensajero: null,
+  indemnizacion: null,
+  ...g,
+});
+
+describe("468 — R27: el aporte de una orden a los snapshots por gestion", () => {
+  it("R27: una orden con DOS gestiones en el cierre aporta la suma de su pago al mensajero", () => {
+    const aporte = aporteDeOrden(FUENTE_CAJA.egreso_pago_mensajero, ORDEN_468, [
+      gestion({ resultado: "reprogramado", pagoMensajero: "500.00" }),
+      gestion({ resultado: "entregado", pagoMensajero: "1250.50" }),
+    ]);
+    expect(aporte?.toFixed(2)).toBe("1750.50");
+    // El MISMO valor en el libro del mensajero: la misma fuente.
+    expect(
+      aporteDeOrden(FUENTE_MENSAJERO.pago_devengado, ORDEN_468, [
+        gestion({ resultado: "reprogramado", pagoMensajero: "500.00" }),
+        gestion({ resultado: "entregado", pagoMensajero: "1250.50" }),
+      ])?.toFixed(2),
+    ).toBe("1750.50");
+  });
+
+  it("R27: un pago NULL cuenta como 0,00 (igual que el feed), y sin gestiones la orden no aporta", () => {
+    expect(
+      aporteDeOrden(FUENTE_CAJA.egreso_pago_mensajero, ORDEN_468, [
+        gestion({ resultado: "novedad", pagoMensajero: null }),
+        gestion({ resultado: "entregado", pagoMensajero: "800.00" }),
+      ])?.toFixed(2),
+    ).toBe("800.00");
+    expect(aporteDeOrden(FUENTE_CAJA.egreso_pago_mensajero, ORDEN_468, [])).toBeUndefined();
+  });
+
+  it("R27: la indemnizacion suma la columna `indemnizacion` y no mira las otras dos", () => {
+    const aporte = aporteDeOrden(FUENTE_CAJA.egreso_indemnizacion, ORDEN_468, [
+      gestion({ resultado: "incidente", indemnizacion: "12000.00", montoRecibido: "999.00", pagoMensajero: "700.00" }),
+    ]);
+    expect(aporte?.toFixed(2)).toBe("12000.00");
+  });
+
+  it("R27: el contra-entrega de la caja usa el MISMO acumulado que el credito de la tienda", () => {
+    const gestiones = [
+      gestion({ resultado: "entregado", montoRecibido: "3000.00", pagoMensajero: "500.00" }),
+      gestion({ resultado: "reprogramado", montoRecibido: "250.75" }),
+    ];
+    expect(aporteDeOrden(FUENTE_CAJA.ingreso_cod_recaudado, ORDEN_468, gestiones)?.toFixed(2)).toBe("3250.75");
+    expect(aporteDeOrden(FUENTE_TIENDA.cod_recaudado, ORDEN_468, gestiones)?.toFixed(2)).toBe("3250.75");
+  });
+
+  it("R27: la decision de reparto de cada concepto nuevo usa SU criterio y el cierre de origen", () => {
+    const deCierre = { origenTipo: "cierre_dia", origenId: "c-1" };
+    expect(fuenteDeMovimiento(deCierre, FUENTE_CAJA.egreso_pago_mensajero)).toEqual({
+      tipo: "reparto",
+      criterio: CRITERIO_PAGO_MENSAJERO,
+      cierreId: "c-1",
+    });
+    expect(fuenteDeMovimiento(deCierre, FUENTE_MENSAJERO.pago_devengado)).toEqual({
+      tipo: "reparto",
+      criterio: CRITERIO_PAGO_MENSAJERO,
+      cierreId: "c-1",
+    });
+    expect(fuenteDeMovimiento(deCierre, FUENTE_CAJA.egreso_indemnizacion)).toEqual({
+      tipo: "reparto",
+      criterio: CRITERIO_INDEMNIZACION,
+      cierreId: "c-1",
+    });
+  });
+
+  it("468 (fuera de alcance): la indemnizacion que nace de un INCIDENTE sigue `no_nace_de_un_cierre`", () => {
+    expect(
+      fuenteDeMovimiento({ origenTipo: "orden_incidente", origenId: "inc-1" }, FUENTE_CAJA.egreso_indemnizacion),
+    ).toEqual({ tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" });
+  });
+});
+
+describe("468 — R19: los motivos sin reparto hablan en espanol claro", () => {
+  it("R19: solo quedan dos motivos, y ningun texto dice «snapshot», «productor», «ledger» ni «feed»", () => {
+    expect([...MOTIVO_SIN_REPARTO_SEED]).toEqual(["no_nace_de_un_cierre", "snapshot_del_cierre"]);
+    const textos = [...Object.values(DETALLE_MOVIMIENTO_SIN_REPARTO), ...Object.values(DETALLE_MI_MOVIMIENTO_SIN_REPARTO)];
+    expect(textos).toHaveLength(4);
+    for (const texto of textos) {
+      expect(texto).not.toMatch(/snapshot|productor|ledger|feed|\bSLA\b/i);
+    }
+    expect(DETALLE_MOVIMIENTO_SIN_REPARTO.snapshot_del_cierre).toBe(
+      "Es lo que se le pagó al mensajero con el efectivo que entregó en ese cierre; no se reparte por guía.",
+    );
   });
 });

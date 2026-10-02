@@ -1,66 +1,56 @@
 /**
- * FICHA 464 (design §5.2; R2, R26, R28–R31) — la hoja «Detalle por orden» del estado de cuenta de UNA
+ * FICHA 464 → 468 (design §7.1; R24, R30, R51) — la hoja «Detalle por guía» del estado de cuenta de UNA
  * tienda, visto desde la oficina.
  *
- * Módulo PURO (sin React ni DOM). Sin columna «Tienda»: todas las órdenes son de esta tienda (el
- * servidor lo acota, R34). Con «Mensajero»: la oficina sí lo ve, como en el detalle de la fila.
- *
- * El motivo sin reparto es el MISMO texto del panel que despliega la fila en esta pantalla
- * (`DetalleMovimientoCierre` con la fuente de la cuenta, que pinta `DETALLE_MOVIMIENTO_SIN_REPARTO`).
+ * Módulo PURO (sin React ni DOM). Sin columna «Tienda»: todas las guías son de esta tienda (el servidor
+ * lo acota, R48). Con «Mensajero»: la oficina sí lo ve, como en el detalle de la fila. Las filas las
+ * coloca `filasDetallePorGuia` (agrupadas por guía); el resultado de cada gestión, con la MISMA etiqueta
+ * que el panel de la fila (`resultadosTexto`).
  */
 import type { DetalleDeLaDescarga } from "@/components/shared/estado-cuenta/EstadoCuenta";
-import type { EntradaFilaDetalle } from "@/components/shared/descarga-con-detalle";
-import { DETALLE_POR_ORDEN_COMUN } from "@/components/shared/wallet/detalle-por-orden-descarga";
+import {
+  COLUMNA_LIBRO,
+  FIJAS_DETALLE_POR_GUIA,
+  LIBRO_KARDEX_HOJAS,
+} from "@/components/shared/wallet/libro-kardex-labels";
+import { filaCabeceraDeGuia } from "@/components/shared/wallet/libro-kardex-descarga";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
-import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
+import type { BloqueDeGuiaDTO } from "@/lib/types/libro-kardex";
 
-import { DETALLE_MOVIMIENTO_SIN_REPARTO, resultadosTexto } from "../../_components/detalle-movimiento-labels";
+import { resultadosTexto } from "../../_components/detalle-movimiento-labels";
 
-/** R2 — ámbito PROPIO de la hoja de detalle del estado de cuenta de una tienda. */
+/** Ámbito PROPIO de la hoja de detalle del estado de cuenta de una tienda (se conserva el de la 464, R52). */
 export const AMBITO_DESCARGA_WALLET_TIENDA_DETALLE = "wallet-tienda-detalle-orden";
 
-/**
- * R26 — catálogo ELEGIBLE de la hoja de detalle, en este orden («N.º» va delante y es FIJA, R17). La
- * enumeración es CONTRATO y se fija con un `toEqual` escrito a mano.
- */
-export const COLUMNAS_DESCARGA_DETALLE_POR_ORDEN_TIENDA: DescargaColumna[] = [
-  { clave: "fecha", encabezado: "Fecha" },
-  { clave: "movimiento", encabezado: "Movimiento" },
-  { clave: "cierre", encabezado: "Cierre del" },
-  { clave: "mensajero", encabezado: "Mensajero" },
-  { clave: "guia", encabezado: "Guía" },
-  { clave: "remision", encabezado: "Remisión" },
-  { clave: "destinatario", encabezado: "Destinatario" },
-  { clave: "resultado", encabezado: "Resultado" },
-  { clave: "monto", encabezado: "Monto" },
+/** R30 — la hoja «Detalle por guía» de la tienda, en este orden (CONTRATO, `toEqual` a mano). */
+export const COLUMNAS_DESCARGA_DETALLE_GUIA_TIENDA: DescargaColumna[] = [
+  COLUMNA_LIBRO.guia,
+  COLUMNA_LIBRO.remision,
+  COLUMNA_LIBRO.destinatario,
+  COLUMNA_LIBRO.mensajero,
+  COLUMNA_LIBRO.cierre,
+  COLUMNA_LIBRO.resultado,
+  COLUMNA_LIBRO.concepto,
+  COLUMNA_LIBRO.detalle,
+  COLUMNA_LIBRO.entra,
+  COLUMNA_LIBRO.sale,
 ];
 
-/**
- * Proyecta UNA orden de un movimiento de la tienda a una fila de la hoja de detalle. «Fecha» y
- * «Movimiento» son las celdas de la fila de su movimiento (R28); lo demás, lo congelado en el cierre
- * (R29); el monto, el STRING del servidor (R31); ningún identificador (R30).
- */
-export function filaDetallePorOrdenTienda({ fila, cierre, orden }: EntradaFilaDetalle): DescargaFila {
-  return {
-    fecha: fila.fecha ?? null,
-    movimiento: fila.movimiento ?? null,
-    cierre: fechaDiaMovimientoCR(cierre.fecha),
-    mensajero: cierre.mensajeroNombre,
-    guia: orden.guia,
-    remision: orden.remision,
-    destinatario: orden.destinatario,
-    resultado: resultadosTexto(orden.resultados),
-    monto: orden.aporte, // STRING tal cual (money-safe)
-  };
+/** R34/R39 — la fila de cabecera de un bloque de guía, con la etiqueta de resultados del panel de la oficina. */
+export function filaCabeceraGuiaTienda(bloque: BloqueDeGuiaDTO): DescargaFila {
+  return filaCabeceraDeGuia(bloque, resultadosTexto);
 }
 
 /** La hoja de detalle del estado de cuenta de una tienda (oficina), lista para `EstadoCuenta`. */
 export const DETALLE_DESCARGA_WALLET_TIENDA: DetalleDeLaDescarga = {
+  cabeceraDe: filaCabeceraGuiaTienda,
   hoja: {
-    ...DETALLE_POR_ORDEN_COMUN,
-    columnas: COLUMNAS_DESCARGA_DETALLE_POR_ORDEN_TIENDA,
+    titulo: LIBRO_KARDEX_HOJAS.detalle,
+    etiquetaOpcion: LIBRO_KARDEX_HOJAS.conDetalle,
+    etiquetaSinDetalle: LIBRO_KARDEX_HOJAS.sinDetalle,
+    columnas: COLUMNAS_DESCARGA_DETALLE_GUIA_TIENDA,
+    columnasFijas: FIJAS_DETALLE_POR_GUIA,
     ambitoColumnas: AMBITO_DESCARGA_WALLET_TIENDA_DETALLE,
   },
-  filaDetalleDe: filaDetallePorOrdenTienda,
-  sinReparto: DETALLE_MOVIMIENTO_SIN_REPARTO,
+  resultadosTexto,
 };

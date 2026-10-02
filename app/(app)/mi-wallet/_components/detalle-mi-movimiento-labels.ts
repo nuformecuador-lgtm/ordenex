@@ -56,7 +56,7 @@ export const DETALLE_MI_MOVIMIENTO_ERROR =
  * dejar la fila muda.
  *
  * Hoy el libro de la tienda sólo puede llegar a `no_nace_de_un_cierre` —sus otros ocho conceptos
- * o se reparten o son el recaudo (`FUENTE_TIENDA`)—, pero las cuatro entradas se escriben igual:
+ * o se reparten o son el recaudo (`FUENTE_TIENDA`)—, pero las dos entradas se escriben igual:
  * el catálogo del servidor puede mover una fuente mañana, y el día que lo haga esta pantalla
  * tiene que tener ya la frase, no un `undefined`.
  */
@@ -64,14 +64,9 @@ export const DETALLE_MI_MOVIMIENTO_SIN_REPARTO: Record<MotivoSinReparto, string>
   no_nace_de_un_cierre:
     "Este movimiento no nace del cierre del día, así que no hay órdenes que lo compongan. " +
     "Su origen está en la columna «Origen» de la fila.",
+  // FICHA 468 (design §2.4): en el servidor solo lo usa el pago tomado del efectivo del mensajero.
   snapshot_del_cierre:
-    "Este importe es un total que el cierre del día dejó anotado, no una acumulación orden por " +
-    "orden, así que no se puede repartir entre tus órdenes.",
-  suma_del_libro_por_tienda:
-    "Este importe se arma sumando lo que el cierre acreditó a cada tienda, no orden por orden.",
-  otro_productor:
-    "Este importe sale de la indemnización anotada en cada gestión del cierre, que la escribe " +
-    "un productor distinto del que reparte el resto de conceptos. Todavía no se desglosa acá.",
+    "Es lo que se le pagó al mensajero con el efectivo que entregó en ese cierre; no se reparte por guía.",
 };
 
 /**

@@ -34,9 +34,11 @@ export function mensajeLimite(total: number, limite: number): string {
  * Ficha 464 (R39) — el tope cuando lo pasa la HOJA DE DETALLE, no la de movimientos: dice cuántas filas
  * tendría el detalle, el tope, y las DOS salidas (acotar el periodo, o bajar solo los movimientos, que
  * sí caben). Solo conteos, nunca datos. El tope lo aplica el servidor; aquí solo se redacta.
+ *
+ * Ficha 468 (R56) — la hoja se llama «Detalle por guía»: el aviso la nombra igual.
  */
 export function mensajeLimiteDetalle(total: number, limite: number): string {
-  return `El detalle por orden tendría ${total} filas y la descarga admite hasta ${limite}. Acota el periodo, o elige «Solo los movimientos» y vuelve a intentarlo.`;
+  return `El detalle por guía tendría ${total} filas y la descarga admite hasta ${limite}. Acota el periodo, o elige «Solo los movimientos» y vuelve a intentarlo.`;
 }
 
 // R27 — Cola accionable del resto de fallos: el mensaje canónico del error dice QUÉ
