@@ -80,7 +80,7 @@ function orden(n: number, aporte: string, over: Partial<OrdenDelLoteDTO> = {}): 
     remision: `REM-${n}`,
     destinatario: `Destinatario ${n}`,
     tiendaNombre: "Tienda Uno",
-    resultados: ["entregada"],
+    resultados: ["entregado"],
     aporte,
     ...over,
   };
@@ -281,7 +281,7 @@ describe("464 R28–R31 — las proyecciones de una orden", () => {
   const principal: DescargaFila = { fecha: "2026-09-20", categoria: "Flete", movimiento: "Flete de la tienda" };
 
   it("R28: «Fecha» y «Movimiento» son las celdas de la fila de su movimiento; R29/R31 lo congelado y el monto del servidor", () => {
-    const o = orden(7, "1234.50", { guia: null, resultados: ["entregada", "rechazada"] });
+    const o = orden(7, "1234.50", { guia: null, resultados: ["entregado", "novedad"] });
     expect(filaDetallePorOrdenCaja({ fila: principal, cierre: CIERRE, orden: o })).toEqual({
       fecha: "2026-09-20",
       movimiento: "Flete",

@@ -91,8 +91,8 @@ const DETALLE: DetalleDeMovimientoLoteDTO[] = [
     modo: "ordenes",
     cierre: { fecha: "2026-09-12T20:00:00.000Z", mensajeroNombre: "Mario Mensajero" },
     ordenes: [
-      { guia: "1001", remision: "R-1", destinatario: "Ana", tiendaNombre: null, resultados: ["entregada"], aporte: "10.00" },
-      { guia: "1002", remision: "R-2", destinatario: "Beto", tiendaNombre: null, resultados: ["entregada"], aporte: "20.00" },
+      { guia: "1001", remision: "R-1", destinatario: "Ana", tiendaNombre: null, resultados: ["entregado"], aporte: "10.00" },
+      { guia: "1002", remision: "R-2", destinatario: "Beto", tiendaNombre: null, resultados: ["entregado"], aporte: "20.00" },
     ],
     suma: "30.00",
     cuadra: true,
