@@ -1,28 +1,27 @@
 import { describe, it, expect } from "vitest";
 
-import { ORDEN_LIBRO, ORDEN_LIBRO_POR_DEFECTO, ZONA_LIBRO_TEXTO, ZONA_WALLET_TEXTO } from "@/components/shared/wallet/zonas-filtros-labels";
+import * as ZONAS from "@/components/shared/wallet/zonas-filtros-labels";
+import { ORDEN_LIBRO, ORDEN_LIBRO_POR_DEFECTO, ZONA_LIBRO_TEXTO } from "@/components/shared/wallet/zonas-filtros-labels";
 import { BUSCADOR_LIBRO_CAJA_PLACEHOLDER } from "@/app/(app)/wallet/_components/libro-caja-labels";
-import { ESTADO_CUENTA_TEXTO } from "@/components/shared/estado-cuenta/estado-cuenta-labels";
+import { CASILLAS_ESTADO_CUENTA_TEXTO, ESTADO_CUENTA_TEXTO } from "@/components/shared/estado-cuenta/estado-cuenta-labels";
+import { LIBRO_CAJA_FILTROS_TEXTO } from "@/app/(app)/wallet/_components/libro-caja-labels";
 import { BUSCADOR_SALDOS_TIENDAS } from "@/app/(app)/wallet/tiendas/_components/estado-cuenta-tienda-labels";
 
 // FICHA 463 (T6, design §5.5) — los textos de las dos zonas de filtros. Los de CONTRATO (R2, el alcance
 // de cada zona; R33, las dos opciones de orden) se afirman como LITERAL escrito a mano: compararlos con
 // su propia constante siempre estaría en verde. Y ningún texto nuevo usa la sigla «SLA» ni jerga (R48).
 
-describe("463 R2 — cada zona dice su alcance, en palabras", () => {
-  it("la zona de la wallet cambia toda la wallet; la del libro, solo el libro", () => {
-    expect(ZONA_WALLET_TEXTO.alcance).toBe("Estos filtros cambian toda la wallet");
-    expect(ZONA_LIBRO_TEXTO.alcance).toBe("Estos filtros solo afectan al libro de movimientos");
-  });
-
-  it("R1: cada zona tiene su nombre accesible propio, y son distintos", () => {
-    expect(ZONA_WALLET_TEXTO.nombre).toBe("Filtros de toda la wallet");
-    expect(ZONA_LIBRO_TEXTO.nombre).toBe("Filtros del libro de movimientos");
+// FICHA 467 (T7; R1, R3) — las DOS ZONAS se retiraron: una sola barra encima del libro, sin textos de
+// alcance ni nombres de zona. Queda el nombre accesible del buscador.
+describe("467 R1/R3 — ya no hay textos de zona", () => {
+  it("fuera `ZONA_WALLET_TEXTO`; `ZONA_LIBRO_TEXTO` solo nombra el buscador", () => {
+    expect(Object.keys(ZONAS)).not.toContain("ZONA_WALLET_TEXTO");
+    expect(ZONA_LIBRO_TEXTO).toEqual({ buscar: "Buscar en el libro" });
   });
 });
 
 describe("463 R33/R34 — el orden: «Más recientes» y «Más antiguas», y se entra en «Más recientes»", () => {
-  it("dos opciones con texto, en este orden, y la de por defecto es la descendente", () => {
+  it("dos opciones (467: con icono; la etiqueta es su nombre), en este orden, y la de por defecto es la descendente", () => {
     expect(ORDEN_LIBRO.opciones.map((o) => [o.valor, o.etiqueta])).toEqual([
       ["desc", "Más recientes"],
       ["asc", "Más antiguas"],
@@ -46,7 +45,9 @@ describe("463 R23/R25–R27 — los placeholders dicen qué se puede buscar", ()
 
 describe("463 R48 — sin la sigla «SLA» ni jerga técnica en los textos nuevos", () => {
   const TEXTOS_NUEVOS: string[] = [
-    ...Object.values(ZONA_WALLET_TEXTO),
+    // FICHA 467 (R36) — los textos de la barra única: casillas y lo que dicen sus controles.
+    ...Object.values(LIBRO_CAJA_FILTROS_TEXTO),
+    ...Object.values(CASILLAS_ESTADO_CUENTA_TEXTO),
     ...Object.values(ZONA_LIBRO_TEXTO),
     ORDEN_LIBRO.nombre,
     ...ORDEN_LIBRO.opciones.map((o) => o.etiqueta),

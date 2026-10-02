@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { elegirEnBarra, ponerCasillas, textoDelControl } from "@/tests/fixtures/barra-libro-wallet";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
@@ -257,7 +258,18 @@ function disparadorAQuien(): HTMLElement {
   return screen.getByRole("button", { name: /^A quién: / });
 }
 
+/** FICHA 467 — el libro, donde vive la barra única (con la casilla «A quién»). */
+function libro(): HTMLElement {
+  return screen.getByRole("region", { name: "Libro de movimientos" });
+}
+
+/** FICHA 467 — «A quién» se pide en «Filtros»: marca su casilla si aún no está. */
+async function conAQuien(user: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryByRole("button", { name: /^A quién: / }) === null) await ponerCasillas(user, libro(), "A quién");
+}
+
 async function elegirAQuien(user: ReturnType<typeof userEvent.setup>, rotulo: RegExp) {
+  await conAQuien(user);
   await user.click(disparadorAQuien());
   const lista = await screen.findByRole("listbox", { name: "A quién" });
   await user.click(await within(lista).findByRole("option", { name: rotulo }));
@@ -286,6 +298,7 @@ afterEach(() => {
 describe("458-E R59 — el selector «A quién»", () => {
   it("no lee nada hasta que se abre; al abrirlo pide las opciones y las rotula con nombre, clase y cardinal", async () => {
     const user = pintarModulo();
+    await conAQuien(user);
     expect(disparadorAQuien()).toHaveAccessibleName("A quién: Todos");
     expect(quienesMock).not.toHaveBeenCalled();
 
@@ -310,12 +323,13 @@ describe("458-E R59 — el selector «A quién»", () => {
   // APLICADO (ya no las del borrador) y no las acota la dirección, que es un filtro del libro.
   it("463: las opciones son las del periodo APLICADO, sin la dirección del libro, y la búsqueda va al servidor", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, libro(), "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
-    await aplicarPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 28);
+    await aplicarPeriodo(user, libro(), 1, 28);
     await waitFor(() => expect(resumenMock).toHaveBeenCalledTimes(1));
     const periodo = { desde: diaDelMesActual(1), hasta: diaDelMesActual(28) };
 
+    await conAQuien(user);
     await user.click(disparadorAQuien());
     await waitFor(() => expect(quienesMock).toHaveBeenCalledWith(periodo));
     await user.type(screen.getByRole("combobox", { name: "Buscar a quién" }), "tania");
@@ -326,12 +340,14 @@ describe("458-E R59 — el selector «A quién»", () => {
   it("dice que hay más cuando el servidor recorta la lista, y lo dice si no la pudo leer", async () => {
     quienesMock.mockResolvedValueOnce({ status: "ok", opciones: OPCIONES, hayMas: true });
     const user = pintarModulo();
+    await conAQuien(user);
     await user.click(disparadorAQuien());
     expect(await screen.findByText(/Hay más nombres de los que caben/)).toBeInTheDocument();
     cleanup();
 
     quienesMock.mockResolvedValue({ status: "forbidden" });
     const user2 = pintarModulo();
+    await conAQuien(user2);
     await user2.click(disparadorAQuien());
     expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos cargar la lista");
   });
@@ -391,9 +407,9 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
   // FICHA 463 (R12) — la dirección se suma en el LIBRO; las cifras reciben solo «A quién».
   it("por MENSAJERO, sumado a la dirección elegida en el libro (las cifras, sin la dirección)", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Entra" }));
+    await elegirEnBarra(user, libro(), "Entra/Sale", "Entra");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Entra" })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(textoDelControl(libro(), "Entra/Sale")).toBe("Entra/Sale: Entra"));
     await elegirAQuien(user, /^Mario Mensajero · Mensajero/);
     const aQuien = { tipo: "mensajero", id: MENSAJERO_ID };
     await waitFor(() =>
@@ -403,9 +419,10 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
     expect(desgloseMock).toHaveBeenLastCalledWith({ aQuien, page: 1, pageSize: 20 });
   });
 
-  // FICHA 463 — la banda con «Limpiar» se retiró: «A quién» se quita eligiendo «Todos» (R20), y el
-  // «Limpiar todo» del libro NO lo toca (R30).
-  it("por NOMBRE LIBRE; «Todos» quita el filtro y el «Limpiar todo» del libro no lo toca", async () => {
+  // FICHA 463 — la banda con «Limpiar» se retiró: «A quién» se quita eligiendo «Todos» (R20).
+  // FICHA 467 (R25) — CAMBIO DE CONTRATO a propósito: con la barra única, «Limpiar todo» quita TODOS
+  // los filtros, «A quién» incluido (antes, R30 de la 463, no lo tocaba), y relee cifras y libro juntos.
+  it("por NOMBRE LIBRE; «Todos» quita el filtro, y «Limpiar todo» (467) también", async () => {
     const user = pintarModulo();
     await elegirAQuien(user, /^Juan Pérez · Nombre anotado/);
     await waitFor(() =>
@@ -418,15 +435,16 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
 
     await elegirAQuien(user, /^Juan Pérez · Nombre anotado/);
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(3));
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, libro(), "Entra/Sale", "Sale");
     await waitFor(() =>
       expect(listarMock).toHaveBeenLastCalledWith({ tipo: "egreso", aQuien: { nombre: "Juan Pérez" }, page: 1, pageSize: 20 }),
     );
+    resumenMock.mockClear();
     await user.click(await screen.findByRole("button", { name: "Limpiar todo" }));
-    await waitFor(() =>
-      expect(listarMock).toHaveBeenLastCalledWith({ aQuien: { nombre: "Juan Pérez" }, page: 1, pageSize: 20 }),
-    );
-    expect(disparadorAQuien()).toHaveAccessibleName(/^A quién: Juan Pérez/);
+    await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 }));
+    expect(resumenMock).toHaveBeenCalledTimes(1);
+    expect(resumenMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 });
+    expect(screen.queryByRole("button", { name: /^A quién: / })).toBeNull();
   });
 
   it("«A quién» se conserva al aplicar el periodo después", async () => {
@@ -434,7 +452,7 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
     await elegirAQuien(user, /^Tania Tienda · Tienda/);
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(disparadorAQuien()).toHaveAccessibleName(/^A quién: Tania Tienda/));
-    await aplicarPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 28);
+    await aplicarPeriodo(user, libro(), 1, 28);
     await waitFor(() =>
       expect(listarMock).toHaveBeenLastCalledWith({
         aQuien: { tipo: "tienda", id: TIENDA_ID },

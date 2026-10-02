@@ -201,7 +201,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     expect(tiendas).toContain("La línea del **saldo inicial** del periodo");
     expect(tiendas).toContain("con **Más recientes**, es la **última línea de la última página**");
     expect(tiendas).not.toContain("La primera fila es el **saldo inicial**");
-    expect(tiendas).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    // FICHA 467: los chips son ahora la casilla «Tipo de movimiento» de la barra única (sin «Todo»).
+    expect(tiendas).toContain("**Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones**");
     expect(tiendas).toContain("El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres");
     expect(tiendas).toContain("Si se anuló antes de que la wallet guardara el motivo, dice **«motivo no registrado»**.");
     expect(tiendas).toContain("La descarga trae **el periodo entero** que estás mirando");
@@ -221,7 +222,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
   it.each(OFICINA)("%s: el estado de cuenta del mensajero, su pago y la anulación desde la wallet (R70)", (rol) => {
     const mensajeros = cuerpoEnContexto(rol, "oficina/wallet-mensajeros");
     expect(mensajeros).toContain("## El estado de cuenta de un mensajero");
-    expect(mensajeros).toContain("**Todo · Cierres · Pagos · Premios · Correcciones**");
+    // FICHA 467: los chips son la casilla «Tipo de movimiento» (sin «Todo»).
+    expect(mensajeros).toContain("**Tipo de movimiento** ofrece **Cierres · Pagos · Premios · Correcciones**");
     expect(mensajeros).toContain("**Ordenex le paga al mensajero**, en las acciones de su estado de cuenta");
     expect(mensajeros).toContain("## Anular un pago");
     expect(mensajeros).toContain("Es **la misma anulación que la de Cierres**");
@@ -231,7 +233,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
   it.each(OFICINA)("%s: el estado de cuenta de una bodega y la conciliación debajo (R31)", (rol) => {
     const satelites = cuerpoEnContexto(rol, "oficina/wallet-satelites");
     expect(satelites).toContain("## El estado de cuenta de una bodega");
-    expect(satelites).toContain("**Todo · Declarado · Recibido**");
+    // FICHA 467: los chips son la casilla «Tipo de movimiento» (sin «Todo»).
+    expect(satelites).toContain("**Tipo de movimiento** (**Declarado · Recibido**;");
     expect(satelites).toContain("Debajo del estado de cuenta de la bodega están sus consolidaciones");
   });
 
@@ -341,7 +344,8 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(wallet).toContain("El saldo de tu movimiento más reciente es el mismo de la cifra grande de arriba.");
     expect(wallet).not.toContain("La primera fila es el **saldo inicial**");
     expect(wallet).toContain("## Filtrar tu estado de cuenta");
-    expect(wallet).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    // FICHA 467: los chips son ahora la casilla «Tipo de movimiento» de la barra única (sin «Todo»).
+    expect(wallet).toContain("**Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones**");
     expect(wallet).toContain("«Cierre del 2026-09-12 · 7 movimientos»");
     expect(wallet).toContain("Y podés **descargar tu estado de cuenta**");
     // Cierre de la 458-D (172 R55/N1): VUELVE el resumen de tres cifras, cuadrando con la tarjeta.
@@ -388,14 +392,16 @@ describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caj
   it.each(OFICINA)("%s: los filtros, con «A quién» por tienda, mensajero o nombre anotado", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
     expect(caja).toContain("## Buscar en el libro: los filtros");
-    expect(caja).toContain("**Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.");
+    // FICHA 467: Entra/Sale es una casilla de la barra única; sin elección dice «Todo».
+    expect(caja).toContain("**Entra/Sale**: lo que entró a la caja o lo que salió. Sin elegir ninguno, dice **Todo**.");
+    expect(caja).toContain("**Filtros**: abre una lista de casillas —**Periodo**, **A quién**, **Entra/Sale** y **Concepto**—.");
     expect(caja).toContain(
       "**A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**",
     );
     expect(caja).toContain("Podés **buscar por el nombre de la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes.");
     // FICHA 463 (R8/R9/R12): las cifras solo las mueven el periodo y «A quién»; los del libro, no.
     expect(caja).toContain("desglose de egresos, el detalle de cada fila de la composición y el libro cuentan solo el periodo y el");
-    expect(caja).toContain("Estos **no cambian ninguna cifra**: solo qué filas del libro se ven y en qué orden.");
+    expect(caja).toContain("**no cambian ninguna cifra**: solo qué filas del libro se ven y en qué orden.");
     expect(caja).not.toContain("cuentan solo lo filtrado");
     // La ayuda vieja («Filtros por concepto y tipo») no vuelve.
     expect(caja).not.toContain("Filtros por **concepto** y **tipo**");

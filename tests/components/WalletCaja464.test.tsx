@@ -9,6 +9,7 @@ import ExcelJS from "exceljs";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import type { DetalleDeMovimientoLoteDTO } from "@/lib/types/detalle-en-lote";
 import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { elegirEnBarra } from "@/tests/fixtures/barra-libro-wallet";
 import {
   DISPARADOR_DETALLE,
   OPCION_CON_DETALLE,
@@ -205,8 +206,9 @@ function pintar() {
   return userEvent.setup();
 }
 
-const zonaWallet = () => screen.getByRole("region", { name: "Filtros de toda la wallet" });
-const zonaLibro = () => screen.getByRole("region", { name: "Filtros del libro de movimientos" });
+// FICHA 467 — una sola barra, dentro del libro: Periodo, Entra/Sale y orden viven en ella.
+const zonaLibro = () => screen.getByRole("region", { name: "Libro de movimientos" });
+const zonaWallet = zonaLibro;
 const buscador = () => screen.getByRole("searchbox", { name: "Buscar en el libro" });
 const descargar = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
@@ -256,7 +258,8 @@ describe("464 R10/R14/R36 — con detalle: UNA petición con los filtros vigente
     const user = pintar();
     await aplicarPeriodo(user, zonaWallet(), 1, 28);
     await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, zonaLibro(), "Entra/Sale", "Sale");
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ tipo: "egreso" })));
     await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
     await user.type(buscador(), "Juan");
     await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ q: "Juan" })), { timeout: 3000 });

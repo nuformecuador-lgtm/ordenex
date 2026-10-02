@@ -3,7 +3,7 @@ titulo: Wallet · Mensajeros
 modulo: wallet
 pantalla: /wallet/mensajeros, /wallet/mensajeros/[mensajeroId]
 roles: [maestro, admin]
-actualizado: 2026-10-01
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx
   - app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts
@@ -54,25 +54,26 @@ movimiento lleva su fecha, su concepto, el motivo, **de dónde viene** con nombr
 2026-09-12 · Juan Pérez Mora», con un enlace **Ver** al cierre), **cómo se pagó** si es un pago (método y
 referencia), **quién lo registró** y el **saldo** del mensajero justo después.
 
-Los filtros están en **dos zonas**. Arriba, antes de las cifras, **«Estos filtros cambian toda la
-wallet»**: el **Periodo** (días de Costa Rica), que se elige en el calendario y se aplica con
-**Aplicar**; **Quitar periodo** lo quita. Encima de la tabla, **«Estos filtros solo afectan al libro de
-movimientos»** —no cambian las cifras de arriba—: un **buscador** (descripción y quién registró, al
-menos 3 caracteres), el orden **Más recientes / Más antiguas**, los chips
-**Todo · Cierres · Pagos · Premios · Correcciones** y el filtro
-por **cierre**: un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero,
-cada uno con su día; se busca por un día o por el nombre. Al elegir un cierre se ven sus filas **y los
-pagos registrados contra ese cierre, con sus anulaciones**; el número de movimientos del selector ya
-los cuenta. El saldo de cada fila es siempre el de la cuenta entera, en cualquier orden. **Limpiar
-todo** quita el texto buscado, el chip y el cierre, sin tocar el orden ni el periodo. Si una lectura
-falla, la pantalla lo dice y se queda con lo que mostraba, filtros incluidos.
+Los filtros están en **una sola barra, encima de la tabla**, en la misma fila que **Descargar**: el orden
+**Más recientes / Más antiguas** (dos botones con flechas), un **buscador** (descripción y quién
+registró, al menos 3 caracteres) y el botón **Filtros**, que ofrece tres casillas: **Periodo**, **Tipo
+de movimiento** y **Cierre**. Marcar una casilla pone su control en la barra (marcarla sola no filtra
+nada); desmarcarla quita ese filtro. El **Periodo** (días de Costa Rica) se elige en el calendario y se
+aplica solo, sin botón: es el único que cambia también las cifras de arriba. El **Tipo de movimiento**
+ofrece **Cierres · Pagos · Premios · Correcciones** (sin elegir ninguno, dice **Todo**). El **Cierre** es
+un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero, cada uno con su
+día; se busca por un día o por el nombre. Al elegir un cierre se ven sus filas **y los pagos registrados
+contra ese cierre, con sus anulaciones**; el número de movimientos del selector ya los cuenta. El saldo
+de cada fila es siempre el de la cuenta entera, en cualquier orden. **Limpiar todo** quita el texto
+buscado, el periodo, el tipo de movimiento, el cierre y todas las casillas, sin tocar el orden. Si una
+lectura falla, la pantalla lo dice y se queda con lo que mostraba, filtros incluidos.
 
 Las filas que vienen de un cierre tienen una flecha al principio. Al abrirla, el pago de un cierre **no
 se reparte orden por orden**: es el total que ese cierre dejó anotado para pagarle al mensajero, y el
 detalle lo dice así. Para ver sus órdenes, abrí el cierre con el enlace **Ver** de la fila.
 
 Es el nivel donde se contesta *«¿por qué me pagaron esto?»* sin discutir de memoria. Se puede
-**descargar** el periodo entero (con el texto buscado, el chip, el cierre y el orden elegidos, y el saldo
+**descargar** el periodo entero (con el texto buscado, el tipo de movimiento, el cierre y el orden elegidos, y el saldo
 inicial donde cae en el tiempo), con el saldo de cada fila; si hay más
 movimientos de los que entran en una descarga, no se descarga nada y te lo dice.
 
@@ -92,7 +93,7 @@ anular igual.
 ## Premios del ranking
 
 El panel de premios conecta con el **Ranking**: lo que se define ahí como premio aparece acá como algo
-a pagar. Un premio no es un número suelto — termina en la cuenta del mensajero, con el chip **Premios**.
+a pagar. Un premio no es un número suelto — termina en la cuenta del mensajero, con el tipo de movimiento **Premios**.
 
 ## Cosas que te pueden pasar
 

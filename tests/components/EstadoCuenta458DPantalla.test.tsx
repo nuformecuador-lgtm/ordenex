@@ -7,6 +7,7 @@ import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { FORMA_UUID, UUID_MENSAJERO, UUID_MOV, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import { ponerCasillas } from "@/tests/fixtures/barra-libro-wallet";
 
 // =================================================================================================
 // FICHA 458-D (cierre de PANTALLA de los pendientes de servidor) — lo que el estado de cuenta de la
@@ -93,6 +94,9 @@ describe("R10–R12 — el estado de cuenta de la oficina se filtra por CIERRE",
     envolver(<EstadoCuentaTienda inicial={estado()} puedeRegistrar={false} />);
     expect(cierresMock).not.toHaveBeenCalled();
 
+    // FICHA 467: el cierre es la casilla «Cierre» de la barra única; marcarla no lee nada.
+    await ponerCasillas(user, document.body, "Cierre");
+    expect(cierresMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
     await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "tienda", tiendaId: UUID_TIENDA }));
     await user.click(await screen.findByRole("option", { name: "Cierre del 2026-09-12 · Juan Pérez Mora · 3 movimientos" }));
@@ -117,6 +121,7 @@ describe("R10–R12 — el estado de cuenta de la oficina se filtra por CIERRE",
         puedeRegistrar={false}
       />,
     );
+    await ponerCasillas(user, document.body, "Cierre");
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
     await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "mensajero", mensajeroId: UUID_MENSAJERO }));
     await user.click(await screen.findByRole("option", { name: /Cierre del 2026-09-12/ }));

@@ -13,7 +13,7 @@
 // conserva la red de la composición (`SelectorBuscable` + `useCierresDeLaCuenta` +
 // `CIERRE_SELECTOR_TEXTOS`) y el estado de cuenta se mide por R2 (ningún control pide un id).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
@@ -52,8 +52,10 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
-// FICHA 463: la categoría de la caja vive en la zona del libro; el periodo, en la de la wallet.
+// FICHA 463/467: la categoría de la caja es la casilla «Concepto» de la barra única del libro; el periodo
+// llega ya aplicado por la prop de la wallet.
 import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
+import { elegirEnBarra } from "@/tests/fixtures/barra-libro-wallet";
 import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { useState } from "react";
 import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
@@ -125,13 +127,13 @@ async function opcionesDe(combobox: HTMLElement): Promise<string[]> {
 
 describe("TA.3 — `/wallet`: el filtro de categoría (libro de caja)", () => {
   it("R13: pide los conceptos del periodo APLICADO y el tipo vigente y los ofrece con su número", async () => {
-    const { rerender } = conSWR(<LibroCajaBarraControlada />);
+    const { rerender } = conSWR(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja" }));
 
     // FICHA 463: el periodo llega de la zona de la wallet, ya aplicado.
     rerender(
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <LibroCajaBarraControlada filtrosWallet={{ desde: "2026-09-01", hasta: "2026-09-30" }} />
+        <LibroCajaBarraControlada activosIniciales={["categoria"]} filtrosWallet={{ desde: "2026-09-01", hasta: "2026-09-30" }} />
       </SWRConfig>,
     );
     await waitFor(() =>
@@ -141,35 +143,39 @@ describe("TA.3 — `/wallet`: el filtro de categoría (libro de caja)", () => {
     await waitFor(async () => {
       expect(conceptosMock).toHaveBeenCalled();
     });
-    const opciones = await opcionesDe(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
-    expect(opciones[0]).toBe("Todas las categorías");
-    expect(opciones).toContain("Sueldo (2)");
+    const opciones = await opcionesDe(screen.getByRole("combobox", { name: "Concepto" }));
+    // FICHA 467: sin la opción «Todas las categorías» (sin elección, el disparador ya dice «Todos»).
+    expect(opciones).not.toContain("Todas las categorías");
+    expect(opciones[0]).toBe("Sueldo (2)");
     for (const o of opciones) expect(o).not.toMatch(/_/);
   });
 
   it("R15: la categoría elegida se conserva, con 0, cuando el periodo la deja sin movimientos", async () => {
     const user = userEvent.setup();
     const proveedor = new Map();
+    const onCambiar = vi.fn();
     const montar = (desde: string) => (
       <SWRConfig value={{ provider: () => proveedor, dedupingInterval: 0 }}>
-        <LibroCajaBarraControlada filtrosWallet={{ desde, hasta: "" }} />
+        <LibroCajaBarraControlada activosIniciales={["categoria"]} filtrosWallet={{ desde, hasta: "" }} onCambiar={onCambiar} />
       </SWRConfig>
     );
     const { rerender } = render(montar(""));
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(screen.getByRole("combobox", { name: "Concepto" }));
     await user.click(await screen.findByRole("option", { name: "Sueldo (2)" }));
+    // FICHA 467: la elección se aplica tras la espera estándar del orquestador.
+    await waitFor(() => expect(onCambiar).toHaveBeenCalledWith(expect.objectContaining({ categoria: "egreso_sueldo" })));
 
     conceptosMock.mockResolvedValue({ status: "ok", conceptos: [{ categoria: "ingreso_flete", movimientos: 7 }] });
     rerender(montar("2026-01-01"));
 
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Filtrar por categoría" })).toHaveTextContent("Sueldo (0)"),
+      expect(screen.getByRole("combobox", { name: "Concepto" })).toHaveTextContent("Sueldo (0)"),
     );
   });
 
   it("si la lectura falla, lo dice (y el filtro sigue usable con «todas»)", async () => {
     conceptosMock.mockResolvedValue({ status: "forbidden" });
-    conSWR(<LibroCajaBarraControlada />);
+    conSWR(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
     expect(await screen.findByText("No pudimos cargar los conceptos del periodo.")).toBeInTheDocument();
   });
 });
@@ -182,7 +188,7 @@ describe("TA.3 → 458-D — `/mi-wallet`: el filtro por concepto es el chip, si
   it("R13/R36: el chip «Cobros» lee SU estado de cuenta sin `tiendaId` ni `cuenta`, y rotula desde la tienda", async () => {
     miEstadoCuentaMock.mockResolvedValue({ status: "ok", estado: estado() });
     conSWR(<MiEstadoCuenta inicial={estado()} cierres={{ opciones: [], hayMas: false, disponible: true }} />);
-    fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
+    await elegirEnBarra(userEvent.setup(), document.body, "Tipo de movimiento", "Cobros");
     await waitFor(() => expect(miEstadoCuentaMock).toHaveBeenLastCalledWith({ chip: "cobros", page: 1, pageSize: 20 }));
     for (const [input] of miEstadoCuentaMock.mock.calls) {
       expect(input).not.toHaveProperty("tiendaId");
@@ -246,13 +252,13 @@ describe("458-D — los estados de cuenta de tienda y mensajero: ningún control
     expect(screen.queryByPlaceholderText(/ID|identificador/i)).toBeNull();
     expect(document.body.textContent ?? "").not.toMatch(/\bID\b|identificador|pegá|copiá su dirección/i);
     expect(document.body.textContent ?? "").not.toMatch(UUID);
-    // FICHA 463: el periodo es el calendario de la zona de la wallet; el único campo que se escribe es
-    // el buscador del libro (R23), que busca por la descripción o quién registró.
+    // FICHA 463/467: el periodo es un calendario (casilla «Periodo» de la barra única); el único campo
+    // que se escribe es el buscador del libro (R23), que busca por la descripción o quién registró.
     expect(screen.getAllByRole("searchbox")).toHaveLength(1);
     expect(screen.getByRole("searchbox", { name: "Buscar en el libro" })).toHaveAttribute(
       "placeholder",
       "Buscar por descripción o quién registró",
     );
-    expect(screen.getByRole("button", { name: "Periodo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtros/ })).toBeInTheDocument();
   });
 });

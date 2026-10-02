@@ -11,6 +11,10 @@ import { ESTADO_CUENTA_TEXTO } from "./estado-cuenta-labels";
 // abrirlo, ofrece SOLO los cierres con movimientos en ESTA cuenta (R11), rotulados por su día CR y el
 // mensajero (R10), y se busca por un día o por el nombre del mensajero. El valor elegido es el cierre:
 // viaja a `verEstadoCuentaAction` como `cierreId` y nunca se pinta (R1). Ningún campo pide un id (R2).
+//
+// FICHA 467 (design §4.3; R22, R23) — vive en la barra única del libro (casilla «Cierre»): el nombre va
+// DENTRO del disparador («Cierre: Todos los cierres») y tiene la altura y el ancho mínimo de los demás
+// controles de la barra.
 
 export interface SelectorCierreDeCuentaProps {
   /** La cuenta de la página, en la forma del borde de `cierresDeLaCuentaAction`. */
@@ -32,7 +36,8 @@ export function SelectorCierreDeCuenta({ cuenta, valor, onCambiar }: Readonly<Se
       estado={cierres.estado}
       hayMas={cierres.hayMas}
       textos={CIERRE_SELECTOR_TEXTOS}
-      className="w-full sm:w-80"
+      rotuloVisible
+      className="h-8 w-auto min-w-56"
     />
   );
 }

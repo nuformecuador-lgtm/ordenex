@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Feature 335 / T4.1-T4.3 — `FilterComponent` sembrando su seleccion desde la URL.
@@ -463,5 +463,32 @@ describe("FilterComponent — el control muestra lo que se sembro (R10, R13)", (
     expect(
       (screen.getByRole("searchbox", { name: "Nota" }) as HTMLInputElement).value,
     ).toBe("llego tarde");
+  });
+});
+
+// FICHA 467 (T7, design §4.4) — MUDADO desde `filter-component-url-aplicar-463.test.tsx` (retirado con el
+// modo «Aplicar»): el caso SIN la prop (revisión m4 de la 463). La mutación M5 de aquella revisión —emitir
+// la precarga en el acto— lo pone rojo: la emisión llegaría antes de vencer la espera.
+describe("463 R22 (mudado en la 467) — la precarga de la URL sigue el camino de siempre", () => {
+  const DESTACADO_URL: FilterDef = { key: "destacado", label: "Destacado", kind: "boolean" };
+
+  afterEach(() => vi.useRealTimers());
+
+  it("se emite UNA vez, con la selección de la URL, al vencer el debounce (no en el acto)", () => {
+    vi.useFakeTimers();
+    parametros = new URLSearchParams("destacado=true");
+    const onChange = vi.fn();
+
+    render(<FilterComponent filters={[DESTACADO_URL]} onChange={onChange} debounceMs={500} />);
+
+    // Montado y con los efectos corridos: nada todavía.
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(499));
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(onChange.mock.calls).toEqual([[{ destacado: [BOOLEAN_MARCADO] }]]);
+    act(() => vi.advanceTimersByTime(2000));
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

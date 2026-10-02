@@ -1,10 +1,15 @@
 import { screen, within } from "@testing-library/react";
 import type userEvent from "@testing-library/user-event";
 
-// FICHA 463 — el periodo de la ZONA DE LA WALLET es el `dateRange` de `FilterComponent` (un calendario
-// en un popover) en modo «Aplicar». El calendario abre en el MES ACTUAL (no se le pasa `defaultMonth`),
-// así que los días se eligen en ese mes y la fecha esperada se deriva de él: los días 1 y 28 existen
-// siempre. Mismo criterio que `tests/unit/components/filter-component.test.tsx`.
+import { ponerCasillas } from "./barra-libro-wallet";
+
+// FICHA 463 — el periodo de las wallets es el `dateRange` de `FilterComponent` (un calendario en un
+// popover). El calendario abre en el MES ACTUAL (no se le pasa `defaultMonth`), así que los días se
+// eligen en ese mes y la fecha esperada se deriva de él: los días 1 y 28 existen siempre. Mismo
+// criterio que `tests/unit/components/filter-component.test.tsx`.
+//
+// FICHA 467 — el periodo vive en la BARRA ÚNICA del libro, detrás de la casilla «Periodo», y se aplica
+// solo (sin «Aplicar»), tras la espera estándar del orquestador.
 
 type Usuario = ReturnType<typeof userEvent.setup>;
 
@@ -28,8 +33,13 @@ export async function elegirPeriodo(user: Usuario, zona: HTMLElement, desde: num
   await user.keyboard("{Escape}");
 }
 
-/** Elige el periodo y pulsa «Aplicar» de la zona. */
+/**
+ * FICHA 467 — pone el periodo en la barra de `zona`: marca la casilla «Periodo» si hace falta y elige el
+ * rango. Se aplica solo (R17); quien llama espera la lectura con `waitFor`.
+ */
 export async function aplicarPeriodo(user: Usuario, zona: HTMLElement, desde: number, hasta: number) {
+  if (within(zona).queryByRole("button", { name: "Periodo" }) === null) {
+    await ponerCasillas(user, zona, "Periodo");
+  }
   await elegirPeriodo(user, zona, desde, hasta);
-  await user.click(within(zona).getByRole("button", { name: "Aplicar" }));
 }

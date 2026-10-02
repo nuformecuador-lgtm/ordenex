@@ -10,6 +10,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { FORMA_UUID, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import userEvent from "@testing-library/user-event";
+import { casillasOfrecidas, opcionesDelControl, ponerCasillas } from "@/tests/fixtures/barra-libro-wallet";
 import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 
@@ -251,11 +253,16 @@ describe("458-D R34 + 463 R39 — el estado de cuenta de la tienda: saldo inicia
   it("los chips de la tienda y el periodo; ningún nombre de la gente de Ordenex («Registró»)", async () => {
     sembrar(estadoTienda([COD, FLETE, PAGO]));
     await verMiWallet();
-    for (const chip of ["Todo", "Cierres", "Pagos", "Cobros", "Correcciones"]) {
-      expect(within(screen.getByRole("group", { name: "Filtrar el estado de cuenta de Tania Tienda" })).getByRole("button", { name: chip })).toBeInTheDocument();
-    }
-    // FICHA 463: el periodo es el calendario de la zona de la wallet.
-    expect(screen.getByRole("button", { name: "Periodo" })).toBeInTheDocument();
+    // FICHA 467: los chips son las opciones de la casilla «Tipo de movimiento» (sin «Todo»: sin elección
+    // ya son todos), y el periodo y el cierre son casillas de la misma barra.
+    const user = userEvent.setup();
+    expect((await casillasOfrecidas(user, document.body)).etiquetas).toEqual(["Periodo", "Tipo de movimiento", "Cierre"]);
+    expect(await opcionesDelControl(user, document.body, "Tipo de movimiento")).toEqual([
+      "Cierres",
+      "Pagos",
+      "Cobros",
+      "Correcciones",
+    ]);
     expect(tabla().textContent ?? "").not.toContain("Registró");
   });
 
@@ -419,6 +426,8 @@ describe("MiWalletPage — la presentación (335 R12–R15 → 458-D)", () => {
 
   it("R14: el selector de cierre va por encima de la tabla", async () => {
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
     expect(selector.compareDocumentPosition(tabla()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -439,6 +448,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "forbidden" });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     laPantallaSigueEntera();
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("No pudimos cargar tus cierres. Probá recargando la página.")).toBeInTheDocument();
@@ -448,6 +459,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "unauthenticated" });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     laPantallaSigueEntera();
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
   });
@@ -456,6 +469,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "ok", cierres: [], hayMas: false });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("Todavía no hay cierres en tu wallet.")).toBeInTheDocument();
     expect(screen.queryByText("No pudimos cargar tus cierres. Probá recargando la página.")).not.toBeInTheDocument();
@@ -464,6 +479,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
   it("R28/R30: con cierres y sin tope alcanzado, no hay aviso ninguno (contraprueba)", async () => {
     sembrar(estadoTienda([COD, FLETE]));
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).not.toBeDisabled();
     expect(screen.queryByText("Todavía no hay cierres en tu wallet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Mostramos los cierres más recientes.")).not.toBeInTheDocument();
@@ -473,6 +490,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ ...CIERRES_OK, hayMas: true });
     await verMiWallet();
+    // FICHA 467: el aviso acompaña al selector, que vive en la casilla «Cierre».
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     const aviso = screen.getByText("Mostramos los cierres más recientes.");
     expect(aviso.getAttribute("role")).toBeNull();
   });

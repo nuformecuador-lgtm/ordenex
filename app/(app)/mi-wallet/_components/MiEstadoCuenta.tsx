@@ -1,6 +1,5 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { EstadoCuenta, type LectorEstadoCuenta } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
@@ -59,7 +58,13 @@ export const ROTULOS_MI_WALLET: RotulosEstadoCuenta = {
   anulado: textoAnuladoMiWallet,
 };
 
-/** R10 (335) — el selector de cierre de la tienda, con las opciones que ya leyó el servidor. */
+/**
+ * R10 (335) — el selector de cierre de la tienda, con las opciones que ya leyó el servidor.
+ *
+ * FICHA 467 (design §4.3; R22, R23) — vive en la barra única (casilla «Cierre»): sin rótulo ENCIMA (rompía
+ * la fila), con el nombre dentro del disparador (`labelPrefix`, el mismo `Select` que el `single` del
+ * orquestador) y a la altura del buscador. Sus avisos se mantienen, como texto corto tras el control.
+ */
 function SelectorMiCierre({
   cierres,
   valor,
@@ -79,17 +84,17 @@ function SelectorMiCierre({
         ? MI_ESTADO_CUENTA_TEXTO.cierresRecientes
         : null;
   return (
-    <div className="flex w-full flex-col gap-1 sm:w-auto">
-      <Label htmlFor="mi-wallet-filtro-cierre">{MI_ESTADO_CUENTA_TEXTO.cierre}</Label>
+    <div className="flex items-center gap-2">
       <Select
         id="mi-wallet-filtro-cierre"
         aria-label={MI_ESTADO_CUENTA_TEXTO.filtrarPorCierre}
+        labelPrefix={MI_ESTADO_CUENTA_TEXTO.cierre}
         value={valor ?? ""}
         onValueChange={(v) => onCambiar(v === "" ? null : v)}
         options={opcionesDeCierre(cierres.opciones)}
         placeholder={MI_ESTADO_CUENTA_TEXTO.todosLosCierres}
         disabled={sinCierres}
-        className="h-9 w-full sm:w-72"
+        className="h-8 w-auto min-w-56"
       />
       {aviso ? <span className="text-xs text-muted-foreground">{aviso}</span> : null}
     </div>

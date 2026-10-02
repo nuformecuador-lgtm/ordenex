@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
@@ -725,3 +725,41 @@ describe("FilterComponent — el filtro UNICO dice que filtra (ficha 372)", () =
   });
 });
 
+// FICHA 467 (T7, design §4.4) — MUDADO desde `filter-component-aplicar-463.test.tsx` (retirado con el
+// modo «Aplicar»): su bloque «463 R22» medía el camino SIN la prop, que sigue siendo EL camino del
+// orquestador. Las emisiones son las de siempre: debounce, una por racha, en el acto con `debounceMs={0}`.
+describe("463 R22 (mudado en la 467) — las emisiones del orquestador", () => {
+  const DESTACADO: FilterDef = { key: "destacado", label: "Destacado", kind: "boolean" };
+
+  afterEach(() => vi.useRealTimers());
+
+  it("con debounce: una racha de cambios da UNA emisión, la del estado final, al cumplirse la espera", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    render(<FilterComponent filters={[DESTACADO]} onChange={onChange} leerDeUrl={false} debounceMs={500} />);
+    const casilla = screen.getByRole("checkbox");
+
+    fireEvent.click(casilla); // marcado
+    act(() => vi.advanceTimersByTime(200));
+    fireEvent.click(casilla); // desmarcado
+    act(() => vi.advanceTimersByTime(200));
+    fireEvent.click(casilla); // marcado otra vez
+    act(() => vi.advanceTimersByTime(499));
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(onChange.mock.calls).toEqual([[{ destacado: ["true"] }]]);
+    // Ni botón «Aplicar» ni «Quitar»: el orquestador no tiene ese modo.
+    expect(screen.queryByRole("button", { name: "Aplicar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Quitar" })).toBeNull();
+  });
+
+  it("sin debounce: cada cambio emite en el acto, como siempre", () => {
+    const onChange = vi.fn();
+    render(<FilterComponent filters={[DESTACADO]} onChange={onChange} leerDeUrl={false} debounceMs={0} />);
+    const casilla = screen.getByRole("checkbox");
+    fireEvent.click(casilla);
+    fireEvent.click(casilla);
+    expect(onChange.mock.calls).toEqual([[{ destacado: ["true"] }], [{}]]);
+  });
+});

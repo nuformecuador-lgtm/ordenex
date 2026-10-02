@@ -170,7 +170,7 @@ describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial 
       status: "error",
       mensaje:
         `El estado de cuenta tiene ${descargaConfig.MAX_FILAS + 1} movimientos con estos filtros y la descarga ` +
-        `admite hasta ${descargaConfig.MAX_FILAS}. Elegí un periodo más corto, un chip o un cierre y volvé a descargar.`,
+        `admite hasta ${descargaConfig.MAX_FILAS}. Elegí un periodo más corto, un tipo de movimiento o un cierre y volvé a descargar.`,
     });
     expect(verEstadoCuentaCompletoMock).toHaveBeenCalledTimes(1);
   });

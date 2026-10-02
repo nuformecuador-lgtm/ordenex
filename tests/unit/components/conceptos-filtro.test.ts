@@ -62,3 +62,38 @@ describe("opcionesDeConceptos", () => {
     expect(rotuloConCuenta("Sueldo", 0)).toBe("Sueldo (0)");
   });
 });
+
+// FICHA 467 (T3, design §3.1; R20) — el modo SIN la opción «todas», para el `single` de la barra única
+// del libro de la caja (allí la ausencia de valor ya es «todos» y lo dice el placeholder).
+describe("opcionesDeConceptos — sin la opción «todas» (467)", () => {
+  it("sin `todos`, la lista son solo los conceptos con movimientos, en el orden del servidor", () => {
+    expect(
+      opcionesDeConceptos(
+        [
+          { categoria: "ingreso_flete", movimientos: 12 },
+          { categoria: "egreso_sueldo", movimientos: 1 },
+        ],
+        CATEGORIA_LABEL,
+        "",
+      ),
+    ).toEqual([
+      { value: "ingreso_flete", label: "Flete cobrado a la tienda (12)" },
+      { value: "egreso_sueldo", label: "Sueldo (1)" },
+    ]);
+  });
+
+  it("R20: el elegido que se queda sin movimientos sigue ofrecido, con 0, al final", () => {
+    expect(opcionesDeConceptos([{ categoria: "ingreso_flete", movimientos: 3 }], CATEGORIA_LABEL, "egreso_sueldo")).toEqual([
+      { value: "ingreso_flete", label: "Flete cobrado a la tienda (3)" },
+      { value: "egreso_sueldo", label: "Sueldo (0)" },
+    ]);
+    // Sin respuesta y sin elección: lista vacía (el control se deshabilita solo).
+    expect(opcionesDeConceptos(undefined, CATEGORIA_LABEL, "")).toEqual([]);
+  });
+
+  it("con `todos`, la lista de siempre: la opción «todas» sigue al frente", () => {
+    expect(opcionesDeConceptos([], CATEGORIA_LABEL, "", CATEGORIA_TODAS_OPTION)).toEqual([
+      { value: "", label: "Todas las categorías" },
+    ]);
+  });
+});

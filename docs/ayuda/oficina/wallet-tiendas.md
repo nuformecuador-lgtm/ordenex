@@ -3,7 +3,7 @@ titulo: Wallet · Tiendas
 modulo: wallet
 pantalla: /wallet/tiendas, /wallet/tiendas/[tiendaId]
 roles: [maestro, admin]
-actualizado: 2026-10-01
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx
   - app/(app)/wallet/tiendas/[tiendaId]/page.tsx
@@ -96,30 +96,33 @@ cada una—, con el día del cierre, el mensajero y cuántas de sus órdenes apo
 
 ### Filtrar el estado de cuenta
 
-Los filtros están en **dos zonas**, y cada una dice hasta dónde llega.
+Los filtros están en **una sola barra, encima de la tabla**, en la misma fila que **Descargar**:
 
-**Arriba, antes de las cifras: «Estos filtros cambian toda la wallet».** Solo el **Periodo**: se eligen
-el primer y el último día en el calendario (días de Costa Rica) y se aplica con **Aplicar**; mientras lo
-elegís no cambia nada. **Quitar periodo** lo quita. Con un periodo cambian las cuatro cifras y el
-extracto, y la línea del saldo inicial dice el saldo con el que la tienda empezó ese periodo.
-
-**Encima de la tabla: «Estos filtros solo afectan al libro de movimientos».** No cambian ninguna cifra
-de arriba; cambiar uno vuelve a la primera página:
-
+- **Más recientes / Más antiguas**: los dos botones con flechas del principio; el orden del extracto,
+  por fecha.
 - **El buscador**: busca en la descripción y en quién registró el movimiento, sin distinguir
   mayúsculas. Escribí **al menos 3 caracteres**.
-- **Más recientes / Más antiguas**: el orden del extracto, por fecha.
-- Los **chips**: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
-  uno solo. El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres: por eso no
-  baja de a poco como si los otros movimientos no existieran.
+- **Filtros**: abre una lista de casillas —**Periodo**, **Tipo de movimiento** y **Cierre**—. Marcar una
+  casilla pone su control en la barra (marcarla sola no filtra nada); desmarcarla quita ese filtro.
+
+Lo que hace cada casilla:
+
+- **Periodo**: se eligen el primer y el último día en el calendario (días de Costa Rica) y se aplica
+  solo, sin botón. Es el único que cambia también las cuatro cifras de arriba, y la línea del saldo
+  inicial dice el saldo con el que la tienda empezó ese periodo.
+- **Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones** (sin elegir ninguno, dice
+  **Todo**). Cada movimiento cae en uno solo. El saldo de cada fila **sigue siendo el de la cuenta
+  entera**, aunque filtres: por eso no baja de a poco como si los otros movimientos no existieran.
 - **Cierre**: un selector con búsqueda. Solo ofrece los cierres que tienen movimientos en **esta**
   tienda, cada uno con su día y el mensajero («Cierre del 2026-09-12 · Juan Pérez Mora · 3
   movimientos»); se busca por un día (2026-09-12) o por el nombre del mensajero. **Todos los cierres**
-  quita el filtro. Como con los chips, el saldo de cada fila sigue siendo el de la cuenta entera.
+  quita el filtro. Como con el tipo de movimiento, el saldo de cada fila sigue siendo el de la cuenta
+  entera.
 
-**Limpiar todo** quita el texto buscado, el chip y el cierre; no toca el orden ni el periodo. Si una
-lectura falla, la pantalla te lo dice y **se queda con lo que mostraba**: las cifras, el extracto y los
-filtros que ya estaban puestos.
+El tipo de movimiento, el cierre, el buscador y el orden no cambian ninguna cifra de arriba; cualquier
+cambio vuelve a la primera página. **Limpiar todo** quita el texto buscado, el periodo, el tipo de
+movimiento, el cierre y todas las casillas; no toca el orden. Si una lectura falla, la pantalla te lo
+dice y **se queda con lo que mostraba**: las cifras, el extracto y los filtros que ya estaban puestos.
 
 ### Anulados
 
@@ -140,10 +143,10 @@ movimiento lo admite (lo que produce la aprobación de un cierre no se anula des
 La descarga trae **el periodo entero** que estás mirando (no solo la página), en el orden elegido y
 con la línea del saldo inicial donde cae en el tiempo (al final con **Más recientes**, al principio con
 **Más antiguas**), y el **saldo** de cada fila, en las mismas columnas que la tabla. No lleva ningún
-identificador. Respeta el periodo, el texto buscado, el chip y el cierre elegidos. Si hay más movimientos de los que entran en una
+identificador. Respeta el periodo, el texto buscado, el tipo de movimiento y el cierre elegidos. Si hay más movimientos de los que entran en una
 descarga, **no se descarga nada** y te lo dice: «El estado de cuenta tiene … movimientos con estos
-filtros y la descarga admite hasta …». Elegí un periodo más corto, un chip o un cierre y volvé a
-descargar.
+filtros y la descarga admite hasta …». Elegí un periodo más corto, un tipo de movimiento o un cierre y
+volvé a descargar.
 
 ## Registrar desde el estado de cuenta
 

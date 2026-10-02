@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within, cleanup, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 
@@ -8,6 +8,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 
 import type { CierresDeLaTienda } from "@/app/(app)/mi-wallet/_components/mi-wallet-cierres";
 import { estado, fila } from "@/tests/fixtures/estado-cuenta";
+import userEvent from "@testing-library/user-event";
+import { elegirEnBarra } from "@/tests/fixtures/barra-libro-wallet";
 
 /**
  * FICHA 458-D (revisión m1; 172 R55) — el resumen de tres cifras de `/mi-wallet` se pinta con la lectura
@@ -87,7 +89,8 @@ describe("/mi-wallet — el resumen se relee con cada lectura (458-D m1, 172 R55
 
   it("tras una lectura nueva (cambiar de chip), el resumen cambia JUNTO con la tarjeta", async () => {
     conSWR(<MiEstadoCuenta inicial={ANTES} cierres={CIERRES} />);
-    fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
+    // FICHA 467: el chip es una opción de la casilla «Tipo de movimiento».
+    await elegirEnBarra(userEvent.setup(), document.body, "Tipo de movimiento", "Cobros");
     await waitFor(() => expect(within(tarjetaSaldo()).getByText("₡7.200")).toBeInTheDocument());
     expect(within(saldoDelResumen()).getByText("₡7.200")).toBeInTheDocument();
     expect(within(resumen()).getByText("₡15.000")).toBeInTheDocument();

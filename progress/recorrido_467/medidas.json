@@ -1,0 +1,925 @@
+{
+  "ordenes": {
+    "fila": {
+      "x": 280,
+      "y": 265,
+      "w": 1136,
+      "h": 52
+    },
+    "lineaBarra": {
+      "x": 280,
+      "y": 265,
+      "w": 974,
+      "h": 32
+    },
+    "buscador": {
+      "x": 544,
+      "y": 265,
+      "w": 592,
+      "h": 32
+    },
+    "filtros": {
+      "x": 1144,
+      "y": 265,
+      "w": 111,
+      "h": 32
+    },
+    "descargar": {
+      "x": 1262,
+      "y": 265,
+      "w": 118,
+      "h": 32
+    },
+    "columnas": {
+      "x": 1384,
+      "y": 265,
+      "w": 32,
+      "h": 32
+    },
+    "grupos": [
+      {
+        "nombre": "Ordenar por",
+        "caja": {
+          "x": 400,
+          "y": 265,
+          "w": 64,
+          "h": 32
+        },
+        "botones": [
+          {
+            "nombre": "Fecha de creación",
+            "caja": {
+              "x": 400,
+              "y": 265,
+              "w": 32,
+              "h": 32
+            }
+          },
+          {
+            "nombre": "Número de remisión",
+            "caja": {
+              "x": 432,
+              "y": 265,
+              "w": 32,
+              "h": 32
+            }
+          }
+        ]
+      },
+      {
+        "nombre": "Dirección del orden por fecha de creación",
+        "caja": {
+          "x": 472,
+          "y": 265,
+          "w": 64,
+          "h": 32
+        },
+        "botones": [
+          {
+            "nombre": "Más recientes",
+            "caja": {
+              "x": 472,
+              "y": 265,
+              "w": 32,
+              "h": 32
+            }
+          },
+          {
+            "nombre": "Más antiguas",
+            "caja": {
+              "x": 504,
+              "y": 265,
+              "w": 32,
+              "h": 32
+            }
+          }
+        ]
+      }
+    ],
+    "controles": [
+      {
+        "nombre": "Vistas guardadas",
+        "texto": "Vistas",
+        "caja": {
+          "x": 280,
+          "y": 265,
+          "w": 112,
+          "h": 32
+        }
+      }
+    ],
+    "textoFila": "Vistas Filtros Descargar"
+  },
+  "wallet_sin_casillas": {
+    "fila": {
+      "x": 296,
+      "y": 1900,
+      "w": 1104,
+      "h": 52
+    },
+    "lineaBarra": {
+      "x": 296,
+      "y": 1900,
+      "w": 942,
+      "h": 32
+    },
+    "buscador": {
+      "x": 368,
+      "y": 1900,
+      "w": 752,
+      "h": 32
+    },
+    "filtros": {
+      "x": 1128,
+      "y": 1900,
+      "w": 111,
+      "h": 32
+    },
+    "descargar": {
+      "x": 1246,
+      "y": 1900,
+      "w": 118,
+      "h": 32
+    },
+    "columnas": {
+      "x": 1368,
+      "y": 1900,
+      "w": 32,
+      "h": 32
+    },
+    "grupos": [
+      {
+        "nombre": "Ordenar el libro",
+        "caja": {
+          "x": 296,
+          "y": 1900,
+          "w": 64,
+          "h": 32
+        },
+        "botones": [
+          {
+            "nombre": "Más recientes",
+            "caja": {
+              "x": 296,
+              "y": 1900,
+              "w": 32,
+              "h": 32
+            }
+          },
+          {
+            "nombre": "Más antiguas",
+            "caja": {
+              "x": 328,
+              "y": 1900,
+              "w": 32,
+              "h": 32
+            }
+          }
+        ]
+      }
+    ],
+    "controles": [],
+    "textoFila": "Filtros Descargar"
+  },
+  "wallet_textos_prohibidos": [],
+  "wallet_con_casillas": {
+    "fila": {
+      "x": 296,
+      "y": 424,
+      "w": 1104,
+      "h": 128
+    },
+    "lineaBarra": {
+      "x": 296,
+      "y": 424,
+      "w": 942,
+      "h": 108
+    },
+    "buscador": {
+      "x": 764,
+      "y": 464,
+      "w": 331,
+      "h": 32
+    },
+    "filtros": {
+      "x": 1103,
+      "y": 464,
+      "w": 136,
+      "h": 32
+    },
+    "descargar": {
+      "x": 1246,
+      "y": 424,
+      "w": 118,
+      "h": 32
+    },
+    "columnas": {
+      "x": 1368,
+      "y": 424,
+      "w": 32,
+      "h": 32
+    },
+    "grupos": [
+      {
+        "nombre": "Ordenar el libro",
+        "caja": {
+          "x": 296,
+          "y": 424,
+          "w": 64,
+          "h": 32
+        },
+        "botones": [
+          {
+            "nombre": "Más recientes",
+            "caja": {
+              "x": 296,
+              "y": 424,
+              "w": 32,
+              "h": 32
+            }
+          },
+          {
+            "nombre": "Más antiguas",
+            "caja": {
+              "x": 328,
+              "y": 424,
+              "w": 32,
+              "h": 32
+            }
+          }
+        ]
+      },
+      {
+        "nombre": "Periodo",
+        "caja": {
+          "x": 368,
+          "y": 424,
+          "w": 224,
+          "h": 32
+        },
+        "botones": [
+          {
+            "nombre": null,
+            "caja": {
+              "x": 368,
+              "y": 424,
+              "w": 224,
+              "h": 32
+            }
+          }
+        ]
+      }
+    ],
+    "controles": [
+      {
+        "nombre": "Periodo: Cualquier fecha",
+        "texto": "Periodo: Cualquier fecha",
+        "caja": {
+          "x": 368,
+          "y": 424,
+          "w": 224,
+          "h": 32
+        }
+      },
+      {
+        "nombre": "A quién: Todos",
+        "texto": "A quién: Todos",
+        "caja": {
+          "x": 600,
+          "y": 424,
+          "w": 224,
+          "h": 32
+        }
+      },
+      {
+        "nombre": "Entra/Sale",
+        "texto": "Entra/Sale: Todo",
+        "caja": {
+          "x": 296,
+          "y": 464,
+          "w": 224,
+          "h": 32
+        }
+      },
+      {
+        "nombre": "Concepto",
+        "texto": "Concepto: Todos",
+        "caja": {
+          "x": 532,
+          "y": 464,
+          "w": 224,
+          "h": 32
+        }
+      }
+    ],
+    "textoFila": "Periodo Periodo: Cualquier fecha A quién: Todos Entra/Sale: Todo Concepto: Todos Filtros (4) Limpiar todo Descargar"
+  },
+  "recorrido_periodo_cambia_cifras": {
+    "cambian": true,
+    "antes": "Registrar un movimiento Flujo de dinero registrado Positivo ₡13.483.932,72 Lo que entró menos lo que salió desde el 11 de agosto de 2026. No es el saldo del banco: la app no sabe con cuánto dinero empezó Ordenex. Entró ₡",
+    "despues": "Registrar un movimiento Movimiento neto del periodo En cero ₡0 Entró ₡0 Salió ₡0 Movimientos 0 Registros del periodo que estás viendo De las tiendas ₡0 Lo que Ordenex les debe a las tiendas Es la suma de los saldos de to"
+  },
+  "recorrido_concepto": {
+    "opcion": "Flete por devolución a origen cobrado a la tienda (1)",
+    "filasAntes": 21,
+    "filasDespues": 2,
+    "cifrasIguales": true
+  },
+  "recorrido_limpiar": {
+    "controles": [],
+    "masAntiguasPulsado": "true",
+    "cifrasComoAlEntrar": true
+  },
+  "ec_tienda": {
+    "href": "/wallet/tiendas/<id>",
+    "sin": {
+      "fila": {
+        "x": 280,
+        "y": 469,
+        "w": 1136,
+        "h": 52
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 469,
+        "w": 974,
+        "h": 32
+      },
+      "buscador": {
+        "x": 352,
+        "y": 469,
+        "w": 784,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1144,
+        "y": 469,
+        "w": 111,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 469,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 469,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 469,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 469,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 469,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [],
+      "textoFila": "Filtros Descargar"
+    },
+    "con": {
+      "fila": {
+        "x": 280,
+        "y": 469,
+        "w": 1136,
+        "h": 92
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 469,
+        "w": 974,
+        "h": 72
+      },
+      "buscador": {
+        "x": 280,
+        "y": 509,
+        "w": 720,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1008,
+        "y": 509,
+        "w": 135,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 469,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 469,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 469,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 469,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 469,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        },
+        {
+          "nombre": "Periodo",
+          "caja": {
+            "x": 352,
+            "y": 469,
+            "w": 224,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": null,
+              "caja": {
+                "x": 352,
+                "y": 469,
+                "w": 224,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [
+        {
+          "nombre": "Periodo: Cualquier fecha",
+          "texto": "Periodo: Cualquier fecha",
+          "caja": {
+            "x": 352,
+            "y": 469,
+            "w": 224,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Tipo de movimiento",
+          "texto": "Tipo de movimiento: Todo",
+          "caja": {
+            "x": 588,
+            "y": 469,
+            "w": 225,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Cierre: Todos los cierres",
+          "texto": "Cierre: Todos los cierres",
+          "caja": {
+            "x": 821,
+            "y": 469,
+            "w": 224,
+            "h": 32
+          }
+        }
+      ],
+      "textoFila": "Periodo Periodo: Cualquier fecha Tipo de movimiento: Todo Cierre: Todos los cierres Filtros (3) Limpiar todo Descargar"
+    },
+    "tarjetasIguales": true
+  },
+  "ec_mensajero": {
+    "href": "/wallet/mensajeros/<id>",
+    "sin": {
+      "fila": {
+        "x": 280,
+        "y": 537,
+        "w": 1136,
+        "h": 52
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 537,
+        "w": 974,
+        "h": 32
+      },
+      "buscador": {
+        "x": 352,
+        "y": 537,
+        "w": 784,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1144,
+        "y": 537,
+        "w": 111,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 537,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 537,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 537,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 537,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 537,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [],
+      "textoFila": "Filtros Descargar"
+    },
+    "con": {
+      "fila": {
+        "x": 280,
+        "y": 537,
+        "w": 1136,
+        "h": 92
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 537,
+        "w": 974,
+        "h": 72
+      },
+      "buscador": {
+        "x": 280,
+        "y": 577,
+        "w": 720,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1008,
+        "y": 577,
+        "w": 135,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 537,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 537,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 537,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 537,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 537,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        },
+        {
+          "nombre": "Periodo",
+          "caja": {
+            "x": 352,
+            "y": 537,
+            "w": 224,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": null,
+              "caja": {
+                "x": 352,
+                "y": 537,
+                "w": 224,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [
+        {
+          "nombre": "Periodo: Cualquier fecha",
+          "texto": "Periodo: Cualquier fecha",
+          "caja": {
+            "x": 352,
+            "y": 537,
+            "w": 224,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Tipo de movimiento",
+          "texto": "Tipo de movimiento: Todo",
+          "caja": {
+            "x": 588,
+            "y": 537,
+            "w": 225,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Cierre: Todos los cierres",
+          "texto": "Cierre: Todos los cierres",
+          "caja": {
+            "x": 821,
+            "y": 537,
+            "w": 224,
+            "h": 32
+          }
+        }
+      ],
+      "textoFila": "Periodo Periodo: Cualquier fecha Tipo de movimiento: Todo Cierre: Todos los cierres Filtros (3) Limpiar todo Descargar"
+    },
+    "tarjetasIguales": true
+  },
+  "ec_satelite": {
+    "error": "sin cuenta en el listado"
+  },
+  "mi_wallet": {
+    "sin": {
+      "fila": {
+        "x": 280,
+        "y": 650,
+        "w": 1136,
+        "h": 52
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 650,
+        "w": 974,
+        "h": 32
+      },
+      "buscador": {
+        "x": 352,
+        "y": 650,
+        "w": 784,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1144,
+        "y": 650,
+        "w": 111,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 650,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 650,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 650,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 650,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 650,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [],
+      "textoFila": "Filtros Descargar"
+    },
+    "con": {
+      "fila": {
+        "x": 280,
+        "y": 650,
+        "w": 1136,
+        "h": 92
+      },
+      "lineaBarra": {
+        "x": 280,
+        "y": 650,
+        "w": 974,
+        "h": 72
+      },
+      "buscador": {
+        "x": 280,
+        "y": 690,
+        "w": 720,
+        "h": 32
+      },
+      "filtros": {
+        "x": 1008,
+        "y": 690,
+        "w": 135,
+        "h": 32
+      },
+      "descargar": {
+        "x": 1262,
+        "y": 650,
+        "w": 118,
+        "h": 32
+      },
+      "columnas": {
+        "x": 1384,
+        "y": 650,
+        "w": 32,
+        "h": 32
+      },
+      "grupos": [
+        {
+          "nombre": "Ordenar el libro",
+          "caja": {
+            "x": 280,
+            "y": 650,
+            "w": 64,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": "Más recientes",
+              "caja": {
+                "x": 280,
+                "y": 650,
+                "w": 32,
+                "h": 32
+              }
+            },
+            {
+              "nombre": "Más antiguas",
+              "caja": {
+                "x": 312,
+                "y": 650,
+                "w": 32,
+                "h": 32
+              }
+            }
+          ]
+        },
+        {
+          "nombre": "Periodo",
+          "caja": {
+            "x": 352,
+            "y": 650,
+            "w": 224,
+            "h": 32
+          },
+          "botones": [
+            {
+              "nombre": null,
+              "caja": {
+                "x": 352,
+                "y": 650,
+                "w": 224,
+                "h": 32
+              }
+            }
+          ]
+        }
+      ],
+      "controles": [
+        {
+          "nombre": "Periodo: Cualquier fecha",
+          "texto": "Periodo: Cualquier fecha",
+          "caja": {
+            "x": 352,
+            "y": 650,
+            "w": 224,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Tipo de movimiento",
+          "texto": "Tipo de movimiento: Todo",
+          "caja": {
+            "x": 588,
+            "y": 650,
+            "w": 225,
+            "h": 32
+          }
+        },
+        {
+          "nombre": "Filtrar por cierre",
+          "texto": "Cierre: Todos los cierres",
+          "caja": {
+            "x": 821,
+            "y": 650,
+            "w": 224,
+            "h": 32
+          }
+        }
+      ],
+      "textoFila": "Periodo Periodo: Cualquier fecha Tipo de movimiento: Todo Cierre: Todos los cierres Filtros (3) Limpiar todo Descargar"
+    }
+  }
+}

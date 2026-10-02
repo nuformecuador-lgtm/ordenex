@@ -6,20 +6,20 @@ import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
-import { UUID_BODEGA, UUID_MENSAJERO, UUID_MOV, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
-import { aplicarPeriodo, diaDelMesActual, elegirPeriodo } from "@/tests/fixtures/periodo-calendario";
+import { UUID_MOV, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { alternarCasillas, elegirEnBarra, textoDelControl } from "@/tests/fixtures/barra-libro-wallet";
 
 // =================================================================================================
-// FICHA 463 (T8) — EL ESTADO DE CUENTA EN DOS ZONAS, CON BUSCADOR Y ORDEN
+// FICHA 463 (T8) — EL ESTADO DE CUENTA CON BUSCADOR Y ORDEN (467: en la barra única)
 // =================================================================================================
 //
 // Las cuatro superficies (tienda, mensajero, bodega satélite y `/mi-wallet`) montan el MISMO módulo:
-//  - zona de la WALLET (antes de las tarjetas): el periodo con «Aplicar» (R4, R10, R15–R19);
-//  - zona del LIBRO (encima de la tabla): buscador canónico, orden, chips y —si la superficie lo da—
-//    el cierre (R6, R7, R23, R24, R29, R30, R33);
+//  - el periodo mueve tarjetas y extracto (R10, R16);
+//  - buscador canónico, orden y chips releen solo el extracto (R11, R23, R24, R29, R33–R35);
 //  - el saldo inicial donde cae en el tiempo según el orden (R38/R39), en pantalla y en el Excel (R43);
 //  - el término y el orden en la clave de caché (R41); las tarjetas no se mueven por el libro (R11).
-// Los literales de contrato (alcance, orden) se escriben A MANO.
+// Los literales de contrato (orden, avisos) se escriben A MANO.
 // =================================================================================================
 
 const H = vi.hoisted(() => ({
@@ -75,8 +75,6 @@ import {
 } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import { claveEstadoCuenta, esClaveDeLaCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-clave";
 import { EstadoCuentaTienda, ROTULOS_TIENDA, PANEL_TIENDA } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
-import { EstadoCuentaMensajero } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
-import { EstadoCuentaSatelite } from "@/app/(app)/wallet/satelites/_components/EstadoCuentaSatelite";
 import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 
 const CIERRE_CON_MOVIMIENTOS = {
@@ -95,13 +93,24 @@ function envolver(nodo: ReactNode) {
   );
 }
 
-const zonaWallet = () => screen.getByRole("region", { name: "Filtros de toda la wallet" });
-const zonaLibro = () => screen.getByRole("region", { name: "Filtros del libro de movimientos" });
+// FICHA 467 — las dos zonas son ahora UNA barra encima del extracto: los filtros se piden en «Filtros».
+// Los contratos de la 463 que siguen vigentes se miden aquí con el localizador nuevo; los que la 467
+// cambió a propósito —las dos zonas con su alcance (R1/R2/R4/R6/R7 de la 463), «Aplicar»/«Quitar
+// periodo» (R15/R17/R19) y el «Limpiar todo» que conservaba el periodo (R30)— se retiraron de aquí: su
+// sustituto vive en `EstadoCuentaBarra467.test.tsx`.
+const zonaLibro = () => document.body;
+const zonaWallet = zonaLibro;
 const buscador = () => screen.getByRole("searchbox", { name: "Buscar en el libro" });
 const tarjetas = (nombre = "Tania Tienda") => screen.getByRole("region", { name: `Saldo de ${nombre}` });
 function filasDeLaTabla(nombre = "Tania Tienda") {
   return within(screen.getByRole("table", { name: `Estado de cuenta de ${nombre}` })).getAllByRole("row").slice(1);
 }
+
+/** Elige un chip en la casilla «Tipo de movimiento» (la marca si hace falta). */
+async function chip(user: ReturnType<typeof userEvent.setup>, nombre: string) {
+  await elegirEnBarra(user, zonaLibro(), "Tipo de movimiento", nombre);
+}
+const textoChip = () => textoDelControl(zonaLibro(), "Tipo de movimiento");
 
 const TRES = [
   fila({ n: 3, fecha: "2026-09-13", abono: "30.00", saldoCorrido: "60.00" }),
@@ -122,94 +131,23 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("463 R1/R2/R4/R6/R7 — las cuatro superficies montan las dos zonas", () => {
-  const SUPERFICIES: { nombre: string; cuenta: string; cierre: boolean; montar: () => void }[] = [
-    {
-      nombre: "tienda",
-      cuenta: "Tania Tienda",
-      cierre: true,
-      montar: () => envolver(<EstadoCuentaTienda inicial={estado({ filas: TRES, total: 3 })} puedeRegistrar={false} />),
-    },
-    {
-      nombre: "mensajero",
-      cuenta: "Mario Mensajero",
-      cierre: true,
-      montar: () =>
-        envolver(
-          <EstadoCuentaMensajero
-            inicial={estado({ tipo: "mensajero", id: UUID_MENSAJERO, nombre: "Mario Mensajero", filas: [], total: 0 })}
-            puedeRegistrar={false}
-          />,
-        ),
-    },
-    {
-      nombre: "bodega satélite",
-      cuenta: "Bodega Norte",
-      cierre: false,
-      montar: () =>
-        envolver(
-          <EstadoCuentaSatelite
-            inicial={estado({ tipo: "bodega", id: UUID_BODEGA, nombre: "Bodega Norte", filas: [], total: 0 })}
-            puedeConciliar={false}
-          />,
-        ),
-    },
-    {
-      nombre: "/mi-wallet",
-      cuenta: "Tania Tienda",
-      cierre: true,
-      montar: () =>
-        envolver(
-          <MiEstadoCuenta
-            inicial={estado({ filas: TRES, total: 3 })}
-            cierres={{ opciones: [], hayMas: false, disponible: true }}
-          />,
-        ),
-    },
-  ];
-
-  it.each(SUPERFICIES)("$nombre: zona de la wallet (solo el periodo) antes de las tarjetas; zona del libro encima de la tabla", ({ cuenta, cierre, montar }) => {
-    montar();
-    const wallet = zonaWallet();
-    const libro = zonaLibro();
-    // R2 — el alcance, visible, en cada zona.
-    expect(within(wallet).getByText("Estos filtros cambian toda la wallet")).toBeInTheDocument();
-    expect(within(libro).getByText("Estos filtros solo afectan al libro de movimientos")).toBeInTheDocument();
-    // R1 — antes de las cifras / dentro del bloque del libro y encima de su tabla.
-    expect(wallet.compareDocumentPosition(tarjetas(cuenta)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const tabla = screen.getByRole("table", { name: `Estado de cuenta de ${cuenta}` });
-    expect(libro.compareDocumentPosition(tabla) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // R4 — en la zona de la wallet, el periodo y nada más.
-    expect(within(wallet).getByRole("button", { name: "Periodo" })).toBeInTheDocument();
-    expect(within(wallet).queryByRole("searchbox")).toBeNull();
-    expect(within(wallet).queryByRole("group", { name: `Filtrar el estado de cuenta de ${cuenta}` })).toBeNull();
-    // R6 — buscador, orden y chips en la zona del libro.
-    expect(within(libro).getByRole("searchbox", { name: "Buscar en el libro" })).toBeInTheDocument();
-    expect(within(libro).getByRole("group", { name: "Ordenar el libro" })).toBeInTheDocument();
-    expect(within(libro).getByRole("group", { name: `Filtrar el estado de cuenta de ${cuenta}` })).toBeInTheDocument();
-    // R7 — el filtro por cierre, donde la superficie lo ofrece, en la zona del libro.
-    const controlCierre = within(libro).queryByRole("button", { name: /^Cierre: / }) ?? within(libro).queryByRole("combobox", { name: "Filtrar por cierre" });
-    expect(controlCierre !== null).toBe(cierre);
-  });
-
+describe("463 R23/R27 — el placeholder del buscador por superficie", () => {
   it("R23/R27: el placeholder de la oficina nombra a quién registró; el de `/mi-wallet`, solo la descripción", () => {
-    SUPERFICIES[0].montar();
+    envolver(<EstadoCuentaTienda inicial={estado({ filas: TRES, total: 3 })} puedeRegistrar={false} />);
     expect(buscador()).toHaveAttribute("placeholder", "Buscar por descripción o quién registró");
     cleanup();
-    SUPERFICIES[3].montar();
+    envolver(<MiEstadoCuenta inicial={estado({ filas: TRES, total: 3 })} cierres={{ opciones: [], hayMas: false, disponible: true }} />);
     expect(buscador()).toHaveAttribute("placeholder", "Buscar por descripción");
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("463 R10/R15/R16/R17/R19 — el periodo de la zona de la wallet", () => {
-  it("R15: editar no lee; R16: «Aplicar» lee una vez con el periodo, desde la página 1; R10: tarjetas nuevas", async () => {
+describe("463 R10/R16 — el periodo (467: casilla «Periodo», sin «Aplicar»)", () => {
+  it("R16: el periodo lee una vez, desde la página 1; R10: tarjetas nuevas", async () => {
     const user = userEvent.setup();
     H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: TRES, total: 3, saldoInicial: "777.00" }) });
     montarTienda();
-    await elegirPeriodo(user, zonaWallet(), 1, 28);
-    expect(H.ver).not.toHaveBeenCalled();
-    await user.click(within(zonaWallet()).getByRole("button", { name: "Aplicar" }));
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
     await waitFor(() => expect(H.ver).toHaveBeenCalledTimes(1));
     expect(H.ver).toHaveBeenCalledWith({
       cuenta: { tipo: "tienda", id: UUID_TIENDA },
@@ -219,10 +157,9 @@ describe("463 R10/R15/R16/R17/R19 — el periodo de la zona de la wallet", () =>
       pageSize: 20,
     });
     await waitFor(() => expect(tarjetas().textContent).toContain("Saldo inicial₡777"));
-    expect(within(zonaWallet()).getByRole("button", { name: "Aplicar" })).toBeDisabled(); // R17
   });
 
-  it("R19: «Quitar periodo» relee sin periodo y CONSERVA chip, término y orden", async () => {
+  it("R19 (467 R10): quitar el periodo relee sin periodo y CONSERVA chip, término y orden", async () => {
     const user = userEvent.setup();
     montarTienda();
     // Primero el periodo y DESPUÉS el libro: así la lectura sin periodo y con los filtros del libro es
@@ -230,11 +167,11 @@ describe("463 R10/R15/R16/R17/R19 — el periodo de la zona de la wallet", () =>
     await aplicarPeriodo(user, zonaWallet(), 1, 28);
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ desde: diaDelMesActual(1) })));
     await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await user.type(buscador(), "etiquetas");
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas" })), { timeout: 3000 });
 
-    await user.click(within(zonaWallet()).getByRole("button", { name: "Quitar periodo" }));
+    await alternarCasillas(user, zonaLibro(), "Periodo");
     await waitFor(() =>
       expect(H.ver).toHaveBeenLastCalledWith({
         cuenta: { tipo: "tienda", id: UUID_TIENDA },
@@ -250,11 +187,11 @@ describe("463 R10/R15/R16/R17/R19 — el periodo de la zona de la wallet", () =>
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("463 R11/R24/R29/R30/R33–R35 — la zona del libro", () => {
+describe("463 R11/R24/R29/R33–R35 — los filtros del libro", () => {
   it("R34/R47: se entra en «Más recientes», sin leer nada y con las tarjetas del servidor", () => {
     montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00" }));
     const orden = within(zonaLibro()).getByRole("group", { name: "Ordenar el libro" });
-    expect(within(orden).getAllByRole("button").map((b) => b.textContent)).toEqual(["Más recientes", "Más antiguas"]);
+    expect(within(orden).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Más recientes", "Más antiguas"]);
     expect(within(orden).getByRole("button", { name: "Más recientes" })).toHaveAttribute("aria-pressed", "true");
     expect(H.ver).not.toHaveBeenCalled();
     expect(tarjetas().textContent).toContain("Saldo inicial₡5");
@@ -282,7 +219,7 @@ describe("463 R11/R24/R29/R30/R33–R35 — la zona del libro", () => {
     // pantalla tampoco: cada lectura trae las MISMAS tarjetas y se siguen pintando.
     H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [TRES[0]], total: 1, saldoInicial: "5.00", abonos: "60.00" }) });
     const antes = tarjetas().textContent;
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
     await user.type(buscador(), "etiquetas");
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas" })), { timeout: 3000 });
@@ -314,36 +251,8 @@ describe("463 R11/R24/R29/R30/R33–R35 — la zona del libro", () => {
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas", page: 1 })), { timeout: 3000 });
     await user.click(within(screen.getByRole("navigation", { name: "Paginación del estado de cuenta de Tania Tienda" })).getByRole("button", { name: /siguiente/i }));
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas", page: 2 })));
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Pagos" }));
+    await chip(user, "Pagos");
     await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ chip: "pagos", page: 1 })));
-  });
-
-  it("R30: «Limpiar todo» quita término, chip y cierre; NO toca el periodo ni el orden", async () => {
-    const user = userEvent.setup();
-    montarTienda();
-    await aplicarPeriodo(user, zonaWallet(), 1, 28);
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
-    await user.type(buscador(), "etiquetas");
-    await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas" })), { timeout: 3000 });
-    // El orden, lo último: la clave «periodo + Más antiguas» sin más filtros no se ha pedido nunca.
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
-    await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ sortDir: "asc" })));
-
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Limpiar todo" }));
-    await waitFor(() =>
-      expect(H.ver).toHaveBeenLastCalledWith({
-        cuenta: { tipo: "tienda", id: UUID_TIENDA },
-        desde: diaDelMesActual(1),
-        hasta: diaDelMesActual(28),
-        sortBy: "fecha",
-        sortDir: "asc",
-        page: 1,
-        pageSize: 20,
-      }),
-    );
-    expect(buscador()).toHaveValue("");
-    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(zonaLibro()).getByRole("button", { name: "Más antiguas" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -492,7 +401,7 @@ describe("463 R43 — el Excel: filtros, término y orden vigentes; el saldo ini
 const AVISO_R49 = /^No se pudo cargar el estado de cuenta\. Se sigue mostrando lo último que se cargó, con sus filtros\.$/;
 
 describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nada ni deja filtros que no se ven", () => {
-  it("aplicar un periodo que falla: aviso, tarjetas y libro de antes, y el control del periodo vuelve a «Cualquier fecha»", async () => {
+  it("un periodo que falla: aviso, tarjetas y libro de antes, y el control del periodo vuelve a «Cualquier fecha»", async () => {
     const user = userEvent.setup();
     montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00", abonos: "60.00" }));
     const tarjetasAntes = tarjetas().textContent;
@@ -509,16 +418,14 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
     expect(filasAntes).toHaveLength(4);
     expect(filasAntes[3]).toContain("Saldo inicial");
-    // Y la zona de la wallet NO dice que hay un periodo puesto.
+    // Y el control NO dice que hay un periodo puesto.
     await waitFor(() =>
       expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
     );
-    expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
-    expect(within(zonaWallet()).getByRole("button", { name: "Aplicar" })).toBeDisabled();
 
     // Y no solo lo pintado: la siguiente lectura del libro se pide SIN el periodo que falló.
     H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [TRES[0]], total: 1 }) });
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await waitFor(() =>
       expect(H.ver).toHaveBeenLastCalledWith({ cuenta: { tipo: "tienda", id: UUID_TIENDA }, chip: "cobros", page: 1, pageSize: 20 }),
     );
@@ -540,7 +447,6 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     await waitFor(() =>
       expect(within(zonaWallet()).getByRole("button", { name: "Periodo" }).textContent).toBe(periodoBueno),
     );
-    expect(within(zonaWallet()).getByRole("button", { name: "Quitar periodo" })).toBeInTheDocument();
   });
 
   it("cambiar un chip que falla: aviso, el chip vuelve a «Todo» y siguen el libro, el orden y las tarjetas de la lectura buena", async () => {
@@ -555,11 +461,10 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     expect(filasBuenas[0]).toContain("Saldo inicial");
 
     H.ver.mockResolvedValue({ status: "forbidden" });
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await screen.findByText(AVISO_R49);
 
-    expect(within(zonaLibro()).getByRole("button", { name: "Cobros" })).toHaveAttribute("aria-pressed", "false");
-    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(textoChip()).toBe("Tipo de movimiento: Todo"));
     expect(within(zonaLibro()).getByRole("button", { name: "Más antiguas" })).toHaveAttribute("aria-pressed", "true");
     expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasBuenas);
     expect(tarjetas().textContent).toBe(tarjetasBuenas);
@@ -585,7 +490,7 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
   });
 
   // Revisión m7 — la acción que LANZA (red caída, 500, tiempo agotado), no solo la que responde un error.
-  it("(m7) aplicar un periodo cuya lectura LANZA: aviso, tarjetas y libro de antes, y el periodo vuelve a «Cualquier fecha»", async () => {
+  it("(m7) un periodo cuya lectura LANZA: aviso, tarjetas y libro de antes, y el periodo vuelve a «Cualquier fecha»", async () => {
     const user = userEvent.setup();
     montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00", abonos: "60.00" }));
     const tarjetasAntes = tarjetas().textContent;
@@ -601,7 +506,6 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     await waitFor(() =>
       expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
     );
-    expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
   });
 
   it("(m7) un chip y un término cuya lectura LANZA: aviso, vuelven a «Todo» y a vacío, y el libro sigue", async () => {
@@ -610,9 +514,9 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     const filasAntes = filasDeLaTabla().map((f) => f.textContent);
     H.ver.mockRejectedValue(new Error("Failed to fetch"));
 
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await screen.findByText(AVISO_R49);
-    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(textoChip()).toBe("Tipo de movimiento: Todo"));
     expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
 
     await user.type(buscador(), "etiquetas");
@@ -628,10 +532,10 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     const user = userEvent.setup();
     montarTienda();
     H.ver.mockResolvedValue({ status: "forbidden" });
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await chip(user, "Cobros");
     await screen.findByText(AVISO_R49);
     H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [TRES[0]], total: 1 }) });
-    await user.click(within(zonaLibro()).getByRole("button", { name: "Pagos" }));
+    await chip(user, "Pagos");
     await waitFor(() => {
       expect(filasDeLaTabla()).toHaveLength(2);
       expect(filasDeLaTabla()[0].textContent).toContain("2026-09-13");
