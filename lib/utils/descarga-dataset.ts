@@ -14,6 +14,7 @@
  */
 import type {
   DescargaArchivo,
+  DescargaColumna,
   DescargaConfig,
   DescargaTipo,
 } from "@/lib/types/descarga";
@@ -191,10 +192,14 @@ export async function construirDescarga(
   const nombreArchivo = nombreArchivoDescarga(titulo, tipo, fecha);
   // Traduccion del vocabulario del contrato (clave/encabezado) al de los generadores
   // reusados (key/header). Es lo UNICO que este despachador aporta sobre ellos.
-  const columnasGenerador = columnas.map((columna) => ({
+  // Ficha 468 (R22): `formato` viaja SOLO si la columna lo declara; sin el, la columna del generador es
+  // exactamente la de siempre (R59). El csv no lo mira (R58).
+  const aColumnaGenerador = (columna: DescargaColumna) => ({
     key: columna.clave,
     header: columna.encabezado,
-  }));
+    ...(columna.formato !== undefined ? { formato: columna.formato } : {}),
+  });
+  const columnasGenerador = columnas.map(aColumnaGenerador);
 
   if (tipo === "csv") {
     return {
@@ -209,7 +214,7 @@ export async function construirDescarga(
       // El nombre de la HOJA se sanea (ver `nombreHoja`); el del ARCHIVO conserva el slug
       // del titulo entero, que es donde el usuario reconoce lo que descargo.
       // Ficha 464 (R41): sin hojas adicionales, EXACTAMENTE el camino de siempre.
-      contenido: await buildXlsxRows(columnasGenerador, filas, nombreHoja(titulo)),
+      contenido: await buildXlsxRows(columnasGenerador, filas, nombreHoja(titulo), config.filasDestacadas),
       mime: XLSX_MIME,
       nombreArchivo,
     };
@@ -230,11 +235,17 @@ export async function construirDescarga(
   ]);
   return {
     contenido: await buildXlsxLibro([
-      { nombre: nombres[0], columns: columnasGenerador, rows: filas },
+      {
+        nombre: nombres[0],
+        columns: columnasGenerador,
+        rows: filas,
+        ...(config.filasDestacadas !== undefined ? { destacadas: config.filasDestacadas } : {}),
+      },
       ...hojasAdicionales.map((hoja, i) => ({
         nombre: nombres[i + 1],
-        columns: hoja.columnas.map((c) => ({ key: c.clave, header: c.encabezado })),
+        columns: hoja.columnas.map(aColumnaGenerador),
         rows: hoja.filas,
+        ...(hoja.filasDestacadas !== undefined ? { destacadas: hoja.filasDestacadas } : {}),
       })),
     ]),
     mime: XLSX_MIME,
