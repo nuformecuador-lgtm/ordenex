@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
-import {
-  COLUMNAS_DESCARGA_WALLET_CAJA,
-  filaDescargaMovimientoCaja,
-} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { COLUMNAS_DESCARGA_WALLET_CAJA } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+// Ficha 468: la fila de la descarga es la de la hoja «Movimientos» (kardex) que coloca `filasKardex`.
+import { filaDeLibroCaja as filaDescargaMovimientoCaja } from "@/tests/fixtures/libro-kardex";
 import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
@@ -56,54 +55,65 @@ describe("columnas de descarga del libro de caja", () => {
     // Registró), con el concepto y el motivo en dos columnas y la dirección, el monto y el dueño en
     // tres (una hoja se filtra y se suma por columna). Las seis claves de antes se CONSERVAN y
     // entran `aQuien` y `registro`. Sustituye al literal de la 170/231 (listado en impl_458-E.md).
+    //
+    // FICHA 468 (R1/R4, decisión 1 del humano) — CONTRATO NUEVO, escrito a mano: la hoja es un KARDEX
+    // (Fecha · Concepto · Detalle · A quién · Es dinero de · Entra · Sale · Cobrado a tiendas · Saldo ·
+    // Registró). «Movimiento», «Motivo y origen», «Entra o sale», «Monto» y «Dueño» salen (R4).
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toEqual([
       "fecha",
-      "categoria",
-      "origen",
+      "concepto",
+      "detalle",
       "aQuien",
-      "tipo",
-      "monto",
-      "dueno",
+      "esDineroDe",
+      "entra",
+      "sale",
+      "cobradoATiendas",
+      "saldo",
       "registro",
     ]);
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.encabezado)).toEqual([
       "Fecha",
-      "Movimiento",
-      "Motivo y origen",
+      "Concepto",
+      "Detalle",
       "A quién",
-      "Entra o sale",
-      "Monto",
-      "Dueño",
+      "Es dinero de",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas",
+      "Saldo",
       "Registró",
     ]);
   });
 
-  it("emite el monto TAL CUAL, sin recalcularlo ni adornarlo (R7)", () => {
+  it("emite el monto TAL CUAL, sin recalcularlo ni adornarlo (R7; 468: el número de Excel lo hace el generador)", () => {
     const fila = filaDescargaMovimientoCaja(MOV);
-    // El STRING exacto que devolvió el servidor: ni parseFloat, ni redondeo, ni símbolo.
-    expect(fila.monto).toBe("12345678901.99");
-    expect(typeof fila.monto).toBe("string");
-    expect(String(fila.monto)).not.toContain("₡");
-    // Y por qué importa: un `Number(...)` intermedio ni siquiera conserva los CÉNTIMOS.
-    // "1000.10" volvería como "1000.1" y la columna de dinero dejaría de cuadrar sola.
-    expect(filaDescargaMovimientoCaja({ ...MOV, monto: "1000.10" }).monto).toBe("1000.10");
+    // El STRING exacto que devolvió el servidor, en su columna: ni parseFloat, ni redondeo, ni símbolo.
+    // (Ficha 468, R22: la celda NUMÉRICA de Excel la hace el generador con `celdaMonto`, comprobando la
+    // vuelta; aquí sigue siendo el texto del servidor, que es lo que sale en el csv, R58.)
+    expect(fila.entra).toBe("12345678901.99");
+    expect(typeof fila.entra).toBe("string");
+    expect(String(fila.entra)).not.toContain("₡");
+    expect(filaDescargaMovimientoCaja({ ...MOV, monto: "1000.10" }).entra).toBe("1000.10");
     expect(String(Number("1000.10"))).toBe("1000.1"); // lo que habría pasado al parsear
   });
 
-  it("emite tipo y categoria como ETIQUETA LEGIBLE, no como valor interno (R8)", () => {
+  it("emite el concepto como ETIQUETA LEGIBLE, no como valor interno (R8; 468 R17)", () => {
     const fila = filaDescargaMovimientoCaja(MOV);
-    // FICHA 458-E (R55): la dirección se dice «Entra» / «Sale», como el filtro y la tabla.
-    expect(fila.tipo).toBe("Sale");
-    expect(fila.categoria).toBe("Gasto fijo de Ordenex");
-    expect(fila.tipo).not.toBe("egreso");
-    expect(fila.categoria).not.toBe("egreso_gasto_fijo");
+    expect(fila.concepto).toBe("Gasto fijo de Ordenex");
+    expect(fila.concepto).not.toBe("egreso_gasto_fijo");
+    // 468 R4: «Entra o sale» ya no existe: el sentido es la columna del importe.
+    expect(fila).not.toHaveProperty("tipo");
   });
 
-  it("compone el origen igual que la tabla: etiqueta y descripcion (R8/R24)", () => {
-    expect(filaDescargaMovimientoCaja(MOV).origen).toBe("Gasto o sueldo registrado a mano · Alquiler de bodega");
+  it("compone el origen igual que la tabla: etiqueta y descripcion, al frente de «Detalle» (R8/R24; 468 R18)", () => {
+    expect(filaDescargaMovimientoCaja(MOV).detalle).toBe("Gasto o sueldo registrado a mano · Alquiler de bodega");
 
     const sinDescripcion = { ...MOV, descripcion: null };
-    expect(filaDescargaMovimientoCaja(sinDescripcion).origen).toBe("Gasto o sueldo registrado a mano");
+    expect(filaDescargaMovimientoCaja(sinDescripcion).detalle).toBe("Gasto o sueldo registrado a mano");
+    // 468 R18: el «N guía(s)» del movimiento repartible, detrás.
+    expect(filaDescargaMovimientoCaja(MOV, undefined, 3).detalle).toBe(
+      "Gasto o sueldo registrado a mano · Alquiler de bodega · 3 guías",
+    );
   });
 
   it("emite la fecha como dia calendario, igual que la tabla (R11/R24)", () => {
