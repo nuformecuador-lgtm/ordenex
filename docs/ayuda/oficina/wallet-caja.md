@@ -3,7 +3,7 @@ titulo: Wallet · Caja
 modulo: wallet
 pantalla: /wallet
 roles: [maestro, admin]
-actualizado: 2026-10-01
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/_components/WalletModule.tsx
   - app/(app)/wallet/_components/CajaResumenCard.tsx
@@ -11,8 +11,8 @@ fuentes:
   - app/(app)/wallet/_components/ComposicionGananciaCard.tsx
   - app/(app)/wallet/_components/WalletLedger.tsx
   - app/(app)/wallet/_components/wallet-filtros-input.ts
-  - app/(app)/wallet/_components/WalletFiltrosCaja.tsx
   - app/(app)/wallet/_components/LibroCajaBarra.tsx
+  - app/(app)/wallet/_components/libro-caja-filtros.ts
   - components/shared/wallet/zonas-filtros-labels.ts
   - app/(app)/wallet/_components/a-quien-selector.ts
   - app/(app)/wallet/_components/libro-caja-labels.ts
@@ -111,7 +111,7 @@ nombre** según lo que la app sabe:
 | --- | --- | --- |
 | **Flujo de dinero registrado** | No hay un saldo inicial registrado | Lo que entró menos lo que salió **desde el primer movimiento de la caja**. La tarjeta dice desde qué día cuenta |
 | **Dinero en caja** | Alguien registró un saldo inicial | El saldo inicial más lo que entró menos lo que salió desde entonces |
-| **Movimiento neto del periodo** | Elegiste un **periodo** o un **A quién** en los filtros de toda la wallet | Lo que entró menos lo que salió **en lo que elegiste**. No es el dinero que hay hoy. Los filtros del libro (buscador, orden, Entra/Sale, categoría) no la cambian |
+| **Movimiento neto del periodo** | Elegiste un **periodo** o un **A quién** en la barra del libro | Lo que entró menos lo que salió **en lo que elegiste**. No es el dinero que hay hoy. Entra/Sale, Concepto, el buscador y el orden no la cambian |
 
 > **«Flujo de dinero registrado» no es el saldo del banco.** La app no sabe con cuánto dinero empezó
 > Ordenex: solo cuenta lo que se registró desde que se empezó a usar. Por eso, mientras no haya un
@@ -412,51 +412,51 @@ salidas no se anulan desde acá, y la tienda los sigue viendo igual que antes en
 
 ## Buscar en el libro: los filtros
 
-Los filtros están en **dos zonas**, y cada una dice hasta dónde llega.
+Los filtros están en **una sola barra, encima del libro**, en la misma fila que **Descargar**: el orden,
+el buscador y el botón **Filtros**.
 
-**Arriba, antes de las cifras: «Estos filtros cambian toda la wallet».**
+- **Más recientes / Más antiguas**: los dos botones con flechas del principio de la barra; el nombre de
+  cada uno aparece al pasar el ratón. Se entra en **Más recientes**: lo último, arriba.
+- **El buscador**: busca en la descripción, en el nombre o la referencia anotados y en quién registró
+  el movimiento, sin distinguir mayúsculas. Escribí **al menos 3 caracteres**; con menos, el campo te
+  dice cuántos faltan y no busca.
+- **Filtros**: abre una lista de casillas —**Periodo**, **A quién**, **Entra/Sale** y **Concepto**—.
+  Marcar una casilla pone su control en la barra, delante del buscador (marcarla sola no filtra nada);
+  desmarcarla quita ese filtro.
+
+Lo que hace cada casilla:
 
 - **Periodo**: se eligen el primer y el último día en el calendario (días de Costa Rica) y se aplica
-  con **Aplicar**. Mientras lo estás eligiendo no cambia nada; **Aplicar** está apagado hasta que el
-  periodo elegido sea distinto del que ya está puesto. **Quitar periodo** vuelve a la caja sin periodo.
+  solo, sin botón. Un solo día también vale.
 - **A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**
   (el de un sueldo, un gasto o una corrección) que tienen movimientos en el periodo, cada uno con qué es
   y cuántos movimientos tiene: «Tania Tienda · Tienda · 2 movimientos». Podés **buscar por el nombre de
   la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes. Se aplica **al elegirlo**;
   **Todos** lo quita. Si la lista es muy larga, te pide que escribas parte del nombre.
+- **Entra/Sale**: lo que entró a la caja o lo que salió. Sin elegir ninguno, dice **Todo**.
+- **Concepto**: solo los conceptos con movimientos en el periodo y el «A quién» elegidos (y en Entra o
+  Sale, si elegiste uno), cada uno con su número. Sin elegir ninguno, dice **Todos**.
 
-Estos dos mueven **toda la pantalla**: **las tarjetas de arriba, la composición de la ganancia, el
-desglose de egresos, el detalle de cada fila de la composición y el libro cuentan solo el periodo y el
-«A quién» elegidos**. Si elegís una tienda en **A quién**, lo que entró y lo que salió son los
-movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse **Movimiento neto del
+**Periodo** y **A quién** mueven **toda la pantalla**: **las tarjetas de arriba, la composición de la
+ganancia, el desglose de egresos, el detalle de cada fila de la composición y el libro cuentan solo el
+periodo y el «A quién» elegidos**. Si elegís una tienda en **A quién**, lo que entró y lo que salió son
+los movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse **Movimiento neto del
 periodo**. Ojo: el contra-entrega que cobró el mensajero a los clientes de esa tienda nace del cierre y
 su **A quién** es el **mensajero**, no la tienda; para verlo, elegí al mensajero.
 
-**Encima del libro: «Estos filtros solo afectan al libro de movimientos».**
-
-- **El buscador**: busca en la descripción, en el nombre o la referencia anotados y en quién registró
-  el movimiento, sin distinguir mayúsculas. Escribí **al menos 3 caracteres**; con menos, el campo te
-  dice cuántos faltan y no busca.
-- **Más recientes / Más antiguas**: el orden del libro, por fecha. Se entra en **Más recientes**: lo
-  último, arriba.
-- **Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.
-- **Categoría**: solo los conceptos con movimientos en el periodo y el «A quién» elegidos (y en Entra o
-  Sale, si elegiste uno), cada uno con su número.
-
-Estos **no cambian ninguna cifra**: solo qué filas del libro se ven y en qué orden. Cambiar uno vuelve a
-la primera página. **Limpiar todo** quita el texto buscado, Entra/Sale y la categoría; no toca el orden
-ni los filtros de arriba.
+**Entra/Sale**, **Concepto**, el buscador y el orden **no cambian ninguna cifra**: solo qué filas del
+libro se ven y en qué orden. Cualquier cambio vuelve a la primera página. **Limpiar todo** quita el texto
+buscado, todos los filtros y todas las casillas (también el periodo y «A quién»); no toca el orden.
 
 Si una lectura falla, la pantalla te lo dice y **se queda con lo que mostraba**: las cifras, el libro y
-los filtros que ya estaban puestos.
+los filtros que ya estaban puestos, con sus casillas.
 
 Si elegís un **nombre anotado** y alguno de sus sueldos, gastos o correcciones se **anuló**, aparecen las
 dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan: un
 sueldo anulado no cuenta como dinero que salió.
 
-Y se puede **descargar** el libro, con los filtros de las dos zonas, el texto buscado y el orden que
-estás mirando, y las mismas columnas que la tabla (**A quién** y **Registró** incluidas), para cuadrar
-fuera.
+Y se puede **descargar** el libro, con todos los filtros puestos, el texto buscado y el orden que estás
+mirando, y las mismas columnas que la tabla (**A quién** y **Registró** incluidas), para cuadrar fuera.
 
 ## Lo que esta pantalla NO hace
 
