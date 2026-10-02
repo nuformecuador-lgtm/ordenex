@@ -93,6 +93,10 @@ describe("bordes de los conjuntos de la wallet (feature 184, T G.1)", () => {
 
     for (const b of BORDES) {
       for (const input of coladas) {
+        // FICHA 463 (R45): «Saldos de tiendas» DECLARA `busqueda` (la del buscador de su tabla, que viaja
+        // a la descarga). Para ese borde deja de ser una clave colada; lo prueba
+        // `tests/integration/db/saldos-tiendas-busqueda-463.test.ts`. Las plantillas la siguen rechazando.
+        if (b.nombre === "listarSaldosTiendasCompletoAction" && "busqueda" in input) continue;
         const { espia, llamar } = b.montar({ status: "ok", items: [b.fila], total: 1 });
         const r = await llamar(input, CON_SESION);
 

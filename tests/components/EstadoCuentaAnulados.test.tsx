@@ -38,7 +38,8 @@ function montar(inicial: EstadoCuentaDTO) {
 
 function filas() {
   const tabla = screen.getByRole("table", { name: "Estado de cuenta de Tania Tienda" });
-  return within(tabla).getAllByRole("row").slice(2); // sin cabecera ni saldo inicial
+  // FICHA 463 (R39): de entrada el orden es «Más recientes» y el saldo inicial es la ÚLTIMA fila.
+  return within(tabla).getAllByRole("row").slice(1, -1); // sin cabecera ni saldo inicial
 }
 
 const PAGO_ANULADO = fila({

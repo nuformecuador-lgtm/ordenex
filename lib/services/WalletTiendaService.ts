@@ -246,13 +246,17 @@ export class WalletTiendaService implements IWalletTiendaService {
    */
   async listarSaldosTiendasCompleto(
     actor: Actor,
+    filtro: { busqueda?: string } = {},
   ): Promise<ListarSaldosTiendasCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repositorio
 
     const limite = descargaConfig.MAX_FILAS;
 
+    // FICHA 463 (R45): la MISMA busqueda que la pagina, resuelta por el MISMO metodo del repositorio:
+    // el archivo trae exactamente las tiendas que la tabla enseña.
     const { items, total } = await this.repo.listarSaldosTiendasPaginado(
       rangoDePagina({ page: 1, pageSize: limite + 1 }),
+      { busqueda: filtro.busqueda },
     );
 
     // R6: o van TODAS las tiendas del conjunto, o van solo los conteos. Nunca un archivo al que
@@ -274,12 +278,16 @@ export class WalletTiendaService implements IWalletTiendaService {
    * sale de esa agregacion y no de un conteo aparte.
    */
   async listarSaldosTiendasPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; busqueda?: string },
     actor: Actor,
   ): Promise<ListarSaldosTiendasPaginadoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R20
 
-    const { items, total } = await this.repo.listarSaldosTiendasPaginado(rangoDePagina(input));
+    // FICHA 463 (R45): `busqueda` es el UNICO dato de la peticion que llega al repositorio; el alcance
+    // lo sigue fijando el rol.
+    const { items, total } = await this.repo.listarSaldosTiendasPaginado(rangoDePagina(input), {
+      busqueda: input.busqueda,
+    });
 
     return {
       status: "ok",

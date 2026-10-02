@@ -13,6 +13,7 @@
 // que los componentes de presentación siguen sin importar una sola Server Action.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
+import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import { readFileSync } from "node:fs";
@@ -326,13 +327,17 @@ const LEDGERS = [
     pagina: CAJA_PAGINA,
     // Filas de la tabla y del archivo que no son movimientos, y el importe de su primer movimiento.
     filasFijas: 0,
+    filasFijasTabla: 0,
     importeArchivo: (filas: Record<string, unknown>[]) => filas[0].monto,
     importeEsperado: CAJA_TODOS[0].monto,
   },
   {
-    // FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda: la
-    // tabla y el archivo llevan arriba la línea del saldo inicial (R20/R32) y el importe va en su
-    // columna de abono.
+    // FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda: el
+    // archivo lleva la línea del saldo inicial (R20/R32) y el importe va en su columna de abono.
+    //
+    // FICHA 463 (R39/R43): de entrada el orden es «Más recientes», así que la línea del saldo inicial
+    // es la ÚLTIMA del archivo y solo aparece en la ÚLTIMA página de la tabla. La página pintada aquí es
+    // la 1 de 3 (60 movimientos de 20 en 20): la tabla NO la lleva.
     titulo: "Estado de cuenta de Tania Tienda",
     tabla: "Estado de cuenta de Tania Tienda",
     montar: renderMiWallet,
@@ -340,7 +345,8 @@ const LEDGERS = [
     todos: TIENDA_TODOS,
     pagina: TIENDA_PAGINA,
     filasFijas: 1,
-    importeArchivo: (filas: Record<string, unknown>[]) => filas[1].abono,
+    filasFijasTabla: 0,
+    importeArchivo: (filas: Record<string, unknown>[]) => filas[0].abono,
     importeEsperado: TIENDA_TODOS[0].abono,
   },
 ] as const;
@@ -413,7 +419,7 @@ describe("Ledgers de dinero · descarga", () => {
       // pinta en carga un `<tr>` con `role="status"` y filas skeleton `aria-hidden` que no
       // cuentan como `row`, así que el número puede cuadrar a media carga.
       await waitFor(() => {
-        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + ledger.filasFijas + 1);
+        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + ledger.filasFijasTabla + 1);
         expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
       });
 
@@ -443,17 +449,16 @@ describe("Ledgers de dinero · descarga", () => {
     const user = userEvent.setup();
     renderCaja();
 
-    await user.type(screen.getByLabelText("Desde"), "2026-07-01");
-    await user.type(screen.getByLabelText("Hasta"), "2026-07-31");
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    // FICHA 463: el periodo es el calendario de la ZONA DE LA WALLET, con «Aplicar».
+    await aplicarPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 28);
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
 
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
 
     await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
     expect(listarMovimientosCompletoMock.mock.calls[0][0]).toEqual({
-      desde: "2026-07-01",
-      hasta: "2026-07-31",
+      desde: diaDelMesActual(1),
+      hasta: diaDelMesActual(28),
     });
   });
 

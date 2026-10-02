@@ -119,6 +119,11 @@ export const ESTADO_CUENTA_TEXTO = {
   registro: (quien: string) => `Registró: ${quien}`,
   vacio: "No hay movimientos en este periodo.",
   error: "No se pudo cargar el estado de cuenta.",
+  /**
+   * FICHA 463 (R49) — una lectura falló y la pantalla se queda con la última buena: lo dice junto al
+   * libro (no en su lugar) y explica que los filtros volvieron a los de esa lectura.
+   */
+  errorConservado: "Se sigue mostrando lo último que se cargó, con sus filtros.",
   errorDescarga: "No se pudo leer el estado de cuenta para descargarlo.",
   tabla: (nombre: string) => `Estado de cuenta de ${nombre}`,
   chips: (nombre: string) => `Filtrar el estado de cuenta de ${nombre}`,
@@ -130,6 +135,15 @@ export const ESTADO_CUENTA_TEXTO = {
   aplicar: "Aplicar",
   limpiar: "Quitar periodo",
   periodoInvalido: "«Desde» no puede ser posterior a «hasta».",
+  /**
+   * FICHA 463 (R23/R26/R27) — el placeholder del buscador del extracto. En la oficina alcanza la
+   * descripción y quién registró; en `/mi-wallet` SOLO la descripción (la tienda no ve los nombres de
+   * la gente de Ordenex, R27), así que no la nombra.
+   */
+  buscarPlaceholder: {
+    oficina: "Buscar por descripción o quién registró",
+    tienda: "Buscar por descripción",
+  },
   acciones: (nombre: string) => `Acciones sobre la cuenta de ${nombre}`,
   volver: "Volver al listado",
   /** FICHA 458-D (R19, 172/457/459) — el método y la referencia del pago de la fila, en palabras. */

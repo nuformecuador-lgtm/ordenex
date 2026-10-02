@@ -3,7 +3,7 @@ titulo: Mi wallet
 modulo: mi-wallet
 pantalla: /mi-wallet
 roles: [adminTienda]
-actualizado: 2026-09-26
+actualizado: 2026-10-01
 fuentes:
   - app/(app)/mi-wallet/page.tsx
   - app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx
@@ -12,6 +12,7 @@ fuentes:
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
   - lib/actions/estado-cuenta.ts
   - lib/services/EstadoCuentaService.ts
@@ -73,12 +74,15 @@ cumple: saldo inicial más abonos menos cargos es el saldo final. Un movimiento 
 
 ## Tu estado de cuenta
 
-La tabla es el **extracto**, del movimiento más antiguo al más reciente:
+La tabla es el **extracto**. Se abre en **Más recientes**: tu último movimiento arriba.
 
-- La primera fila es el **saldo inicial**: lo que tenías al terminar el día anterior al periodo.
+- La línea del **saldo inicial** —lo que tenías al terminar el día anterior al periodo— va donde cae en
+  el tiempo: con **Más recientes**, es la última línea de la última página; con **Más antiguas**, la
+  primera de la primera página.
 - Cada movimiento dice su fecha, qué fue, el motivo, de dónde viene, cómo se pagó (si es un pago), el
   **cargo** o el **abono**, y tu **saldo** justo después de ese movimiento.
-- El saldo de la última fila es el mismo de la cifra grande de arriba.
+- El saldo de tu movimiento más reciente es el mismo de la cifra grande de arriba. Cambiar el orden
+  no cambia el saldo de ninguna fila.
 
 Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 
@@ -144,16 +148,30 @@ comprobante, te lo dice: «Este registro no tiene comprobante.». Solo ves los d
 
 ## Filtrar tu estado de cuenta
 
-- Los **chips** de arriba: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
+Los filtros están en **dos zonas**, y cada una dice hasta dónde llega.
+
+**Arriba, antes de las cifras: «Estos filtros cambian toda la wallet».** Solo el **Periodo**: elegís el
+primer y el último día en el calendario (días de Costa Rica) y lo aplicás con **Aplicar**; mientras lo
+elegís no cambia nada. **Quitar periodo** lo quita. Con un periodo, la línea del saldo inicial dice el
+saldo con el que empezaste ese periodo.
+
+**Encima de la tabla: «Estos filtros solo afectan al libro de movimientos».** No cambian ninguna cifra de
+arriba:
+
+- **El buscador**: busca en la descripción de tus movimientos. Escribí **al menos 3 caracteres**.
+- **Más recientes / Más antiguas**: el orden del extracto, por fecha.
+- Los **chips**: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
   uno solo. El saldo de cada fila **sigue siendo el de tu cuenta entera**, aunque filtres.
 - **Cierre** — todos los movimientos que entraron con un cierre determinado. Cada cierre se nombra por
   su día y cuántos movimientos trajo, por ejemplo «Cierre del 2026-09-12 · 7 movimientos». **Todos los
   cierres** quita el filtro.
-- **Desde** y **Hasta** — días completos de Costa Rica. Con un periodo, la primera fila es el saldo con
-  el que empezaste ese periodo.
+
+**Limpiar todo** quita el texto buscado, el chip y el cierre; no toca el orden ni el periodo. Si una
+lectura falla, la pantalla te lo dice y se queda con lo que mostraba, filtros incluidos.
 
 Y podés **descargar tu estado de cuenta**: trae **el periodo entero** que estás mirando (no solo la
-página), con el saldo inicial arriba y el saldo de cada fila, con los mismos nombres que la tabla. Si
+página), en el orden elegido y con el saldo inicial donde cae en el tiempo, y el saldo de cada fila,
+con los mismos nombres que la tabla. Respeta el texto buscado, el chip y el cierre. Si
 el periodo tiene más movimientos de los que entran en una descarga, no se descarga nada y te lo dice:
 elegí un periodo más corto, un chip o un cierre.
 

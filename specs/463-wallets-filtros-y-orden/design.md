@@ -216,7 +216,8 @@ Término / Entra-Sale / categoría / orden ──► recargarLibro(fw, fl, 1)
 ```
 
 Si una de las lecturas falla: toast y NO se pisa ningún estado (R49) — hoy ya es así en `recargar`,
-se conserva.
+se conserva. (Precisado en la tercera vuelta: ver §9.7 —zona de la wallet ATÓMICA, excepciones
+incluidas, un único turno—.)
 
 ## 7. Alternativas descartadas
 
@@ -247,3 +248,60 @@ se conserva.
 | Saldo inicial en página equivocada con DESC | Test de componente para R38/R39 con `total` múltiplo y no múltiplo de `pageSize` |
 | Fuga de nombres de Ordenex a la tienda por la búsqueda | R27: integración con un registrador de nombre conocido; buscarlo en `/mi-wallet` devuelve lo mismo que buscar un texto ausente |
 | Guardias de censo (`censo-tablas`, contadores de cabecera) | Correr `./init.sh --rapido`; si una guardia lista archivos, actualizar su censo en la misma task |
+
+## 9. Desvíos de la implementación (anotados en la revisión, m6)
+
+Decisiones técnicas del frontend (`progress/impl_463.md`) que se apartan de lo escrito arriba. La
+revisión (`progress/review_463.md`, m6) las juzgó aceptables; se anotan aquí para que el diseño diga lo
+que hay.
+
+1. **Categoría (caja) y cierre (estado de cuenta) a la vista, no detrás del selector «Filtros»**
+   (§5.2/§5.3). Son el único filtro extra de cada barra: esconderlos costaba un clic sin ganar sitio.
+   R5/R7 se cumplen igual: están en la zona del libro.
+2. **`WalletFiltros.tsx` no se retiró: pasó a ser el módulo de traducción sin JSX** (§5.2/T7 decían
+   retirarlo). Ahí viven `FiltrosWallet`/`FiltrosLibro`, `inputDeWallet`/`inputDeLibro`,
+   `filtrosDeWallet` e `inputDeFiltros`, que usan la composición y el detalle de fila. En la vuelta de
+   revisión se renombró a `app/(app)/wallet/_components/wallet-filtros-input.ts` (sin componente, el
+   `PascalCase.tsx` chocaba con `docs/conventions.md`), con todos sus importadores, los tests y la
+   fuente que declara la ayuda `oficina/wallet-caja.md`.
+3. **El orden por defecto no viaja.** «Más recientes» es lo que el borde aplica sin pedirlo (R34, probado
+   en SCH/ACT); solo «Más antiguas» manda `sortBy: "fecha", sortDir: "asc"`. La clave SWR lleva el
+   orden explícito (R41), así que dos órdenes no comparten caché.
+4. **El periodo del estado de cuenta pasa al calendario de `FilterComponent`** (§5.3 decía conservar el
+   aviso del formulario Desde/Hasta propio). Con el calendario un «Desde» posterior a «Hasta» no se puede
+   elegir (los extremos se ordenan solos); R18 queda como red del modo «Aplicar» por unitario (siembra
+   invertida en `filter-component-aplicar-463`).
+
+Y, de la vuelta de revisión:
+
+5. **§6 / R49 en el estado de cuenta** (B1): §6 solo contaba la caja. `EstadoCuenta` guarda cada lectura
+   buena JUNTO a la selección que la pidió (periodo, chip, cierre, término, orden, página y tamaño). Si
+   una lectura falla, sigue pintando esa lectura (tarjetas y libro), devuelve todos los controles a su
+   selección —el periodo por la `siembra` de `FilterComponent` y el término por la de
+   `BuscadorFiltros`, como la caja— y avisa JUNTO al libro (`role="alert"`), no en su lugar. La posición
+   del saldo inicial se calcula con la selección de lo pintado, no con lo pedido (m2).
+6. **Conmutadores del libro de la caja durante una lectura** (m1): no se deshabilitan ni se tragan el
+   clic. El módulo compone el cambio con lo PEDIDO y le da turno (`turnoLibro`): se pinta la última
+   lectura pedida. (En la tercera vuelta los dos turnos pasan a ser uno solo: ver 7.)
+
+Y, de la segunda revisión (B3/B4, decisión del leader):
+
+7. **R49 en la caja: la zona de la wallet es ATÓMICA y un fallo es también una lectura que LANZA**
+   (`WalletModule.tsx`). Un cambio de la zona superior (periodo / «A quién») pide cifras Y libro; solo si
+   TODAS las lecturas salen bien se pintan JUNTAS y se confirma la selección. Si cualquiera falla —con
+   respuesta de error o lanzando (red caída, 500, tiempo agotado: `catch`)—, se conserva la última
+   pantalla buena completa (cifras + libro + controles; el periodo por la `siembra` del calendario y el
+   término por la del buscador) y se avisa (toast; el de «sin respuesta» es `LECTURA_CAJA_FALLO`). Un
+   cambio de la zona del libro (término, orden, Entra/Sale, categoría, página) relee solo el libro, con
+   la wallet APLICADA; si falla o lanza, el libro y sus controles vuelven a la última lectura buena.
+   - **Un solo turno** (`turno`) para toda lectura de la caja en lugar de uno por zona: la respuesta de
+     una selección ya superada —buena o mala, de cualquier zona— nunca se pinta ni avisa. Con dos turnos
+     un fallo de una zona dejaba pintado lo que la otra había leído con otra selección (B4).
+   - **Un cambio del libro con la wallet en vuelo se SUMA a ella**: la selección nueva aún no está
+     confirmada, así que se relee todo junto (periodo pedido + libro nuevo) en vez de leer un libro con
+     un periodo que todavía puede fallar. Cuesta repetir las lecturas de las cifras en ese caso raro; a
+     cambio, la pantalla nunca muestra cifras de una selección y libro de otra.
+   - Lo aplicado vive además en refs (`aplicadoWallet`/`aplicadoLibro`) para que el fallo restaure lo
+     vigente al llegar la respuesta, no lo del render que la pidió.
+   - Estado de cuenta (m7): una acción que LANZA ya avisaba y restauraba (el fetcher de SWR convierte el
+     rechazo en `onError`); queda fijado por test, sin cambio de código.

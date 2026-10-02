@@ -1,5 +1,6 @@
 import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import type { PrismaClient } from "@prisma/client";
 import type {
   AgregadoCajaRow,
@@ -100,6 +101,18 @@ export interface ListarMovimientosFiltros {
    * OPCIONAL: ausente ⇒ la consulta es la de siempre (el `where` de Prisma, byte a byte).
    */
   aQuien?: AQuienFiltro;
+  /**
+   * FICHA 463 (design §3.1, R24/R25/R28) — el termino del buscador del libro, YA recortado y con el
+   * minimo cumplido (lo valida el borde). Casa, sin distinguir mayusculas, con la descripcion, el
+   * nombre y la referencia anotados y el nombre de quien registro; `%` y `_` son texto. Solo existe
+   * en el LISTADO: `BalanceFiltros` no lo tiene, asi que ningun agregado de las cifras lo recibe (R12).
+   */
+  termino?: string;
+  /**
+   * FICHA 463 (R33/R36) — el sentido de la tupla `fecha_movimiento, created_at, id`. Ausente ⇒
+   * `desc` (lo mas nuevo primero), que es el orden de siempre.
+   */
+  sortDir?: DireccionOrden;
 }
 
 export interface ListarMovimientosPage {
@@ -170,7 +183,8 @@ export interface IWalletMovimientoRepository {
     laterales?: LateralesDelRegistro,
   ): Promise<number>;
   /**
-   * R20/R24: pagina el libro (fecha_movimiento desc) con filtros en el WHERE.
+   * R20/R24: pagina el libro (fecha_movimiento desc por defecto; asc o desc segun `sortDir`, ficha 463)
+   * con filtros —y, si viene, el termino— en el WHERE.
    *
    * Ficha 334 (R26, design §4): el orden es TOTAL —`fecha_movimiento`, luego `created_at`,
    * luego `id`—, porque una sola columna con `skip`/`take` deja las filas empatadas en orden

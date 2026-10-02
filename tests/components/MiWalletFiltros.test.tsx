@@ -94,13 +94,19 @@ describe("/mi-wallet — el cierre se ELIGE, no se escribe (R22) [335 → 458-D]
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("ID del cierre")).not.toBeInTheDocument();
 
-    // Ningún campo de texto libre: los dos `input` que quedan son las fechas del periodo. Se
-    // descartan los `aria-hidden` (Base UI planta un input oculto por cada `Select`).
+    // FICHA 463 — el único campo de texto libre es el BUSCADOR del libro (R23), que busca por la
+    // descripción y no pide ningún identificador; el periodo ya no son dos `input[type=date]` sino el
+    // calendario de la zona de la wallet. Se descartan los `aria-hidden` (Base UI planta un input
+    // oculto por cada `Select`).
     const visibles = Array.from(document.querySelectorAll("input")).filter(
       (i) => i.getAttribute("aria-hidden") !== "true",
     );
-    expect(visibles.filter((i) => i.type === "text" || i.type === "search")).toEqual([]);
-    expect(visibles.map((i) => i.type)).toEqual(["date", "date"]);
+    expect(visibles.filter((i) => i.type === "text")).toEqual([]);
+    const busqueda = visibles.filter((i) => i.type === "search");
+    expect(busqueda).toHaveLength(1);
+    expect(busqueda[0]).toHaveAccessibleName("Buscar en el libro");
+    expect(busqueda[0].placeholder).toBe("Buscar por descripción");
+    expect(busqueda[0].placeholder).not.toMatch(/\bID\b|identificador/i);
   });
 
   it("R22: el rótulo del selector cuelga de un `id` REAL, no de la nada", () => {

@@ -223,7 +223,7 @@ describeSiHayBase("458-D B1 — 172 R52: el filtro por cierre del mensajero trae
             { getActor: async () => maestro, service: new FiltrosWalletService(new FiltrosWalletRepository(tx as never)) },
           ),
           porLaAction: await verEstadoCuentaAction(
-            { cuenta: cuentaM, cierreId: cierreA, page: 1, pageSize: 50 },
+            { cuenta: cuentaM, cierreId: cierreA, page: 1, pageSize: 50, sortDir: "asc" },
             { getActor: async () => maestro, service: ec },
           ),
         };

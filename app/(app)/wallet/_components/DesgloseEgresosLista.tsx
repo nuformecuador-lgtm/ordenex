@@ -24,7 +24,7 @@ import {
   OTROS_EGRESOS_PISTA,
 } from "./composicion-detalle-labels";
 import { FilaComposicion } from "./FilaComposicion";
-import type { WalletFiltrosValue } from "./WalletFiltros";
+import type { WalletFiltrosValue } from "./wallet-filtros-input";
 import { money } from "./wallet-labels";
 
 // Feature 231 (T6.1, design §4.3) — la LISTA de egresos, extraida del `<dl>` que vivia dentro

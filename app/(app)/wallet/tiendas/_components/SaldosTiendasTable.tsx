@@ -5,6 +5,7 @@ import { useState } from "react";
 import useSWR from "swr";
 
 import { Badge } from "@/components/ui/badge";
+import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
@@ -16,7 +17,7 @@ import {
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
-import { ENLACE_ESTADO_CUENTA_TIENDA } from "./estado-cuenta-tienda-labels";
+import { BUSCADOR_SALDOS_TIENDAS, ENLACE_ESTADO_CUENTA_TIENDA } from "./estado-cuenta-tienda-labels";
 import { claveSaldosTiendas } from "./saldos-tiendas-clave";
 import {
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
@@ -115,11 +116,20 @@ export interface SaldosTiendasTableProps {
   initialData: SaldosTiendasPagina;
 }
 
+/**
+ * FICHA 463 (R45) — el término viaja SOLO si hay algo escrito: sin búsqueda la entrada es la de
+ * siempre (`page`/`pageSize`), y la descarga sin búsqueda llama al completo como antes.
+ */
+function conBusqueda(busqueda: string): { busqueda?: string } {
+  return busqueda === "" ? {} : { busqueda };
+}
+
 async function leerPagina(
   page: number,
   pageSize: number,
+  busqueda: string,
 ): Promise<SaldosTiendasPagina> {
-  const res = await listarSaldosTiendasPaginadoAction({ page, pageSize });
+  const res = await listarSaldosTiendasPaginadoAction({ page, pageSize, ...conBusqueda(busqueda) });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -127,15 +137,28 @@ async function leerPagina(
 export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
+  // FICHA 463 (R45) — el término APLICADO del buscador (lo emite ya recortado y con su espera).
+  const [busqueda, setBusqueda] = useState("");
+
+  /**
+   * R45 — la búsqueda se resuelve en el SERVIDOR y vuelve a la página 1: buscar dentro de la página
+   * pintada encontraría solo lo que ya está a la vista. El canónico no repite un término sin cambio,
+   * así que `setPage(1)` puede ir sin comparar (el mismo molde que `/wallet/mensajeros`).
+   */
+  function aplicarBusqueda(termino: string) {
+    setBusqueda(termino);
+    setPage(1);
+  }
 
   // Ficha 461 (auditoría P1): la clave sale del módulo compartido para que el bloque de pago del
   // desglose pueda refrescar ESTA tabla tras pagar o anular, sin importar este archivo.
   const { data, error } = useSWR(
-    claveSaldosTiendas(page, pageSize),
-    () => leerPagina(page, pageSize),
+    claveSaldosTiendas(page, pageSize, busqueda),
+    () => leerPagina(page, pageSize, busqueda),
     {
+      // Lo que el Server Component ya resolvió: página 1, sin búsqueda, tamaño de origen.
       fallbackData:
-        page === 1 && pageSize === initialData.pageSize ? initialData : undefined,
+        page === 1 && pageSize === initialData.pageSize && busqueda === "" ? initialData : undefined,
     },
   );
 
@@ -155,6 +178,17 @@ export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
         emptyMessage="No hay tiendas con saldo registrado."
         isLoading={cargando}
         error={error ? ERROR_CARGA : null}
+        // FICHA 463 (R45) — el buscador CANÓNICO por nombre de tienda, en la cabecera de la tabla y
+        // junto a la descarga. Sin `filtros` ni «Limpiar todo» (no hay más que limpiar; el campo trae
+        // su X) y sin `disabled`: no se pierden teclas mientras llega la página.
+        filtros={
+          <BuscadorFiltros
+            label={BUSCADOR_SALDOS_TIENDAS.label}
+            placeholder={BUSCADOR_SALDOS_TIENDAS.placeholder}
+            leerDeUrl={false}
+            onChange={aplicarBusqueda}
+          />
+        }
         /**
          * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
          * CONJUNTO COMPLETO, y exige el mismo acceso total que la tabla: la descarga no
@@ -175,7 +209,8 @@ export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
           columnas: COLUMNAS_DESCARGA_SALDOS_TIENDAS,
           obtenerFilas: () =>
             filasDesdeResultado(
-              listarSaldosTiendasCompletoAction(),
+              // FICHA 463 (R45): el término aplicado viaja también a la descarga; sin él, la llamada de siempre.
+              busqueda === "" ? listarSaldosTiendasCompletoAction() : listarSaldosTiendasCompletoAction({ busqueda }),
               filaDescargaSaldoTienda,
             ),
         }}

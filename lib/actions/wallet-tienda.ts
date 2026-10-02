@@ -322,10 +322,10 @@ export async function listarSaldosTiendasPaginadoAction(
  * a salir ORDENADO como la tabla (R5), cosa que hoy no ocurre porque el listado sin paginar
  * devuelve las filas en el orden del planificador.
  *
- * Como este listado no tiene filtros, la lista blanca derivada de la de su pagina no deja
- * NINGUNA clave: `tiendaId` —la que convertiria el saldo de TODAS las tiendas en el de una— y
- * `page`/`pageSize` mueren aqui con `validation_error` sin tocar el servicio (R17). El input se
- * parsea aunque no se transporte nada: parsear ES la barrera.
+ * La lista blanca derivada de la de su pagina deja UNA clave, `busqueda` (FICHA 463, R45): el mismo
+ * texto que filtra la tabla filtra el archivo. `tiendaId` —la que convertiria el saldo de TODAS las
+ * tiendas en el de una— y `page`/`pageSize` mueren aqui con `validation_error` sin tocar el servicio
+ * (R17): parsear ES la barrera.
  */
 export async function listarSaldosTiendasCompletoAction(
   input: unknown = {},
@@ -334,9 +334,13 @@ export async function listarSaldosTiendasCompletoAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarSaldosTiendasCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarSaldosTiendasCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarSaldosTiendasCompleto(actor);
+    // FICHA 463 (R45): la busqueda vigente viaja tal cual y el conjunto vuelve YA filtrado. Sin ella,
+    // la llamada es la de siempre (sin segundo argumento).
+    return data.busqueda === undefined
+      ? service.listarSaldosTiendasCompleto(actor)
+      : service.listarSaldosTiendasCompleto(actor, { busqueda: data.busqueda });
   });
   return isAppErrorShape(r) ? toWalletTiendaActionError(r) : r;
 }

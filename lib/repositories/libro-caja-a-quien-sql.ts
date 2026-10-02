@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { AQuienCuentaTipo, AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { WalletMovimientoCategoria, WalletMovimientoTipo, WalletOrigenTipo } from "@/lib/types/wallet";
 import { CATEGORIAS_CONTRA_ASIENTO_ANOTADO } from "@/lib/utils/anotacion-de-fila";
+import { escaparComodinesLike } from "@/lib/utils/escapar-like";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-E (TE.2, R59; design §3.4 y §6) — «A quién» del libro de la caja, EN SQL.
@@ -263,4 +264,65 @@ export function nombresConMovimientosSql(f: FiltrosComunesSql): Prisma.Sql {
     WHERE ${origenDe(ORIGENES_CON_ANOTACION)} AND a."contraparte_nombre" IS NOT NULL
       AND btrim(a."contraparte_nombre") <> '' AND ${filtro}
     GROUP BY ${clave}`;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// FICHA 463 (design §3.1, R24/R25/R28) — el BUSCADOR del libro de la caja, EN SQL.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//
+// El texto buscable de una fila (R25) es: su descripcion, el nombre y la referencia ANOTADOS y el
+// nombre de quien la registro. La anotacion se lee con la MISMA regla que la columna «A quién» y el
+// filtro de arriba (revision M2 de la 458-E): el contra-asiento de un egreso o de una correccion
+// anulados lleva la anotacion de su ORIGINAL, asi que buscar «Pedro» trae la salida y su vuelta, como
+// las enseña la columna. Las dos relaciones son 0..1 y entran como `EXISTS`: no multiplican filas.
+//
+// `%` y `_` del termino se buscan como TEXTO (R28): `escaparComodinesLike` les antepone `\`, que es el
+// escape por defecto de `LIKE` en Postgres. Sin el, buscar «%» devolveria el libro entero.
+
+/**
+ * El nombre COMPLETO de quien registro (alias `ur`): el gemelo SQL de `nombreCompletoUsuario`, escrito
+ * con `Prisma.sql` y no con `Prisma.raw(nombreCompletoUsuarioSql(…))`: este modulo no lleva SQL crudo
+ * (guardia `caja-173-alcance`, M1 de la 458-E). Misma expresion que `NOMBRE_SQL` del estado de cuenta.
+ */
+const NOMBRE_REGISTRADOR = Prisma.sql`trim(concat_ws(' ', ur."nombre", ur."primer_apellido", ur."segundo_apellido"))`;
+
+/** El patron `ILIKE` de un termino: subcadena en cualquier posicion, comodines escapados (R28). */
+export function patronDeTermino(termino: string): string {
+  return `%${escaparComodinesLike(termino)}%`;
+}
+
+/**
+ * La condicion del termino sobre la fila `w` de `wallet_movimiento` (R24/R25/R28). `ILIKE`: sin
+ * distinguir mayusculas de minusculas. Cuatro campos en `OR`; quitar cualquiera de ellos pone rojo
+ * `tests/integration/db/libro-caja-busqueda-orden-463.test.ts` (mutaciones en `progress/impl_463.md`).
+ */
+export function condicionTerminoCajaSql(termino: string): Prisma.Sql {
+  const patron = patronDeTermino(termino);
+  return Prisma.sql`(
+    w."descripcion" ILIKE ${patron}
+    OR (${origenDe(ORIGENES_CON_ANOTACION)} AND EXISTS (
+      SELECT 1 FROM "wallet_anotacion" a
+      WHERE a."movimiento_id" = ${MOVIMIENTO_DE_LA_ANOTACION}
+        AND (a."contraparte_nombre" ILIKE ${patron} OR a."referencia" ILIKE ${patron})
+    ))
+    OR EXISTS (
+      SELECT 1 FROM "usuario" ur
+      WHERE ur."id" = w."registrado_por" AND ${NOMBRE_REGISTRADOR} ILIKE ${patron}
+    )
+  )`;
+}
+
+/**
+ * El WHERE del libro de la caja con lo que el `where` de Prisma no expresa: «A quién» (458-E) y/o el
+ * termino (463). Los dos son opcionales; los demas filtros son los de `buildWhere`, uno a uno
+ * (`condicionesComunesSql`). Con «A quién» y sin termino es, condicion a condicion, `whereLibroCajaSql`.
+ */
+export function whereLibroCajaConTerminoSql(
+  f: FiltrosComunesSql & { aQuien?: AQuienFiltro; termino?: string },
+): Prisma.Sql {
+  const partes: Prisma.Sql[] = [];
+  if (f.aQuien !== undefined) partes.push(condicionAQuienSql(f.aQuien));
+  partes.push(...condicionesComunesSql(f));
+  if (f.termino !== undefined) partes.push(condicionTerminoCajaSql(f.termino));
+  return whereOVerdadero(partes);
 }

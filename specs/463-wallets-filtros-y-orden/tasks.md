@@ -11,7 +11,7 @@ aprobar, este desglose se ajusta primero.
 
 ## Backend
 
-- [ ] **T1 — Contratos de borde** (deps: ninguna)
+- [x] **T1 — Contratos de borde** (deps: ninguna)
   - `lib/config`: `BUSQUEDA_LIBRO_MIN_CHARS = 3` y `CAMPOS_ORDEN_LIBRO = ["fecha"]`.
   - `lib/types/wallet.ts`: `listarLibroCajaSchema` y `listarLibroCajaCompletoSchema` (design §2.1);
     `listarMovimientosSchema` sin cambios de forma.
@@ -21,7 +21,7 @@ aprobar, este desglose se ajusta primero.
     `sortDir` ⇒ `validation_error`), R40 (dirección o campo inválido ⇒ `validation_error`), default
     `desc` presente en los cuatro esquemas del estado de cuenta y en el del libro de caja.
 
-- [ ] **T2 — Repositorio de la caja** (deps: T1) [P con T3]
+- [x] **T2 — Repositorio de la caja** (deps: T1) [P con T3]
   - `WalletMovimientoRepository.listar` y el modo completo: término (R25, R28) y `sortDir` con
     `ordenTotal` en los dos caminos (Prisma y SQL con «A quién»).
   - **Hecho:** integración contra Postgres (`tests/integration/db/…`) que siembra movimientos con
@@ -31,7 +31,7 @@ aprobar, este desglose se ajusta primero.
     menos un test (anotar la mutación y el rojo en `progress/impl_463.md`). Los tests NO deben pasar
     en verde sin filas (comprobar que el conjunto sembrado no está vacío).
 
-- [ ] **T3 — Repositorio y servicio del estado de cuenta** (deps: T1) [P con T2]
+- [x] **T3 — Repositorio y servicio del estado de cuenta** (deps: T1) [P con T2]
   - `VentanaDeLibro` + `paginar` + `paginaDeBodega`: `ORDER BY` final según `sortDir`, término en el
     `WHERE` exterior, nombre del registrador solo con `conNombreRegistrador` (design §3.2).
   - `EstadoCuentaService.leerCuenta`: propagar `q`, `sortDir`, `conNombreRegistrador = vista ===
@@ -41,7 +41,7 @@ aprobar, este desglose se ajusta primero.
     registrador da el mismo resultado que un texto ausente), R11 a nivel servicio (tarjetas iguales con
     y sin `q`/`chip`/`sortDir`). Mutación: invertir también el `OVER (ORDER BY …)` ⇒ R37 rojo.
 
-- [ ] **T4 — Acciones y listado de tiendas** (deps: T1, T2, T3)
+- [x] **T4 — Acciones y listado de tiendas** (deps: T1, T2, T3)
   - `listarMovimientosAction`/`listarMovimientosCompletoAction` parsean los esquemas nuevos;
     `verResumenCajaAction`, `verDesgloseEgresosAction`, `listarMovimientosDeFilaAction` sin cambio.
   - `listarSaldosTiendasPaginadoAction`/completo: `busqueda` hasta el repositorio (molde de cuentas por
@@ -52,7 +52,7 @@ aprobar, este desglose se ajusta primero.
 
 ## Frontend
 
-- [ ] **T5 — `FilterComponent`: modo «Aplicar»** (deps: ninguna; puede empezar en paralelo al backend) [P]
+- [x] **T5 — `FilterComponent`: modo «Aplicar»** (deps: ninguna; puede empezar en paralelo al backend) [P]
   - Prop `aplicarConBoton` (design §5.1).
   - **Hecho:** tests de componente: R21 (editar no emite; pulsar emite una vez y sin debounce), R17
     (botón deshabilitado con borrador = aplicado), R18 (rango invertido ⇒ botón deshabilitado y
@@ -60,12 +60,12 @@ aprobar, este desglose se ajusta primero.
     emisiones que antes: test que fije la secuencia de llamadas con temporizadores falsos). Suites
     existentes de `FilterComponent` y de sus consumidores verdes sin tocarlas.
 
-- [ ] **T6 — Etiquetas** (deps: ninguna) [P]
+- [x] **T6 — Etiquetas** (deps: ninguna) [P]
   - Textos de design §5.5 en los `*-labels.ts` de caja, estado de cuenta y tiendas.
   - **Hecho:** test que afirma como LITERAL los textos de contrato (R2 alcance de las dos zonas, R33
     «Más recientes»/«Más antiguas») y que ningún texto nuevo contiene «SLA» (R48).
 
-- [ ] **T7 — Caja: dos zonas** (deps: T4, T5, T6)
+- [x] **T7 — Caja: dos zonas** (deps: T4, T5, T6)
   - Partir el estado de `WalletModule` en `FiltrosWallet`/`FiltrosLibro`, `inputDeWallet`/
     `inputDeLibro`, `recargarTodo`/`recargarLibro` (design §5.2).
   - `WalletFiltrosCaja.tsx` (zona de la wallet, encima de `CajaResumenCard`) y `LibroCajaBarra.tsx`
@@ -80,7 +80,7 @@ aprobar, este desglose se ajusta primero.
     aplicados), R15/R16/R19, R29, R30, R31 (`leerDeUrl` apagado: entrar con `?q=x` no filtra), R32,
     R34, R35, R42 (la descarga recibe filtros de las dos zonas, término y orden), R49.
 
-- [ ] **T8 — Estado de cuenta: dos zonas y orden** (deps: T4, T5, T6) [P con T7]
+- [x] **T8 — Estado de cuenta: dos zonas y orden** (deps: T4, T5, T6) [P con T7]
   - `EstadoCuenta.tsx`: zona de la wallet arriba con `FilterComponent` en modo «Aplicar»; zona del
     libro con `BuscadorFiltros` + orden + chips + cierre en el selector (design §5.3).
   - Clave SWR con término y orden; `posicionSaldoInicial`; `filasDelPeriodo` con término y orden.
@@ -92,11 +92,11 @@ aprobar, este desglose se ajusta primero.
     `MiEstadoCuenta`) montan las dos zonas (un test por superficie que encuentre las dos por nombre
     accesible).
 
-- [ ] **T9 — Listado de tiendas** (deps: T4, T6) [P con T7 y T8]
+- [x] **T9 — Listado de tiendas** (deps: T4, T6) [P con T7 y T8]
   - `SaldosTiendasTable` con `BuscadorFiltros` (design §5.4).
   - **Hecho:** test de componente R45 (término ⇒ página 1, en la clave SWR y en la descarga).
 
-- [ ] **T10 — Cierre y verificación** (deps: T7, T8, T9)
+- [x] **T10 — Cierre y verificación** (deps: T7, T8, T9)
   - Mapa `R<n> → test` completo en `progress/impl_463.md` (R1–R49, sin huecos).
   - `./init.sh` completo verde (toca `lib/types/`); revisar `skipped` de `tests/integration/db`, no solo
     el código de salida.

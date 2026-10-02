@@ -45,7 +45,8 @@ import type {
 import type { IAjusteCajaService } from "@/lib/interfaces/services/IAjusteCajaService";
 import {
   anularAjusteCajaSchema,
-  listarMovimientosCompletoSchema,
+  listarLibroCajaCompletoSchema,
+  listarLibroCajaSchema,
   listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
   type AnularAjusteCajaResult,
@@ -222,7 +223,8 @@ export async function listarMovimientosAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R19: antes de tocar el service
-    const data = listarMovimientosSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // Ficha 463 (R24/R33/R40): el borde DEL LIBRO — el de las cifras + termino y orden.
+    const data = listarLibroCajaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     const r = await service.listarMovimientos(data, actor);
     return origenEnPagina(deps.origenes ?? buildOrigenes(), "caja", r, actor);
@@ -243,7 +245,8 @@ export async function listarMovimientosCompletoAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
-    const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    // Ficha 463 (R42): el borde de la descarga del libro, con termino y orden.
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     const r = await service.listarMovimientosCompleto(data, actor);
     return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
@@ -303,7 +306,7 @@ export async function verResumenCajaAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError();
-    const data = listarMovimientosSchema.parse(input); // mismos filtros que el listado
+    const data = listarMovimientosSchema.parse(input); // los filtros de la WALLET; `.strict()`: termino u orden => validation_error (463/R14)
     const service = deps.service ?? buildService();
     return service.verResumenCaja(data, actor);
   });

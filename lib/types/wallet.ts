@@ -12,6 +12,12 @@ import { walletMovimientoConfig } from "@/lib/config/wallet-movimiento";
 import { desdeDiaCRSchema, hastaDiaCRSchema } from "@/lib/types/filtro-dias-cr";
 import { aQuienFiltroSchema } from "@/lib/types/libro-caja-a-quien";
 import {
+  BUSQUEDA_LIBRO_MAX_CHARS,
+  BUSQUEDA_LIBRO_MIN_CHARS,
+  CAMPOS_ORDEN_LIBRO,
+} from "@/lib/config/libro-wallet";
+import { esquemaOrdenamiento } from "@/lib/types/ordenamiento-listado";
+import {
   esFechaCalendarioValida,
   fechaCalendarioCR,
   ultimosNDiasCalendarioCR,
@@ -666,6 +672,47 @@ export const listarMovimientosCompletoSchema = listarMovimientosSchema
   .strict();
 
 export type ListarMovimientosCompletoInput = z.infer<typeof listarMovimientosCompletoSchema>;
+
+// ── FICHA 463 (design §2.1, R12/R14/R24/R33/R40) — el borde del LIBRO de la caja ──
+//
+// Los filtros se separan por NIVEL en el esquema, no solo en la pantalla. `listarMovimientosSchema`
+// (arriba, SIN cambios de forma) sigue siendo el de las CIFRAS de la wallet: resumen, desglose y
+// detalle de una fila de la composicion. Al ser `.strict()`, un `q`, `sortBy` o `sortDir` que llegue
+// a esos bordes es `validation_error` sin leer nada (R14): con un esquema comun, el resumen aceptaria
+// el termino y lo ignoraria en silencio — un fallo mudo.
+//
+// El libro paginado y su descarga parsean ESTOS dos, que son el de las cifras mas el termino y el
+// orden. Lo vacio no viaja (lo filtra la pantalla); un termino por debajo del minimo es
+// `validation_error` (el buscador ya no lo emite).
+
+/** El termino del libro: recortado, entre el minimo y el maximo de `lib/config/libro-wallet`. */
+export const terminoLibroSchema = z.string().trim().min(BUSQUEDA_LIBRO_MIN_CHARS).max(BUSQUEDA_LIBRO_MAX_CHARS);
+
+export const listarLibroCajaSchema = listarMovimientosSchema
+  .extend({
+    q: terminoLibroSchema.optional(),
+    // R33/R34/R40: solo por fecha; por defecto lo mas nuevo primero (lo que el libro hacia hasta hoy).
+    ...esquemaOrdenamiento(CAMPOS_ORDEN_LIBRO, "fecha", "desc"),
+  })
+  .strict();
+
+export type ListarLibroCajaInput = z.infer<typeof listarLibroCajaSchema>;
+
+/** La descarga del libro (R42): el mismo borde sin `page`/`pageSize`, `.strict()`. */
+export const listarLibroCajaCompletoSchema = listarLibroCajaSchema
+  .omit({ page: true, pageSize: true })
+  .strict();
+
+export type ListarLibroCajaCompletoInput = z.infer<typeof listarLibroCajaCompletoSchema>;
+
+/**
+ * Lo que el SERVICIO acepta para el libro: la entrada de las cifras mas el termino y el orden, estos
+ * opcionales (ausente el orden ⇒ `desc`, el de siempre). El borde siempre los manda ya resueltos por
+ * el esquema; los llamadores internos que no buscan ni ordenan siguen compilando sin cambios.
+ */
+type TerminoYOrdenDelLibro = Partial<Pick<ListarLibroCajaInput, "q" | "sortBy" | "sortDir">>;
+export type ListarLibroCajaServicioInput = ListarMovimientosInput & TerminoYOrdenDelLibro;
+export type ListarLibroCajaCompletoServicioInput = ListarMovimientosCompletoInput & TerminoYOrdenDelLibro;
 
 /**
  * Ficha 339 (T1.4, design §4.1 — R20/R29/R32) — entrada del DETALLE de una fila de la tarjeta.

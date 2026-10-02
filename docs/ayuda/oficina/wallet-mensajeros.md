@@ -3,7 +3,7 @@ titulo: Wallet · Mensajeros
 modulo: wallet
 pantalla: /wallet/mensajeros, /wallet/mensajeros/[mensajeroId]
 roles: [maestro, admin]
-actualizado: 2026-09-26
+actualizado: 2026-10-01
 fuentes:
   - app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable.tsx
   - app/(app)/wallet/mensajeros/_components/wallet-mensajeros-labels.ts
@@ -16,6 +16,7 @@ fuentes:
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx
   - app/(app)/wallet/_components/DetalleMovimientoCierre.tsx
   - app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts
@@ -46,22 +47,33 @@ periodo: **Saldo inicial**, **Abonos del periodo** (lo que Ordenex le debe por s
 sus premios), **Cargos del periodo** (lo que ya se le pagó o descontó) y **Saldo al final del periodo**.
 Acá las cifras ya **no cuentan los pagos anulados**: un pago y su anulación se cancelan entre ellos.
 
-El extracto va del más antiguo al más reciente, con el **saldo inicial** como primera fila, y cada
-movimiento con su fecha, su concepto, el motivo, **de dónde viene** con nombre («Cierre del día ·
+El extracto se abre en **Más recientes** (el último movimiento arriba) y se puede pasar a **Más
+antiguas**. La línea del **saldo inicial** va donde cae en el tiempo: con **Más recientes**, la última
+línea de la última página; con **Más antiguas**, la primera de la primera página. Cada
+movimiento lleva su fecha, su concepto, el motivo, **de dónde viene** con nombre («Cierre del día ·
 2026-09-12 · Juan Pérez Mora», con un enlace **Ver** al cierre), **cómo se pagó** si es un pago (método y
-referencia), **quién lo registró** y el **saldo** del mensajero justo después. Se filtra con los chips
-**Todo · Cierres · Pagos · Premios · Correcciones**, con **Desde** / **Hasta** (días de Costa Rica) y
+referencia), **quién lo registró** y el **saldo** del mensajero justo después.
+
+Los filtros están en **dos zonas**. Arriba, antes de las cifras, **«Estos filtros cambian toda la
+wallet»**: el **Periodo** (días de Costa Rica), que se elige en el calendario y se aplica con
+**Aplicar**; **Quitar periodo** lo quita. Encima de la tabla, **«Estos filtros solo afectan al libro de
+movimientos»** —no cambian las cifras de arriba—: un **buscador** (descripción y quién registró, al
+menos 3 caracteres), el orden **Más recientes / Más antiguas**, los chips
+**Todo · Cierres · Pagos · Premios · Correcciones** y el filtro
 por **cierre**: un selector con búsqueda que solo ofrece los cierres con movimientos de este mensajero,
 cada uno con su día; se busca por un día o por el nombre. Al elegir un cierre se ven sus filas **y los
 pagos registrados contra ese cierre, con sus anulaciones**; el número de movimientos del selector ya
-los cuenta. El saldo de cada fila es siempre el de la cuenta entera.
+los cuenta. El saldo de cada fila es siempre el de la cuenta entera, en cualquier orden. **Limpiar
+todo** quita el texto buscado, el chip y el cierre, sin tocar el orden ni el periodo. Si una lectura
+falla, la pantalla lo dice y se queda con lo que mostraba, filtros incluidos.
 
 Las filas que vienen de un cierre tienen una flecha al principio. Al abrirla, el pago de un cierre **no
 se reparte orden por orden**: es el total que ese cierre dejó anotado para pagarle al mensajero, y el
 detalle lo dice así. Para ver sus órdenes, abrí el cierre con el enlace **Ver** de la fila.
 
 Es el nivel donde se contesta *«¿por qué me pagaron esto?»* sin discutir de memoria. Se puede
-**descargar** el periodo entero (con el chip y el cierre elegidos), con el saldo de cada fila; si hay más
+**descargar** el periodo entero (con el texto buscado, el chip, el cierre y el orden elegidos, y el saldo
+inicial donde cae en el tiempo), con el saldo de cada fila; si hay más
 movimientos de los que entran en una descarga, no se descarga nada y te lo dice.
 
 ## Pagarle al mensajero
@@ -87,8 +99,8 @@ a pagar. Un premio no es un número suelto — termina en la cuenta del mensajer
 **«No hay cuentas por pagar».** Nadie tiene saldo pendiente. Después de una ronda de pagos es lo
 normal.
 
-**«No se pudo cargar el estado de cuenta».** Fallo al leer esa página del extracto; recargá. El saldo de
-arriba sigue siendo válido.
+**«No se pudo cargar el estado de cuenta».** Falló una lectura; la pantalla se queda con lo último que
+cargó —cifras, extracto y filtros— y lo dice encima del extracto. Probá de nuevo.
 
 **Un mensajero con saldo menor del que esperaba.** Los pagos entran **cuando se aprueba su cierre**, no
 cuando entrega. Si tiene cierres sin aprobar, ese trabajo todavía no está contado.

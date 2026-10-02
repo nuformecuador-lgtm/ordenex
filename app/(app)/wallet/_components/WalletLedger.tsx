@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -282,6 +282,11 @@ export interface WalletLedgerProps {
    * Ausente ⇒ la tabla no monta el control y se comporta igual que antes (R39).
    */
   obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
+  /**
+   * FICHA 463 (design §5.2) — la ZONA DEL LIBRO, en la cabecera de la tabla y en la misma línea que la
+   * descarga (`filtros` de `DataTable`, como `/ordenes`). Nodo OPACO: la tabla la coloca, no la mira.
+   */
+  filtros?: ReactNode;
 }
 
 export function WalletLedger({
@@ -290,6 +295,7 @@ export function WalletLedger({
   onCambio,
   autoria: autoriaProp,
   obtenerFilasDescarga,
+  filtros,
 }: WalletLedgerProps) {
   const autoria = autoriaProp ?? AUTORIA_CARGANDO;
   // Feature 200 (tanda 3): cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé,
@@ -366,6 +372,7 @@ export function WalletLedger({
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
         emptyMessage="No hay movimientos que coincidan con los filtros."
+        filtros={filtros}
         // R71/R72 (458-C): anulado = tachado y apagado, decidido por el servidor.
         rowClassName={claseDeFila}
         // Ficha 344 (T6.4, R1–R6): cada fila de CIERRE despliega las órdenes que componen su

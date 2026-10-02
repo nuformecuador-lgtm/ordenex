@@ -32,6 +32,7 @@ import type {
   TipoDeCuenta,
 } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import type { LibroWallet } from "@/lib/types/wallet-origen";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 import type { DesgloseTiendaDTO, WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
@@ -197,6 +198,11 @@ export class EstadoCuentaService implements IEstadoCuentaService {
       hastaUtc,
       pares,
       cierreId: input.cierreId,
+      // FICHA 463 (design §4, R11/R24/R27/R37): el termino y el orden solo tocan las FILAS del libro.
+      // Las tarjetas (inicial, abonos, cargos, final) y R22 no los miran: salen del periodo entero.
+      ...(input.q !== undefined ? { termino: input.q } : {}),
+      sortDir: input.sortDir,
+      conNombreRegistrador: vista === "oficina",
       skip: (input.page - 1) * input.pageSize,
       take: input.pageSize,
       // 172 R55 (cierre de la 458-D) — el resumen de tres cifras solo lo lee la propia tienda.
@@ -527,6 +533,12 @@ type Ventana = {
    * `VentanaDeLibro.cierreId`. Declarado aqui para que el compilador proteja la propagacion.
    */
   cierreId?: string;
+  /** FICHA 463 (R24) — el termino del buscador; llega tal cual a `VentanaDeLibro.termino`. */
+  termino?: string;
+  /** FICHA 463 (R33/R37) — el sentido del `ORDER BY` final (la ventana del corrido no cambia). */
+  sortDir: DireccionOrden;
+  /** FICHA 463 (R26/R27) — el termino casa con quien registro solo en la oficina. */
+  conNombreRegistrador: boolean;
   skip: number;
   take: number;
   /** 172 R55 — leer el resumen de tres cifras (solo la vista de la propia tienda). */

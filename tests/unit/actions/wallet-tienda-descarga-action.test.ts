@@ -89,7 +89,7 @@ describe("verMiEstadoCuentaCompletoAction (borde de la descarga de /mi-wallet, 1
     expect(r).toEqual({ status: "ok", estado: e });
     const [data, actor] = leerMiTiendaCompleto.mock.calls[0];
     expect(actor).toEqual(TIENDA);
-    expect(data).toEqual({ chip: "cobros" });
+    expect(data).toEqual({ chip: "cobros", sortBy: "fecha", sortDir: "desc" }); // 463/R34: orden por defecto
     expect(data).not.toHaveProperty("tiendaId");
     expect(data).not.toHaveProperty("cuenta");
     expect(data).not.toHaveProperty("page");

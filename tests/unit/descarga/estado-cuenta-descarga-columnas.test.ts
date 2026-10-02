@@ -82,7 +82,7 @@ describe("R32 — las columnas del archivo son las de la pantalla, con el saldo 
 });
 
 describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial arriba", () => {
-  it("pide el completo con periodo, chip y cierre vigentes; la primera fila es el saldo inicial", async () => {
+  it("pide el completo con periodo, chip y cierre vigentes; con «Más recientes» la ÚLTIMA fila es el saldo inicial (463 R43)", async () => {
     const filas = [
       ...Array.from({ length: 100 }, (_, i) => fila({ n: i + 1, saldoCorrido: `${i + 1}.00` })),
       fila({
@@ -127,7 +127,9 @@ describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial 
       cierreId: CIERRE,
     });
     expect(r.filas).toHaveLength(102);
-    expect(r.filas[0]).toEqual({
+    // FICHA 463 (R43): sin orden pedido el archivo sale en «Más recientes» y la línea del saldo inicial
+    // es la ÚLTIMA fila, donde cae en el tiempo (con «Más antiguas», la primera: lo mide el caso 463).
+    expect(r.filas[101]).toEqual({
       fecha: "2026-09-01",
       movimiento: "Saldo inicial del periodo",
       motivo: null,
@@ -141,7 +143,7 @@ describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial 
     });
     // El monto CRUDO (sin símbolo): la hoja lo suma. El origen CON su entidad (458-D servidor), el
     // método y la referencia, y el estado de anulación, en palabras.
-    expect(r.filas[101]).toEqual({
+    expect(r.filas[100]).toEqual({
       fecha: "2026-09-14",
       movimiento: "Ordenex le paga a la tienda",
       motivo: "Quincena",
@@ -205,7 +207,7 @@ describe("R32 / TD.6 — el periodo ENTERO en UNA lectura, con el saldo inicial 
     expect(verEstadoCuentaCompletoMock).not.toHaveBeenCalled();
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.filas[1]).toMatchObject({ movimiento: "Ordenex te cobró", origen: "Registro a mano · Material" });
+    expect(r.filas[0]).toMatchObject({ movimiento: "Ordenex te cobró", origen: "Registro a mano · Material" });
   });
 
   it("la proyección no lee nada que no esté en la línea ya rotulada", () => {

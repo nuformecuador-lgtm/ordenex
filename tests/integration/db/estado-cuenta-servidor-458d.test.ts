@@ -20,7 +20,7 @@ import { derivarSaldoTienda } from "@/lib/utils/saldo-tienda";
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 import { cargarCatalogo459, enTransaccionRevertida459, montarServicios459 } from "./_fixtures/caja-459";
-import { T4, leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
+import { CRONOLOGICO, T4, leerEstadoCuenta, montarEstadoCuenta, sembrarEscenario458 } from "./_fixtures/wallet-458";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-D (servidor) — el ESTADO DE CUENTA ampliado, contra Postgres (lección «probar el WHERE
@@ -191,7 +191,7 @@ describeSiHayBase("458-D servidor — el estado de cuenta ampliado contra Postgr
         const cuentaC = { tipo: "tienda" as const, id: esc.tiendaC };
         const oficina = (input: Parameters<typeof leerEstadoCuenta>[2]) => leerEstadoCuenta(ec, esc.maestro, input);
         const deLaTienda = async (actor: Actor, input: Record<string, unknown> = {}) => {
-          const r = await ec.leerMiTienda({ page: 1, pageSize: 50, ...input }, actor);
+          const r = await ec.leerMiTienda({ page: 1, pageSize: 50, ...CRONOLOGICO, ...input }, actor);
           if (r.status !== "ok") throw new Error(`mi estado de cuenta: ${JSON.stringify(r)}`);
           return r.estado;
         };
@@ -258,7 +258,7 @@ describeSiHayBase("458-D servidor — el estado de cuenta ampliado contra Postgr
           verMiEstadoCuentaCompletoAction(input, { getActor: async () => tiendaC, service: ec });
         const completo = {
           oficinaEntero: await completoOficina({ cuenta: cuentaC }),
-          oficinaCierres: await completoOficina({ cuenta: cuentaC, chip: "cierres" }),
+          oficinaCierres: await completoOficina({ cuenta: cuentaC, chip: "cierres", sortDir: "asc" }),
           oficinaConPagina: await completoOficina({ cuenta: cuentaC, page: 1 }),
           tiendaEntero: await completoTienda({}),
           tiendaCierreReal: await completoTienda({ cierreId: cierreReal }),
