@@ -1,6 +1,6 @@
 # ESTADO 2026-10-02 (madrugada) — 463, 464, 465 y 466 HECHAS en `dev`, SIN DESPLEGAR
 
-- **En `dev`:** 465 (#837), 466 (#838), 463 (#839), 464 (#840). Gates post-merge verdes hasta la 463; el de la 464 corre tras el merge (`progress/gate_dev_tras_840.log`).
+- **En `dev`:** 465 (#837), 466 (#838), 463 (#839), 464 (#840). Gates post-merge verdes hasta la 463; y el de la 464 también: 32.800 tests (`progress/gate_dev_tras_840.log`).
 - **Pendiente del humano:** WhatsApp interno (ejemplos por rol/hora, «sin moverse» desde cuándo, quién corrige 7 teléfonos); ¿investigar «Corregir» de la recepción de dinero de satélites? (sospecha: choca con `conciliadoAt: null` en `CierresBodegaAdminRepository.ts:528`); ¿el modal SINPE que tapa Tarifas/Wallet es esperado?; ¿registrar fichas menores?: periodo de la caja corta el texto (`w-56`), tests `OrdenesDescarga*` que fallan 00:00–01:00 (hora local vs CR), m1/m2 de la 464.
 - **Corrección de caja** para ganancia 0: la registra Carlos; medir la cifra justo antes.
 - **Flakes de la base local compartida** vistos hoy: FK en siembras, deadlock 40P01, totales de caja medidos con otro proceso escribiendo. Todos verdes aislados; correr gates sin otro proceso usando la base.
