@@ -5,13 +5,14 @@ import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ColumnasPopover } from "@/components/shared/ColumnasPopover";
+import { RadioGroup, type RadioGroupOption } from "@/components/ui/radio-group";
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { usePreferenciaColumnas } from "@/hooks/usePreferenciaColumnas";
 import { claveDeAmbitoDescarga } from "@/lib/columnas/preferencia-columnas";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
-import type { DescargaColumna, DescargaTipo } from "@/lib/types/descarga";
-import type { DataTableDescarga } from "@/components/shared/DataTable";
+import type { DescargaColumna, DescargaHoja, DescargaTipo } from "@/lib/types/descarga";
+import type { DataTableDescarga, DataTableDescargaDetalle } from "@/components/shared/DataTable";
 
 /**
  * Feature 151 (design.md §5) — control de descarga del dataset completo de un
@@ -32,6 +33,14 @@ import type { DataTableDescarga } from "@/components/shared/DataTable";
  * selector de columnas (`ColumnasPopover`) y emite el archivo con las columnas MARCADAS y en
  * el orden que el usuario haya fijado en ese ámbito. Sin ámbito no hay selector y salen todas
  * las columnas declaradas (R33), que es lo que siguen haciendo las 24 tablas restantes.
+ *
+ * FICHA 464 (design §2.2) — cuando la configuración declara además `detalle`, el MISMO selector gana
+ * arriba dos decisiones, con el molde de `DescargarCierresButton`: «Hojas del archivo» (solo la hoja
+ * principal, o también la hoja de detalle) y, si van las dos, «Columnas de la hoja» (de cuál se eligen
+ * las columnas que se listan debajo). Cada hoja guarda su elección en su propio ámbito (R2/R11); lo que
+ * se descarga NO se guarda y arranca siempre con el detalle (R8). Con detalle el archivo es siempre
+ * Excel (R12) y lleva las dos columnas FIJAS —enlace y estado—, que no están en el catálogo del
+ * selector y por eso no se pueden desmarcar (R17). Sin `detalle`, nada de esto existe (R41).
  */
 export interface DescargarDatasetButtonProps extends DataTableDescarga {
   /** Texto del botón (i18n por prop, sin literal fijo en el consumidor). */
@@ -73,12 +82,48 @@ const MENSAJE_SIN_DATOS =
 const MENSAJE_FALLO =
   "No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.";
 
+// --- Ficha 464: textos del selector con hoja de detalle (i18n-ready, sin dominio) ---------------
+
+/** Nombre accesible del disparador: dice las DOS cosas que se eligen dentro. */
+export const SELECTOR_DETALLE_DISPARADOR = "Elegir qué se descarga y sus columnas";
+/** Encabezado del popup con detalle. */
+const SELECTOR_DETALLE_TITULO = "Qué se descarga";
+/** Rótulo (y nombre accesible) del grupo «qué se descarga». */
+export const QUE_SE_DESCARGA_LEGEND = "Hojas del archivo";
+/** Rótulo (y nombre accesible) del grupo «de qué hoja se eligen las columnas». */
+export const COLUMNAS_DE_LA_HOJA_LEGEND = "Columnas de la hoja";
+/** Rótulo de la lista de columnas, dentro del mismo popup. */
+const COLUMNAS_DETALLE_LEGEND = "Columnas que salen en esa hoja";
+
+const CON_DETALLE = "con-detalle";
+const SIN_DETALLE = "sin-detalle";
+const HOJA_PRINCIPAL = "principal";
+const HOJA_DETALLE = "detalle";
+type Hoja = typeof HOJA_PRINCIPAL | typeof HOJA_DETALLE;
+
+/**
+ * Ficha 464 — la hoja de detalle, ya resuelta, que acompaña a la principal en el archivo. La columna
+ * de enlace se pone aquí y no en el catálogo: así el selector no la lista y no se puede desmarcar (R17).
+ */
+function hojaDeDetalle(
+  detalle: DataTableDescargaDetalle,
+  visiblesDetalle: readonly DescargaColumna[],
+  filas: DescargaHoja["filas"],
+): DescargaHoja {
+  return {
+    titulo: detalle.titulo,
+    columnas: [detalle.columnaEnlace, ...visiblesDetalle],
+    filas,
+  };
+}
+
 export function DescargarDatasetButton({
   titulo,
   columnas,
   obtenerFilas,
   formatos,
   ambitoColumnas,
+  detalle: detalleDeclarado,
   label,
   className,
 }: DescargarDatasetButtonProps) {
@@ -93,6 +138,20 @@ export function DescargarDatasetButton({
     columnas,
     claveDeDescarga,
   );
+  // Ficha 464 — la hoja de detalle solo se ofrece con el ámbito de la principal: las dos hojas se
+  // eligen en el mismo selector, y sin ámbito no habría dónde guardar la elección de la principal.
+  const detalle = claveColumnas === null ? undefined : detalleDeclarado;
+  const claveDetalle =
+    detalle === undefined ? null : claveDeAmbitoDescarga(detalle.ambitoColumnas);
+  const { visibles: visiblesDetalle } = usePreferenciaColumnas(
+    claveDetalle,
+    detalle?.columnas ?? SIN_COLUMNAS,
+    claveDeDescarga,
+  );
+  // R8 — arranca CON detalle y no se recuerda: es estado local, se pierde al desmontar.
+  const [conDetalle, setConDetalle] = useState(true);
+  const [hoja, setHoja] = useState<Hoja>(HOJA_PRINCIPAL);
+  const descargaDetalle = detalle !== undefined && conDetalle;
   const [generando, setGenerando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   // Guard de CARRERA (R26): `generando` como estado no está actualizado hasta el
@@ -100,7 +159,12 @@ export function DescargarDatasetButton({
   const enVueloRef = useRef(false);
   const contenedorRef = useRef<HTMLDivElement | null>(null);
 
-  const disponibles = formatos && formatos.length > 0 ? formatos : [FORMATO_POR_DEFECTO];
+  // R12 — con la hoja de detalle el archivo es SIEMPRE Excel: un csv no tiene hojas.
+  const disponibles: DescargaTipo[] = descargaDetalle
+    ? [FORMATO_POR_DEFECTO]
+    : formatos && formatos.length > 0
+      ? formatos
+      : [FORMATO_POR_DEFECTO];
   const eligeFormato = disponibles.length > 1;
   const nombreAccesible = `${label ?? DEFAULT_LABEL} ${titulo}`;
 
@@ -122,7 +186,11 @@ export function DescargarDatasetButton({
     setGenerando(true);
     setMenuAbierto(false);
     try {
-      const resultado = await obtenerFilas();
+      // R41 — sin `detalle` declarado, la llamada de SIEMPRE: sin argumentos.
+      const resultado =
+        detalle === undefined
+          ? await obtenerFilas()
+          : await obtenerFilas({ conDetalle: descargaDetalle });
       if (resultado.status === "error") {
         // R27: el mensaje ya viene accionable y saneado desde el consumidor.
         toast.error(resultado.mensaje);
@@ -135,6 +203,22 @@ export function DescargarDatasetButton({
       // R25 — Import DINÁMICO del generador común: mantiene `exceljs` fuera del
       // bundle inicial de todas las pantallas que montan un `DataTable`.
       const { construirDescarga } = await import("@/lib/utils/descarga-dataset");
+      if (descargaDetalle && detalle !== undefined) {
+        // Ficha 464 (R10/R17/R36) — las dos hojas, de la MISMA respuesta. Sin filas de detalle no
+        // hay archivo: una hoja vacía diría «ninguna orden» donde el consumidor no las leyó.
+        if (resultado.filasDetalle === undefined) {
+          throw new Error("faltan las filas de la hoja de detalle");
+        }
+        const archivo = await construirDescarga({
+          tipo: FORMATO_POR_DEFECTO,
+          titulo,
+          columnas: [detalle.columnaEnlace, ...visibles, detalle.columnaEstado],
+          filas: resultado.filas,
+          hojasAdicionales: [hojaDeDetalle(detalle, visiblesDetalle, resultado.filasDetalle)],
+        });
+        descargarBlob(archivo.contenido, archivo.mime, archivo.nombreArchivo);
+        return;
+      }
       const archivo = await construirDescarga({
         tipo,
         titulo,
@@ -188,7 +272,18 @@ export function DescargarDatasetButton({
 
       {/* R1 — control PARALELO al botón, no un paso de su camino: abrirlo no descarga, y el
           botón descarga en un click con lo ya guardado (R6). Solo se monta si hay ámbito. */}
-      {claveColumnas !== null ? (
+      {claveColumnas !== null && detalle !== undefined ? (
+        <SelectorConDetalle
+          detalle={detalle}
+          tituloPrincipal={titulo}
+          clavePrincipal={claveColumnas}
+          columnasPrincipal={columnas}
+          conDetalle={conDetalle}
+          onConDetalle={setConDetalle}
+          hoja={hoja}
+          onHoja={setHoja}
+        />
+      ) : claveColumnas !== null ? (
         <ColumnasPopover
           claveAlmacenamiento={claveColumnas}
           publicadas={columnas}
@@ -219,5 +314,84 @@ export function DescargarDatasetButton({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Catálogo vacío estable (dependencia de `useMemo` del hook): sin detalle no hay columnas que leer. */
+const SIN_COLUMNAS: readonly DescargaColumna[] = [];
+
+/**
+ * Ficha 464 (R6/R8/R11) — el selector cuando hay hoja de detalle: arriba, qué hojas lleva el archivo;
+ * si van las dos, de cuál se eligen las columnas; debajo, las columnas de ESA hoja con su ámbito.
+ */
+function SelectorConDetalle({
+  detalle,
+  tituloPrincipal,
+  clavePrincipal,
+  columnasPrincipal,
+  conDetalle,
+  onConDetalle,
+  hoja,
+  onHoja,
+}: {
+  detalle: DataTableDescargaDetalle;
+  tituloPrincipal: string;
+  clavePrincipal: string;
+  columnasPrincipal: DescargaColumna[];
+  conDetalle: boolean;
+  onConDetalle: (v: boolean) => void;
+  hoja: Hoja;
+  onHoja: (h: Hoja) => void;
+}) {
+  const opcionesQue: readonly RadioGroupOption[] = [
+    { value: SIN_DETALLE, label: detalle.etiquetaSinDetalle },
+    { value: CON_DETALLE, label: detalle.etiquetaOpcion },
+  ];
+  // Cada hoja se nombra con SU nombre en el archivo: el control no conoce el dominio.
+  const opcionesHoja: readonly RadioGroupOption[] = [
+    { value: HOJA_PRINCIPAL, label: tituloPrincipal },
+    { value: HOJA_DETALLE, label: detalle.titulo },
+  ];
+  // Sin detalle solo hay una hoja: la lista es la de la principal, se eligiera lo que se eligiera antes.
+  const enDetalle = conDetalle && hoja === HOJA_DETALLE;
+  const clave = enDetalle ? claveDeAmbitoDescarga(detalle.ambitoColumnas) : clavePrincipal;
+  const publicadas = enDetalle ? detalle.columnas : columnasPrincipal;
+
+  const encabezado = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">{QUE_SE_DESCARGA_LEGEND}</span>
+        <RadioGroup
+          value={conDetalle ? CON_DETALLE : SIN_DETALLE}
+          onValueChange={(v) => onConDetalle(v === CON_DETALLE)}
+          options={opcionesQue}
+          aria-label={QUE_SE_DESCARGA_LEGEND}
+        />
+      </div>
+      {conDetalle ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">{COLUMNAS_DE_LA_HOJA_LEGEND}</span>
+          <RadioGroup
+            value={hoja}
+            onValueChange={(v) => onHoja(v === HOJA_DETALLE ? HOJA_DETALLE : HOJA_PRINCIPAL)}
+            options={opcionesHoja}
+            aria-label={COLUMNAS_DE_LA_HOJA_LEGEND}
+          />
+        </div>
+      ) : null}
+      <span className="text-sm font-medium">{COLUMNAS_DETALLE_LEGEND}</span>
+    </div>
+  );
+
+  return (
+    <ColumnasPopover
+      claveAlmacenamiento={clave}
+      publicadas={publicadas}
+      claveDe={claveDeDescarga}
+      etiquetaDe={etiquetaDeDescarga}
+      titulo={SELECTOR_DETALLE_TITULO}
+      etiquetaDisparador={SELECTOR_DETALLE_DISPARADOR}
+      encabezado={encabezado}
+    />
   );
 }

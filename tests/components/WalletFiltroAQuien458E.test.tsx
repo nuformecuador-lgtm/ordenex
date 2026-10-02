@@ -83,6 +83,7 @@ import { aQuienDeValor, opcionesDeAQuien, valorDeAQuien } from "@/app/(app)/wall
 import { CAJA_RESUMEN_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -381,6 +382,8 @@ describe("458-E R59 — elegir «A quién» filtra el libro, las tarjetas, el de
     );
 
     // Y la descarga lleva el mismo filtro.
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(completoMock).toHaveBeenCalledWith({ aQuien: { tipo: "tienda", id: TIENDA_ID } }));
   });

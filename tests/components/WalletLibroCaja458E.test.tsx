@@ -85,6 +85,7 @@ import { WalletLedger, type AutoriaDelLibro } from "@/app/(app)/wallet/_componen
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { CAJA_RESUMEN_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import { COBRO_RECHAZO_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 // ── Datos ──
 
@@ -504,6 +505,8 @@ describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarje
     expect(desgloseMock).toHaveBeenLastCalledWith({ ...periodo, page: 1, pageSize: 20 });
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", ...esperado }));
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(completoMock).toHaveBeenCalledWith(esperado));
   });

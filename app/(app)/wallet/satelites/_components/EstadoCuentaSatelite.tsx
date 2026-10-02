@@ -2,6 +2,7 @@
 
 import { EstadoCuenta } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { AMBITO_DESCARGA_ESTADO_CUENTA_SATELITE } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import type { EstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 
 import { ConciliacionSatelite } from "./ConciliacionSatelite";
@@ -35,6 +36,9 @@ export function EstadoCuentaSatelite({ inicial, puedeConciliar }: Readonly<Estad
     <EstadoCuenta
       inicial={inicial}
       rotulos={ROTULOS_BODEGA}
+      // FICHA 464 (R1/R2/R7) — solo el selector de columnas: el libro de la bodega son consolidaciones,
+      // sin lectura por orden.
+      descargaDeLaSuperficie={{ ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_SATELITE }}
       pie={(vigente, refrescar) => (
         <ConciliacionSatelite
           bodega={{ zonaId: vigente.cuenta.id, zonaNombre: vigente.cuenta.nombre }}

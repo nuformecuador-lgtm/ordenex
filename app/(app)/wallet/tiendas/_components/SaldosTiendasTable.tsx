@@ -20,6 +20,7 @@ import { money } from "../../../mi-wallet/_components/mi-wallet-labels";
 import { BUSCADOR_SALDOS_TIENDAS, ENLACE_ESTADO_CUENTA_TIENDA } from "./estado-cuenta-tienda-labels";
 import { claveSaldosTiendas } from "./saldos-tiendas-clave";
 import {
+  AMBITO_DESCARGA_SALDOS_TIENDAS,
   COLUMNAS_DESCARGA_SALDOS_TIENDAS,
   filaDescargaSaldoTienda,
 } from "./saldos-tiendas-descarga-columnas";
@@ -207,6 +208,8 @@ export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
         descarga={{
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_SALDOS_TIENDAS,
+          // FICHA 464 (R1/R2): el selector de columnas, con su ámbito propio.
+          ambitoColumnas: AMBITO_DESCARGA_SALDOS_TIENDAS,
           obtenerFilas: () =>
             filasDesdeResultado(
               // FICHA 463 (R45): el término aplicado viaja también a la descarga; sin él, la llamada de siempre.

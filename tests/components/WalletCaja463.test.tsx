@@ -90,6 +90,7 @@ import {
   inputDeLibro,
   inputDeWallet,
 } from "@/app/(app)/wallet/_components/wallet-filtros-input";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 function mov(n: number, over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
   return {
@@ -489,6 +490,8 @@ describe("463 R42 — la descarga lleva las dos zonas, el término y el orden", 
     await user.type(buscador(), "Juan");
     await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ q: "Juan" })), { timeout: 3000 });
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(H.completo).toHaveBeenCalledTimes(1));
     expect(H.completo).toHaveBeenCalledWith({
@@ -591,9 +594,72 @@ describe("463 R49 (revisión B3) — una lectura que LANZA avisa y deja la panta
     H.toastError.mockClear();
     await user.type(buscador(), "Juan");
     await waitFor(() => expect(H.toastError).toHaveBeenCalledWith(AVISO_SIN_RESPUESTA), { timeout: 3000 });
+    // Revisión m11 — `fallo()` devolvió lo PEDIDO a lo aplicado: el término se pidió con «Más recientes»
+    // (el orden por defecto no viaja), no con el «Más antiguas» que había fallado y el conmutador no dice.
+    expect(H.listar).toHaveBeenLastCalledWith({ q: "Juan", page: 1, pageSize: 20 });
     await waitFor(() => expect(buscador()).toHaveValue(""));
     await sigueLaPantallaDeEntrada();
     expect(H.resumen).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Tercera revisión de la 463 — m9 y m10 (cerrados en la 464).
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("463 R49 (revisión m9) — un fallo no borra lo que se está tecleando", () => {
+  it("falla «Sale» mientras se teclea «Juan»: el texto se queda en el campo y se pide al cumplirse la espera", async () => {
+    const pendientes: Array<(v: unknown) => void> = [];
+    H.listar.mockImplementationOnce(() => new Promise((r) => pendientes.push(r)));
+    const user = pintar();
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(H.listar).toHaveBeenCalledTimes(1));
+
+    // Se teclea con «Sale» en vuelo, y «Sale» falla ANTES de que venza la espera del buscador.
+    await user.type(buscador(), "Juan");
+    pendientes[0]({ status: "validation_error" });
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith("Los filtros no son válidos. Revisá el rango de fechas."));
+    expect(buscador()).toHaveValue("Juan");
+    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+
+    // Lo tecleado no se pierde: al vencer la espera se pide, sobre lo APLICADO (sin el «Sale» que falló).
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith({ q: "Juan", page: 1, pageSize: 20 }), {
+      timeout: 3000,
+    });
+    expect(H.listar).toHaveBeenCalledTimes(2);
+    expect(buscador()).toHaveValue("Juan");
+  });
+});
+
+describe("463 R49 (revisión m10) — una lectura superada no suelta el turno de la vigente", () => {
+  it("periodo en vuelo + «Sale» en vuelo; la primera llega y luego «Más antiguas»: se relee TODO con el periodo pedido", async () => {
+    const primera = diferida();
+    const segunda = diferida();
+    H.resumen.mockReturnValueOnce(primera.promesa).mockReturnValueOnce(segunda.promesa);
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    // Con la wallet en vuelo, «Sale» se suma a ella: segunda lectura de TODO.
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(2));
+
+    // La primera (ya superada) termina: no pinta y NO suelta el turno de la segunda, que sigue en vuelo.
+    primera.soltar({ status: "ok", resumen: RESUMEN_PERIODO, composicion: COMPOSICION });
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Por eso «Más antiguas» se suma también a la lectura de TODO, con el periodo PEDIDO. Sin la guarda de
+    // `soltarTurno`, iría por el libro con la wallet de antes y el periodo pedido se perdería sin aviso.
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(3));
+    expect(H.listar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desde: diaDelMesActual(1),
+        hasta: diaDelMesActual(28),
+        tipo: "egreso",
+        sortDir: "asc",
+        pageSize: 20,
+      }),
+    );
+    segunda.soltar({ status: "ok", resumen: RESUMEN_PERIODO, composicion: COMPOSICION });
   });
 });
 

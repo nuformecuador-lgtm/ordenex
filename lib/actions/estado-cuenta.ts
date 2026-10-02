@@ -220,7 +220,8 @@ export async function verMiEstadoCuentaCompletoAction(
  * de cuenta de UNA TIENDA, en la oficina, en una sola peticion: la hoja del completo de siempre con los
  * mismos filtros, termino y orden, y el detalle por orden de ESAS filas, acotado a esa tienda (R34).
  *
- * @sin-superficie la descarga con detalle del estado de cuenta de una tienda la cablea el frontend de la ficha 464 (T9)
+ * Superficie (ficha 464, T9): la descarga con detalle del estado de cuenta de una tienda
+ * (`lectorDeLaCuenta` de `EstadoCuenta.tsx`, montado por `EstadoCuentaTienda.tsx`).
  */
 export async function verEstadoCuentaCompletoConDetalleAction(
   input: unknown,
@@ -241,7 +242,7 @@ export async function verEstadoCuentaCompletoConDetalleAction(
  * la SESION. Mismo borde que `verMiEstadoCuentaCompletoAction` (`.strict()`): una `cuenta` o un
  * `tiendaId` en la entrada es `validation_error` sin leer nada (R35).
  *
- * @sin-superficie la descarga con detalle de /mi-wallet la cablea el frontend de la ficha 464 (T9), en esta misma rama
+ * Superficie (ficha 464, T9): la descarga con detalle de `/mi-wallet` (`LECTOR_MI_TIENDA`, `MiEstadoCuenta.tsx`).
  */
 export async function verMiEstadoCuentaCompletoConDetalleAction(
   input: unknown,

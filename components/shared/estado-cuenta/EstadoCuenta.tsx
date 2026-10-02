@@ -9,9 +9,18 @@ import { Button } from "@/components/ui/button";
 import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
 import { FilterComponent, type FilterDef, type FilterSelection } from "@/components/shared/FilterComponent";
 import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
-import { DataTable, type Column, type DataTableProps, type DescargaFilasResult } from "@/components/shared/DataTable";
+import {
+  DataTable,
+  type Column,
+  type DataTableDescarga,
+  type DataTableDescargaDetalle,
+  type DataTableProps,
+  type DescargaFilasResult,
+} from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { SUFIJO_REINTENTO } from "@/components/shared/descarga-resultado";
+import { enlazarHojas, type EntradaFilaDetalle } from "@/components/shared/descarga-con-detalle";
+import { SUFIJO_REINTENTO, mensajeLimiteDetalle } from "@/components/shared/descarga-resultado";
+import { textoDetallePorOrden } from "@/components/shared/wallet/detalle-por-orden-descarga";
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { ORIGEN_ENLACE_VISIBLE } from "@/components/shared/wallet/origen-movimiento";
@@ -24,7 +33,12 @@ import {
 import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import { money } from "@/lib/config/moneda";
-import { verEstadoCuentaAction, verEstadoCuentaCompletoAction } from "@/lib/actions/estado-cuenta";
+import {
+  verEstadoCuentaAction,
+  verEstadoCuentaCompletoAction,
+  verEstadoCuentaCompletoConDetalleAction,
+  type VerEstadoCuentaConDetalleResult,
+} from "@/lib/actions/estado-cuenta";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import type {
   EstadoCuentaDTO,
@@ -32,6 +46,8 @@ import type {
   VerEstadoCuentaCompletoResult,
   VerEstadoCuentaResult,
 } from "@/lib/types/estado-cuenta";
+import type { DescargaFila } from "@/lib/types/descarga";
+import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 import type { ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +123,12 @@ export interface LectorEstadoCuenta {
   leer: (f: FiltrosDeLectura & { page: number; pageSize: number }) => Promise<VerEstadoCuentaResult>;
   /** TD.6/R32 — el periodo filtrado ENTERO, con el tope en el servidor. */
   leerCompleto: (f: FiltrosDeLectura) => Promise<VerEstadoCuentaCompletoResult>;
+  /**
+   * FICHA 464 (R36) — lo mismo que `leerCompleto` MÁS el detalle por orden de esas filas, en UNA
+   * petición. Solo lo tienen la tienda en la oficina y `/mi-wallet` (R7): el mensajero y la bodega no
+   * tienen detalle por orden.
+   */
+  leerCompletoConDetalle?: (f: FiltrosDeLectura) => Promise<VerEstadoCuentaConDetalleResult>;
 }
 
 /** El lector de la oficina: la cuenta de la página viaja como id (nunca se pinta). */
@@ -115,7 +137,34 @@ export function lectorDeLaCuenta(cuenta: Pick<EstadoCuentaDTO["cuenta"], "tipo" 
   return {
     leer: (f) => verEstadoCuentaAction({ cuenta: { tipo, id }, ...f }),
     leerCompleto: (f) => verEstadoCuentaCompletoAction({ cuenta: { tipo, id }, ...f }),
+    // FICHA 464 (R7) — el detalle por orden solo existe en el estado de cuenta de una TIENDA.
+    ...(tipo === "tienda"
+      ? {
+          leerCompletoConDetalle: (f: FiltrosDeLectura) =>
+            verEstadoCuentaCompletoConDetalleAction({ cuenta: { tipo, id }, ...f }),
+        }
+      : {}),
   };
+}
+
+/**
+ * FICHA 464 (design §5.2/§5.3; R6, R16, R25–R28) — la hoja «Detalle por orden» de una superficie: la
+ * configuración del control, la proyección de cada orden y el diccionario del motivo sin reparto que ya
+ * pinta el panel de esa superficie (el mismo texto, R16).
+ */
+export interface DetalleDeLaDescarga {
+  hoja: DataTableDescargaDetalle;
+  filaDetalleDe: (entrada: EntradaFilaDetalle) => DescargaFila;
+  sinReparto: Readonly<Record<MotivoSinReparto, string>>;
+}
+
+/**
+ * FICHA 464 (R1/R2) — lo que CADA superficie declara de su descarga: el ámbito de su selector de
+ * columnas (cada una el suyo) y, si la tiene, su hoja de detalle. El ámbito se asigna en el módulo de
+ * la superficie, nunca aquí: este módulo lo monta para las cuatro y no puede ser dueño de ninguno.
+ */
+export interface DescargaDeLaSuperficie extends Required<Pick<DataTableDescarga, "ambitoColumnas">> {
+  detalle?: DetalleDeLaDescarga;
 }
 
 /** FICHA 458-D (R19) — el despliegue de las órdenes de las filas que nacen de un cierre. */
@@ -138,6 +187,12 @@ export interface EstadoCuentaProps {
   /** La primera página, resuelta en el servidor (sin periodo ni chip). */
   inicial: EstadoCuentaDTO;
   rotulos: RotulosEstadoCuenta;
+  /**
+   * FICHA 464 (R1/R2/R6/R7) — el ámbito del selector de columnas de la descarga y, en la tienda y en
+   * `/mi-wallet`, la hoja de detalle. REQUERIDA y sin default: que la declare cada superficie la
+   * garantiza el compilador.
+   */
+  descargaDeLaSuperficie: DescargaDeLaSuperficie;
   /** Sin él, el de la oficina sobre `inicial.cuenta`. */
   lector?: LectorEstadoCuenta;
   /**
@@ -292,6 +347,61 @@ export async function filasDelPeriodo(
   }
 }
 
+/** FICHA 464 — el movimiento del libro de la TIENDA de una fila: el enlace con su detalle. Nunca se pinta. */
+function idDeLibroTienda(fila: FilaEstadoCuentaDTO): string | null {
+  return fila.ref !== null && "libro" in fila.ref && fila.ref.libro === "tienda" ? fila.ref.movimientoId : null;
+}
+
+type LineaDescarga = { tipo: "inicial" } | { tipo: "movimiento"; fila: FilaEstadoCuentaDTO };
+
+/**
+ * FICHA 464 (T9; R10, R14–R16, R36, R38, R39, R43) — «Movimientos y detalle por orden»: UNA lectura trae
+ * las filas del periodo y el detalle de ESAS filas. La hoja de movimientos es la de `filasDelPeriodo`
+ * —las mismas filas, en el mismo orden y con el saldo inicial en su sitio (R14)—, con «N.º» en cada
+ * movimiento y NINGUNO en el saldo inicial (R15). Cualquier fallo: aviso y sin archivo (R43).
+ */
+export async function filasDelPeriodoConDetalle(
+  leerConDetalle: NonNullable<LectorEstadoCuenta["leerCompletoConDetalle"]>,
+  filtros: FiltrosDeLectura,
+  rotulos: RotulosEstadoCuenta,
+  detalle: DetalleDeLaDescarga,
+): Promise<DescargaFilasResult> {
+  try {
+    const r = await leerConDetalle(filtros);
+    if (r.status === "limite_excedido") {
+      return {
+        status: "error",
+        mensaje:
+          r.hoja === "detalle"
+            ? mensajeLimiteDetalle(r.total, r.limite)
+            : ESTADO_CUENTA_TEXTO.limiteDescarga(r.total, r.limite),
+      };
+    }
+    if (r.status !== "ok") throw new Error(r.status);
+    const estado = r.estado;
+    const inicial: LineaDescarga = { tipo: "inicial" };
+    const movimientos: LineaDescarga[] = estado.filas.map((fila) => ({ tipo: "movimiento", fila }));
+    const lineas = ordenDe(filtros) === "asc" ? [inicial, ...movimientos] : [...movimientos, inicial];
+    const hojas = enlazarHojas({
+      lineas,
+      numerada: (l) => l.tipo === "movimiento",
+      idDe: (l) => (l.tipo === "movimiento" ? idDeLibroTienda(l.fila) : null),
+      filaDe: (l) =>
+        filaDescargaEstadoCuenta(
+          l.tipo === "inicial" ? lineaSaldoInicial(estado, filtros.desde ?? "") : lineaDeFila(l.fila, rotulos),
+        ),
+      detalle: r.detalle,
+      filaDetalleDe: detalle.filaDetalleDe,
+      textoEstado: (d) => textoDetallePorOrden(d, detalle.sinReparto),
+      claveEnlace: detalle.hoja.columnaEnlace.clave,
+      claveEstado: detalle.hoja.columnaEstado.clave,
+    });
+    return { status: "ok", ...hojas };
+  } catch {
+    return { status: "error", mensaje: `${ESTADO_CUENTA_TEXTO.errorDescarga} ${SUFIJO_REINTENTO}` };
+  }
+}
+
 /** El movimiento que pinta el panel «Ver», con lo que dice SU fila (el estado lo decidió el servidor). */
 function detalleDe(
   fila: FilaEstadoCuentaDTO,
@@ -327,6 +437,7 @@ function detalleDe(
 export function EstadoCuenta({
   inicial,
   rotulos,
+  descargaDeLaSuperficie,
   lector: lectorDado,
   vista = "oficina",
   selectorCierre,
@@ -339,6 +450,14 @@ export function EstadoCuenta({
 }: Readonly<EstadoCuentaProps>) {
   const { tipo, id, nombre } = inicial.cuenta;
   const lector = lectorDado ?? lectorDeLaCuenta(inicial.cuenta);
+  // FICHA 464 — el ámbito viaja tal cual (se ASIGNA en la superficie); la hoja de detalle solo se ofrece
+  // si la superficie la declara Y su lector sabe leerla (R6/R7).
+  const { detalle: detalleDeLaSuperficie, ...ambitoDeLaSuperficie } = descargaDeLaSuperficie;
+  const leerConDetalle = lector.leerCompletoConDetalle;
+  const detalleDescarga =
+    detalleDeLaSuperficie !== undefined && leerConDetalle !== undefined
+      ? { config: detalleDeLaSuperficie, leer: leerConDetalle }
+      : null;
   const { mutate } = useSWRConfig();
   const [periodo, setPeriodo] = useState<Periodo>({ desde: "", hasta: "" });
   const [chip, setChip] = useState<ChipOTodo>(CHIP_TODO);
@@ -565,9 +684,15 @@ export function EstadoCuenta({
         detalleDeFila={detalleDeFila}
         accionDeFila={accionDeFila}
         descarga={{
+          ...ambitoDeLaSuperficie,
           titulo: ESTADO_CUENTA_TEXTO.tabla(nombre),
           columnas: vista === "oficina" ? COLUMNAS_DESCARGA_ESTADO_CUENTA : COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
-          obtenerFilas: () => filasDelPeriodo(lector, filtros, rotulos),
+          // FICHA 464 (R13): «Solo los movimientos» es la lectura de SIEMPRE; con el detalle, UNA petición.
+          obtenerFilas: (opciones) =>
+            opciones?.conDetalle && detalleDescarga !== null
+              ? filasDelPeriodoConDetalle(detalleDescarga.leer, filtros, rotulos, detalleDescarga.config)
+              : filasDelPeriodo(lector, filtros, rotulos),
+          detalle: detalleDescarga?.config.hoja,
         }}
       />
       {data !== undefined && data.estado.filas.length === 0 ? (

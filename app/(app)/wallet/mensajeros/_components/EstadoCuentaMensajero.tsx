@@ -3,6 +3,7 @@
 import { EstadoCuenta, type PanelDeLaSuperficie } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import { SelectorCierreDeCuenta } from "@/components/shared/estado-cuenta/SelectorCierreDeCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
@@ -52,6 +53,9 @@ export function EstadoCuentaMensajero({ inicial, puedeRegistrar }: Readonly<Esta
       inicial={inicial}
       rotulos={ROTULOS_MENSAJERO}
       panel={PANEL_MENSAJERO}
+      // FICHA 464 (R1/R2/R7) — solo el selector de columnas: el pago al mensajero es un total del cierre,
+      // sin reparto por orden, así que aquí no hay hoja de detalle.
+      descargaDeLaSuperficie={{ ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO }}
       // R10–R12 — el filtro por cierre de ESTE mensajero (la 458-A); el cierre viaja, no se pinta.
       selectorCierre={(valor, onCambiar) => (
         <SelectorCierreDeCuenta cuenta={{ cuenta: "mensajero", mensajeroId }} valor={valor} onCambiar={onCambiar} />

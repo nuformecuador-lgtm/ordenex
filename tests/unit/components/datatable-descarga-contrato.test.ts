@@ -47,7 +47,7 @@ describe("contrato de descarga del DataTable", () => {
     expect(fuente).not.toMatch(/\bfetch\s*\(/);
   });
 
-  it("la configuración de descarga solo expone título, columnas, obtenerFilas, formatos y ámbito", () => {
+  it("la configuración de descarga solo expone título, columnas, obtenerFilas, formatos, ámbito y detalle", () => {
     // Ficha 314 — `ambitoColumnas` entra como QUINTO miembro, y esta guardia se amplía en vez
     // de relajarse. Es la única forma de declarar el ámbito de la preferencia de columnas: la
     // alternativa —colgarlo de `DataTableProps`— no habría tocado este archivo, pero
@@ -68,13 +68,30 @@ describe("contrato de descarga del DataTable", () => {
       "obtenerFilas",
       "formatos",
       "ambitoColumnas",
+      "detalle",
     ]);
 
-    // `obtenerFilas` es una FUNCIÓN sin parámetros: la tabla no le pasa filtros, ni
-    // página, ni url. El consumidor cierra sobre los suyos (D4).
+    // `obtenerFilas` es una FUNCIÓN que la tabla no alimenta con filtros, ni página, ni url: el
+    // consumidor cierra sobre los suyos (D4). Ficha 464 — su ÚNICO parámetro, opcional, es un
+    // booleano sin dominio (si se pide también la hoja de detalle). Se fija la firma entera para
+    // que nadie cuele por ahí un filtro.
     expect(bloque![1]).toMatch(
-      /obtenerFilas:\s*\(\)\s*=>\s*Promise<DescargaFilasResult>/,
+      /obtenerFilas:\s*\(opciones\?:\s*\{\s*conDetalle:\s*boolean\s*\}\)\s*=>\s*Promise<DescargaFilasResult>/,
     );
+
+    // Ficha 464 — `detalle` es la configuración de una HOJA más (hojas, columnas, textos y un ámbito),
+    // opcional, y de un tipo declarado en ESTE módulo: nada de dominio importado.
+    expect(bloque![1]).toMatch(/\n\s{2}detalle\?:\s*DataTableDescargaDetalle;/);
+    const detalle = fuente.match(/export type DataTableDescargaDetalle =([\s\S]*?)\n\};/);
+    expect(detalle).not.toBeNull();
+    expect([...detalle![1].matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1])).toEqual([
+      "titulo",
+      "columnas",
+      "etiquetaOpcion",
+      "etiquetaSinDetalle",
+      "columnaEnlace",
+      "columnaEstado",
+    ]);
 
     // El ámbito es un IDENTIFICADOR, no una configuración: `string` a secas, opcional, y sin
     // ningún tipo de dominio detrás. Un `ManifiestoFlujo`, un `AmbitoDescarga` o un objeto

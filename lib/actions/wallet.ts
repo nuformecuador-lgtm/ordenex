@@ -295,7 +295,8 @@ export async function listarMovimientosCompletoAction(
  * termino y orden de la 463; `.strict()`), mas el detalle por orden de ESOS movimientos. El tope de la
  * hoja de movimientos y el del detalle los aplica el SERVIDOR (`limite_excedido` con `hoja`).
  *
- * @sin-superficie la descarga con detalle de la caja la cablea el frontend de la ficha 464 (T8), en esta misma rama
+ * Superficie (ficha 464, T8): la descarga «Movimientos y detalle por orden» del libro de `/wallet`
+ * (`WalletModule.tsx`). Su `@sin-superficie` se borró al cablearla.
  */
 export async function listarMovimientosCompletoConDetalleAction(
   input: unknown,
