@@ -240,3 +240,128 @@ en los archivos y, para dinero/orden/búsqueda, con mutación). Excepciones:
 1. B1: R49 en `EstadoCuenta.tsx` + test (o enmienda del spec por el humano).
 2. B2: test del detalle de fila sin filtros del libro, que mate M1b.
 3. Opcional en la misma vuelta: m1–m4.
+
+---
+
+# Segunda revisión
+
+Revisor: reviewer. Fecha: 2026-10-01. Rama revisada: `origin/feature/463-wallets-filtros-y-orden` @ `c1998d88`
+(delta revisado: `git diff b5bb07e1..c1998d88`). Worktree aislado, `checkout --detach` de ese SHA.
+
+Búsqueda de código: lectura directa del delta y `grep` (renombre); el MCP `codebase-memory` no hizo falta
+(el delta nombra cada archivo). Por indicación del leader NO se corrió `./init.sh` ni `tests/integration`
+(gate completo ajeno sobre la base local compartida) ni dev server: se corrieron las suites de componente y
+unitarias del delta, `tsc` y mutaciones/sondas puntuales, todas restauradas (`git status` limpio tras cada una).
+
+## Veredicto: **RECHAZADO**
+
+B1, B2 y m1–m6 están cerrados y bien probados (mutaciones repetidas abajo). Pero al juzgar m1 —lo que pidió
+el leader: ¿puede pintarse una lectura vieja sobre una nueva?— salieron dos huecos de R49 en la CAJA, medidos
+con sondas de componente. Ninguno lo introduce este delta (están en `WalletModule.tsx` desde `b5bb07e1` y la
+primera revisión no los vio), pero R49 es requisito de esta ficha, el síntoma es exactamente el que bloqueó
+B1 (cifras de un periodo con el control diciendo otro) y la ayuda nueva (m5) promete al usuario lo contrario.
+
+## Checklist
+
+- [x] B1 — R49 en los estados de cuenta: cerrado (`EstadoCuenta.tsx` guarda `{ seleccion, estado }`, `onError`
+      devuelve periodo/chip/cierre/término/orden/página a la última lectura buena, siembras de calendario y
+      buscador, aviso `role=alert` ENCIMA del libro, `shouldRetryOnError: false`). Verificado en SWR 2.4.2
+      que `onError` solo se llama si la clave que falló sigue vigente (`callbackSafeguard`) y que `data` con
+      `keepPreviousData` es la última buena: una respuesta tardía de otra clave no se pinta.
+- [x] B2 — R12 detalle de fila: test CJ «463 R12 (revisión B2)» con `toHaveBeenCalledWith` exacto y bucle de
+      claves prohibidas; M1b repetida: **muerta**.
+- [x] m1 — conmutadores sin guarda; test con respuestas en orden inverso. Ver juicio abajo (B4).
+- [x] m2 — posición del saldo inicial con `data.seleccion` (lo pintado); test m2.
+- [x] m3 — integración con sentido absoluto (no corrida aquí por la restricción; la mutación consta en `impl_463.md`).
+- [x] m4 — `filter-component-url-aplicar-463` (con/sin «Aplicar», debounce 499/500 ms).
+- [x] m5 — ayuda de las 4 superficies reescrita; contrastada con R2/R3/R15–R17/R19/R23–R34/R39/R43: no
+      contradice el spec. Excepción: la frase de R49 en `wallet-caja.md` no es cierta hoy para la caja (B3).
+- [x] m6 — §9 de `design.md` con los 6 desvíos; renombre `WalletFiltros.tsx` → `wallet-filtros-input.ts`.
+- [x] Renombre sin importadores rotos: `grep` de `_components/WalletFiltros` / `./WalletFiltros` en código y
+      tests = 0. Quedan menciones en comentarios (`lib/actions/wallet-filtros.ts:56`,
+      `tests/fixtures/libro-caja-barra.tsx:12`) y en documentos históricos: inocuas. `pnpm run typecheck`: exit 0.
+- [x] Suites del delta: 20 archivos / **352 tests verdes** (EstadoCuenta463, EstadoCuenta, WalletCaja463,
+      ComposicionGananciaCard, DetalleFilaComposicion, WalletFiltroAQuien458E, `tests/unit/asistente` (12),
+      filter-component-url-aplicar-463, guardia wallet-sin-uuid).
+- [ ] `./init.sh` completo: no corrido por el revisor (restricción del leader). El del implementador
+      (`progress/gate_463_fix.log`) da un rojo ajeno (`liberacion-reprogramada-cierre-real`, FK al sembrar,
+      4/4 verde aislado ×3). Hay que repetirlo antes de mergear.
+- [ ] **R49 en la caja: NO se cumple** con una lectura que lanza (B3) ni con un fallo parcial cruzado (B4).
+
+## Mutaciones repetidas por el revisor (restauradas con `git checkout --`)
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| R1 | «No restaurar el periodo»: fuera `setPeriodo(buena.periodo)` en `conservarLoUltimo` | **Muerta**: 1 rojo (EC «aplicar un periodo que falla») |
+| R2 | «Borrar el libro al fallar»: `estado={hayFallo ? undefined : data?.estado}` | **Muerta**: 4 rojos (EC chip, periodo, término/orden; `EstadoCuenta.test` R5/171) |
+| R3 | M1b: `ComposicionGananciaCard filtros={{ ...filtrosDeWallet(..), tipo, categoria }}` | **Muerta**: 1 rojo (CJ R12 revisión B2) |
+
+## Hallazgos
+
+### B3 — BLOQUEANTE — Caja: una lectura que LANZA no avisa y deja el periodo puesto sin cifras (R49)
+
+`recargarTodo` y `recargarLibro` (`app/(app)/wallet/_components/WalletModule.tsx`) tienen `try/finally` sin
+`catch`: R49 solo se atiende cuando la acción RESPONDE `status !== "ok"`. Si la acción lanza (red caída, 500
+del servidor, timeout: el modo de fallo más común en producción, p. ej. los 500 intermitentes del pooler), la
+promesa se rechaza sin manejar, no hay toast ni `deshacerPedido`.
+
+**Medido** (sonda de componente, borrada): `verResumenCajaAction` rechaza con `Error("Failed to fetch")` al
+aplicar 01–28 → 1 rechazo no manejado, **0 toasts**, el control dice `Periodo: 01 oct 2026 – 28 oct 2026` y
+la ganancia sigue en `-₡20.000` (la de SIN periodo). Es el síntoma exacto de B1 —cifras de dinero de un
+periodo con el control diciendo otro—, sin aviso. El estado de cuenta NO lo tiene (el fetcher de SWR
+convierte el rechazo en `onError`); la caja sí. Y `docs/ayuda/oficina/wallet-caja.md` promete «Si una lectura
+falla, la pantalla te lo dice y se queda con lo que mostraba».
+
+Qué falta: tratar el rechazo como un fallo en las dos funciones (toast en español + `deshacerPedido` / volver
+`pedidoLibro`), respetando el turno; y un test por función con `mockRejectedValue` que afirme aviso, cifras,
+libro y control del periodo de antes. Comprobar que quitar el `catch` lo pone rojo.
+
+### B4 — BLOQUEANTE — Caja: fallo parcial con las dos zonas en vuelo deja libro y cifras de periodos distintos
+
+Respuesta a la pregunta del leader sobre m1. **Dentro de una zona, no**: `turnoLibro`/`turnoWallet` impiden
+que una respuesta vieja pise a una nueva (lo prueba el test m1 y lo confirma el código). **Entre zonas, sí**,
+cuando una de las dos lecturas falla. `recargarLibro` lee con `pedidoWallet.current` (el periodo PEDIDO, aún
+no aplicado) y `recargarTodo` se salta su libro si hay otro turno de libro. Medido con sondas (aplicar
+01–28 y, con la wallet en vuelo, pulsar «Sale»):
+
+- **A — wallet OK, libro falla:** ganancia `-₡1.234` (la del periodo), control `01 oct – 28 oct`, pero el
+  libro sigue con las 3 filas de SIN periodo (la lectura de la wallet no lo pintó por turno y la del libro
+  falló). El libro no es del periodo que dicen el control y las cifras (R3/R8).
+- **B — libro OK primero, wallet falla:** control vuelve a `Cualquier fecha`, ganancia `-₡20.000`, pero el
+  libro enseña la fila leída CON el periodo 01–28 y «Sale» pulsado. R49 pide conservar el libro de ANTES
+  del intento; se queda uno leído con el periodo que falló. (`deshacerPedido` además restaura
+  `pedidoLibro` con el `filtrosLibro` de su cierre, que ya no es el pintado.)
+- **C — mismo caso B por el buscador** (escribir «Juan» con la wallet en vuelo): idéntico. O sea, el hueco
+  existe desde `b5bb07e1` por R32 (el buscador nunca se deshabilita); m1 no lo crea, le añade dos disparadores
+  de un clic. Con B3 resuelto, los fallos parciales por red (un 500 en una de dos peticiones) lo hacen alcanzable.
+
+Qué falta: un fallo de la wallet debe invalidar también el libro pedido con ese periodo (p. ej. tomar turno
+de libro en `deshacerPedido` y apagar `cargandoLibro`, de modo que una lectura del libro en vuelo con el
+periodo fallido no se pinte), y un fallo del libro cuya wallet SÍ se aplicó mientras tanto no puede dejar el
+libro del periodo anterior (releerlo con la wallet aplicada, o pintar el libro que trajo `recargarTodo`).
+Tests de componente para A y B. Si el humano prefiere acotar R49 a fallos no concurrentes, que lo diga y se
+anota en `requirements.md`; tal como está aprobado, falla.
+
+### m7 — menor — El aviso de R49 en el estado de cuenta solo se prueba con `status !== "ok"`
+
+El camino del rechazo (acción que lanza) es el mismo por SWR y es correcto por construcción, pero ningún
+test lo fija; un caso con `mockRejectedValue` lo blindaría frente a un futuro `try/catch` en `leer`.
+
+### m8 — menor — `progress/review_463.md` va copiado en la rama de la feature
+
+`c1998d88` añade este archivo tal como estaba en `review/463` @ `7d7df39c`. Esta segunda revisión solo añade
+al final, así que el merge debería ser limpio, pero si la siguiente vuelta lo toca en la rama de la feature
+habrá conflicto con `review/463`. Mejor no editarlo allí.
+
+## Juicio de m1 (quitar la guarda `!disabled`)
+
+Seguro para la concurrencia DENTRO del libro: cada clic compone sobre `pedidoLibro` y toma turno; solo pinta
+el último pedido. No es la causa de B4, que ya existía por el buscador, pero sí lo hace más fácil de
+disparar. Con B3 y B4 arreglados, m1 queda bien como está.
+
+## Para volver a revisión
+
+1. B3: `catch` en `recargarTodo` y `recargarLibro` con R49 completo + tests con rechazo.
+2. B4: un fallo en una zona no deja el libro y las cifras de periodos distintos + tests de las secuencias A y B.
+3. `./init.sh` completo en verde (repetir el rojo ajeno contra `dev` limpio si vuelve a salir).
+4. Opcional: m7.
