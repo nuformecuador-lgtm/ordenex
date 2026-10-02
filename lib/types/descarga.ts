@@ -24,6 +24,18 @@ export interface DescargaColumna {
 /** Fila del dataset, indexada por la `clave` de las columnas declaradas. */
 export type DescargaFila = Record<string, DescargaCelda>;
 
+/**
+ * Ficha 464 (design §2.1) — una hoja MAS del libro: nombre, columnas y filas. Mismo vocabulario que
+ * la hoja principal y la misma ceguera al dominio: el generador no sabe que es un «detalle».
+ */
+export interface DescargaHoja {
+  /** Nombre de la hoja; se sanea igual que el de la principal (`nombreHoja`). */
+  titulo: string;
+  /** Se emiten EXACTAMENTE estas columnas, en este orden. Vacio => error, sin archivo. */
+  columnas: DescargaColumna[];
+  filas: DescargaFila[];
+}
+
 /** Unico insumo del generador comun: sin filtros, sin roles, sin dominio (R1). */
 export interface DescargaConfig {
   /** R2: ausente => "xlsx". */
@@ -33,6 +45,12 @@ export interface DescargaConfig {
   /** R5/R9: se emiten EXACTAMENTE estas columnas, en este orden. Vacio => error. */
   columnas: DescargaColumna[];
   filas: DescargaFila[];
+  /**
+   * Ficha 464 (R10/R12/R41/R42) — hojas que siguen a la principal, en este orden. SOLO xlsx: con
+   * `tipo: "csv"` y alguna hoja, el generador lanza y no produce archivo (un csv no tiene hojas).
+   * Ausente o vacio => el MISMO archivo de siempre: una hoja (R41).
+   */
+  hojasAdicionales?: DescargaHoja[];
 }
 
 /** Salida del generador comun: contenido + como entregarlo (R7). */

@@ -310,6 +310,39 @@ export function criterioDeFuente(fuente: FuenteDeAporte): CriterioDeAporte | nul
   return null;
 }
 
+/**
+ * Ficha 464 (T3, design §4.1) — LA decision «este movimiento se reparte por orden, y de que cierre»,
+ * escrita UNA vez para el detalle de una fila (344/458-D) y para el detalle en lote de la descarga.
+ * Si las dos rutas decidieran por separado, la hoja «Detalle por orden» podria decir algo distinto
+ * de lo que la pantalla ensena al abrir la misma fila.
+ *
+ *  - el concepto no admite reparto -> `sin_reparto` con SU motivo del catalogo (R48 de la 344);
+ *  - lo admite pero el movimiento no cuelga de un cierre (ajuste, gasto…) -> `no_nace_de_un_cierre`;
+ *  - si no, el criterio del concepto y el cierre de origen.
+ *
+ * Pura: no consulta nada. Ninguna de las dos ramas `sin_reparto` ha tocado aun una orden.
+ */
+export type DecisionDeReparto =
+  | { tipo: "reparto"; criterio: CriterioDeAporte; cierreId: string }
+  | { tipo: "sin_reparto"; motivo: MotivoSinReparto };
+
+export function fuenteDeMovimiento(
+  movimiento: { origenTipo: string; origenId: string | null },
+  fuente: FuenteDeAporte,
+): DecisionDeReparto {
+  const criterio = criterioDeFuente(fuente);
+  if (criterio === null || fuente.tipo === "sin_reparto") {
+    return {
+      tipo: "sin_reparto",
+      motivo: fuente.tipo === "sin_reparto" ? fuente.motivo : "no_nace_de_un_cierre",
+    };
+  }
+  if (movimiento.origenTipo !== "cierre_dia" || movimiento.origenId === null) {
+    return { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" };
+  }
+  return { tipo: "reparto", criterio, cierreId: movimiento.origenId };
+}
+
 /** Las ENTRADAS congeladas de una orden en un cierre (`cierre_detail`), ya money-safe. */
 export interface OrdenCongelada {
   esCentral: boolean;
