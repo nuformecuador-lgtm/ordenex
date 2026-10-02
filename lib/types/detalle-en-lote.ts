@@ -1,7 +1,5 @@
 import type { GestionResultado } from "@prisma/client";
 import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
-import type { EstadoCuentaDTO } from "@/lib/types/estado-cuenta";
-import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
 /**
  * Ficha 464 (design §2.3) — el contrato del DETALLE POR ORDEN EN LOTE: para cada movimiento de la
@@ -86,19 +84,8 @@ export interface LimiteExcedidoDeHoja {
   limite: number;
 }
 
-/**
- * Ficha 464 (design §2.3/§4) — la hoja de movimientos Y su detalle por orden, de UNA vez (R36), vistas
- * desde el SERVICIO. `limite_excedido` lleva `hoja`: «movimientos» es el tope de siempre (R38, el
- * resultado del completo tal cual) y «detalle» el nuevo (R39). Ninguna rama de error lleva filas.
+/*
+ * Ficha 464 — `CajaConDetalleServiceResult` y `EstadoCuentaConDetalleServiceResult` (la hoja de
+ * movimientos con su detalle por orden) se RETIRARON en la 468 (bloque B) con sus orquestadores: los
+ * sustituyen los resultados del kardex de `lib/types/libro-kardex.ts`.
  */
-export type CajaConDetalleServiceResult =
-  | { status: "ok"; items: WalletMovimientoDTO[]; total: number; detalle: DetalleDeMovimientoLoteDTO[] }
-  | LimiteExcedidoDeHoja
-  | { status: "forbidden" };
-
-export type EstadoCuentaConDetalleServiceResult =
-  | { status: "ok"; estado: EstadoCuentaDTO; detalle: DetalleDeMovimientoLoteDTO[] }
-  | LimiteExcedidoDeHoja
-  | { status: "no_encontrado" }
-  | { status: "forbidden" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };

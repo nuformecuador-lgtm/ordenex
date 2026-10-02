@@ -18,9 +18,8 @@ import {
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
-import { enlazarHojas, type EntradaFilaDetalle } from "@/components/shared/descarga-con-detalle";
 import { SUFIJO_REINTENTO, mensajeLimiteDetalle } from "@/components/shared/descarga-resultado";
-import { textoDetallePorOrden } from "@/components/shared/wallet/detalle-por-orden-descarga";
+import { filasDetallePorGuia, filasKardex } from "@/components/shared/wallet/libro-kardex-descarga";
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { ORIGEN_ENLACE_VISIBLE } from "@/components/shared/wallet/origen-movimiento";
@@ -29,21 +28,22 @@ import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import { money } from "@/lib/config/moneda";
 import {
+  estadoCuentaKardexAction,
+  estadoCuentaKardexConDetalleAction,
   verEstadoCuentaAction,
-  verEstadoCuentaCompletoAction,
-  verEstadoCuentaCompletoConDetalleAction,
-  type VerEstadoCuentaConDetalleResult,
+  type CuentaKardexActionResult,
+  type CuentaKardexConDetalleActionResult,
 } from "@/lib/actions/estado-cuenta";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import type {
   EstadoCuentaDTO,
   FilaEstadoCuentaDTO,
   TipoDeCuenta,
-  VerEstadoCuentaCompletoResult,
   VerEstadoCuentaResult,
 } from "@/lib/types/estado-cuenta";
+import type { GestionResultado } from "@prisma/client";
+import type { BloqueDeGuiaDTO, DetallePorGuiaDTO, KardexDTO } from "@/lib/types/libro-kardex";
 import type { DescargaFila } from "@/lib/types/descarga";
-import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 import type { ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +52,8 @@ import { claveEstadoCuenta, esClaveDeLaCuenta } from "./estado-cuenta-clave";
 import {
   COLUMNAS_DESCARGA_ESTADO_CUENTA,
   COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
-  filaDescargaEstadoCuenta,
+  FIJAS_DESCARGA_ESTADO_CUENTA,
+  filaBaseCuenta,
 } from "./estado-cuenta-descarga-columnas";
 import {
   CASILLA_ESTADO_CUENTA,
@@ -119,20 +120,22 @@ export interface FiltrosDeLectura {
 
 /**
  * FICHA 458-D — DE DÓNDE se lee el estado de cuenta. La oficina lo lee por la cuenta de la página
- * (`verEstadoCuentaAction` / `verEstadoCuentaCompletoAction`); `/mi-wallet`, por la tienda de la SESIÓN
- * (`verMiEstadoCuentaAction` / `verMiEstadoCuentaCompletoAction`, sin ninguna clave de cuenta, R36). El
- * módulo no sabe cuál: pinta lo que devuelve.
+ * (`verEstadoCuentaAction`); `/mi-wallet`, por la tienda de la SESIÓN (`verMiEstadoCuentaAction`, sin
+ * ninguna clave de cuenta, R36). El módulo no sabe cuál: pinta lo que devuelve.
+ *
+ * FICHA 468 (T13) — la descarga deja de leer el «completo» de la 458-D y lee el KARDEX: la oficina con
+ * `estadoCuentaKardexAction` / `estadoCuentaKardexConDetalleAction`, `/mi-wallet` con
+ * `miEstadoCuentaKardexAction` / `miEstadoCuentaKardexConDetalleAction`.
  */
 export interface LectorEstadoCuenta {
   leer: (f: FiltrosDeLectura & { page: number; pageSize: number }) => Promise<VerEstadoCuentaResult>;
-  /** TD.6/R32 — el periodo filtrado ENTERO, con el tope en el servidor. */
-  leerCompleto: (f: FiltrosDeLectura) => Promise<VerEstadoCuentaCompletoResult>;
+  /** R5–R16, R32 — el periodo filtrado ENTERO como kardex (hoja «Movimientos»), con el tope en el servidor. */
+  leerKardex: (f: FiltrosDeLectura) => Promise<CuentaKardexActionResult>;
   /**
-   * FICHA 464 (R36) — lo mismo que `leerCompleto` MÁS el detalle por orden de esas filas, en UNA
-   * petición. Solo lo tienen la tienda en la oficina y `/mi-wallet` (R7): el mensajero y la bodega no
-   * tienen detalle por orden.
+   * R26, R53 — lo mismo que `leerKardex` MÁS la hoja «Detalle por guía», en UNA petición. Lo tienen la
+   * tienda y el mensajero en la oficina, y `/mi-wallet` (R24); la bodega satélite no (R25).
    */
-  leerCompletoConDetalle?: (f: FiltrosDeLectura) => Promise<VerEstadoCuentaConDetalleResult>;
+  leerKardexConDetalle?: (f: FiltrosDeLectura) => Promise<CuentaKardexConDetalleActionResult>;
 }
 
 /** El lector de la oficina: la cuenta de la página viaja como id (nunca se pinta). */
@@ -140,26 +143,27 @@ export function lectorDeLaCuenta(cuenta: Pick<EstadoCuentaDTO["cuenta"], "tipo" 
   const { tipo, id } = cuenta;
   return {
     leer: (f) => verEstadoCuentaAction({ cuenta: { tipo, id }, ...f }),
-    leerCompleto: (f) => verEstadoCuentaCompletoAction({ cuenta: { tipo, id }, ...f }),
-    // FICHA 464 (R7) — el detalle por orden solo existe en el estado de cuenta de una TIENDA.
-    ...(tipo === "tienda"
-      ? {
-          leerCompletoConDetalle: (f: FiltrosDeLectura) =>
-            verEstadoCuentaCompletoConDetalleAction({ cuenta: { tipo, id }, ...f }),
-        }
-      : {}),
+    leerKardex: (f) => estadoCuentaKardexAction({ cuenta: { tipo, id }, ...f }),
+    // FICHA 468 (R24/R25) — el detalle por guía existe en la tienda y en el mensajero, no en la bodega.
+    ...(tipo === "bodega"
+      ? {}
+      : {
+          leerKardexConDetalle: (f: FiltrosDeLectura) =>
+            estadoCuentaKardexConDetalleAction({ cuenta: { tipo, id }, ...f }),
+        }),
   };
 }
 
 /**
- * FICHA 464 (design §5.2/§5.3; R6, R16, R25–R28) — la hoja «Detalle por orden» de una superficie: la
- * configuración del control, la proyección de cada orden y el diccionario del motivo sin reparto que ya
- * pinta el panel de esa superficie (el mismo texto, R16).
+ * FICHA 468 (design §7.1; R24, R30–R32) — la hoja «Detalle por guía» de una superficie: la configuración
+ * del control (su catálogo, su ámbito y sus columnas fijas) y la etiqueta de pantalla de los resultados
+ * de una gestión (la del detalle de la fila de esa superficie).
  */
 export interface DetalleDeLaDescarga {
   hoja: DataTableDescargaDetalle;
-  filaDetalleDe: (entrada: EntradaFilaDetalle) => DescargaFila;
-  sinReparto: Readonly<Record<MotivoSinReparto, string>>;
+  /** La fila de cabecera de un bloque de guía de ESTA superficie (`filaCabeceraGuia*` de su módulo). */
+  cabeceraDe: (bloque: BloqueDeGuiaDTO) => DescargaFila;
+  resultadosTexto: (resultados: readonly GestionResultado[]) => string;
 }
 
 /**
@@ -358,89 +362,101 @@ async function leer(lector: LectorEstadoCuenta, seleccion: Seleccion): Promise<L
   return { seleccion, estado: r.estado };
 }
 
+/** El movimiento del libro (tienda o mensajero) de una fila: el enlace con la hoja 2. Nunca se pinta. */
+function idDeLibro(fila: FilaEstadoCuentaDTO): string | null {
+  return fila.ref !== null && "libro" in fila.ref ? fila.ref.movimientoId : null;
+}
+
 /**
- * R32 / TD.6 — el periodo filtrado ENTERO (periodo, chip, cierre y —463— término), en UNA lectura: la
- * acción «completa» del servidor, que aplica el tope. Por encima del tope no hay archivo
- * (`limite_excedido`: nunca uno al que le falten filas) y se dice con un aviso claro.
+ * FICHA 468 (T13; R5–R8, R16, R18, R24–R26, R53, R57) — la descarga del estado de cuenta como KARDEX: el
+ * periodo filtrado ENTERO (periodo, chip, cierre y término) en UNA lectura, con el tope en el servidor.
  *
- * FICHA 463 (R43) — en el orden vigente, y la línea del saldo inicial donde cae en el tiempo: la
- * PRIMERA fila con «Más antiguas» y la ÚLTIMA con «Más recientes».
+ * - Siempre en orden cronológico ascendente (R7), aunque la pantalla diga «Más recientes»: el saldo
+ *   corrido solo se lee de la más antigua a la más reciente. El servidor lo fuerza también.
+ * - «Solo los movimientos» (`detalle` ausente) lee `leerKardex`; con `detalle`, `leerKardexConDetalle`:
+ *   la hoja «Movimientos» sale de la MISMA función en los dos modos (R57).
+ * - Por encima del tope no hay archivo (nunca uno al que le falten filas) y se dice con el aviso de esa
+ *   hoja; cualquier otro fallo, aviso y sin archivo.
  */
 export async function filasDelPeriodo(
   lector: LectorEstadoCuenta,
   filtros: FiltrosDeLectura,
   rotulos: RotulosEstadoCuenta,
+  detalle?: DetalleDeLaDescarga,
 ): Promise<DescargaFilasResult> {
+  const entrada: FiltrosDeLectura = { ...filtros, sortBy: "fecha", sortDir: "asc" };
+  const desde = filtros.desde ?? null;
   try {
-    const r = await lector.leerCompleto(filtros);
-    if (r.status === "limite_excedido") {
-      return { status: "error", mensaje: ESTADO_CUENTA_TEXTO.limiteDescarga(r.total, r.limite) };
+    if (detalle === undefined) {
+      const r = await lector.leerKardex(entrada);
+      if (r.status !== "ok") return errorDeDescargaCuenta(r);
+      return colocarCuenta(r.estado, r.kardex, rotulos, desde);
     }
-    if (r.status !== "ok") throw new Error(r.status);
-    const inicial = filaDescargaEstadoCuenta(lineaSaldoInicial(r.estado, filtros.desde ?? ""));
-    const movimientos = r.estado.filas.map((f) => filaDescargaEstadoCuenta(lineaDeFila(f, rotulos)));
+    if (lector.leerKardexConDetalle === undefined) throw new Error("la superficie no tiene detalle por guía");
+    const r = await lector.leerKardexConDetalle(entrada);
+    if (r.status !== "ok") return errorDeDescargaCuenta(r);
+    return colocarCuenta(r.estado, r.kardex, rotulos, desde, { porGuia: r.porGuia, detalle });
+  } catch {
+    return { status: "error", mensaje: `${ESTADO_CUENTA_TEXTO.errorDescarga} ${SUFIJO_REINTENTO}` };
+  }
+}
+
+/** El tope (con el aviso de SU hoja, R56) o cualquier otro fallo, como resultado de la descarga. */
+function errorDeDescargaCuenta(
+  r: Exclude<CuentaKardexActionResult | CuentaKardexConDetalleActionResult, { status: "ok" }>,
+): DescargaFilasResult {
+  if (r.status === "limite_excedido") {
     return {
-      status: "ok",
-      filas: ordenDe(filtros) === "asc" ? [inicial, ...movimientos] : [...movimientos, inicial],
+      status: "error",
+      mensaje:
+        r.hoja === "detalle" ? mensajeLimiteDetalle(r.total, r.limite) : ESTADO_CUENTA_TEXTO.limiteDescarga(r.total, r.limite),
     };
-  } catch {
-    return { status: "error", mensaje: `${ESTADO_CUENTA_TEXTO.errorDescarga} ${SUFIJO_REINTENTO}` };
   }
+  return { status: "error", mensaje: `${ESTADO_CUENTA_TEXTO.errorDescarga} ${SUFIJO_REINTENTO}` };
 }
 
-/** FICHA 464 — el movimiento del libro de la TIENDA de una fila: el enlace con su detalle. Nunca se pinta. */
-function idDeLibroTienda(fila: FilaEstadoCuentaDTO): string | null {
-  return fila.ref !== null && "libro" in fila.ref && fila.ref.libro === "tienda" ? fila.ref.movimientoId : null;
-}
-
-type LineaDescarga = { tipo: "inicial" } | { tipo: "movimiento"; fila: FilaEstadoCuentaDTO };
-
-/**
- * FICHA 464 (T9; R10, R14–R16, R36, R38, R39, R43) — «Movimientos y detalle por orden»: UNA lectura trae
- * las filas del periodo y el detalle de ESAS filas. La hoja de movimientos es la de `filasDelPeriodo`
- * —las mismas filas, en el mismo orden y con el saldo inicial en su sitio (R14)—, con «N.º» en cada
- * movimiento y NINGUNO en el saldo inicial (R15). Cualquier fallo: aviso y sin archivo (R43).
- */
-export async function filasDelPeriodoConDetalle(
-  leerConDetalle: NonNullable<LectorEstadoCuenta["leerCompletoConDetalle"]>,
-  filtros: FiltrosDeLectura,
+/** Coloca la hoja «Movimientos» y, con `conGuias`, la hoja «Detalle por guía». */
+function colocarCuenta(
+  estado: EstadoCuentaDTO,
+  kardex: KardexDTO,
   rotulos: RotulosEstadoCuenta,
-  detalle: DetalleDeLaDescarga,
-): Promise<DescargaFilasResult> {
-  try {
-    const r = await leerConDetalle(filtros);
-    if (r.status === "limite_excedido") {
-      return {
-        status: "error",
-        mensaje:
-          r.hoja === "detalle"
-            ? mensajeLimiteDetalle(r.total, r.limite)
-            : ESTADO_CUENTA_TEXTO.limiteDescarga(r.total, r.limite),
-      };
-    }
-    if (r.status !== "ok") throw new Error(r.status);
-    const estado = r.estado;
-    const inicial: LineaDescarga = { tipo: "inicial" };
-    const movimientos: LineaDescarga[] = estado.filas.map((fila) => ({ tipo: "movimiento", fila }));
-    const lineas = ordenDe(filtros) === "asc" ? [inicial, ...movimientos] : [...movimientos, inicial];
-    const hojas = enlazarHojas({
-      lineas,
-      numerada: (l) => l.tipo === "movimiento",
-      idDe: (l) => (l.tipo === "movimiento" ? idDeLibroTienda(l.fila) : null),
-      filaDe: (l) =>
-        filaDescargaEstadoCuenta(
-          l.tipo === "inicial" ? lineaSaldoInicial(estado, filtros.desde ?? "") : lineaDeFila(l.fila, rotulos),
-        ),
-      detalle: r.detalle,
-      filaDetalleDe: detalle.filaDetalleDe,
-      textoEstado: (d) => textoDetallePorOrden(d, detalle.sinReparto),
-      claveEnlace: detalle.hoja.columnaEnlace.clave,
-      claveEstado: detalle.hoja.columnaEstado.clave,
-    });
-    return { status: "ok", ...hojas };
-  } catch {
-    return { status: "error", mensaje: `${ESTADO_CUENTA_TEXTO.errorDescarga} ${SUFIJO_REINTENTO}` };
+  desde: string | null,
+  conGuias?: { porGuia: DetallePorGuiaDTO; detalle: DetalleDeLaDescarga },
+): DescargaFilasResult {
+  const hoja1 = filasKardex({
+    movimientos: estado.filas,
+    kardex,
+    // La fila se lee como la pinta la tabla (`lineaDeFila`) y se proyecta a la hoja (`filaBaseCuenta`).
+    filaBase: (fila, ordenes) => filaBaseCuenta(lineaDeFila(fila, rotulos), ordenes),
+    variante: "cuenta",
+    fechaInicial: desde,
+  });
+  if (conGuias === undefined) {
+    return { status: "ok", filas: hoja1.filas, filasDestacadas: hoja1.filasDestacadas };
   }
+  const { porGuia, detalle } = conGuias;
+  const porId = new Map<string, { fila: FilaEstadoCuentaDTO; ordenes: number | null }>();
+  estado.filas.forEach((fila, i) => {
+    const id = idDeLibro(fila);
+    if (id !== null) porId.set(id, { fila, ordenes: kardex.filas[i].ordenes });
+  });
+  const hoja2 = filasDetallePorGuia({
+    porGuia,
+    cabeceraDe: detalle.cabeceraDe,
+    movimientoPorId: porId,
+    conceptoDe: (m) => rotulos.concepto(m.fila),
+    fechaDe: (m) => m.fila.fecha,
+    // R40 — el MISMO Detalle que en la hoja 1 (con su «N guía(s)»).
+    detalleDe: (m) => String(filaBaseCuenta(lineaDeFila(m.fila, rotulos), m.ordenes).detalle),
+    resultadosTexto: detalle.resultadosTexto,
+  });
+  return {
+    status: "ok",
+    filas: hoja1.filas,
+    filasDestacadas: hoja1.filasDestacadas,
+    filasDetalle: hoja2.filas,
+    filasDestacadasDetalle: hoja2.filasDestacadas,
+  };
 }
 
 /** El movimiento que pinta el panel «Ver», con lo que dice SU fila (el estado lo decidió el servidor). */
@@ -492,13 +508,10 @@ export function EstadoCuenta({
   const { tipo, id, nombre } = inicial.cuenta;
   const lector = lectorDado ?? lectorDeLaCuenta(inicial.cuenta);
   // FICHA 464 — el ámbito viaja tal cual (se ASIGNA en la superficie); la hoja de detalle solo se ofrece
-  // si la superficie la declara Y su lector sabe leerla (R6/R7).
+  // si la superficie la declara Y su lector sabe leerla (468: R24/R25).
   const { detalle: detalleDeLaSuperficie, ...ambitoDeLaSuperficie } = descargaDeLaSuperficie;
-  const leerConDetalle = lector.leerCompletoConDetalle;
   const detalleDescarga =
-    detalleDeLaSuperficie !== undefined && leerConDetalle !== undefined
-      ? { config: detalleDeLaSuperficie, leer: leerConDetalle }
-      : null;
+    detalleDeLaSuperficie !== undefined && lector.leerKardexConDetalle !== undefined ? detalleDeLaSuperficie : null;
   const { mutate } = useSWRConfig();
   const [periodo, setPeriodo] = useState<Periodo>({ desde: "", hasta: "" });
   const [chip, setChip] = useState<ChipOTodo>(CHIP_TODO);
@@ -751,12 +764,17 @@ export function EstadoCuenta({
           ...ambitoDeLaSuperficie,
           titulo: ESTADO_CUENTA_TEXTO.tabla(nombre),
           columnas: vista === "oficina" ? COLUMNAS_DESCARGA_ESTADO_CUENTA : COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
-          // FICHA 464 (R13): «Solo los movimientos» es la lectura de SIEMPRE; con el detalle, UNA petición.
+          // FICHA 468 (R51) — Concepto, Entra, Sale y Saldo no se pueden desmarcar.
+          columnasFijas: FIJAS_DESCARGA_ESTADO_CUENTA,
+          // FICHA 468 (R7/R53/R57): una petición por opción, siempre en orden cronológico ascendente.
           obtenerFilas: (opciones) =>
-            opciones?.conDetalle && detalleDescarga !== null
-              ? filasDelPeriodoConDetalle(detalleDescarga.leer, filtros, rotulos, detalleDescarga.config)
-              : filasDelPeriodo(lector, filtros, rotulos),
-          detalle: detalleDescarga?.config.hoja,
+            filasDelPeriodo(
+              lector,
+              filtros,
+              rotulos,
+              opciones?.conDetalle && detalleDescarga !== null ? detalleDescarga : undefined,
+            ),
+          detalle: detalleDescarga?.hoja,
         }}
       />
       {data !== undefined && data.estado.filas.length === 0 ? (

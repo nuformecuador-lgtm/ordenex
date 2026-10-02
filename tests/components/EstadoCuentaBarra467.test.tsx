@@ -28,11 +28,12 @@ const H = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/estado-cuenta", () => ({
   verEstadoCuentaAction: (...a: unknown[]) => H.ver(...a),
-  verEstadoCuentaCompletoAction: (...a: unknown[]) => H.completo(...a),
+  // Ficha 468: la descarga lee el KARDEX.
+  estadoCuentaKardexAction: (...a: unknown[]) => H.completo(...a),
   verMiEstadoCuentaAction: (...a: unknown[]) => H.verMi(...a),
-  verMiEstadoCuentaCompletoAction: (...a: unknown[]) => H.completoMi(...a),
-  verEstadoCuentaCompletoConDetalleAction: vi.fn(),
-  verMiEstadoCuentaCompletoConDetalleAction: vi.fn(),
+  miEstadoCuentaKardexAction: (...a: unknown[]) => H.completoMi(...a),
+  estadoCuentaKardexConDetalleAction: vi.fn(),
+  miEstadoCuentaKardexConDetalleAction: vi.fn(),
   verOrdenesDeFilaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-filtros", () => ({

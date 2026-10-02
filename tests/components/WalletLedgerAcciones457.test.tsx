@@ -64,10 +64,9 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import {
-  COLUMNAS_DESCARGA_WALLET_CAJA,
-  filaDescargaMovimientoCaja,
-} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { COLUMNAS_DESCARGA_WALLET_CAJA } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+// Ficha 468: la fila de la descarga es la de la hoja «Movimientos» (kardex).
+import { filaDeLibroCaja as filaDescargaMovimientoCaja } from "@/tests/fixtures/libro-kardex";
 import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { CATEGORIA_LABEL as CATEGORIA_LABEL_458, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 
@@ -170,12 +169,13 @@ describe("457/R45 — concepto, tipo, origen y dueño en la tabla, el filtro y l
   });
 
   it.each(ESPERADO)("descarga — $caso: las mismas palabras que la tabla, sin columnas de más", (e) => {
+    // Ficha 468 (R1/R4/R18/R21): «Movimiento» → «Concepto», «Motivo y origen» → al frente de «Detalle»,
+    // «Dueño» → «Es dinero de»; «Entra o sale» desaparece (el sentido es la columna del importe, que la
+    // decide el servidor) y el importe lo coloca el kardex.
     const d = filaDescargaMovimientoCaja(e.movimiento);
-    expect(d.categoria).toBe(e.concepto);
-    expect(d.tipo).toBe(e.tipo);
-    expect(d.origen).toBe(e.origen);
-    expect(d.dueno).toBe(e.dueno);
-    expect(d.monto).toBe(e.movimiento.monto);
+    expect(d.concepto).toBe(e.concepto);
+    expect(String(d.detalle).startsWith(e.origen)).toBe(true);
+    expect(d.esDineroDe).toBe(e.dueno);
     expect(Object.keys(d).sort()).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort());
   });
 

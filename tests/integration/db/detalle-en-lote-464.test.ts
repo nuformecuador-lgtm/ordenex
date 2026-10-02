@@ -10,7 +10,9 @@ import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
-import { CajaConDetalleService, EstadoCuentaConDetalleService } from "@/lib/services/LibroConDetalleService";
+import { CajaKardexService } from "@/lib/services/LibroKardexService";
+import type { EstadoCuentaCompletoInput } from "@/lib/types/estado-cuenta";
+import type { ListarLibroCajaCompletoServicioInput } from "@/lib/types/wallet";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenAporteRow } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { DetalleDeMovimientoLoteDTO } from "@/lib/types/detalle-en-lote";
@@ -339,6 +341,52 @@ async function sembrar(tx: TxDeTest, cat: Catalogo459): Promise<Escenario> {
   };
 }
 
+// 468 (bloque B) — los orquestadores de la 464 (`CajaConDetalleService`, `EstadoCuentaConDetalleService`)
+// se retiraron con sus acciones. Lo que este archivo mide de ellos —que el LOTE de los movimientos de la
+// hoja es, movimiento a movimiento, el detalle de esa fila en pantalla (R21/R22/R34)— sigue valiendo y se
+// mide igual: estas tres funciones piden al lote REAL exactamente lo que le pide hoy `LibroKardexService`
+// (los movimientos de la hoja, en su orden, con la cuenta leída por el servidor).
+function entradaCajaDelLote(items: ReadonlyArray<{ id: string; categoria: string; monto: string; origenTipo: string; origenId: string | null }>) {
+  return {
+    superficie: "caja" as const,
+    movimientos: items.map((m) => ({ id: m.id, categoria: m.categoria, monto: m.monto, origenTipo: m.origenTipo, origenId: m.origenId })),
+  };
+}
+
+function idsDelLibroDeTienda(filas: ReadonlyArray<{ ref: unknown }>): string[] {
+  return filas.flatMap((f) => {
+    const ref = f.ref as { libro?: string; movimientoId?: string } | null;
+    return ref !== null && ref.libro === "tienda" && ref.movimientoId !== undefined ? [ref.movimientoId] : [];
+  });
+}
+
+async function cajaConDetalle(e: Escenario, entrada: ListarLibroCajaCompletoServicioInput) {
+  const r = await e.s.wallet.listarMovimientosCompleto(entrada, MAESTRO);
+  if (r.status !== "ok") throw new Error(`se esperaba ok: ${r.status}`);
+  const d = await e.lote.detallar(entradaCajaDelLote(r.items) as Parameters<typeof e.lote.detallar>[0], MAESTRO);
+  if (d.status !== "ok") throw new Error(`se esperaba ok del lote: ${d.status}`);
+  return { status: "ok" as const, items: r.items, total: r.total, detalle: d.detalle };
+}
+
+async function tiendaConDetalle(e: Escenario, entrada: EstadoCuentaCompletoInput) {
+  const r = await montarEstadoCuenta(e.s).leerCompleto(entrada, MAESTRO);
+  if (r.status !== "ok") throw new Error(`se esperaba ok: ${r.status}`);
+  const d = await e.lote.detallar(
+    { superficie: "tienda_oficina", tiendaId: r.estado.cuenta.id, movimientoIds: idsDelLibroDeTienda(r.estado.filas) },
+    MAESTRO,
+  );
+  if (d.status !== "ok") throw new Error(`se esperaba ok del lote: ${d.status}`);
+  return { status: "ok" as const, estado: r.estado, detalle: d.detalle };
+}
+
+async function miTiendaConDetalle(e: Escenario, actor: Actor) {
+  const r = await montarEstadoCuenta(e.s).leerMiTiendaCompleto({ sortBy: "fecha", sortDir: "asc" }, actor);
+  if (r.status !== "ok") throw new Error(`se esperaba ok: ${r.status}`);
+  const d = await e.lote.detallar({ superficie: "mi_wallet", movimientoIds: idsDelLibroDeTienda(r.estado.filas) }, actor);
+  if (d.status !== "ok") throw new Error(`se esperaba ok del lote: ${d.status}`);
+  return { status: "ok" as const, estado: r.estado, detalle: d.detalle };
+}
+
 /** Una orden comparable entre la pantalla y el lote: lo que se pinta, en el mismo orden. */
 type Linea = string;
 const lineaDeFila = (o: OrdenAporteDTO): Linea =>
@@ -482,8 +530,7 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
   it("R14/R21/R22/R36 — caja: la hoja de movimientos es la de siempre y cada detalle = el de su fila", async () => {
     await conEscenario(async (e) => {
       const entrada = listarLibroCajaCompletoSchema.parse({ desde: DIA_C1, hasta: DIA_C2, sortDir: "asc" });
-      const orquestador = new CajaConDetalleService(e.s.wallet, e.lote);
-      const conDetalle = await orquestador.cajaConDetalle(entrada, MAESTRO);
+      const conDetalle = await cajaConDetalle(e, entrada);
       const sinDetalle = await e.s.wallet.listarMovimientosCompleto(entrada, MAESTRO);
       if (conDetalle.status !== "ok" || sinDetalle.status !== "ok") throw new Error("se esperaba ok en los dos");
       // R14/R36: mismas filas, mismo orden, mismo total.
@@ -531,10 +578,9 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
 
   it("R21/R22/R34 — tienda en la oficina: cada detalle = el de su fila, y solo ordenes de esa tienda", async () => {
     await conEscenario(async (e) => {
-      const orquestador = new EstadoCuentaConDetalleService(montarEstadoCuenta(e.s), e.lote);
       const cuenta = { tipo: "tienda" as const, id: e.tiendaA };
       const entrada = { cuenta, sortBy: "fecha" as const, sortDir: "desc" as const };
-      const r = await orquestador.tiendaConDetalle(entrada, MAESTRO);
+      const r = await tiendaConDetalle(e, entrada);
       const sin = await montarEstadoCuenta(e.s).leerCompleto(entrada, MAESTRO);
       if (r.status !== "ok" || sin.status !== "ok") throw new Error("se esperaba ok");
       expect(r.estado).toEqual(sin.estado); // R14/R36
@@ -568,8 +614,7 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
   it("R5/R21/R22/R34 — /mi-wallet: cada detalle = el de su fila, sin nombres de Ordenex ni de otra tienda", async () => {
     await conEscenario(async (e) => {
       const tiendaB: Actor = { usuarioId: e.tiendaB, rol: "adminTienda" };
-      const orquestador = new EstadoCuentaConDetalleService(montarEstadoCuenta(e.s), e.lote);
-      const r = await orquestador.miTiendaConDetalle({ sortBy: "fecha", sortDir: "asc" }, tiendaB);
+      const r = await miTiendaConDetalle(e, tiendaB);
       if (r.status !== "ok") throw new Error(`se esperaba ok: ${r.status}`);
       expect(r.detalle).toHaveLength(r.estado.filas.length);
       let conOrdenes = 0;
@@ -609,10 +654,11 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
         const entrada = listarLibroCajaCompletoSchema.parse({ desde: DIA_C1, hasta: DIA_C2, categoria: "ingreso_flete" });
         const listar = vi.spyOn(e.aportes, "listarAportesDeCierres");
         const cabeceras = vi.spyOn(e.aportes, "cabecerasDeCierres");
-        const orquestador = new CajaConDetalleService(e.s.wallet, e.lote);
+        // 468: el orquestador de la 464 se retiró; el de hoy es `CajaKardexService` (mismo lote, mismos topes).
+        const orquestador = new CajaKardexService(e.s.wallet, new WalletMovimientoRepository(e.cliente), e.lote);
 
         tope.valor = 5;
-        expect(await orquestador.cajaConDetalle(entrada, MAESTRO)).toEqual({
+        expect(await orquestador.kardexConDetalle(entrada, MAESTRO)).toEqual({
           status: "limite_excedido",
           hoja: "detalle",
           total: 6,
@@ -622,12 +668,12 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
         expect(cabeceras).not.toHaveBeenCalled();
 
         tope.valor = 6; // frontera: exactamente el tope SI sale
-        const ok = await orquestador.cajaConDetalle(entrada, MAESTRO);
+        const ok = await orquestador.kardexConDetalle(entrada, MAESTRO);
         expect(ok.status).toBe("ok");
         expect(listar).toHaveBeenCalled();
 
         tope.valor = 1; // y por debajo de la hoja de movimientos, el aviso de siempre (R38)
-        expect(await orquestador.cajaConDetalle(entrada, MAESTRO)).toEqual({
+        expect(await orquestador.kardexConDetalle(entrada, MAESTRO)).toEqual({
           status: "limite_excedido",
           hoja: "movimientos",
           total: 2,

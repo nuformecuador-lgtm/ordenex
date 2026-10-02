@@ -20,7 +20,6 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
-import { CajaConDetalleService } from "@/lib/services/LibroConDetalleService";
 import { CajaKardexService } from "@/lib/services/LibroKardexService";
 import type { ICajaKardexService } from "@/lib/interfaces/services/ICajaKardexService";
 import type { LibroCajaKardexConDetalleServiceResult, LibroCajaKardexServiceResult } from "@/lib/types/libro-kardex";
@@ -33,8 +32,6 @@ import {
   type ConOrigenEnItems,
   type ConOrigenEnPagina,
 } from "@/lib/services/origen-en-resultado";
-import type { ICajaConDetalleService } from "@/lib/interfaces/services/ICajaConDetalleService";
-import type { CajaConDetalleServiceResult } from "@/lib/types/detalle-en-lote";
 import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -184,22 +181,9 @@ function buildDetalleService(): IDetalleMovimientoService {
 }
 
 /**
- * Ficha 464 (design §4) — el composition root de la descarga de la caja CON detalle por orden: el
- * servicio del libro de SIEMPRE (el mismo `buildService` que la descarga sin detalle, para que la hoja
- * de movimientos sea la misma, R14) y el detalle en lote sobre sus dos repositorios reales. Ninguna
- * dependencia es opcional (`tests/unit/actions/libro-con-detalle-464.composition-root.test.ts`).
- */
-function buildCajaConDetalleService(): ICajaConDetalleService {
-  const prisma = getPrismaClient();
-  return new CajaConDetalleService(
-    buildService(),
-    buildDetalleEnLote(prisma),
-  );
-}
-
-/**
  * Ficha 468 — el lote del detalle por guia sobre sus TRES repositorios reales (aportes, libro de la
- * tienda y libro del mensajero). Lo comparten el composition root de la 464 y el del kardex.
+ * tienda y libro del mensajero). Lo usa el composition root del kardex (el de la 464 se retiro en el
+ * bloque B, al cablear la descarga a las acciones del kardex).
  */
 function buildDetalleEnLote(prisma: ReturnType<typeof getPrismaClient>): DetalleEnLoteService {
   return new DetalleEnLoteService(
@@ -235,22 +219,6 @@ export type LibroCajaKardexActionResult =
 
 export type LibroCajaKardexConDetalleActionResult =
   | ConOrigenEnItems<LibroCajaKardexConDetalleServiceResult>
-  | { status: "unauthenticated" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
-
-/** Ficha 464 — dependencias de la descarga con detalle, inyectables en test. */
-export interface CajaConDetalleDeps {
-  service?: ICajaConDetalleService;
-  getActor?: () => Promise<Actor | null>;
-  origenes?: IOrigenLegibleService;
-}
-
-/**
- * Ficha 464 (R14/R36/R38/R39) — el resultado en el BORDE: el `ok` lleva las filas con su origen
- * legible (como `listarMovimientosCompletoAction`) y el `detalle`; `limite_excedido` lleva `hoja`.
- */
-export type ListarMovimientosCompletoConDetalleActionResult =
-  | ConOrigenEnItems<CajaConDetalleServiceResult>
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
@@ -316,6 +284,8 @@ export async function listarMovimientosAction(
  * Calcado de `listarMovimientosAction`: mismo borde, mismo actor, mismo schema (menos
  * `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que es quien autoriza y aplica el
  * tope. Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ *
+ * @sin-superficie FICHA 468 (bloque B): la descarga del libro de `/wallet` paso a `libroCajaKardexAction` (kardex); esta accion queda sin pantalla y su retirada (con sus tests) la decide el leader.
  */
 export async function listarMovimientosCompletoAction(
   input: unknown,
@@ -333,29 +303,11 @@ export async function listarMovimientosCompletoAction(
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
 }
 
-/**
- * Ficha 464 (design §2.3, R14/R36/R38/R39) — la descarga «Movimientos y detalle por orden» de la caja,
- * en UNA peticion: la MISMA entrada y el MISMO servicio que `listarMovimientosCompletoAction` (filtros,
- * termino y orden de la 463; `.strict()`), mas el detalle por orden de ESOS movimientos. El tope de la
- * hoja de movimientos y el del detalle los aplica el SERVIDOR (`limite_excedido` con `hoja`).
- *
- * Superficie (ficha 464, T8): la descarga «Movimientos y detalle por orden» del libro de `/wallet`
- * (`WalletModule.tsx`). Su `@sin-superficie` se borró al cablearla.
+/*
+ * Ficha 464 — `listarMovimientosCompletoConDetalleAction` («Movimientos y detalle por orden») se RETIRO
+ * en la 468 (bloque B), junto con su orquestador `CajaConDetalleService`: la sustituye
+ * `libroCajaKardexConDetalleAction` (kardex + detalle por guia, de UNA peticion).
  */
-export async function listarMovimientosCompletoConDetalleAction(
-  input: unknown,
-  deps: CajaConDetalleDeps = {},
-): Promise<ListarMovimientosCompletoConDetalleActionResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
-    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildCajaConDetalleService();
-    const r = await service.cajaConDetalle(data, actor);
-    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
-  });
-  return isAppErrorShape(r) ? toWalletActionError(r) : r;
-}
 
 /**
  * Ficha 468 (design §3–§4, R5–R16, R53, R57, R61) — la descarga «Solo los movimientos · una hoja» del libro
@@ -364,7 +316,8 @@ export async function listarMovimientosCompletoConDetalleAction(
  * `kardex` (saldo inicial y final de la tarjeta, la columna y el saldo de cada fila, totales y el «N
  * guía(s)» de los conteos, sin leer ninguna orden).
  *
- * @sin-superficie FICHA 468 (Bloque B pendiente): la cablea el frontend en la descarga del libro de `/wallet` (`WalletModule.tsx`); hasta entonces la descarga sigue en `listarMovimientosCompletoAction`. Al cablearla se borra esta anotacion.
+ * Superficie (ficha 468, bloque B): la descarga «Solo los movimientos» del libro de `/wallet`
+ * (`WalletModule.tsx`, `descargaLibroCaja`). Su `@sin-superficie` se borro al cablearla.
  */
 export async function libroCajaKardexAction(
   input: unknown,
@@ -387,7 +340,8 @@ export async function libroCajaKardexAction(
  * TOTAL GENERAL el servidor afirma igual al «Total del periodo». Topes: el de la hoja de movimientos y el
  * del detalle (`limite_excedido` con `hoja`).
  *
- * @sin-superficie FICHA 468 (Bloque B pendiente): la cablea el frontend en la descarga con detalle del libro de `/wallet` (`WalletModule.tsx`), sustituyendo a `listarMovimientosCompletoConDetalleAction`. Al cablearla se borra esta anotacion.
+ * Superficie (ficha 468, bloque B): la descarga «Movimientos y detalle por guía» del libro de `/wallet`
+ * (`WalletModule.tsx`, `descargaLibroCaja`). Su `@sin-superficie` se borro al cablearla.
  */
 export async function libroCajaKardexConDetalleAction(
   input: unknown,

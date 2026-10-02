@@ -13,6 +13,7 @@ import { DETALLE_MOVIMIENTO_NOMBRE } from "../../_components/detalle-movimiento-
 import { fuenteOrdenesDeFila } from "../../_components/ordenes-de-fila-cuenta";
 
 import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
+import { DETALLE_DESCARGA_WALLET_MENSAJERO } from "./estado-cuenta-mensajero-descarga-columnas";
 import { ESTADO_CUENTA_MENSAJERO_PAGINA } from "./estado-cuenta-mensajero-labels";
 import { CATEGORIA_PAGO_LABEL, ORIGEN_PAGO_LABEL } from "./wallet-mensajeros-labels";
 
@@ -53,16 +54,19 @@ export function EstadoCuentaMensajero({ inicial, puedeRegistrar }: Readonly<Esta
       inicial={inicial}
       rotulos={ROTULOS_MENSAJERO}
       panel={PANEL_MENSAJERO}
-      // FICHA 464 (R1/R2/R7) — solo el selector de columnas: el pago al mensajero es un total del cierre,
-      // sin reparto por orden, así que aquí no hay hoja de detalle.
-      descargaDeLaSuperficie={{ ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO }}
+      // FICHA 468 (R24/R31) — el mensajero gana la hoja «Detalle por guía» (la 464 no la tenía): el pago
+      // devengado se reparte por guía; el tomado del efectivo va en «Movimientos sin guía» (R43).
+      descargaDeLaSuperficie={{
+        ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO,
+        detalle: DETALLE_DESCARGA_WALLET_MENSAJERO,
+      }}
       // R10–R12 — el filtro por cierre de ESTE mensajero (la 458-A); el cierre viaja, no se pinta.
       selectorCierre={(valor, onCambiar) => (
         <SelectorCierreDeCuenta cuenta={{ cuenta: "mensajero", mensajeroId }} valor={valor} onCambiar={onCambiar} />
       )}
-      // R19 — su fila de cierre se abre igual: el pago del mensajero es un total que el cierre dejó
-      // anotado (`sin_reparto: snapshot_del_cierre`), y el panel lo dice en palabras; el enlace a SU
-      // cierre es el del origen de la fila.
+      // R19 — su fila de cierre se abre igual. FICHA 468 (R28): el pago devengado lista sus órdenes, con su
+      // tienda; el pago tomado del efectivo de ese cierre no se reparte por guía y el panel lo dice en
+      // palabras. El enlace a SU cierre es el del origen de la fila.
       detalleDeFila={{
         nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
         render: (f, { concepto, fecha }) =>

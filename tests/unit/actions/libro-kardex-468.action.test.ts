@@ -169,4 +169,42 @@ describe("468 — el borde de las acciones del kardex", () => {
     await libroCajaKardexConDetalleAction({ categoria: "ingreso_flete" }, deps);
     expect(caja.kardexConDetalle).toHaveBeenCalledWith(expect.objectContaining({ categoria: "ingreso_flete" }), MAESTRO);
   });
+
+  it("468 (antes 464 T6): caja — filtros y término llegan al servicio, y el ok lleva el origen legible en cada fila con su kardex y su detalle tal cual", async () => {
+    const kardex = {
+      saldoInicial: "0.00",
+      saldoFinal: "10.00",
+      totales: { entra: "10.00", sale: "0.00", cobradoATiendas: "0.00" },
+      conOtrosFiltros: true,
+      filas: [{ monto: { columna: "entra" as const, monto: "10.00" }, saldo: "10.00", ordenes: 1 }],
+    };
+    const porGuia = { bloques: [], sinGuia: [], totalGeneral: kardex.totales };
+    const fila = {
+      id: "00000000-0000-4000-8000-0000000000d1",
+      tipo: "ingreso" as const,
+      categoria: "ingreso_flete" as const,
+      monto: "10.00",
+      origenTipo: "cierre_dia" as const,
+      origenId: "00000000-0000-4000-8000-0000000000d2",
+      descripcion: null,
+      registradoPor: null,
+      fechaMovimiento: "2026-09-20T15:00:00.000Z",
+      dueno: "propio" as const,
+      documento: null,
+    };
+    const caja = servicioCaja();
+    caja.kardexConDetalle.mockResolvedValueOnce({ status: "ok", items: [fila], total: 1, kardex, porGuia });
+    const r = await libroCajaKardexConDetalleAction(
+      { q: "  flete  ", tipo: "ingreso", desde: "2026-09-01" },
+      { getActor: async () => MAESTRO, service: caja, origenes: ORIGENES_FALSOS },
+    );
+    expect(caja.kardexConDetalle.mock.calls[0][0]).toMatchObject({ q: "flete", tipo: "ingreso" });
+    expect(r).toEqual({
+      status: "ok",
+      items: [{ ...fila, origen: { texto: "Origen legible de prueba", enlace: null } }],
+      total: 1,
+      kardex,
+      porGuia,
+    });
+  });
 });

@@ -602,12 +602,13 @@ describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
 
 describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
   it("/mi-wallet: concepto y origen legibles desde la tienda, sin ids", async () => {
-    const { lineaDeFila } = await import("@/components/shared/estado-cuenta/estado-cuenta-lineas");
     const { ROTULOS_MI_WALLET } = await import("@/app/(app)/mi-wallet/_components/MiEstadoCuenta");
-    const { COLUMNAS_DESCARGA_MI_ESTADO_CUENTA, filaDescargaEstadoCuenta } = await import(
+    const { COLUMNAS_DESCARGA_MI_ESTADO_CUENTA } = await import(
       "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas"
     );
-    const f = filaDescargaEstadoCuenta(lineaDeFila(PAGO_POR_CUENTA, ROTULOS_MI_WALLET));
+    // Ficha 468: la fila de la hoja «Movimientos» (kardex) que coloca la descarga real.
+    const { filaDeLibroCuenta } = await import("@/tests/fixtures/libro-kardex");
+    const f = filaDeLibroCuenta(PAGO_POR_CUENTA, ROTULOS_MI_WALLET);
     const valores = Object.values(f).join(" | ");
     expect(valores).toContain("Ordenex pagó un gasto por ti");
     expect(valores).toContain("Pago de un gasto de una tienda · A Facebook");

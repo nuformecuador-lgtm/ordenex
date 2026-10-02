@@ -45,7 +45,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import { filaDescargaMovimientoCaja } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+// Ficha 468: la fila de la descarga es la de la hoja «Movimientos» (kardex).
+import { filaDeLibroCaja as filaDescargaMovimientoCaja } from "@/tests/fixtures/libro-kardex";
 import { EstadoCuentaTienda, ROTULOS_TIENDA } from "@/app/(app)/wallet/tiendas/_components/EstadoCuentaTienda";
 import { ROTULOS_MENSAJERO } from "@/app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero";
 import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";

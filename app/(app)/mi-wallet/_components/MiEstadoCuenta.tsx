@@ -5,9 +5,9 @@ import { EstadoCuenta, type LectorEstadoCuenta } from "@/components/shared/estad
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { AMBITO_DESCARGA_MI_ESTADO_CUENTA } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import {
+  miEstadoCuentaKardexAction,
+  miEstadoCuentaKardexConDetalleAction,
   verMiEstadoCuentaAction,
-  verMiEstadoCuentaCompletoAction,
-  verMiEstadoCuentaCompletoConDetalleAction,
 } from "@/lib/actions/estado-cuenta";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
@@ -42,9 +42,10 @@ import { CATEGORIA_MI_WALLET_LABEL, ORIGEN_TIENDA_LABEL } from "./mi-wallet-labe
 /** La lectura de la tienda de la sesión: ningún id de tienda sale del navegador (R36). */
 export const LECTOR_MI_TIENDA: LectorEstadoCuenta = {
   leer: (f) => verMiEstadoCuentaAction(f),
-  leerCompleto: (f) => verMiEstadoCuentaCompletoAction(f),
-  // FICHA 464 (R33/R35/R36) — la hoja y su detalle por orden, en UNA petición; tampoco aquí viaja la tienda.
-  leerCompletoConDetalle: (f) => verMiEstadoCuentaCompletoConDetalleAction(f),
+  // FICHA 468 (R3/R26/R32) — el kardex y, con detalle, la hoja «Detalle por guía», en UNA petición cada
+  // uno; tampoco aquí viaja la tienda.
+  leerKardex: (f) => miEstadoCuentaKardexAction(f),
+  leerKardexConDetalle: (f) => miEstadoCuentaKardexConDetalleAction(f),
 };
 
 function categoria(f: FilaEstadoCuentaDTO): WalletTiendaMovimientoCategoria {
@@ -125,7 +126,7 @@ export function MiEstadoCuenta({ inicial, cierres }: Readonly<MiEstadoCuentaProp
         rotulos={ROTULOS_MI_WALLET}
         lector={LECTOR_MI_TIENDA}
         vista="tienda"
-        // FICHA 464 (R1/R2/R5/R6) — su selector de columnas y su hoja «Detalle por orden», sin mensajero.
+        // FICHA 464/468 (R24/R32/R49) — su selector de columnas y su hoja «Detalle por guía», sin mensajero.
         descargaDeLaSuperficie={{
           ambitoColumnas: AMBITO_DESCARGA_MI_ESTADO_CUENTA,
           detalle: DETALLE_DESCARGA_MI_WALLET,

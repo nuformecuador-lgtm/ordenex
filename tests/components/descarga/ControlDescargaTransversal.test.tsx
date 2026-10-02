@@ -665,10 +665,20 @@ describe("Control de descarga · consistencia transversal", () => {
     // `DesgloseTiendaLedger` y los dos se retiraron con el libro de `/mi-wallet`; su sustituto, el
     // estado de cuenta de la tienda, arma el archivo con la lectura COMPLETA del servidor (tope allí,
     // `limite_excedido`), lo que cubre `tests/unit/descarga/estado-cuenta-descarga-columnas.test.ts`.
+    //
+    // FICHA 468 (bloque B) — la caja (`WalletModule`) deja de pasar por `filasDesdeResultado`: su archivo
+    // es un KARDEX (saldo inicial, totales, negritas) que coloca `descargaLibroCaja` con la lectura del
+    // kardex del servidor, igual que el estado de cuenta. El tope sigue en el SERVIDOR
+    // (`limite_excedido` de `libroCajaKardex{,ConDetalle}Action`, con el MISMO `mensajeLimite`); lo mide
+    // `tests/components/WalletCaja468.test.tsx` («sin archivo, con aviso»). Es NOMINAL: ninguna otra
+    // tabla puede usar ese camino sin pasar por aquí.
+    const ADAPTADOR_KARDEX: Record<string, RegExp> = {
+      "app/(app)/wallet/_components/WalletModule.tsx": /obtenerFilasDescarga=\{[^}]*?descargaLibroCaja\(/,
+    };
     expect(MODULOS_PROVEEDORES.length).toBe(2);
     for (const modulo of MODULOS_PROVEEDORES) {
       expect(modulo.fuente, `${modulo.ruta} pasa filas sin adaptador`).toMatch(
-        /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,
+        ADAPTADOR_KARDEX[modulo.ruta] ?? /obtenerFilasDescarga=\{[^}]*?(filasDesdeResultado|filasLocales)\(/,
       );
     }
   });

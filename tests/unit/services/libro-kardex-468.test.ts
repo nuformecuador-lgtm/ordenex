@@ -299,4 +299,31 @@ describe("468 — estado de cuenta: el kardex y su orquestacion", () => {
     expect(r.porGuia.totalGeneral).toEqual(r.kardex.totales);
     expect(r.porGuia.sinGuia).toHaveLength(1);
   });
+
+  it("468 (antes 464 T6): /mi-wallet pide el lote de la superficie mi_wallet SIN tienda en la entrada (sale del actor)", async () => {
+    const dos = estado("tienda", [filaCuenta("a"), filaCuenta("b", { saldoCorrido: "200.00" })]);
+    const m = montarCuenta({ ...dos, abonos: "200.00", saldoFinal: "200.00" });
+    const tienda = { usuarioId: "t", rol: "adminTienda" as const };
+    await m.servicio.miKardexConDetalle({ sortBy: "fecha", sortDir: "asc" }, tienda);
+    expect(m.detallar).toHaveBeenCalledWith({ superficie: "mi_wallet", movimientoIds: ["a", "b"] }, tienda);
+    await m.servicio.miKardex({ sortBy: "fecha", sortDir: "asc" }, tienda);
+    expect(m.contar).toHaveBeenCalledWith({ superficie: "mi_wallet", movimientoIds: ["a", "b"] }, tienda);
+  });
+
+  it("468 (antes 464 R38): el tope del estado de cuenta pasa con hoja «movimientos» y NO se pide el lote; no_encontrado tal cual", async () => {
+    const m = montarCuenta(estado("tienda", [filaCuenta("a")]));
+    m.leerCompleto.mockResolvedValueOnce({ status: "limite_excedido", total: 9, limite: 5 });
+    expect(await m.servicio.kardexConDetalle({ cuenta: { tipo: "tienda", id: "t" }, sortBy: "fecha", sortDir: "asc" }, MAESTRO)).toEqual({
+      status: "limite_excedido",
+      hoja: "movimientos",
+      total: 9,
+      limite: 5,
+    });
+    m.leerCompleto.mockResolvedValueOnce({ status: "no_encontrado" });
+    expect(await m.servicio.kardex({ cuenta: { tipo: "tienda", id: "t" }, sortBy: "fecha", sortDir: "asc" }, MAESTRO)).toEqual({
+      status: "no_encontrado",
+    });
+    expect(m.detallar).not.toHaveBeenCalled();
+    expect(m.contar).not.toHaveBeenCalled();
+  });
 });
