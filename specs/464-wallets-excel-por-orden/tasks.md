@@ -8,7 +8,7 @@
 
 ## Base común (sin dominio)
 
-- [ ] **T1 [P] — Generador de varias hojas.** `DescargaHoja` y `hojasAdicionales` en
+- [x] **T1 [P] — Generador de varias hojas.** `DescargaHoja` y `hojasAdicionales` en
   `lib/types/descarga.ts`; `buildXlsxLibro` en `lib/utils/xlsx-template.ts` con `buildXlsxRows`
   delegando en ella; `construirDescarga` con hojas adicionales, `throw` con csv + hojas, y
   `nombresDeHojaUnicos`.
@@ -17,7 +17,7 @@
   distintos, también con títulos que chocan o pasan de 31 caracteres (R42); csv + hojas ⇒ error sin
   archivo (R12). Suites `tests/unit/descarga/**` existentes en verde.
 
-- [ ] **T2 — Control de descarga con hoja de detalle.** Depende de T1. `DataTableDescargaDetalle`,
+- [x] **T2 — Control de descarga con hoja de detalle.** Depende de T1. `DataTableDescargaDetalle`,
   `obtenerFilas(opciones?)` y `filasDetalle` en `components/shared/DataTable.tsx`;
   `DescargarDatasetButton` con el `encabezado` de dos grupos de opciones, columnas fijas de enlace y
   estado fuera del catálogo, xlsx forzado con detalle.
@@ -29,13 +29,13 @@
 
 ## Servidor
 
-- [ ] **T3 [P] — Decisión de fuente compartida.** Extraer `fuenteDeMovimiento` a
+- [x] **T3 [P] — Decisión de fuente compartida.** Extraer `fuenteDeMovimiento` a
   `lib/utils/aporte-por-orden.ts` y hacer que `DetalleMovimientoService.resolverConjunto` la use.
   *Hecho:* tests unitarios de la función para cada rama (concepto con reparto y cierre; concepto con
   reparto sin cierre ⇒ `no_nace_de_un_cierre`; `sin_reparto` con su motivo); suites de la 344 y la
   458-D sin cambios y en verde.
 
-- [ ] **T4 [P] — Repositorio en lote.** `contarAportesPorCierre`, `listarAportesDeCierres` y
+- [x] **T4 [P] — Repositorio en lote.** `contarAportesPorCierre`, `listarAportesDeCierres` y
   `cabecerasDeCierres` en `ICierreAporteRepository` / `CierreAporteRepository`, con el `OR` de
   `buildWhere` por cierre, tramos de `detalleMovimientoConfig.TRAMO_CIERRES_LOTE` (nuevo en
   `lib/config/detalle-movimiento.ts`) y gestiones filtradas a su cierre.
@@ -45,7 +45,7 @@
   esa tienda (R34). Mutación: quitar `cierreId` de la rama de la gestión pone el test rojo (anotar el
   resultado en `progress/impl_464.md`). Comprobar que el test NO se salta sin `.env` (mirar `skipped`).
 
-- [ ] **T5 — `DetalleEnLoteService`.** Depende de T3 y T4. Interfaz en
+- [x] **T5 — `DetalleEnLoteService`.** Depende de T3 y T4. Interfaz en
   `lib/interfaces/services/IDetalleEnLoteService.ts`, tipos en `lib/types/detalle-en-lote.ts`.
   *Hecho:* tests unitarios con dobles: guard antes de cualquier llamada al repositorio (R32, R33);
   `total > tope` ⇒ `limite_excedido` con conteos y CERO llamadas a `listarAportesDeCierres` (R39,
@@ -54,7 +54,7 @@
   `ORDEN_TOTAL` (R20); `suma`/`cuadra` con Decimal, incluido un caso forzado que no cuadra (R22, R23);
   `tiendaNombre`/`mensajeroNombre` nulos donde toca (R5).
 
-- [ ] **T6 — Orquestación y acciones.** Depende de T5 y de los esquemas de la 463.
+- [x] **T6 — Orquestación y acciones.** Depende de T5 y de los esquemas de la 463.
   `LibroConDetalleService` y las tres acciones de `design.md §2.3` con `limite_excedido.hoja`.
   *Hecho:* tests de borde: `.strict()` rechaza `tiendaId`/`cuenta` en `/mi-wallet` sin leer (R35); la
   acción de la oficina rechaza `cuenta.tipo` distinto de `tienda`; un `limite_excedido` del completo
@@ -66,7 +66,7 @@
 
 ## Cliente
 
-- [ ] **T7 [P] — Adaptador y catálogos.** `components/shared/descarga-con-detalle.ts`
+- [x] **T7 [P] — Adaptador y catálogos.** `components/shared/descarga-con-detalle.ts`
   (`enlazarHojas`), `mensajeLimiteDetalle` en `descarga-resultado.ts`, los catálogos de detalle y los
   ámbitos de `design.md §5.2`.
   *Hecho:* tests unitarios: numeración desde 1 en el orden recibido y saldo inicial sin número (R15,
@@ -76,27 +76,27 @@
   texto del servidor (R31); sonda de uuid sobre todas las proyecciones (R30); `/mi-wallet` sin
   columnas con nombres de Ordenex (R5); mensaje de R39 con total, tope y qué hacer.
 
-- [ ] **T8 — Caja.** Depende de T2, T6, T7 y de la 463 en `dev`. `WalletLedger`/`WalletModule`:
+- [x] **T8 — Caja.** Depende de T2, T6, T7 y de la 463 en `dev`. `WalletLedger`/`WalletModule`:
   `ambitoColumnas`, `detalle` y `obtenerFilas({ conDetalle })` sobre `inputDeLibro`.
   *Hecho:* test de componente con dobles de acción: sin tocar el selector, columnas de hoy (R4); con
   detalle, una sola llamada a la acción con detalle y los filtros, término y orden vigentes (R14, R36);
   sin detalle, cero llamadas a ella (R13); error de lectura ⇒ aviso y sin archivo (R43).
 
-- [ ] **T9 — Estado de cuenta.** Depende de T2, T6, T7 y de la 463. `EstadoCuenta` recibe
+- [x] **T9 — Estado de cuenta.** Depende de T2, T6, T7 y de la 463. `EstadoCuenta` recibe
   `descargaDeLaSuperficie`; lectores de tienda (oficina) y `/mi-wallet` con `leerCompletoConDetalle`;
   mensajero y bodega solo con ámbito.
   *Hecho:* tests de componente: tienda y `/mi-wallet` ofrecen el detalle, mensajero y bodega no (R6,
   R7); la línea del saldo inicial sin número en la posición que dicta el orden (R15); las cuatro con
   su ámbito y sus columnas de hoy por defecto (R1, R2, R4).
 
-- [ ] **T10 [P] — Listados.** Depende de T2. `ambitoColumnas` en `SaldosTiendasTable`,
+- [x] **T10 [P] — Listados.** Depende de T2. `ambitoColumnas` en `SaldosTiendasTable`,
   `CuentasPorPagarTable` y `SaldosSatelitesTable`.
   *Hecho:* tests: el selector aparece y sin tocarlo salen las columnas de hoy (R1, R4); desmarcar y
   reordenar se refleja en el archivo (R3).
 
 ## Cierre
 
-- [ ] **T11 — Guardias, textos y censos.** Depende de T8–T10. Actualizar `censo-tablas`,
+- [x] **T11 — Guardias, textos y censos.** Depende de T8–T10. Actualizar `censo-tablas`,
   `ambito-columnas.guardia` (un ámbito por módulo, sin duplicados, R2) y la guardia de columnas
   sensibles; revisar textos nuevos (R44: español claro, sin «SLA»).
   *Hecho:* guardias en verde sin excepciones nuevas; test de textos que afirma la ausencia de «SLA».

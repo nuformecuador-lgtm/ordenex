@@ -227,3 +227,157 @@ módulo. Los 26 `skipped` son los de siempre (`AnaliticaPage` 17 + `AnaliticaShe
 
 **Veredicto:** el backend de la 464 (T1, T3–T6) está hecho y verde. El gate completo marca un rojo ajeno,
 que en aislado sale verde 3 de 3. Queda el frontend (T2, T7–T10, T11/T12) en esta rama.
+
+
+---
+
+# FRONTEND (T2, T7–T11; T12 abajo) — frontend_dev
+
+Rama `fe/464` desde `origin/feature/464-wallets-excel-por-orden @ e393a799`; se empuja a esa misma rama.
+Búsqueda de código: el MCP `codebase-memory` estaba en el conjunto de herramientas, pero cada archivo
+tocado lo nombraba el design/impl y se leyó entero directamente (no hizo falta el grafo).
+
+## Archivos
+
+Creados (código):
+- `components/shared/descarga-con-detalle.ts` — `enlazarHojas` (numera «N.º», enlaza cada orden con el
+  número de SU movimiento, pone el texto de estado; un detalle huérfano o un movimiento sin su detalle
+  LANZA: sin archivo, R36) y `EntradaFilaDetalle`.
+- `components/shared/wallet/detalle-por-orden-descarga.ts` — textos de la hoja y de las dos opciones,
+  columnas fijas `N.º` / `Detalle por orden`, `DETALLE_POR_ORDEN_COMUN` y `textoDetallePorOrden`
+  («N órdenes», el aviso de R23 con la `suma` del servidor, o el motivo con el diccionario del panel).
+- `app/(app)/wallet/tiendas/_components/estado-cuenta-tienda-descarga-columnas.ts` (R26) y
+  `app/(app)/mi-wallet/_components/mi-estado-cuenta-descarga-columnas.ts` (R27): catálogo, ámbito,
+  proyección y `DETALLE_DESCARGA_*` de cada superficie. Nombre `*-descarga-columnas.ts` a propósito: la
+  guardia de columnas sensibles descubre por ese sufijo y ejecuta las proyecciones con su sonda (R30).
+
+Modificados (código):
+- `components/shared/DataTable.tsx` — `DataTableDescargaDetalle`, `detalle?`, `obtenerFilas(opciones?)`,
+  `filasDetalle?` en el `ok`. El ámbito del detalle se tipa con `Required<Pick<…>>` (la guardia de ámbitos
+  lee el árbol como texto).
+- `components/shared/DescargarDatasetButton.tsx` — con `detalle` (y ámbito en la principal): selector con
+  «Hojas del archivo» (R6, arranca con el detalle y no se guarda, R8) y «Columnas de la hoja» (R11, cada
+  hoja su ámbito); fijas fuera del catálogo (R17); xlsx forzado con detalle (R12); sin `filasDetalle` ⇒
+  aviso y sin archivo. Sin `detalle`, `obtenerFilas()` sin argumentos y el mismo control (R41).
+- `components/shared/descarga-resultado.ts` — `mensajeLimiteDetalle` (R39).
+- `app/(app)/wallet/_components/wallet-ledger-descarga-columnas.ts` — ámbitos de la caja, catálogo R25,
+  `filaDetallePorOrdenCaja`, `DETALLE_DESCARGA_WALLET_CAJA`.
+- `app/(app)/wallet/_components/WalletLedger.tsx` — `ambitoColumnas` + `detalle` en la descarga.
+- `app/(app)/wallet/_components/WalletModule.tsx` — `listarConAutoriaYDetalle` (UNA petición a
+  `listarMovimientosCompletoConDetalleAction` con `inputDeLibro`, autoría en tramos como hoy,
+  `enlazarHojas`; `limite_excedido` por `hoja`); «Solo los movimientos» = la descarga de siempre. Y m9 de
+  la 463 (ver `progress/impl_463.md`).
+- `components/shared/estado-cuenta/EstadoCuenta.tsx` — prop REQUERIDA `descargaDeLaSuperficie`
+  (`{ ambitoColumnas, detalle? }`, asignada en cada superficie); `LectorEstadoCuenta.leerCompletoConDetalle?`
+  (lo da `lectorDeLaCuenta` solo con `tipo === "tienda"`, y `LECTOR_MI_TIENDA`); `filasDelPeriodoConDetalle`
+  (las mismas líneas que `filasDelPeriodo`, saldo inicial sin número en su sitio; el enlace es
+  `ref.movimientoId` del libro de la tienda, igual que `idsDeTienda` del servidor).
+- `components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts` — los 4 ámbitos de la hoja de
+  movimientos de los estados de cuenta (uno por superficie).
+- Superficies: `EstadoCuentaTienda.tsx` y `MiEstadoCuenta.tsx` (ámbito + detalle), `EstadoCuentaMensajero.tsx`
+  y `EstadoCuentaSatelite.tsx` (solo ámbito, R7).
+- Listados (T10): `SaldosTiendasTable.tsx`, `CuentasPorPagarTable.tsx`, `SaldosSatelitesTable.tsx` +
+  `AMBITO_DESCARGA_*` en su `*-descarga-columnas.ts`.
+- `lib/actions/wallet.ts`, `lib/actions/estado-cuenta.ts` — **borradas las tres `@sin-superficie`** (solo
+  el docstring; ninguna línea de código del servidor cambia).
+
+Tests creados: DD `tests/components/descarga/DescargarDatasetDetalle464.test.tsx` (13), DP
+`tests/unit/descarga/detalle-por-orden-464.test.ts` (20), CJ4 `tests/components/WalletCaja464.test.tsx` (8),
+EC4 `tests/components/EstadoCuenta464.test.tsx` (7), LI4 `tests/components/descarga/WalletListados464.test.tsx`
+(6), fixture `tests/fixtures/descarga-detalle-por-orden.ts` (textos del selector A MANO + «elegir Solo los
+movimientos»). Todos los archivos se releen con exceljs (lo que se baja, no lo que el control dice).
+
+Tests existentes tocados, sin borrar nada:
+- `WalletDescarga.test.tsx` (×5), `WalletCaja463.test.tsx` (R42), `WalletFiltroAQuien458E.test.tsx`,
+  `WalletLibroCaja458E.test.tsx`: miden la descarga de SIEMPRE, que ahora es la opción «Solo los
+  movimientos» (R8 arranca con el detalle) ⇒ eligen esa opción antes de descargar (`elegirSoloLosMovimientos`).
+  Sus aserciones no cambian.
+- `EstadoCuenta.test.tsx`, `EstadoCuenta458DPantalla.test.tsx`, `EstadoCuenta463.test.tsx`,
+  `EstadoCuentaAnulados.test.tsx`: montan `EstadoCuenta` a pelo y la prop nueva es REQUERIDA ⇒ un ámbito de
+  prueba.
+- `tests/unit/components/datatable-descarga-contrato.test.ts`: la guardia de «tabla sin dominio» se AMPLÍA
+  (no se relaja): miembros + `detalle`, la firma de `obtenerFilas` fijada entera (`(opciones?: { conDetalle:
+  boolean })`), y los miembros de `DataTableDescargaDetalle` enumerados.
+- `WalletCaja463.test.tsx`: además, m9/m10/m11 de la revisión de la 463.
+
+Decisiones técnicas (anotadas, no preguntadas):
+1. **R4 con el detalle por defecto.** Con «Movimientos y detalle por orden» la hoja de movimientos lleva
+   «N.º» delante y «Detalle por orden» detrás (R15/R16 lo exigen); ENTRE ellas, las columnas, encabezados
+   y orden de siempre. Con «Solo los movimientos», la hoja es idéntica a la de antes. Así se leen R4 y R8 a
+   la vez; los tests afirman las dos cosas.
+2. El ámbito de la principal es condición del detalle: sin él, `detalle` no se ofrece (test DD R41 «sin el
+   ámbito»). Todas las superficies con detalle lo declaran.
+3. La opción de la hoja principal en «Columnas de la hoja» se rotula con el `titulo` de esa hoja (el control
+   común no conoce «Movimientos»).
+4. `N.º` sale como número (celda numérica); los montos siguen como texto (decisión del spec).
+5. La hoja principal del estado de cuenta conserva el nombre saneado de siempre (31 caracteres:
+   «Estado de cuenta de Tania Tien…»); el de la hoja de detalle es «Detalle por orden».
+6. T11: `censo-tablas` y la guardia de columnas sensibles no necesitaron cambios (ninguna tabla nueva; los
+   dos módulos nuevos `*-descarga-columnas.ts` entran solos y pasan la sonda). Las tres constantes
+   `COLUMNAS_DESCARGA_DETALLE_POR_ORDEN_*` tienen su aserción de orden nombrada (DP).
+
+## Mapa R1–R44 → test (completo; el de backend arriba se mantiene, aquí se cita por sus siglas VH/FM/LS/AC/CR/IN)
+
+| R | Test |
+| --- | --- |
+| R1 | CJ4 «R1/R6/R8»; EC4 «R6: la tienda y /mi-wallet…» y «R1/R7: el mensajero y la bodega…»; LI4 «R1/R7…» ×3 |
+| R2 | DP «R2 — un ámbito propio…» (11 literales distintos); DD «R2/R3/R11» (escribe SOLO en el ámbito del detalle); EC4 «R2/R4» (mensajero ≠ bodega); LI4 «R2/R3» ×3; `ambito-columnas.guardia` (unicidad) |
+| R3 | DD «R2/R3/R11», DD «R3: reordenar…»; LI4 «R2/R3» ×3 |
+| R4 | DP «R4: el catálogo de la caja…»; CJ4 «R4/R10/…» y «R9/R13»; EC4 «R2/R4» y «R4/R9»; LI4 «R1/R7… R4» ×3 (ver decisión 1) |
+| R5 | DP «R5: en /mi-wallet…»; EC4 «/mi-wallet con «Más antiguas»… sin mensajero»; LS/IN (servidor) |
+| R6 | DD «R6/R8»; CJ4 «R1/R6/R8»; EC4 «R6» |
+| R7 | EC4 «R1/R7»; LI4 «R1/R7» ×3; AC «R7» (servidor) |
+| R8 | DD «R6/R8», DD «R8: la opción NO se recuerda…»; CJ4 «R1/R6/R8»; EC4 «R6» |
+| R9 | DD «R9/R13»; CJ4 «R9/R13»; EC4 «R4/R9»; `WalletDescarga`/CJ «R42»/458-E (la descarga de siempre, vía «Solo los movimientos») |
+| R10 | DD «R10/R15/R16/R17»; CJ4 «R4/R10/…»; EC4 «tienda (oficina)…»; VH «R10» |
+| R11 | DD «R17… R11» y «R2/R3/R11» |
+| R12 | DD «R12»; VH «R12» |
+| R13 | DD «R9/R13» (`obtenerFilas({ conDetalle: false })`); CJ4 «R9/R13» (cero llamadas con detalle); EC4 «R4/R9» (ídem en tienda y /mi-wallet) |
+| R14 | DP «R14»; CJ4 «R10/R14/R36…» (misma entrada que la de siempre); EC4 «tienda (oficina)…» (saldo inicial en su sitio); IN/AC «R14/R36» |
+| R15 | DP «R15/R19/R20» y «R15: la línea del saldo inicial…»; EC4 tienda (última, sin número) y /mi-wallet (primera, sin número) |
+| R16 | DP «R16/R23»; CJ4 «R4/R10/…» (texto del panel de la caja); EC4 tienda |
+| R17 | DD «R17: las columnas fijas no están…» y «R2/R3/R11» (siguen saliendo) |
+| R18 | IN (servidor); DP «R15/R19/R20» (una fila por orden, ninguna más) |
+| R19 | DP «R15/R19/R20»; CJ4 (detalle con N.º 1, 1, 3); EC4 tienda (N.º 2) |
+| R20 | DP «R15/R19/R20»; LS/IN (servidor) |
+| R21 | IN diferencial ×3 (servidor) |
+| R22 | IN/LS (servidor); CJ4 (12.50 + 17.50 = 30.00, «2 órdenes») |
+| R23 | DP «R23»; CJ4 (fila 3: «1 orden. La suma de las órdenes es 4.00 y no coincide…»); LS «R23» |
+| R24 | DP «R24»; DD «R24»; VH «R24» |
+| R25 | DP «R25» (literal); CJ4 (cabecera de la hoja de detalle) |
+| R26 | DP «R26» (literal); EC4 tienda (cabecera de la hoja de detalle) |
+| R27 | DP «R27» (literal) |
+| R28 | DP «R28…»; CJ4 (Fecha/Movimiento del detalle = celdas de su fila); EC4 tienda |
+| R29 | IN «R29» (servidor); DP «R28…» (la proyección emite lo del DTO congelado) |
+| R30 | DP «R30»; `columnas-sensibles.guardia` (sonda sobre `filaDetallePorOrden*`); LS (servidor) |
+| R31 | DP «R28…» («1234.50» tal cual); CJ4 («12.50»); EC4 («10.00») |
+| R32 | LS «R32» ×2 (servidor) |
+| R33 | LS «R33» (servidor) |
+| R34 | IN/LS (servidor); EC4/DP (sin columna «Tienda» en tienda y /mi-wallet) |
+| R35 | AC «R35» (servidor); EC4 /mi-wallet (`{ sortBy, sortDir }`, ninguna cuenta viaja) |
+| R36 | DP «R36»; DD «R36: …sin las filas del detalle…»; CJ4 (una sola llamada); EC4 tienda; AC/IN |
+| R37 | LS «con 6 y con 40 movimientos…» (servidor) |
+| R38 | CJ4 «R38»; AC «R38» |
+| R39 | DP «R39/R44»; CJ4 «R39»; EC4 «R39/R43»; LS/AC/IN |
+| R40 | LS/IN (servidor) |
+| R41 | DD «R41» ×2; `tests/components/descarga/**` y `tests/unit/descarga/**` en verde; `datatable-descarga-contrato` ampliada; VH «R41» |
+| R42 | VH «R42»; EC4 (nombre saneado de la principal + «Detalle por orden») |
+| R43 | DD «R43»; CJ4 «R43» ×2 (lanza; autoría ilegible); EC4 «R39/R43» |
+| R44 | DP «R44» (todos los textos nuevos, sin «SLA») y «R39/R44» |
+
+## Mutaciones del frontend (arnés de un solo uso con autocomprobación: el archivo CAMBIÓ, restauración byte a byte, base verde antes y después: 54/54)
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| M1 | el selector arranca SIN detalle | **Muerta** (19 rojos) |
+| M2 | la hoja de detalle sin «N.º» | **Muerta** (6) |
+| M3 | csv permitido con detalle | **Muerta** (1) |
+| M4 | la caja con detalle llama al completo de siempre | **Muerta** (4) |
+| M5 | el saldo inicial se numera | **Muerta** (2) |
+| M6 | numeración sin incrementar | **Muerta** (6) |
+| M7 | un detalle huérfano no falla | **Muerta** (1) |
+| M8 | el tope del detalle con el aviso de siempre | **Muerta** (1) |
+| M9 | `/mi-wallet` sin `leerCompletoConDetalle` | **Muerta** (3) |
+| M10 | la oficina-tienda sin `leerCompletoConDetalle` | **Muerta** (4) |
+| M11 | «no cuadra» se calla | **Muerta** (2) |
+| M12 | un listado sin ámbito | **Muerta** (2) |
