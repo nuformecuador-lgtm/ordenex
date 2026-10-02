@@ -5596,6 +5596,18 @@
       "depends_on": null,
       "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 464. Decidido: detalle agrupado por guia con subtotal; los movimientos sin guia en seccion final; total hoja 2 = total hoja 1, siempre. Medido en prod: COD (206/206), pago mensajero (207/207) e indemnizacion (1/1) cuadran con gestion_orden.monto_recibido/pago_mensajero/indemnizacion. Si algo no cuadra, fila visible de diferencia. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults: columna 'Cobrado a tiendas' solo en caja; kardex siempre ascendente; Detalle dice '1 guia'; el detalle en pantalla de los 4 conceptos pasa a listar ordenes; pago tomado del efectivo en 'Movimientos sin guia'. T1 medido 100% (progress/medicion_468.md). Arranca tras mergear la 467. || 2026-10-02: implementacion arrancada tras mergear la 467 (backend_dev -> frontend_dev en worktree).",
       "branch": "feature/468-wallet-excel-kardex-por-guia"
+    },
+    {
+      "id": 469,
+      "title": "buscar una guia en el libro de la wallet",
+      "description": "El buscador del libro (caja y estados de cuenta) encuentra por numero de guia o remision los movimientos en los que esa orden aporta dinero.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": 468,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release.",
+      "branch": null
     }
   ]
 }
