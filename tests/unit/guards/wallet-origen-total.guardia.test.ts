@@ -81,7 +81,9 @@ describe("458-A R94 — ninguna superficie de la wallet pinta un origen sin nomb
     const esperado: Record<string, number> = {
       // FICHA 464 (T6): 3 → 4. `listarMovimientosCompletoConDetalleAction` entrega las filas del libro
       // de la caja (hoja de movimientos con detalle) y les adjunta el origen igual que el completo.
-      "lib/actions/wallet.ts": 4,
+      // FICHA 468 (T9): 4 → 6. `libroCajaKardexAction` y `libroCajaKardexConDetalleAction` entregan las
+      // filas del libro de la caja (hoja «Movimientos» como kardex) con su origen, igual que el completo.
+      "lib/actions/wallet.ts": 6,
       // FICHA 458-D (cierre): 4 → 2. Se retiraron `listarMisMovimientos{,Completo}Action`; el libro de
       // `/mi-wallet` es el estado de cuenta, cuyo origen lo resuelve `EstadoCuentaService` con el
       // `OrigenLegibleService` que le inyecta `buildService()` de `lib/actions/estado-cuenta.ts`.

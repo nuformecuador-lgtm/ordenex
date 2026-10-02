@@ -25,6 +25,7 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { whereLibroCajaConTerminoSql, whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import { ordenTotal, type DireccionOrden } from "@/lib/types/ordenamiento-listado";
+import { derivarBalance } from "@/lib/utils/wallet-balance";
 
 /** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
 const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
@@ -365,25 +366,24 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository, 
     const saldos = new Map<string, string>();
     if (ids.length === 0) return saldos;
     const corte = hasta === undefined ? Prisma.sql`TRUE` : Prisma.sql`w."fecha_movimiento" < ${hasta}`;
-    const filas = await this.prisma.$queryRaw<{ id: string; saldo: Prisma.Decimal | null }[]>(Prisma.sql`
-      SELECT t."id", t."saldo"
-      FROM (
-        SELECT w."id",
-               SUM(
-                 CASE
-                   WHEN w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'ingreso' THEN w."monto"
-                   WHEN w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'egreso' THEN -w."monto"
-                   ELSE 0
-                 END
-               ) OVER (
+    // Las dos sumas son de `w."monto"` (guardia `caja-173-alcance`): lo que entro de verdad menos lo que
+    // salio de verdad, cada una con su FILTER. Mismo orden total en las dos ventanas.
+    const ventana = Prisma.sql`OVER (
                  ORDER BY w."fecha_movimiento" ASC, w."created_at" ASC, w."id" ASC
                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-               ) AS "saldo"
+               )`;
+    const filas = await this.prisma.$queryRaw<{ id: string; entro: Prisma.Decimal | null; salio: Prisma.Decimal | null }[]>(Prisma.sql`
+      SELECT t."id", t."entro", t."salio"
+      FROM (
+        SELECT w."id",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'ingreso') ${ventana} AS "entro",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'egreso') ${ventana} AS "salio"
         FROM "wallet_movimiento" w
         WHERE ${corte}
       ) t
       WHERE t."id" = ANY(${[...ids]}::text[])`);
-    for (const f of filas) saldos.set(f.id, (f.saldo ?? new Prisma.Decimal(0)).toFixed(2));
+    // La resta la hace `derivarBalance` (la misma de la tarjeta), no este repositorio.
+    for (const f of filas) saldos.set(f.id, derivarBalance(f.entro ?? new Prisma.Decimal(0), f.salio ?? new Prisma.Decimal(0)).balance);
     return saldos;
   }
 
