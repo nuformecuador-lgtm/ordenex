@@ -66,6 +66,14 @@ export interface SelectorBuscableProps {
   className?: string;
   /** Espera entre la ultima tecla y `onBuscar`. Inyectable para los tests. */
   esperaMs?: number;
+  /**
+   * FICHA 467 (design §4.2; R23) — pinta `etiqueta` DENTRO del disparador, en gris y delante del valor
+   * («A quién: Todos»), como el `labelPrefix` de `Select` que usa el `single` de `FilterComponent`. Es
+   * lo que necesita el control cuando vive en una barra de filtros, sin rótulo encima ni al lado.
+   *
+   * **Ausente, el disparador es idéntico al de siempre** (R33): mismo texto y mismo `aria-label`.
+   */
+  rotuloVisible?: boolean;
 }
 
 /** Minusculas y sin tildes: «dia» encuentra «Día». */
@@ -89,6 +97,7 @@ export function SelectorBuscable({
   disabled = false,
   className,
   esperaMs = DEBOUNCE_MS_DEFAULT,
+  rotuloVisible = false,
 }: Readonly<SelectorBuscableProps>) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState("");
@@ -199,9 +208,18 @@ export function SelectorBuscable({
           className,
         )}
       >
-        <span className={cn("min-w-0 truncate", elegida === null && "text-muted-foreground")}>
-          {rotuloDisparador}
-        </span>
+        {rotuloVisible ? (
+          // FICHA 467 — el nombre delante, en gris; el valor detrás, en el mismo hueco truncable. Sin
+          // elección, «Todos» se lee en el color normal: el gris ya lo lleva el nombre (como `Select`).
+          <span className="min-w-0 truncate">
+            <span className="text-muted-foreground">{etiqueta}: </span>
+            {rotuloDisparador}
+          </span>
+        ) : (
+          <span className={cn("min-w-0 truncate", elegida === null && "text-muted-foreground")}>
+            {rotuloDisparador}
+          </span>
+        )}
         <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden="true" />
       </PopoverTrigger>
       <PopoverContent
