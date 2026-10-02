@@ -101,7 +101,7 @@
   sensibles; revisar textos nuevos (R44: español claro, sin «SLA»).
   *Hecho:* guardias en verde sin excepciones nuevas; test de textos que afirma la ausencia de «SLA».
 
-- [ ] **T12 — Gate y verificación en la app.** Depende de todo.
+- [x] **T12 — Gate y verificación en la app.** Depende de todo.
   `./init.sh` completo con `INIT_EXIT=$?` escrito en el log y revisión de `skipped` en
   `tests/integration/db`. Descargar en la app (dev server único) la caja y `/mi-wallet` con detalle y
   abrir el `.xlsx`: dos hojas, «N.º» enlaza, y en un movimiento de cierre la suma de su detalle

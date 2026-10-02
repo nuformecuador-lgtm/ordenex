@@ -381,3 +381,59 @@ Decisiones técnicas (anotadas, no preguntadas):
 | M10 | la oficina-tienda sin `leerCompletoConDetalle` | **Muerta** (4) |
 | M11 | «no cuadra» se calla | **Muerta** (2) |
 | M12 | un listado sin ámbito | **Muerta** (2) |
+
+## Verificación (salida real)
+
+Gate COMPLETO `./init.sh` en `progress/gate_464_frontend.log` (sin `tail`, `INIT_EXIT` dentro), sin
+mutaciones ni dev server en curso. Un primer intento cayó en el typecheck (dobles de test con
+`"entregada"`, que no es un `GestionResultado`; corregido en `f8fc8385`); el log es el del segundo:
+
+```
+✓ typecheck paso
+✖ 220 problems (0 errors, 220 warnings)   (los mismos 220 de antes)
+✓ lint paso
+✓ DATABASE_URL resuelta: los 326 archivos de tests contra Postgres SI se ejecutan
+ FAIL  tests/components/OrdenesDescarga.test.tsx > … > el nombre del archivo identifica el listado y la fecha
+ FAIL  tests/components/OrdenesDescargaColumnas.test.tsx > … > R34 — con preferencia guardada NO cambian el nombre del archivo…
+ Test Files  2 failed | 2361 passed (2363)
+      Tests  2 failed | 32798 passed | 26 skipped (32826)
+INIT_EXIT=1
+```
+
+Los dos rojos son AJENOS y de RELOJ: esperan `ordenes-2026-10-02.xlsx` y el generador da
+`ordenes-2026-10-01.xlsx`. El test calcula «hoy» con la hora LOCAL de la máquina (UTC−5) y el nombre del
+archivo usa el día de Costa Rica (UTC−6): entre las 00:00 y las 01:00 locales los dos días difieren, y el
+gate corrió justo en esa hora (~05:30–06:00 UTC). Ni el test ni `nombreArchivoDescarga` los toca la 464.
+Repetidos AISLADOS a las 06:07 UTC: `Tests 23 passed (23)` ×3. El rojo ajeno conocido
+(`tests/integration/recuperar-contrasena-form.test.tsx`) salió VERDE en esta corrida (11/11). Los 26
+`skipped` son los de siempre (`AnaliticaPage` 17 + `AnaliticaShell` 9); ninguno de `tests/integration/db`.
+Los once archivos de la 464 corren en el gate y pasan (6 backend + 5 frontend, 113 tests).
+
+### La app, vista (dev server propio en :3014 sobre este worktree, maestro local `maestro.qa464@ordenex.test`)
+
+Playwright (script en el scratchpad, no en el árbol) descargó de verdad y releyó cada `.xlsx` con exceljs.
+
+- **`/wallet`**: el selector arranca en «Movimientos y detalle por orden · dos hojas» (`aria-checked=true`).
+  Archivo: **2 hojas**, «Libro de movimientos» (36 filas) y «Detalle por orden» (26). Cabecera de
+  movimientos `N.º · Fecha · Movimiento · Motivo y origen · A quién · Entra o sale · Monto · Dueño ·
+  Registró · Detalle por orden`; la de detalle, la de R25. 36 movimientos numerados, **0 filas de detalle
+  con un «N.º» inexistente**. De los 10 movimientos con filas de detalle, **10 cuadran** (Σ órdenes =
+  monto). Hay 12 movimientos de cierre con reparto y 0 órdenes: su celda dice «0 órdenes. La suma de las
+  órdenes es 0.00 y no coincide con el monto del movimiento.» (los cierres viejos sin datos congelados que
+  ya explica `DETALLE_MOVIMIENTO_VACIO`). Los sin reparto dicen el motivo del panel (p. ej. COD recaudado:
+  «Este importe es la suma de lo que ese mismo cierre le acreditó a cada tienda…»).
+  Con «Solo los movimientos»: **1 hoja** (36 filas) con las 8 columnas de siempre.
+- **`/wallet/tiendas/773e9313-…` (Tania)**: 2 hojas, «Estado de cuenta de Tania Tien…» (28 filas: 27
+  movimientos numerados + «Saldo inicial» SIN número) y «Detalle por orden» (40). 0 huérfanas. De 14
+  movimientos con detalle, **13 cuadran** y 1 no: el N.º 25 (COD del cierre QA del 2026-08-12, abono
+  124100.00, Σ de sus 6 órdenes 136600.00), y su celda lo dice: «6 órdenes. La suma de las órdenes es
+  136600.00 y no coincide con el monto del movimiento.» (R23; es el mismo cierre de datos QA anteriores al
+  congelado que cita `DETALLE_MOVIMIENTO_VACIO`). Con «Solo los movimientos»: 1 hoja, las 10 columnas de
+  siempre.
+- Un aviso de la ficha SF-001 («Confirmá el SINPE de GAM») tapaba `/wallet` en local: se cerró con
+  «Ahora no»; no es de la 464.
+
+Servidor bajado y `dev464.log` borrado. El maestro `maestro.qa464@ordenex.test` queda en la base LOCAL.
+
+**Veredicto:** frontend de la 464 (T2, T7–T12) hecho; R1–R44 mapeados; gate completo con 2 rojos ajenos de
+reloj (verdes aislados 3/3); en la app, las dos descargas con detalle enlazan y cuadran (o lo dicen).
