@@ -1,6 +1,5 @@
 import { PANEL_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import type { AQuienDTO } from "@/lib/types/libro-caja-autoria";
-import type { WalletMovimientoTipo } from "@/lib/types/wallet";
 
 // FICHA 458-E (TE.1/TE.2, design §5.2; R54–R57, R59) — los textos del libro de la caja (`/wallet`).
 // Fuera del JSX (docs/conventions). Ninguno lleva un identificador interno (H6): la cuenta de «A
@@ -16,17 +15,25 @@ export const LIBRO_CAJA_COLUMNA = {
   ver: "Ver",
 } as const;
 
-/** R54 — el filtro Todo / Entra / Sale. `todo` = sin filtro de dirección. */
-export type DireccionFiltro = "todo" | WalletMovimientoTipo;
-
-export const FILTRO_DIRECCION = {
-  /** Nombre accesible del grupo. */
-  nombre: "Filtrar por dirección del dinero",
-  opciones: [
-    { valor: "todo", etiqueta: "Todo" },
-    { valor: "ingreso", etiqueta: "Entra" },
-    { valor: "egreso", etiqueta: "Sale" },
-  ] as const satisfies readonly { valor: DireccionFiltro; etiqueta: string }[],
+/**
+ * FICHA 467 (design §8; R6, R19, R20) — los textos de la BARRA ÚNICA del libro de la caja: el nombre de
+ * cada casilla del selector «Filtros» (en el orden en que se ofrecen) y lo que dicen sus controles. Sin
+ * siglas y sin jerga (R36).
+ *
+ * Sustituye al conmutador «Todo / Entra / Sale» de la 458-E: Entra/Sale es ahora una casilla con un
+ * `single` cuyo placeholder («Todo») dice lo que pasa sin elección.
+ */
+export const LIBRO_CAJA_FILTROS_TEXTO = {
+  periodo: "Periodo",
+  aQuien: "A quién",
+  direccion: "Entra/Sale",
+  concepto: "Concepto",
+  /** El `single` de Entra/Sale sin elección: el libro incluye los dos sentidos (R19). */
+  direccionTodo: "Todo",
+  /** El `single` de Concepto sin elección. */
+  conceptoTodos: "Todos",
+  entra: "Entra",
+  sale: "Sale",
 } as const;
 
 /** Lo que dice la celda de «A quién» y de «Registró» mientras se lee o si la lectura falló. */
