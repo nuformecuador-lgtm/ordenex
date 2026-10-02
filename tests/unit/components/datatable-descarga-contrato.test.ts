@@ -62,14 +62,18 @@ describe("contrato de descarga del DataTable", () => {
     const miembros = [
       ...bloque![1].matchAll(/^\s{2}(\w+)\??:/gm),
     ].map((m) => m[1]);
+    // Ficha 468 (R51): + `columnasFijas`, claves del catálogo que el selector no deja desmarcar. Sin
+    // dominio: una lista de claves de columna, como `columnas`.
     expect(miembros).toEqual([
       "titulo",
       "columnas",
       "obtenerFilas",
       "formatos",
       "ambitoColumnas",
+      "columnasFijas",
       "detalle",
     ]);
+    expect(bloque![1]).toMatch(/columnasFijas\?:\s*readonly string\[\];/);
 
     // `obtenerFilas` es una FUNCIÓN que la tabla no alimenta con filtros, ni página, ni url: el
     // consumidor cierra sobre los suyos (D4). Ficha 464 — su ÚNICO parámetro, opcional, es un
@@ -89,8 +93,9 @@ describe("contrato de descarga del DataTable", () => {
       "columnas",
       "etiquetaOpcion",
       "etiquetaSinDetalle",
-      "columnaEnlace",
-      "columnaEstado",
+      // Ficha 468 (R51): las dos columnas fijas de la 464 («N.º», «Detalle por orden») se retiran; la
+      // hoja declara las claves de SU catálogo que no se pueden desmarcar.
+      "columnasFijas",
     ]);
 
     // El ámbito es un IDENTIFICADOR, no una configuración: `string` a secas, opcional, y sin

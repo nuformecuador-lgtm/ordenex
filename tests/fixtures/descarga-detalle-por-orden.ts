@@ -12,7 +12,8 @@ import { expect } from "vitest";
  */
 export const DISPARADOR_DETALLE = "Elegir qué se descarga y sus columnas";
 export const OPCION_SOLO_MOVIMIENTOS = "Solo los movimientos · una hoja";
-export const OPCION_CON_DETALLE = "Movimientos y detalle por orden · dos hojas";
+/** Ficha 468 (R24) — la hoja 2 pasa a llamarse «Detalle por guía». */
+export const OPCION_CON_DETALLE = "Movimientos y detalle por guía · dos hojas";
 export const GRUPO_HOJAS = "Hojas del archivo";
 export const GRUPO_COLUMNAS_DE_LA_HOJA = "Columnas de la hoja";
 

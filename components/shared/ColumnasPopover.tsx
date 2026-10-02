@@ -36,7 +36,16 @@ export interface ColumnasPopoverProps<T> {
    * estado. Sin este prop, el popover es exactamente el de antes.
    */
   encabezado?: ReactNode;
+  /**
+   * Ficha 468 (R51) — claves que se listan MARCADAS y DESHABILITADAS: no se pueden desmarcar, pero sí
+   * reordenar (sus botones de subir/bajar siguen activos). Quien descarga las añade al archivo aunque
+   * una preferencia guardada antes las ocultara (R52). Sin este prop, nada cambia.
+   */
+  fijas?: readonly string[];
 }
+
+/** Sin columnas fijas: lista estable, para que el valor por defecto no cambie de identidad. */
+const SIN_FIJAS: readonly string[] = [];
 
 /**
  * Ficha 314 (design §6) — selector de columnas de una descarga, GENÉRICO y con REORDENAR.
@@ -81,6 +90,7 @@ export function ColumnasPopover<T>({
   titulo,
   etiquetaDisparador,
   encabezado,
+  fijas = SIN_FIJAS,
 }: Readonly<ColumnasPopoverProps<T>>) {
   const { ordenadas, clavesVisibles, alternar, mover, restablecer } =
     usePreferenciaColumnas(claveAlmacenamiento, publicadas, claveDe);
@@ -119,7 +129,10 @@ export function ColumnasPopover<T>({
     if (destino instanceof HTMLElement) destino.focus();
   });
 
-  const enElMinimo = clavesVisibles.length <= 1;
+  // Ficha 468 (R51): con alguna columna fija en el catálogo, el archivo nunca se queda sin columnas, así
+  // que el mínimo de R7 no bloquea ninguna casilla.
+  const hayFijas = publicadas.some((columna) => fijas.includes(claveDe(columna)));
+  const enElMinimo = !hayFijas && clavesVisibles.length <= 1;
 
   function alMover(clave: string, direccion: DireccionMovimiento) {
     focoPendiente.current = { clave, direccion };
@@ -158,7 +171,8 @@ export function ColumnasPopover<T>({
               {ordenadas.map((columna, indice) => {
                 const clave = claveDe(columna);
                 const etiqueta = etiquetaDe(columna);
-                const marcada = clavesVisibles.includes(clave);
+                const fija = fijas.includes(clave);
+                const marcada = fija || clavesVisibles.includes(clave);
                 const idCasilla = `${idBase}-${clave}`;
                 const idEtiqueta = `${idCasilla}-etiqueta`;
                 const esPrimera = indice === 0;
@@ -170,7 +184,8 @@ export function ColumnasPopover<T>({
                       checked={marcada}
                       // R7: solo se bloquea la ÚLTIMA marcada; las desmarcadas siguen
                       // disponibles para volver a activarse.
-                      disabled={marcada && enElMinimo}
+                      // R51 (468): una columna fija tampoco.
+                      disabled={fija || (marcada && enElMinimo)}
                       aria-labelledby={idEtiqueta}
                       onCheckedChange={() => alternar(clave)}
                     />
