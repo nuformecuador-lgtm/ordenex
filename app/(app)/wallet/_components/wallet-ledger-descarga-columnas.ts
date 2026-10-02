@@ -23,6 +23,9 @@
  * (`autoriaDelLibroCajaAction`, pedida por el módulo) y con los MISMOS textos: nombres, nunca ids
  * (R3; el id de la cuenta de «A quién» solo sirve al enlace de la pantalla y aquí no sale).
  */
+import type { DataTableDescargaDetalle } from "@/components/shared/DataTable";
+import type { EntradaFilaDetalle } from "@/components/shared/descarga-con-detalle";
+import { DETALLE_POR_ORDEN_COMUN } from "@/components/shared/wallet/detalle-por-orden-descarga";
 import { textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
@@ -30,6 +33,7 @@ import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
+import { resultadosTexto } from "./detalle-movimiento-labels";
 import { AUTORIA_CELDA, LIBRO_CAJA_COLUMNA, textoAQuien } from "./libro-caja-labels";
 import { CATEGORIA_LABEL, DUENO_LABEL, ORIGEN_LABEL, TIPO_LABEL } from "./wallet-labels";
 
@@ -81,5 +85,62 @@ export function filaDescargaMovimientoCaja(
     // aquí solo se traduce a la palabra que se lee en pantalla.
     dueno: DUENO_LABEL[movimiento.dueno] ?? movimiento.dueno,
     registro: autoria === undefined ? AUTORIA_CELDA.sinDato : textoRegistro(autoria.registro),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// FICHA 464 (design §5.2; R1, R2, R25, R28–R31) — el selector de columnas y la hoja «Detalle por orden».
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** R1/R2 — ámbito de la preferencia de columnas de la hoja de movimientos de la caja. */
+export const AMBITO_DESCARGA_WALLET_CAJA = "wallet-caja-libro";
+
+/** R2 — ámbito PROPIO de la hoja de detalle de la caja: distinto del de la hoja de movimientos. */
+export const AMBITO_DESCARGA_WALLET_CAJA_DETALLE = "wallet-caja-detalle-orden";
+
+/**
+ * R25 — catálogo ELEGIBLE de la hoja de detalle de la caja, en este orden. «N.º» va delante y es FIJA:
+ * no está aquí (R17). La enumeración es CONTRATO y se fija con un `toEqual` escrito a mano.
+ */
+export const COLUMNAS_DESCARGA_DETALLE_POR_ORDEN_CAJA: DescargaColumna[] = [
+  { clave: "fecha", encabezado: "Fecha" },
+  { clave: "movimiento", encabezado: "Movimiento" },
+  { clave: "cierre", encabezado: "Cierre del" },
+  { clave: "mensajero", encabezado: "Mensajero" },
+  { clave: "guia", encabezado: "Guía" },
+  { clave: "remision", encabezado: "Remisión" },
+  { clave: "destinatario", encabezado: "Destinatario" },
+  { clave: "tienda", encabezado: "Tienda" },
+  { clave: "resultado", encabezado: "Resultado" },
+  { clave: "monto", encabezado: "Monto" },
+];
+
+/** La hoja de detalle de la caja, tal como la recibe el control de descarga. */
+export const DETALLE_DESCARGA_WALLET_CAJA: DataTableDescargaDetalle = {
+  ...DETALLE_POR_ORDEN_COMUN,
+  columnas: COLUMNAS_DESCARGA_DETALLE_POR_ORDEN_CAJA,
+  ambitoColumnas: AMBITO_DESCARGA_WALLET_CAJA_DETALLE,
+};
+
+/**
+ * Proyecta UNA orden de un movimiento de la caja a una fila de la hoja de detalle.
+ *
+ * «Fecha» y «Movimiento» son las celdas de la fila de su movimiento, tal cual (R28). Guía, remisión,
+ * destinatario y tienda son los CONGELADOS en el cierre (R29); el resultado, la etiqueta de pantalla
+ * (`resultadosTexto`, la misma del detalle de la fila); el monto, el STRING del servidor (R31). Ningún
+ * identificador (R30).
+ */
+export function filaDetallePorOrdenCaja({ fila, cierre, orden }: EntradaFilaDetalle): DescargaFila {
+  return {
+    fecha: fila.fecha ?? null,
+    movimiento: fila.categoria ?? null,
+    cierre: fechaDiaMovimientoCR(cierre.fecha),
+    mensajero: cierre.mensajeroNombre,
+    guia: orden.guia,
+    remision: orden.remision,
+    destinatario: orden.destinatario,
+    tienda: orden.tiendaNombre,
+    resultado: resultadosTexto(orden.resultados),
+    monto: orden.aporte, // STRING tal cual (money-safe)
   };
 }

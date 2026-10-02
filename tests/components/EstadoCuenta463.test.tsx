@@ -110,7 +110,7 @@ const TRES = [
 ];
 
 function montarTienda(inicial = estado({ filas: TRES, total: 3 })) {
-  return envolver(<EstadoCuenta inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
+  return envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
 }
 
 beforeEach(() => {

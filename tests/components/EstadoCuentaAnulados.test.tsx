@@ -30,7 +30,7 @@ function montar(inicial: EstadoCuentaDTO) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <ToastProvider>
-        <EstadoCuenta inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />
+        <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />
       </ToastProvider>
     </SWRConfig>,
   );

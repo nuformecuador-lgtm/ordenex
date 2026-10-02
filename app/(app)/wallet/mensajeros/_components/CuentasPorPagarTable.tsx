@@ -22,6 +22,7 @@ import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 import { ENLACE_ESTADO_CUENTA_MENSAJERO } from "./estado-cuenta-mensajero-labels";
 import { claveCuentasPorPagar } from "./cuentas-por-pagar-clave";
 import {
+  AMBITO_DESCARGA_CUENTAS_POR_PAGAR,
   COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
   filaDescargaCuentaPorPagar,
 } from "./cuentas-por-pagar-descarga-columnas";
@@ -287,6 +288,8 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
         descarga={{
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR,
+          // FICHA 464 (R1/R2): el selector de columnas, con su ámbito propio.
+          ambitoColumnas: AMBITO_DESCARGA_CUENTAS_POR_PAGAR,
           obtenerFilas: () =>
             filasDesdeResultado(
               listarCuentasPorPagarCompletoAction({ busqueda: aplicada }),

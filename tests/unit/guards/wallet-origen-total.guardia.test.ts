@@ -79,7 +79,9 @@ describe("458-A R94 — ninguna superficie de la wallet pinta un origen sin nomb
     // filas de un libro llama `deps.origenes ?? buildOrigenes()`, y `buildOrigenes` construye el
     // servicio sobre el repositorio de Prisma.
     const esperado: Record<string, number> = {
-      "lib/actions/wallet.ts": 3,
+      // FICHA 464 (T6): 3 → 4. `listarMovimientosCompletoConDetalleAction` entrega las filas del libro
+      // de la caja (hoja de movimientos con detalle) y les adjunta el origen igual que el completo.
+      "lib/actions/wallet.ts": 4,
       // FICHA 458-D (cierre): 4 → 2. Se retiraron `listarMisMovimientos{,Completo}Action`; el libro de
       // `/mi-wallet` es el estado de cuenta, cuyo origen lo resuelve `EstadoCuentaService` con el
       // `OrigenLegibleService` que le inyecta `buildService()` de `lib/actions/estado-cuenta.ts`.

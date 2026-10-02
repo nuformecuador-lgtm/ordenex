@@ -210,27 +210,63 @@ export async function buildXlsxRows(
       "buildXlsxRows: se requiere al menos una columna para generar la hoja",
     );
   }
+  // Ficha 464: UNA hoja es el caso particular del libro de varias. Misma firma, mismo resultado.
+  return buildXlsxLibro([{ nombre: sheetName, columns, rows }]);
+}
+
+/** Ficha 464 (design §2.1) — una hoja del libro: nombre ya valido, columnas y filas. */
+export interface XlsxHoja {
+  nombre: string;
+  columns: XlsxColumn[];
+  rows: Array<Record<string, XlsxCellValue>>;
+}
+
+/**
+ * Ficha 464 (design §2.1, R10/R41/R42) — el binario XLSX de un libro de VARIAS hojas, en el orden
+ * recibido. Cada hoja se escribe exactamente como `buildXlsxRows` escribia la unica: cabecera en
+ * negrita, una fila por elemento, solo las columnas declaradas, `null` = celda vacia, anchos por
+ * contenido.
+ *
+ * Los nombres llegan YA validos y distintos (los sanea quien conoce el titulo:
+ * `nombreHoja` + `nombresDeHojaUnicos` en `descarga-dataset.ts`). Aqui se afirma lo minimo: un
+ * libro sin hojas o una hoja sin columnas no producen archivo.
+ *
+ * @throws si `hojas` esta vacio o alguna hoja no tiene columnas.
+ */
+export async function buildXlsxLibro(hojas: readonly XlsxHoja[]): Promise<ArrayBuffer> {
+  if (hojas.length === 0) {
+    throw new Error("buildXlsxLibro: se requiere al menos una hoja para generar el libro");
+  }
+  for (const hoja of hojas) {
+    if (hoja.columns.length === 0) {
+      throw new Error(
+        `buildXlsxLibro: la hoja «${hoja.nombre}» necesita al menos una columna`,
+      );
+    }
+  }
 
   // Import dinámico: exceljs queda fuera del bundle inicial del consumidor.
   const ExcelJS = (await import("exceljs")).default;
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(sheetName);
+  for (const { nombre, columns, rows } of hojas) {
+    const worksheet = workbook.addWorksheet(nombre);
 
-  worksheet.columns = columns.map((column) => ({
-    header: column.header,
-    key: column.key,
-    width: column.width ?? computeDataWidth(column, rows),
-  }));
+    worksheet.columns = columns.map((column) => ({
+      header: column.header,
+      key: column.key,
+      width: column.width ?? computeDataWidth(column, rows),
+    }));
 
-  worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).font = { bold: true };
 
-  for (const row of rows) {
-    const celdas: Record<string, XlsxCellValue> = {};
-    for (const column of columns) {
-      celdas[column.key] = row[column.key] ?? null;
+    for (const row of rows) {
+      const celdas: Record<string, XlsxCellValue> = {};
+      for (const column of columns) {
+        celdas[column.key] = row[column.key] ?? null;
+      }
+      worksheet.addRow(celdas);
     }
-    worksheet.addRow(celdas);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

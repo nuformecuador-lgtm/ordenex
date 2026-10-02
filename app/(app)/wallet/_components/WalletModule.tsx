@@ -11,16 +11,30 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Pagination } from "@/components/shared/Pagination";
-import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import type { DescargaFilasResult } from "@/components/shared/DataTable";
+import { enlazarHojas } from "@/components/shared/descarga-con-detalle";
+import {
+  SUFIJO_REINTENTO,
+  filasDesdeResultado,
+  mensajeLimite,
+  mensajeLimiteDetalle,
+} from "@/components/shared/descarga-resultado";
+import {
+  COLUMNA_DETALLE_POR_ORDEN,
+  COLUMNA_NUMERO_MOVIMIENTO,
+  textoDetallePorOrden,
+} from "@/components/shared/wallet/detalle-por-orden-descarga";
 import { useToast } from "@/hooks/useToast";
 import {
   listarMovimientosAction,
   listarMovimientosCompletoAction,
+  listarMovimientosCompletoConDetalleAction,
   verResumenCajaAction,
 } from "@/lib/actions/wallet";
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import { autoriaDelLibroCajaAction } from "@/lib/actions/libro-caja-autoria";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import { messageFromActionError } from "@/lib/utils/action-error-message";
 import type { AutoriaDeFilaDTO } from "@/lib/types/libro-caja-autoria";
 import type {
   CajaResumenDTO,
@@ -39,7 +53,8 @@ import {
   type CobrosRechazoTiendaPendientes,
 } from "./CobrosRechazoTiendaPendientesPanel";
 import { WalletLedger, type AutoriaDelLibro } from "./WalletLedger";
-import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
+import { DETALLE_MOVIMIENTO_SIN_REPARTO } from "./detalle-movimiento-labels";
+import { filaDescargaMovimientoCaja, filaDetallePorOrdenCaja } from "./wallet-ledger-descarga-columnas";
 import { LECTURA_CAJA_FALLO } from "./wallet-labels";
 import {
   FILTROS_LIBRO_INICIALES,
@@ -215,6 +230,42 @@ async function listarConAutoria(
   };
 }
 
+/**
+ * FICHA 464 (T8; R10, R13–R16, R36, R38, R39, R43) — la descarga «Movimientos y detalle por orden» de la
+ * caja: UNA petición (`listarMovimientosCompletoConDetalleAction`, misma entrada que el completo de
+ * siempre) trae el libro y el detalle de ESOS movimientos; la autoría se lee como hoy, en tramos; y
+ * `enlazarHojas` numera y enlaza las dos hojas. Cualquier fallo es un aviso y ningún archivo.
+ */
+async function listarConAutoriaYDetalle(input: Record<string, unknown>): Promise<DescargaFilasResult> {
+  const res = await listarMovimientosCompletoConDetalleAction(input);
+  if (res.status === "limite_excedido") {
+    return {
+      status: "error",
+      mensaje: res.hoja === "detalle" ? mensajeLimiteDetalle(res.total, res.limite) : mensajeLimite(res.total, res.limite),
+    };
+  }
+  if (res.status !== "ok") return { status: "error", mensaje: `${messageFromActionError(res)} ${SUFIJO_REINTENTO}` };
+  const porMovimiento = new Map<string, AutoriaDeFilaDTO>();
+  for (let i = 0; i < res.items.length; i += TOPE_IDS_AUTORIA) {
+    const tramo = res.items.slice(i, i + TOPE_IDS_AUTORIA).map((m) => m.id);
+    const r = await autoriaDelLibroCajaAction({ movimientoIds: tramo });
+    if (r.status !== "ok") return { status: "error", mensaje: `${messageFromActionError(r)} ${SUFIJO_REINTENTO}` };
+    for (const fila of r.filas) porMovimiento.set(fila.movimientoId, fila);
+  }
+  const hojas = enlazarHojas({
+    lineas: res.items,
+    numerada: () => true,
+    idDe: (m) => m.id,
+    filaDe: (m) => filaDescargaMovimientoCaja(m, porMovimiento.get(m.id)),
+    detalle: res.detalle,
+    filaDetalleDe: filaDetallePorOrdenCaja,
+    textoEstado: (d) => textoDetallePorOrden(d, DETALLE_MOVIMIENTO_SIN_REPARTO),
+    claveEnlace: COLUMNA_NUMERO_MOVIMIENTO.clave,
+    claveEstado: COLUMNA_DETALLE_POR_ORDEN.clave,
+  });
+  return { status: "ok", ...hojas };
+}
+
 export function WalletModule({
   movimientos: initialMovimientos,
   total: initialTotal,
@@ -317,7 +368,7 @@ export function WalletModule({
    * R49 — la lectura falló (con respuesta de error o lanzando): se avisa, la pantalla se queda TAL
    * CUAL (nada se pintó) y lo pedido vuelve a lo aplicado, con el periodo y el término de los controles.
    */
-  function fallo(status: "forbidden" | "unauthenticated" | "validation_error" | null) {
+  function fallo(status: "forbidden" | "unauthenticated" | "validation_error" | null, pedido: FiltrosLibro) {
     if (status === null) toast.error(LECTURA_CAJA_FALLO);
     else manejarError(status);
     pedidoWallet.current = aplicadoWallet.current;
@@ -325,7 +376,10 @@ export function WalletModule({
     const fw = aplicadoWallet.current;
     const termino = aplicadoLibro.current.termino;
     setSiembraPeriodo((s) => ({ senal: (s?.senal ?? 0) + 1, seleccion: seleccionDePeriodo(fw.desde, fw.hasta) }));
-    setSiembraTermino((s) => ({ senal: (s?.senal ?? 0) + 1, termino }));
+    // Revisión 463 m9 — el buscador solo se resiembra si la lectura que falló pedía OTRO término. Si falló
+    // por otra cosa (un conmutador, el periodo), lo que el usuario está tecleando y aún no se envió se
+    // queda en el campo y su espera sigue: se pedirá sobre lo aplicado al cumplirse, como cualquier tecleo.
+    if (pedido.termino !== termino) setSiembraTermino((s) => ({ senal: (s?.senal ?? 0) + 1, termino }));
   }
 
   /** Toma el turno: desde aquí, cualquier lectura anterior llega tarde y no pinta. */
@@ -369,7 +423,7 @@ export function WalletModule({
       if (mio !== turno.current) return; // una selección posterior manda
 
       for (const r of [movRes, resRes, desRes, totRes]) {
-        if (r !== null && r.status !== "ok") return fallo(r.status);
+        if (r !== null && r.status !== "ok") return fallo(r.status, fl);
       }
       if (movRes.status !== "ok" || resRes.status !== "ok" || desRes.status !== "ok") return;
 
@@ -385,7 +439,7 @@ export function WalletModule({
       setPage(movRes.data.page);
       setFiltrosLibro(fl);
     } catch {
-      if (mio === turno.current) fallo(null);
+      if (mio === turno.current) fallo(null, fl);
     } finally {
       soltarTurno(mio);
     }
@@ -402,14 +456,14 @@ export function WalletModule({
     try {
       const movRes = await listarMovimientosAction(paginado(inputDeLibro(fw, fl), nextPage, pageSize));
       if (mio !== turno.current) return;
-      if (movRes.status !== "ok") return fallo(movRes.status);
+      if (movRes.status !== "ok") return fallo(movRes.status, fl);
       aplicadoLibro.current = fl;
       setMovimientos(movRes.data.movimientos);
       setTotal(movRes.data.total);
       setPage(movRes.data.page);
       setFiltrosLibro(fl);
     } catch {
-      if (mio === turno.current) fallo(null);
+      if (mio === turno.current) fallo(null, fl);
     } finally {
       soltarTurno(mio);
     }
@@ -588,10 +642,14 @@ export function WalletModule({
               onCambio={() => void recargarTrasCambio()}
               autoria={autoria}
               // FICHA 463 (R42): las dos zonas, el término y el orden vigentes.
-              obtenerFilasDescarga={() =>
-                filasDesdeResultado(listarConAutoria(inputDeLibro(filtrosWallet, filtrosLibro)), (f) =>
-                  filaDescargaMovimientoCaja(f.movimiento, f.autoria),
-                )
+              // FICHA 464 (R13/R36): «Solo los movimientos» es la descarga de SIEMPRE; con el detalle, UNA
+              // petición con la MISMA entrada.
+              obtenerFilasDescarga={(opciones) =>
+                opciones?.conDetalle
+                  ? listarConAutoriaYDetalle(inputDeLibro(filtrosWallet, filtrosLibro))
+                  : filasDesdeResultado(listarConAutoria(inputDeLibro(filtrosWallet, filtrosLibro)), (f) =>
+                      filaDescargaMovimientoCaja(f.movimiento, f.autoria),
+                    )
               }
               // FICHA 463 (R1/R5) — la ZONA DEL LIBRO, encima de la tabla y junto a la descarga.
               filtros={

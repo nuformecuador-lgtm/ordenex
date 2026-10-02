@@ -26,7 +26,7 @@ import {
   FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   aporteDeOrden,
-  criterioDeFuente,
+  fuenteDeMovimiento,
   type FuenteDeAporte,
 } from "@/lib/utils/aporte-por-orden";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
@@ -90,7 +90,10 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       IWalletTiendaMovimientoRepository,
       "obtenerPorIdDeTienda"
     >,
-    private readonly aportes: ICierreAporteRepository,
+    private readonly aportes: Pick<
+      ICierreAporteRepository,
+      "listarOrdenesQueAportan" | "contarOrdenesDelCierre" | "obtenerCabeceraDeCierre"
+    >,
     // FICHA 458-D (servidor, R19) — la fila del libro del MENSAJERO, con su cuenta en el WHERE.
     private readonly movimientosDeMensajero: Pick<IEstadoCuentaRepository, "movimientoDeMensajero">,
   ) {}
@@ -228,20 +231,12 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
     tiendaId: string | undefined,
     rango: { skip: number; take: number },
   ): Promise<ConjuntoResuelto> {
-    const criterio = criterioDeFuente(fuente);
-    // R48: el concepto no se reparte por orden. La fila se abre igual y dice por que.
-    if (criterio === null || fuente.tipo === "sin_reparto") {
-      return {
-        estado: "sin_reparto",
-        motivo: fuente.tipo === "sin_reparto" ? fuente.motivo : "no_nace_de_un_cierre",
-      };
-    }
-    // R6/R48: un ajuste manual o un gasto no cuelga de ningun cierre, aunque su categoria si
-    // admita reparto. Aqui todavia no se ha consultado ni una orden.
-    if (movimiento.origenTipo !== "cierre_dia" || movimiento.origenId === null) {
-      return { estado: "sin_reparto", motivo: "no_nace_de_un_cierre" };
-    }
-    const cierreId = movimiento.origenId;
+    // R48 / R6: el concepto no se reparte por orden, o el movimiento no cuelga de un cierre. La
+    // fila se abre igual y dice por que; aqui todavia no se ha consultado ni una orden.
+    // Ficha 464 (T3): la decision vive en `fuenteDeMovimiento`, la MISMA que usa el detalle en lote.
+    const decision = fuenteDeMovimiento(movimiento, fuente);
+    if (decision.tipo === "sin_reparto") return { estado: "sin_reparto", motivo: decision.motivo };
+    const { criterio, cierreId } = decision;
 
     const cabecera = await this.aportes.obtenerCabeceraDeCierre(cierreId);
     // El origen apunta a un cierre que no esta: no se inventa cabecera ni se sirven ordenes.

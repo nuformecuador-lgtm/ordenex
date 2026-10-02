@@ -257,6 +257,9 @@ describe("el PUENTE `verBalanceAction` ya no existe (173, Tanda H)", () => {
       "anularAjusteCajaAction", // ficha 461 (R69–R71): anular una correccion de caja
       "listarMovimientosAction",
       "listarMovimientosCompletoAction",
+      // Ficha 464 (T6): la descarga «Movimientos y detalle por orden» de la caja, deliberada; nace
+      // `@sin-superficie` hasta que el frontend de la 464 (T8) la cablee.
+      "listarMovimientosCompletoConDetalleAction",
       "listarMovimientosDeFilaAction",
       "registrarMovimientoManualAction",
       "verDetalleDeMovimientoAction",

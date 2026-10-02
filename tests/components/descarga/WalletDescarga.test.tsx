@@ -150,6 +150,7 @@ import {
   filaDescargaMovimientoCaja,
 } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
 import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -423,6 +424,8 @@ describe("Ledgers de dinero · descarga", () => {
         expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
       });
 
+      // Ficha 464 (R8/R9): las dos superficies arrancan con el detalle; aquí se mide la descarga de SIEMPRE.
+      await elegirSoloLosMovimientos(user);
       await user.click(boton);
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
@@ -453,6 +456,8 @@ describe("Ledgers de dinero · descarga", () => {
     await aplicarPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 28);
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
 
     await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
@@ -695,6 +700,8 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     });
     renderCaja(CAJA_CON_NUEVOS);
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
@@ -798,6 +805,8 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
     expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
 
     // Y el archivo dice exactamente eso, celda a celda, con la autoría leída para el libro ENTERO.
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas] = buildXlsxRowsMock.mock.calls[0];
@@ -825,6 +834,8 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
     await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(1));
     autoriaMock.mockResolvedValueOnce({ status: "forbidden" } as never);
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(2));

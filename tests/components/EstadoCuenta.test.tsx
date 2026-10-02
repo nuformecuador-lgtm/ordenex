@@ -49,7 +49,7 @@ function envolver(nodo: ReactNode) {
 }
 
 function montarTienda(inicial: EstadoCuentaDTO) {
-  return envolver(<EstadoCuenta inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
+  return envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
 }
 
 function filasDeLaTabla(nombre = "Tania Tienda") {
@@ -79,7 +79,7 @@ describe("R18 — las tarjetas dicen quién le debe a quién, en palabras", () =
 
   it("mensajero: «Ordenex le debe ₡3.500 a Mario Mensajero»", () => {
     envolver(
-      <EstadoCuenta
+      <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }}
         inicial={estado({ tipo: "mensajero", nombre: "Mario Mensajero", saldoActual: "3500.00", filas: [], total: 0 })}
         rotulos={ROTULOS_MENSAJERO}
       />,
@@ -89,7 +89,7 @@ describe("R18 — las tarjetas dicen quién le debe a quién, en palabras", () =
 
   it("bodega: «Bodega Norte tiene ₡4.000,10 por entregar»", () => {
     envolver(
-      <EstadoCuenta
+      <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }}
         inicial={estado({ tipo: "bodega", nombre: "Bodega Norte", saldoActual: "4000.10", filas: [], total: 0 })}
         rotulos={ROTULOS_BODEGA}
       />,
@@ -210,12 +210,12 @@ describe("R24 — los chips por tipo de cuenta (D10)", () => {
   });
 
   it("mensajero: Todo · Cierres · Pagos · Premios · Correcciones", () => {
-    envolver(<EstadoCuenta inicial={estado({ tipo: "mensajero", nombre: "Mario" })} rotulos={ROTULOS_MENSAJERO} />);
+    envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ tipo: "mensajero", nombre: "Mario" })} rotulos={ROTULOS_MENSAJERO} />);
     expect(chips("Mario")).toEqual(["Todo", "Cierres", "Pagos", "Premios", "Correcciones"]);
   });
 
   it("bodega: Todo · Declarado · Recibido", () => {
-    envolver(<EstadoCuenta inicial={estado({ tipo: "bodega", nombre: "Bodega", filas: [] })} rotulos={ROTULOS_BODEGA} />);
+    envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ tipo: "bodega", nombre: "Bodega", filas: [] })} rotulos={ROTULOS_BODEGA} />);
     expect(chips("Bodega")).toEqual(["Todo", "Declarado", "Recibido"]);
   });
 
@@ -291,7 +291,7 @@ describe("«Ver» → el panel de la 458-C, y H6", () => {
 
   it("la bodega no tiene filas de libro: sin «Ver»", () => {
     envolver(
-      <EstadoCuenta
+      <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }}
         inicial={estado({
           tipo: "bodega",
           nombre: "Bodega",

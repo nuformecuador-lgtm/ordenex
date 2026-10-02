@@ -53,6 +53,16 @@ export const COLUMNAS_DESCARGA_MI_ESTADO_CUENTA: DescargaColumna[] = COLUMNAS_DE
   (c) => c.clave !== "registro",
 );
 
+/**
+ * FICHA 464 (R1/R2) — el ámbito del selector de columnas de la hoja de movimientos de CADA estado de
+ * cuenta: uno por superficie, aunque compartan catálogo, para que ocultar una columna en el de una
+ * tienda no la oculte en el de un mensajero. Se ASIGNAN en el módulo de cada superficie.
+ */
+export const AMBITO_DESCARGA_ESTADO_CUENTA_TIENDA = "wallet-tienda-estado-cuenta";
+export const AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO = "wallet-mensajero-estado-cuenta";
+export const AMBITO_DESCARGA_ESTADO_CUENTA_SATELITE = "wallet-satelite-estado-cuenta";
+export const AMBITO_DESCARGA_MI_ESTADO_CUENTA = "mi-wallet-estado-cuenta";
+
 /** Proyecta UNA línea del extracto a una fila de export con valores crudos. */
 export function filaDescargaEstadoCuenta(linea: LineaEstadoCuenta): DescargaFila {
   return {

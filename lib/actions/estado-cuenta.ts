@@ -17,6 +17,10 @@ import { RechazoTiendaCobroAnulacionRepository } from "@/lib/repositories/Rechaz
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
+import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
+import { EstadoCuentaConDetalleService } from "@/lib/services/LibroConDetalleService";
+import type { IEstadoCuentaConDetalleService } from "@/lib/interfaces/services/IEstadoCuentaConDetalleService";
+import type { EstadoCuentaConDetalleServiceResult } from "@/lib/types/detalle-en-lote";
 import { EstadoCuentaService } from "@/lib/services/EstadoCuentaService";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import {
@@ -81,6 +85,37 @@ function buildDetalleService(): IDetalleMovimientoService {
     new EstadoCuentaRepository(prisma),
   );
 }
+
+/**
+ * Ficha 464 (design §4) — el composition root de la descarga del estado de cuenta CON detalle por
+ * orden: el servicio del estado de cuenta de SIEMPRE (`buildService`, la misma hoja que sin detalle,
+ * R14) y el detalle en lote sobre sus dos repositorios reales. Sin dependencias opcionales.
+ */
+function buildConDetalleService(): IEstadoCuentaConDetalleService {
+  const prisma = getPrismaClient();
+  return new EstadoCuentaConDetalleService(
+    buildService(),
+    new DetalleEnLoteService(new CierreAporteRepository(prisma), new WalletTiendaMovimientoRepository(prisma)),
+  );
+}
+
+/** Ficha 464 — dependencias de la descarga con detalle, inyectables en test. */
+export interface EstadoCuentaConDetalleDeps {
+  service?: IEstadoCuentaConDetalleService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+/** Ficha 464 (R35/R36/R38/R39) — `ok` con `estado` + `detalle`; `limite_excedido` con `hoja`. */
+export type VerEstadoCuentaConDetalleResult = EstadoCuentaConDetalleServiceResult | ErrorDeBorde;
+
+/**
+ * Ficha 464 (R7) — el borde de la oficina: el del completo de SIEMPRE (con lo de la 463) y, ademas, la
+ * cuenta TIENE que ser una tienda. El mensajero y la bodega no tienen detalle por orden.
+ */
+const estadoCuentaTiendaCompletoSchema = estadoCuentaCompletoSchema.refine((v) => v.cuenta.tipo === "tienda", {
+  message: "El detalle por orden solo existe en el estado de cuenta de una tienda.",
+  path: ["cuenta"],
+});
 
 export interface EstadoCuentaDeps {
   service?: IEstadoCuentaService;
@@ -176,6 +211,49 @@ export async function verMiEstadoCuentaCompletoAction(
     const data = miEstadoCuentaCompletoSchema.parse(input ?? {});
     const service = deps.service ?? buildService();
     return service.leerMiTiendaCompleto(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 464 (design §2.3, R14/R36/R38/R39) — la descarga «Movimientos y detalle por orden» del estado
+ * de cuenta de UNA TIENDA, en la oficina, en una sola peticion: la hoja del completo de siempre con los
+ * mismos filtros, termino y orden, y el detalle por orden de ESAS filas, acotado a esa tienda (R34).
+ *
+ * Superficie (ficha 464, T9): la descarga con detalle del estado de cuenta de una tienda
+ * (`lectorDeLaCuenta` de `EstadoCuenta.tsx`, montado por `EstadoCuentaTienda.tsx`).
+ */
+export async function verEstadoCuentaCompletoConDetalleAction(
+  input: unknown,
+  deps: EstadoCuentaConDetalleDeps = {},
+): Promise<VerEstadoCuentaConDetalleResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = estadoCuentaTiendaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildConDetalleService();
+    return service.tiendaConDetalle(data, actor);
+  });
+  return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
+}
+
+/**
+ * Ficha 464 (design §2.3, R33/R35/R36) — la descarga con detalle de `/mi-wallet`: la tienda es la de
+ * la SESION. Mismo borde que `verMiEstadoCuentaCompletoAction` (`.strict()`): una `cuenta` o un
+ * `tiendaId` en la entrada es `validation_error` sin leer nada (R35).
+ *
+ * Superficie (ficha 464, T9): la descarga con detalle de `/mi-wallet` (`LECTOR_MI_TIENDA`, `MiEstadoCuenta.tsx`).
+ */
+export async function verMiEstadoCuentaCompletoConDetalleAction(
+  input: unknown,
+  deps: EstadoCuentaConDetalleDeps = {},
+): Promise<VerEstadoCuentaConDetalleResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = miEstadoCuentaCompletoSchema.parse(input ?? {});
+    const service = deps.service ?? buildConDetalleService();
+    return service.miTiendaConDetalle(data, actor);
   });
   return isAppErrorShape(r) ? toEstadoCuentaActionError(r) : r;
 }

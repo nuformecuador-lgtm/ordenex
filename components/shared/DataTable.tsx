@@ -106,8 +106,41 @@ export interface DataTableEmptyState {
  * tabla no traduce códigos de error ni conoce sus causas.
  */
 export type DescargaFilasResult =
-  | { status: "ok"; filas: DescargaFila[] }
+  | {
+      status: "ok";
+      filas: DescargaFila[];
+      /**
+       * Ficha 464 (R10) — las filas de la HOJA DE DETALLE, solo cuando se pidieron con
+       * `conDetalle: true` y la configuración declara `detalle`. Ausente en todo lo demás.
+       */
+      filasDetalle?: DescargaFila[];
+    }
   | { status: "error"; mensaje: string };
+
+/**
+ * Ficha 464 (design §2.2) — una SEGUNDA HOJA opcional del archivo, con su propio catálogo y su propio
+ * ámbito de columnas (R2/R11), elegible desde el mismo selector que la principal (R6).
+ *
+ * Sigue SIN DOMINIO: son hojas, columnas, textos y un ámbito. Qué datos van en ella lo decide el
+ * consumidor dentro de `obtenerFilas`, igual que con la hoja principal.
+ *
+ * El ámbito se toma con `Required<Pick<…>>` y no repitiendo el campo: `ambito-columnas.guardia` lee el
+ * árbol como texto y un `ambitoColumnas: <tipo>` escrito aquí le parecería una asignación sin resolver.
+ */
+export type DataTableDescargaDetalle = Required<Pick<DataTableDescarga, "ambitoColumnas">> & {
+  /** Nombre de la hoja de detalle (se sanea y se hace distinto del de la principal). */
+  titulo: string;
+  /** Catálogo ELEGIBLE de la hoja de detalle, sin la columna de enlace (que es fija). */
+  columnas: DescargaColumna[];
+  /** R6 — la opción que descarga las dos hojas; su texto dice cuántas hojas lleva. */
+  etiquetaOpcion: string;
+  /** R6 — la opción que descarga solo la hoja principal; su texto dice cuántas hojas lleva. */
+  etiquetaSinDetalle: string;
+  /** R15/R17/R19 — columna FIJA, primera de las dos hojas: enlaza cada fila de detalle con su fila. */
+  columnaEnlace: DescargaColumna;
+  /** R16/R17 — columna FIJA, última de la hoja principal: qué detalle tiene cada fila. */
+  columnaEstado: DescargaColumna;
+};
 
 /**
  * Configuración OPT-IN de la descarga del dataset completo (R29).
@@ -123,8 +156,14 @@ export interface DataTableDescarga {
   titulo: string;
   /** Columnas del EXPORT, declaradas aparte de `Column<T>` y con valor crudo (D5). */
   columnas: DescargaColumna[];
-  /** Obtiene el dataset completo. Es el ÚNICO punto que conoce filtros y acciones. */
-  obtenerFilas: () => Promise<DescargaFilasResult>;
+  /**
+   * Obtiene el dataset completo. Es el ÚNICO punto que conoce filtros y acciones.
+   *
+   * Ficha 464 — gana UN parámetro OPCIONAL, y sin dominio: si se pide también la hoja de detalle.
+   * Solo se le pasa cuando la configuración declara `detalle`; sin ella se llama SIN argumentos, como
+   * siempre, y las funciones sin parámetro de las demás tablas siguen valiendo (R41).
+   */
+  obtenerFilas: (opciones?: { conDetalle: boolean }) => Promise<DescargaFilasResult>;
   /** R28: más de uno ⇒ el usuario elige; ausente o uno solo ⇒ descarga directa. */
   formatos?: DescargaTipo[];
   /**
@@ -137,6 +176,15 @@ export interface DataTableDescarga {
    * un IDENTIFICADOR, y quien lee el almacenamiento es el control común.
    */
   ambitoColumnas?: string;
+  /**
+   * Ficha 464 (R6–R13) — la hoja de detalle opcional. AUSENTE ⇒ el control es exactamente el de
+   * siempre: una hoja, sin opciones nuevas (R41). Exige `ambitoColumnas` en la principal (las dos hojas
+   * se eligen en el mismo selector); sin él, `detalle` no se ofrece.
+   *
+   * Se amplía el contrato a sabiendas del aviso de arriba, y se deja escrito: lo nuevo sigue sin
+   * dominio —hojas, columnas, textos y un booleano—, no filtros ni roles (design §2.2).
+   */
+  detalle?: DataTableDescargaDetalle;
 }
 
 export interface DataTableProps<T> {
@@ -546,6 +594,7 @@ export function DataTable<T>({
               obtenerFilas={descarga.obtenerFilas}
               formatos={descarga.formatos}
               ambitoColumnas={descarga.ambitoColumnas}
+              detalle={descarga.detalle}
             />
           ) : null}
         </div>

@@ -19,14 +19,19 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
+import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
+import { CajaConDetalleService } from "@/lib/services/LibroConDetalleService";
 import { WalletService } from "@/lib/services/WalletService";
 import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import {
   origenEnItems,
   origenEnPagina,
+  type ConOrigenEnItems,
   type ConOrigenEnPagina,
 } from "@/lib/services/origen-en-resultado";
+import type { ICajaConDetalleService } from "@/lib/interfaces/services/ICajaConDetalleService";
+import type { CajaConDetalleServiceResult } from "@/lib/types/detalle-en-lote";
 import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -175,6 +180,36 @@ function buildDetalleService(): IDetalleMovimientoService {
   );
 }
 
+/**
+ * Ficha 464 (design §4) — el composition root de la descarga de la caja CON detalle por orden: el
+ * servicio del libro de SIEMPRE (el mismo `buildService` que la descarga sin detalle, para que la hoja
+ * de movimientos sea la misma, R14) y el detalle en lote sobre sus dos repositorios reales. Ninguna
+ * dependencia es opcional (`tests/unit/actions/libro-con-detalle-464.composition-root.test.ts`).
+ */
+function buildCajaConDetalleService(): ICajaConDetalleService {
+  const prisma = getPrismaClient();
+  return new CajaConDetalleService(
+    buildService(),
+    new DetalleEnLoteService(new CierreAporteRepository(prisma), new WalletTiendaMovimientoRepository(prisma)),
+  );
+}
+
+/** Ficha 464 — dependencias de la descarga con detalle, inyectables en test. */
+export interface CajaConDetalleDeps {
+  service?: ICajaConDetalleService;
+  getActor?: () => Promise<Actor | null>;
+  origenes?: IOrigenLegibleService;
+}
+
+/**
+ * Ficha 464 (R14/R36/R38/R39) — el resultado en el BORDE: el `ok` lleva las filas con su origen
+ * legible (como `listarMovimientosCompletoAction`) y el `detalle`; `limite_excedido` lleva `hoja`.
+ */
+export type ListarMovimientosCompletoConDetalleActionResult =
+  | ConOrigenEnItems<CajaConDetalleServiceResult>
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 export interface WalletDeps {
   service?: IWalletService;
   getActor?: () => Promise<Actor | null>;
@@ -249,6 +284,30 @@ export async function listarMovimientosCompletoAction(
     const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     const r = await service.listarMovimientosCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 464 (design §2.3, R14/R36/R38/R39) — la descarga «Movimientos y detalle por orden» de la caja,
+ * en UNA peticion: la MISMA entrada y el MISMO servicio que `listarMovimientosCompletoAction` (filtros,
+ * termino y orden de la 463; `.strict()`), mas el detalle por orden de ESOS movimientos. El tope de la
+ * hoja de movimientos y el del detalle los aplica el SERVIDOR (`limite_excedido` con `hoja`).
+ *
+ * Superficie (ficha 464, T8): la descarga «Movimientos y detalle por orden» del libro de `/wallet`
+ * (`WalletModule.tsx`). Su `@sin-superficie` se borró al cablearla.
+ */
+export async function listarMovimientosCompletoConDetalleAction(
+  input: unknown,
+  deps: CajaConDetalleDeps = {},
+): Promise<ListarMovimientosCompletoConDetalleActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCajaConDetalleService();
+    const r = await service.cajaConDetalle(data, actor);
     return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;

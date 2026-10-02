@@ -351,7 +351,7 @@ Archivos: **AP** = `tests/unit/components/filter-component-aplicar-463.test.tsx`
 | R46 | CJ «R34/R46: se entra en «Más recientes» y sin leer nada»; LC «R34/R46» |
 | R47 | EC «R34/R47»; ECI «R34/R47» |
 | R48 | LB «463 R48» (sin «SLA» ni jerga en los textos nuevos) |
-| R49 | CJ «R49» (×2: falla el libro / falla la wallet: aviso en español, nada se pisa, el periodo vuelve); `EstadoCuenta.test` «R5 (171) … el fallo se dice» |
+| R49 | CJ «R49» (×2: falla el libro / falla la wallet: aviso en español, nada se pisa, el periodo vuelve) + CJ «463 R49 (revisión B3)» (×2: la wallet lanza / el libro lanza, con la aserción de m11) + CJ «463 R49 (revisión B4)» (×4: A, B, C, «las dos bien») + CJ «(revisión m9)» + CJ «(revisión m10)»; `EstadoCuenta.test` «R5 (171) … el fallo se dice»; EC «463 R49» y «(m7)» ×2 |
 
 ## Mutaciones del frontend (medidas, restauradas con `cmp`)
 
@@ -561,7 +561,7 @@ Las 12 suites de `tests/unit/asistente` y las 191 de `tests/unit/guards` en verd
 | R22 | + `filter-component-url-aplicar-463` (precarga por URL con y sin «Aplicar») |
 | R33/R34 | + ECI «R33/R34: «Mas recientes» empieza por la fecha MAYOR…» (sentido absoluto) |
 | R38/R39 | + EC «463 R38/R39 (revisión m2)» |
-| R49 | CJ «R49» (×2, caja) + EC «463 R49» (×5, estados de cuenta) + `EstadoCuenta.test` «R5 (171)» reescrito |
+| R49 | CJ «R49» (×2, caja) + CJ «revisión B3» (×2) + CJ «revisión B4» (×4) + CJ «revisión m9» + CJ «revisión m10» + EC «463 R49» (×5, estados de cuenta) + EC «(m7)» (×2) + `EstadoCuenta.test` «R5 (171)» reescrito |
 
 ## Gate de la vuelta (salida real)
 
@@ -667,3 +667,30 @@ El único archivo rojo es AJENO: `tests/integration/db/cierre-sin-gestion-tope-s
 `CierresAdminRepository.resolverCierre` — el usuario actor desaparecido por otro archivo/gate sobre la base
 local compartida, no una aserción. Esta vuelta no toca cierres, órdenes ni Prisma. Repetido AISLADO 3 veces:
 **9/9 verde las 3**. Los 26 `skipped` son los de siempre. Todo lo de la 463 verde.
+
+## Menores de la tercera revisión (m9–m12), cerrados en la rama de la 464
+
+Hechos por el frontend de la 464 en `feature/464-wallets-excel-por-orden` (tocan `WalletModule.tsx`, que la
+464 también cambia). CJ = `tests/components/WalletCaja463.test.tsx`.
+
+- **m9** — `fallo(status, pedido)` solo resiembra el buscador si la lectura que falló pedía OTRO término que
+  el aplicado. Si falló por otra cosa (un conmutador, el periodo), lo tecleado y aún no enviado se queda en
+  el campo y su espera sigue: al cumplirse se pide sobre lo aplicado. Test: CJ «463 R49 (revisión m9)»
+  (falla «Sale» mientras se teclea «Juan»: el campo sigue en «Juan» y luego se pide `{ q: "Juan" }` sin el
+  «Sale» que falló).
+- **m10** — test CJ «463 R49 (revisión m10)»: periodo en vuelo + «Sale» en vuelo, llega la primera (ya
+  superada) y luego «Más antiguas»: se relee TODO (resumen ×3) y el libro lleva periodo + `egreso` + `asc`.
+- **m11** — en CJ «revisión B3 / el libro lanza», la lectura del término tras el fallo de «Más antiguas» va
+  `{ q: "Juan", page: 1, pageSize: 20 }` (sin `sortDir: "asc"`).
+- **m12** — las dos filas R49 de los mapas de arriba nombran ya los bloques B3, B4, m9 y m10.
+
+Mutaciones (arnés de un solo uso que comprueba que el archivo CAMBIÓ y restaura byte a byte; CJ entero):
+
+| # | Mutación en `WalletModule.tsx` | Resultado |
+| --- | --- | --- |
+| R2 (de la revisión) | `fallo()` no devuelve `pedidoLibro` a lo aplicado | **Muerta**: 2 rojos (B3 «el libro lanza» por m11, m9) |
+| R4 (de la revisión) | `soltarTurno` sin la guarda `mio !== turno.current` | **Muerta**: 1 rojo (m10) |
+| m9 | resembrar el término siempre | **Muerta**: 1 rojo (m9) |
+
+Restaurado `true`; base 31/31 verde antes y después.
+

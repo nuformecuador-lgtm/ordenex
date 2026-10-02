@@ -25,7 +25,11 @@ import {
   textoAQuien,
 } from "./libro-caja-labels";
 import { VerMovimientoCaja, type AutoriaDeLaFilaEnElLibro } from "./VerMovimientoCaja";
-import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
+import {
+  AMBITO_DESCARGA_WALLET_CAJA,
+  COLUMNAS_DESCARGA_WALLET_CAJA,
+  DETALLE_DESCARGA_WALLET_CAJA,
+} from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
   DUENO_LABEL,
@@ -280,8 +284,10 @@ export interface WalletLedgerProps {
    * componente sin fetchear nada.
    *
    * Ausente ⇒ la tabla no monta el control y se comporta igual que antes (R39).
+   *
+   * FICHA 464 (T8) — recibe `{ conDetalle }`: con `true` devuelve también la hoja «Detalle por orden».
    */
-  obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
+  obtenerFilasDescarga?: (opciones?: { conDetalle: boolean }) => Promise<DescargaFilasResult>;
   /**
    * FICHA 463 (design §5.2) — la ZONA DEL LIBRO, en la cabecera de la tabla y en la misma línea que la
    * descarga (`filtros` de `DataTable`, como `/ordenes`). Nodo OPACO: la tabla la coloca, no la mira.
@@ -414,6 +420,9 @@ export function WalletLedger({
                 titulo: TITULO_DESCARGA,
                 columnas: COLUMNAS_DESCARGA_WALLET_CAJA,
                 obtenerFilas: obtenerFilasDescarga,
+                // FICHA 464 (R1/R2/R6) — selector de columnas con su ámbito y la hoja de detalle.
+                ambitoColumnas: AMBITO_DESCARGA_WALLET_CAJA,
+                detalle: DETALLE_DESCARGA_WALLET_CAJA,
               }
             : undefined
         }

@@ -24,6 +24,9 @@ import type { CuentaPorPagarResumenDTO } from "@/lib/types/wallet-mensajero";
 
 import { ENCABEZADOS_DESCARGA_MAESTRO, SIGNO_BADGE } from "./wallet-mensajeros-labels";
 
+/** FICHA 464 (R1/R2) — ámbito del selector de columnas de la descarga del listado de mensajeros. */
+export const AMBITO_DESCARGA_CUENTAS_POR_PAGAR = "wallet-mensajeros-cuentas";
+
 /** Columnas del archivo, en el orden de la pantalla: las cinco que la tabla pinta. */
 export const COLUMNAS_DESCARGA_CUENTAS_POR_PAGAR: DescargaColumna[] = [
   { clave: "mensajero", encabezado: ENCABEZADOS_DESCARGA_MAESTRO.mensajero },
