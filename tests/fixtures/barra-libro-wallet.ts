@@ -66,6 +66,23 @@ export async function elegirEnBarra(user: Usuario, contenedor: HTMLElement, nomb
   await user.click(await screen.findByRole("option", { name: opcion }));
 }
 
+/**
+ * Las opciones del `single` `nombre` de la barra (marcando antes su casilla si hace falta), en su
+ * orden. Cierra la lista con Escape.
+ */
+export async function opcionesDelControl(user: Usuario, contenedor: HTMLElement, nombre: string): Promise<string[]> {
+  if (within(contenedor).queryByRole("combobox", { name: nombre }) === null) {
+    await ponerCasillas(user, contenedor, nombre);
+  }
+  await user.click(within(contenedor).getByRole("combobox", { name: nombre }));
+  const lista = await screen.findByRole("listbox");
+  const opciones = within(lista)
+    .getAllByRole("option")
+    .map((o) => o.textContent?.trim() ?? "");
+  await user.keyboard("{Escape}");
+  return opciones;
+}
+
 /** Lo que dice el disparador del `single` `nombre`, o `null` si su casilla no está marcada. */
 export function textoDelControl(contenedor: HTMLElement, nombre: string): string | null {
   return within(contenedor).queryByRole("combobox", { name: nombre })?.textContent ?? null;

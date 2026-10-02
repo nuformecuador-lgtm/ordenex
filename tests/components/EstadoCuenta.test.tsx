@@ -4,7 +4,8 @@ import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-li
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 import userEvent from "@testing-library/user-event";
-import { diaDelMesActual, elegirPeriodo } from "@/tests/fixtures/periodo-calendario";
+import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { alternarCasillas, elegirEnBarra, opcionesDelControl, textoDelControl } from "@/tests/fixtures/barra-libro-wallet";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { EstadoCuentaDTO } from "@/lib/types/estado-cuenta";
@@ -156,12 +157,14 @@ describe("R19–R21/R23 — el extracto: saldo inicial arriba, orden y saldo cor
   });
 
   it("R21: con un chip, el saldo corrido sigue siendo el de la cuenta ENTERA (el que manda el servidor)", async () => {
+    const user = userEvent.setup();
     montarTienda(estado({ filas: TRES, total: 3 }));
     verEstadoCuentaMock.mockResolvedValueOnce({
       status: "ok",
       estado: estado({ filas: [TRES[1]], total: 1 }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
+    // FICHA 467: el chip es una opción de la casilla «Tipo de movimiento».
+    await elegirEnBarra(user, document.body, "Tipo de movimiento", "Cobros");
     await waitFor(() => {
       expect(filasDeLaTabla()).toHaveLength(2);
       expect(filasDeLaTabla()[0].textContent).toContain("Ordenex le cobra a la tienda");
@@ -196,32 +199,33 @@ describe("R19–R21/R23 — el extracto: saldo inicial arriba, orden y saldo cor
   });
 });
 
+// FICHA 467 (R21) — los chips son las opciones de la casilla «Tipo de movimiento», sin «Todo»: sin
+// elección ya son todos, y lo dice el disparador («Tipo de movimiento: Todo»).
 describe("R24 — los chips por tipo de cuenta (D10)", () => {
-  function chips(nombre: string): string[] {
-    const grupo = screen.getByRole("group", { name: `Filtrar el estado de cuenta de ${nombre}` });
-    return within(grupo)
-      .getAllByRole("button")
-      .map((b) => b.textContent ?? "");
+  async function chips(): Promise<string[]> {
+    return opcionesDelControl(userEvent.setup(), document.body, "Tipo de movimiento");
   }
 
-  it("tienda: Todo · Cierres · Pagos · Cobros · Correcciones", () => {
+  it("tienda: Cierres · Pagos · Cobros · Correcciones", async () => {
     montarTienda(estado());
-    expect(chips("Tania Tienda")).toEqual(["Todo", "Cierres", "Pagos", "Cobros", "Correcciones"]);
+    expect(await chips()).toEqual(["Cierres", "Pagos", "Cobros", "Correcciones"]);
+    expect(textoDelControl(document.body, "Tipo de movimiento")).toBe("Tipo de movimiento: Todo");
   });
 
-  it("mensajero: Todo · Cierres · Pagos · Premios · Correcciones", () => {
+  it("mensajero: Cierres · Pagos · Premios · Correcciones", async () => {
     envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ tipo: "mensajero", nombre: "Mario" })} rotulos={ROTULOS_MENSAJERO} />);
-    expect(chips("Mario")).toEqual(["Todo", "Cierres", "Pagos", "Premios", "Correcciones"]);
+    expect(await chips()).toEqual(["Cierres", "Pagos", "Premios", "Correcciones"]);
   });
 
-  it("bodega: Todo · Declarado · Recibido", () => {
+  it("bodega: Declarado · Recibido", async () => {
     envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ tipo: "bodega", nombre: "Bodega", filas: [] })} rotulos={ROTULOS_BODEGA} />);
-    expect(chips("Bodega")).toEqual(["Todo", "Declarado", "Recibido"]);
+    expect(await chips()).toEqual(["Declarado", "Recibido"]);
   });
 
-  it("elegir un chip lo pide al servidor desde la página 1; «Todo» no manda chip", async () => {
+  it("elegir un chip lo pide al servidor desde la página 1; quitar la casilla («Todo») no manda chip", async () => {
+    const user = userEvent.setup();
     montarTienda(estado());
-    fireEvent.click(screen.getByRole("button", { name: "Pagos" }));
+    await elegirEnBarra(user, document.body, "Tipo de movimiento", "Pagos");
     await waitFor(() =>
       expect(verEstadoCuentaMock).toHaveBeenLastCalledWith({
         cuenta: { tipo: "tienda", id: UUID_TIENDA },
@@ -230,23 +234,21 @@ describe("R24 — los chips por tipo de cuenta (D10)", () => {
         pageSize: 20,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    await alternarCasillas(user, document.body, "Tipo de movimiento");
     // «Todo» con la página 1 es la lectura inicial: la trae el caché, sin clave `chip`.
     const llamadas = verEstadoCuentaMock.mock.calls.map((c) => c[0] as Record<string, unknown>);
     expect(llamadas.every((l) => l.chip === undefined || l.chip === "pagos")).toBe(true);
   });
 });
 
-// FICHA 463 — REESCRITO: el periodo es el calendario de la ZONA DE LA WALLET con «Aplicar» (antes, dos
-// `input[type=date]`). Con el calendario un «desde» posterior a «hasta» no se puede elegir: los
-// extremos se ordenan solos; el aviso de R18 lo mide `filter-component-aplicar-463.test.tsx`.
+// FICHA 463 — REESCRITO: el periodo es un calendario (antes, dos `input[type=date]`). Con el calendario
+// un «desde» posterior a «hasta» no se puede elegir: los extremos se ordenan solos.
+// FICHA 467 — y vive en la casilla «Periodo» de la barra única, sin «Aplicar»: se aplica solo.
 describe("R16 — el periodo: días de Costa Rica tal como se eligen", () => {
   it("aplicar manda `desde` y `hasta` como YYYY-MM-DD y vuelve a la página 1", async () => {
     const user = userEvent.setup();
     montarTienda(estado());
-    await elegirPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 15);
-    expect(verEstadoCuentaMock).not.toHaveBeenCalled(); // 463 R15: editar no lee
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    await aplicarPeriodo(user, document.body, 1, 15);
     await waitFor(() =>
       expect(verEstadoCuentaMock).toHaveBeenLastCalledWith({
         cuenta: { tipo: "tienda", id: UUID_TIENDA },
@@ -256,7 +258,7 @@ describe("R16 — el periodo: días de Costa Rica tal como se eligen", () => {
         pageSize: 20,
       }),
     );
-    expect(verEstadoCuentaMock).toHaveBeenCalledTimes(1); // 463 R16: una sola lectura
+    expect(verEstadoCuentaMock).toHaveBeenCalledTimes(1); // 463 R16 / 467 R14: una sola lectura
     // R20: con periodo, la línea del saldo inicial es la DEL PERIODO, fechada el primer día. Con «Más
     // recientes» (463 R39) cierra la última página.
     await waitFor(() => {
@@ -267,9 +269,9 @@ describe("R16 — el periodo: días de Costa Rica tal como se eligen", () => {
     expect(filas[filas.length - 1].textContent).toContain(diaDelMesActual(1));
   });
 
-  it("463 R17: «Aplicar» nace deshabilitado y no se lee nada hasta pulsarlo", () => {
+  it("467 R3/R35: no hay «Aplicar» y no se lee nada al entrar", () => {
     montarTienda(estado());
-    expect(screen.getByRole("button", { name: "Aplicar" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Aplicar" })).toBeNull();
     expect(verEstadoCuentaMock).not.toHaveBeenCalled();
   });
 });
@@ -319,16 +321,17 @@ describe("R5 (171) / R82 — el fallo se dice y el permiso lo decide el servidor
   // FICHA 463 (R49) — el contrato pasa de «el aviso SUSTITUYE la tabla» a «el aviso va JUNTO al libro,
   // que se queda con la última lectura buena, y el filtro vuelve a la de esa lectura».
   it("si la lectura con otro chip falla, se dice JUNTO al libro, que sigue en pie con las tarjetas y el chip de antes", async () => {
+    const user = userEvent.setup();
     montarTienda(estado());
     const filasAntes = filasDeLaTabla().map((f) => f.textContent);
     verEstadoCuentaMock.mockResolvedValue({ status: "forbidden" });
-    fireEvent.click(screen.getByRole("button", { name: "Pagos" }));
+    await elegirEnBarra(user, document.body, "Tipo de movimiento", "Pagos");
     const aviso = await screen.findByText(/^No se pudo cargar el estado de cuenta\. Se sigue mostrando lo último/);
     expect(aviso).toHaveAttribute("role", "alert");
     expect(screen.getByRole("region", { name: "Saldo de Tania Tienda" })).toBeInTheDocument();
     expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
     expect(filasAntes.length).toBeGreaterThan(1);
-    expect(screen.getByRole("button", { name: "Pagos" })).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(textoDelControl(document.body, "Tipo de movimiento")).toBe("Tipo de movimiento: Todo"));
   });
 
   it("sin permiso de registrar (lo decide la página con `esAccesoTotal`), no hay acciones", () => {

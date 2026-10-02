@@ -391,11 +391,15 @@ describe("467 R10 — desmarcar una casilla con valor quita el filtro, en UNA re
 describe("467 R12/R13/R16 — qué relee cada filtro", () => {
   it("R12/R16: el Periodo relee cifras y libro desde la página 1; las cifras sin tipo, categoría, término ni orden", async () => {
     const user = pintar();
+    // Cada paso espera su lectura antes del siguiente (bajo carga, la espera de 500 ms se alarga).
     await elegirEnBarra(user, libro(), "Entra/Sale", "Sale");
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ tipo: "egreso" })), { timeout: 3000 });
     await elegirEnBarra(user, libro(), "Concepto", "Sueldo (3)");
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ categoria: "egreso_sueldo" })), { timeout: 3000 });
     await user.click(within(libro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ sortDir: "asc" })), { timeout: 3000 });
     await user.type(buscador(), "Juan");
-    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ q: "Juan" })), { timeout: 3000 });
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ q: "Juan", tipo: "egreso", categoria: "egreso_sueldo" })), { timeout: 3000 });
     expect(H.resumen).not.toHaveBeenCalled();
 
     await aplicarPeriodo(user, libro(), 1, 28);
@@ -562,7 +566,10 @@ describe("467 R27/R28 — lo que filtra se ve, también tras un fallo", () => {
     const user = pintar();
     H.listar.mockResolvedValue(paginaOk([mov(2)], 1));
     await elegirEnBarra(user, libro(), "Concepto", "Sueldo (3)");
-    await waitFor(() => expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(1));
+    await waitFor(() => {
+      expect(within(tabla()).queryByRole("status")).toBeNull();
+      expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(1);
+    });
 
     H.listar.mockResolvedValue({ status: "validation_error" });
     await alternarCasillas(user, libro(), "Concepto");
@@ -631,8 +638,10 @@ describe("467 R29 — mientras se lee, nada se deshabilita y solo pinta la últi
     await waitFor(() => expect(H.listar).toHaveBeenCalledTimes(2));
     pendientes[1](paginaOk([mov(1), mov(2)], 2));
     pendientes[0](paginaOk(PAGINA, 42));
-    await waitFor(() => expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(2));
-    expect(within(tabla()).getAllByRole("row")[1].textContent).toContain("2026-09-21");
+    await waitFor(() => {
+      expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(2);
+      expect(within(tabla()).getAllByRole("row")[1].textContent).toContain("2026-09-21");
+    });
   });
 });
 

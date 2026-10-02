@@ -24,12 +24,7 @@ import { textoDetallePorOrden } from "@/components/shared/wallet/detalle-por-ord
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import { ORIGEN_ENLACE_VISIBLE } from "@/components/shared/wallet/origen-movimiento";
-import {
-  ORDEN_LIBRO,
-  ORDEN_LIBRO_POR_DEFECTO,
-  ZONA_LIBRO_TEXTO,
-  ZONA_WALLET_TEXTO,
-} from "@/components/shared/wallet/zonas-filtros-labels";
+import { ORDEN_LIBRO, ORDEN_LIBRO_POR_DEFECTO, ZONA_LIBRO_TEXTO } from "@/components/shared/wallet/zonas-filtros-labels";
 import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import { money } from "@/lib/config/moneda";
@@ -43,6 +38,7 @@ import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import type {
   EstadoCuentaDTO,
   FilaEstadoCuentaDTO,
+  TipoDeCuenta,
   VerEstadoCuentaCompletoResult,
   VerEstadoCuentaResult,
 } from "@/lib/types/estado-cuenta";
@@ -51,7 +47,6 @@ import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 import type { ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 import { cn } from "@/lib/utils";
 
-import { ChipsEstadoCuenta } from "./ChipsEstadoCuenta";
 import { TarjetasEstadoCuenta } from "./TarjetasEstadoCuenta";
 import { claveEstadoCuenta, esClaveDeLaCuenta } from "./estado-cuenta-clave";
 import {
@@ -59,7 +54,16 @@ import {
   COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
   filaDescargaEstadoCuenta,
 } from "./estado-cuenta-descarga-columnas";
-import { CHIP_TODO, COLUMNAS_TEXTO, ESTADO_CUENTA_TEXTO, type ChipOTodo } from "./estado-cuenta-labels";
+import {
+  CASILLA_ESTADO_CUENTA,
+  CASILLAS_ESTADO_CUENTA_TEXTO,
+  CHIP_LABEL,
+  CHIP_TODO,
+  CHIPS_POR_TIPO,
+  COLUMNAS_TEXTO,
+  ESTADO_CUENTA_TEXTO,
+  type ChipOTodo,
+} from "./estado-cuenta-labels";
 import {
   estadoDeFila,
   lineaDeFila,
@@ -300,13 +304,50 @@ export function posicionSaldoInicial(
   return page === ultimaPagina ? "ultima" : null;
 }
 
-/** FICHA 463 (R4) — el único filtro de la zona de la wallet de un estado de cuenta: el periodo. */
-const CLAVE_PERIODO = "periodo";
-const FILTROS_PERIODO: FilterDef[] = [{ key: CLAVE_PERIODO, label: ZONA_WALLET_TEXTO.periodo, kind: "dateRange" }];
+/**
+ * FICHA 467 (design §4.5; R7, R21) — los controles del ORQUESTADOR de la barra única de un estado de
+ * cuenta: el Periodo (rango de fechas, se aplica solo) y el Tipo de movimiento (`single` con los chips
+ * de ese tipo de cuenta, sin «Todo»: sin elección, ya son todos). El Cierre lo monta la superficie.
+ */
+const CASILLA = CASILLA_ESTADO_CUENTA;
 
-/** El periodo como selección del orquestador (la terna `[atajo, desde, hasta]`); sin periodo, `{}`. */
-function seleccionDePeriodo(p: Periodo): FilterSelection {
-  return p.desde === "" && p.hasta === "" ? {} : { [CLAVE_PERIODO]: ["", p.desde, p.hasta] };
+export function declaracionesEstadoCuenta(tipo: TipoDeCuenta): FilterDef[] {
+  return [
+    { key: CASILLA.periodo, label: CASILLAS_ESTADO_CUENTA_TEXTO.periodo, kind: "dateRange" },
+    {
+      key: CASILLA.tipoMovimiento,
+      label: CASILLAS_ESTADO_CUENTA_TEXTO.tipoMovimiento,
+      kind: "single",
+      options: CHIPS_POR_TIPO[tipo].filter((c) => c !== CHIP_TODO).map((c) => ({ value: c, label: CHIP_LABEL[c] })),
+      placeholder: CHIP_LABEL[CHIP_TODO],
+    },
+  ];
+}
+
+/** R7 — las casillas que ofrece «Filtros», en su orden: «Cierre» solo si la superficie lo ofrece. */
+export function casillasEstadoCuenta(conCierre: boolean): { key: string; label: string }[] {
+  return [
+    { key: CASILLA.periodo, label: CASILLAS_ESTADO_CUENTA_TEXTO.periodo },
+    { key: CASILLA.tipoMovimiento, label: CASILLAS_ESTADO_CUENTA_TEXTO.tipoMovimiento },
+    ...(conCierre ? [{ key: CASILLA.cierre, label: CASILLAS_ESTADO_CUENTA_TEXTO.cierre }] : []),
+  ];
+}
+
+/** Periodo y chip como selección del orquestador (lo que repone la `siembra`, R28). */
+function seleccionDe(p: Periodo, chip: ChipOTodo): FilterSelection {
+  return {
+    ...(p.desde === "" && p.hasta === "" ? {} : { [CASILLA.periodo]: ["", p.desde, p.hasta] }),
+    ...(chip === CHIP_TODO ? {} : { [CASILLA.tipoMovimiento]: [chip] }),
+  };
+}
+
+/** R27 — las casillas cuyo filtro TIENE valor, en el orden de las casillas. */
+function casillasConValor(p: Periodo, chip: ChipOTodo, cierreId: string | null): string[] {
+  return [
+    ...(p.desde !== "" || p.hasta !== "" ? [CASILLA.periodo] : []),
+    ...(chip !== CHIP_TODO ? [CASILLA.tipoMovimiento] : []),
+    ...(cierreId !== null ? [CASILLA.cierre] : []),
+  ];
 }
 
 async function leer(lector: LectorEstadoCuenta, seleccion: Seleccion): Promise<Lectura> {
@@ -468,11 +509,12 @@ export function EstadoCuenta({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(inicial.pageSize);
   const [abierta, setAbierta] = useState<FilaEstadoCuentaDTO | null>(null);
-  // R49 — si una lectura falla, los controles con estado propio (el calendario del periodo y el campo
-  // del buscador) vuelven a lo de la última lectura buena por su `siembra`, que no emite.
-  const [siembraPeriodo, setSiembraPeriodo] = useState<{ senal: number; seleccion: FilterSelection } | undefined>(
-    undefined,
-  );
+  // FICHA 467 (R8–R11, R27) — las casillas marcadas de la barra. Se entra sin ninguna (R11).
+  const [activos, setActivos] = useState<string[]>([]);
+  // R49/R28 — si una lectura falla, los controles con estado propio (el calendario del periodo y el campo
+  // del buscador) vuelven a lo de la última lectura buena por su `siembra`, que no emite: la señal sube y
+  // el orquestador repone el periodo y el tipo de movimiento de lo vigente.
+  const [senalSiembra, setSenalSiembra] = useState(0);
   const [siembraTermino, setSiembraTermino] = useState<{ senal: number; termino: string } | undefined>(undefined);
   // R49 — la lectura buena sobre la que falló la última: mientras sea la que se pinta, se avisa.
   const [falloSobre, setFalloSobre] = useState<Lectura | null>(null);
@@ -544,7 +586,10 @@ export function EstadoCuenta({
     setSortDir(buena.sortDir);
     setPage(buena.page);
     setPageSize(buena.pageSize);
-    setSiembraPeriodo((s) => ({ senal: (s?.senal ?? 0) + 1, seleccion: seleccionDePeriodo(buena.periodo) }));
+    // FICHA 467 (R27/R28) — y las casillas: como mínimo, las de los filtros de la lectura buena.
+    const conValor = casillasConValor(buena.periodo, buena.chip, buena.cierreId);
+    setActivos((a) => [...a, ...conValor.filter((k) => !a.includes(k))]);
+    setSenalSiembra((n) => n + 1);
     setSiembraTermino((s) => ({ senal: (s?.senal ?? 0) + 1, termino: buena.termino }));
   }
 
@@ -554,13 +599,40 @@ export function EstadoCuenta({
   }
 
   /**
-   * FICHA 463 (R10/R16/R19) — la zona de la wallet aplica (o quita) el periodo: tarjetas y extracto se
-   * releen con él, desde la página 1. Los filtros del libro (chip, cierre, término, orden) se quedan.
+   * FICHA 467 (R14/R15/R17) — lo que emite el orquestador de la barra: el periodo (tarjetas y extracto
+   * se releen con él) y el tipo de movimiento (solo el extracto). Página 1. Una emisión igual a lo que ya
+   * se pidió —la poda del orquestador tras desmarcar una casilla— no cambia nada.
    */
-  function aplicarPeriodo(seleccion: FilterSelection) {
-    const [, desde = "", hasta = ""] = seleccion[CLAVE_PERIODO] ?? [];
+  function cambiarSeleccion(seleccion: FilterSelection) {
+    const [, desde = "", hasta = ""] = seleccion[CASILLA.periodo] ?? [];
+    const siguienteChip = (seleccion[CASILLA.tipoMovimiento]?.[0] ?? CHIP_TODO) as ChipOTodo;
+    if (desde === periodo.desde && hasta === periodo.hasta && siguienteChip === chip) return;
     setPeriodo({ desde, hasta });
+    setChip(siguienteChip);
     setPage(1);
+  }
+
+  /**
+   * FICHA 467 (R8/R10) — marcar no lee nada; desmarcar una casilla CON valor quita ese filtro (una sola
+   * lectura: los cambios del mismo gesto mueven la clave SWR una vez).
+   */
+  function cambiarActivos(claves: string[]) {
+    const salen = new Set(activos.filter((k) => !claves.includes(k)));
+    setActivos(claves);
+    let cambia = false;
+    if (salen.has(CASILLA.periodo) && (periodo.desde !== "" || periodo.hasta !== "")) {
+      setPeriodo({ desde: "", hasta: "" });
+      cambia = true;
+    }
+    if (salen.has(CASILLA.tipoMovimiento) && chip !== CHIP_TODO) {
+      setChip(CHIP_TODO);
+      cambia = true;
+    }
+    if (salen.has(CASILLA.cierre) && cierreId !== null) {
+      setCierreId(null);
+      cambia = true;
+    }
+    if (cambia) setPage(1);
   }
 
   /** R29 — el término cambia: página 1. El buscador ya no avisa si no cambió. */
@@ -576,13 +648,21 @@ export function EstadoCuenta({
     setPage(1);
   }
 
-  /** R30 — «Limpiar todo» del libro: fuera término, chip y cierre; el periodo y el orden se quedan. */
-  function limpiarLibro() {
+  /**
+   * FICHA 467 (R25) — «Limpiar todo»: fuera el término, el periodo, el tipo de movimiento, el cierre y
+   * todas las casillas; el ORDEN se queda. (La 463 conservaba el periodo: ahora vive en la misma barra.)
+   */
+  function limpiarTodo() {
+    setActivos([]);
     setTermino("");
+    setPeriodo({ desde: "", hasta: "" });
     setChip(CHIP_TODO);
     setCierreId(null);
     setPage(1);
   }
+
+  const marcadas = new Set(activos);
+  const montadas = declaracionesEstadoCuenta(tipo).filter((d) => marcadas.has(d.key));
 
   const detalle = abierta !== null && panel !== undefined ? detalleDe(abierta, rotulos, panel) : null;
   const registroAbierta = abierta?.registro ?? null;
@@ -595,27 +675,8 @@ export function EstadoCuenta({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* FICHA 463 (R1/R2/R4) — la ZONA DE LA WALLET, antes de todo lo demás: el periodo, con «Aplicar».
-          Mueve las tarjetas del periodo y el extracto. */}
-      <section
-        aria-label={ZONA_WALLET_TEXTO.nombre}
-        className="flex flex-col gap-2 rounded-xl border bg-muted/30 px-4 py-3"
-      >
-        <p className="text-xs text-muted-foreground">{ZONA_WALLET_TEXTO.alcance}</p>
-        <FilterComponent
-          filters={FILTROS_PERIODO}
-          onChange={aplicarPeriodo}
-          leerDeUrl={false}
-          siembra={siembraPeriodo}
-          aplicarConBoton={{
-            etiqueta: ZONA_WALLET_TEXTO.aplicar,
-            etiquetaQuitar: ZONA_WALLET_TEXTO.quitar,
-            avisoRangoInvertido: ESTADO_CUENTA_TEXTO.periodoInvalido,
-          }}
-          className="items-start"
-        />
-      </section>
-
+      {/* FICHA 467 (R1) — la sección de periodo de la 463 ya no está aquí: el Periodo es una casilla de la
+          barra única del libro y sigue moviendo las tarjetas (R14). */}
       {encabezado ? encabezado(vigente) : null}
       <TarjetasEstadoCuenta estado={vigente} vista={vista} />
 
@@ -637,44 +698,47 @@ export function EstadoCuenta({
         rotulos={rotulos}
         desde={data?.seleccion.periodo.desde ?? periodo.desde}
         posicionSaldoInicial={posicion}
-        // FICHA 463 (R1/R2/R6/R7/R23/R33) — la ZONA DEL LIBRO, encima de la tabla y junto a la descarga:
-        // el buscador canónico, el orden, los chips y —si la superficie lo ofrece— el cierre.
+        // FICHA 467 (R1/R2/R4/R7/R9/R23/R24/R32) — la BARRA ÚNICA, encima de la tabla y en la fila de
+        // «Descargar», igual que `/ordenes`: [orden] [casillas marcadas…] [buscador] [Filtros] [Limpiar
+        // todo]. Periodo y Tipo de movimiento son el orquestador; el Cierre, el selector de la superficie.
         filtros={
-          <section aria-label={ZONA_LIBRO_TEXTO.nombre} className="flex flex-col gap-1">
-            <p className="text-xs text-muted-foreground">{ZONA_LIBRO_TEXTO.alcance}</p>
-            <BuscadorFiltros
-              label={ZONA_LIBRO_TEXTO.buscar}
-              placeholder={ESTADO_CUENTA_TEXTO.buscarPlaceholder[vista]}
-              minChars={BUSQUEDA_LIBRO_MIN_CHARS}
-              leerDeUrl={false}
-              siembra={siembraTermino}
-              onChange={cambiarTermino}
-              onLimpiarTodo={limpiarLibro}
-              hayFiltrosAplicados={termino !== "" || chip !== CHIP_TODO || cierreId !== null}
-            >
-              <SegmentedToggle<DireccionOrden>
-                options={ORDEN_LIBRO.opciones}
-                valor={sortDir}
-                onChange={cambiarOrden}
-                ariaLabel={ORDEN_LIBRO.nombre}
+          <BuscadorFiltros
+            label={ZONA_LIBRO_TEXTO.buscar}
+            placeholder={ESTADO_CUENTA_TEXTO.buscarPlaceholder[vista]}
+            minChars={BUSQUEDA_LIBRO_MIN_CHARS}
+            leerDeUrl={false}
+            siembra={siembraTermino}
+            onChange={cambiarTermino}
+            filtros={casillasEstadoCuenta(selectorCierre !== undefined)}
+            activos={activos}
+            onActivosChange={cambiarActivos}
+            onLimpiarTodo={limpiarTodo}
+            // R26 — con texto escrito (lo mira la barra) o con alguna casilla marcada.
+            hayFiltrosAplicados={activos.length > 0}
+          >
+            <SegmentedToggle<DireccionOrden>
+              options={ORDEN_LIBRO.opciones}
+              valor={sortDir}
+              onChange={cambiarOrden}
+              ariaLabel={ORDEN_LIBRO.nombre}
+              soloIcono
+            />
+            {montadas.length > 0 ? (
+              <FilterComponent
+                filters={montadas}
+                onChange={cambiarSeleccion}
+                leerDeUrl={false}
+                // R28 — lo vigente (lo que dice la clave SWR); al subir la señal, se repone sin emitir.
+                siembra={{ senal: senalSiembra, seleccion: seleccionDe(periodo, chip) }}
               />
-              <ChipsEstadoCuenta
-                tipo={tipo}
-                nombre={nombre}
-                valor={chip}
-                onChange={(c) => {
-                  setChip(c);
+            ) : null}
+            {selectorCierre && marcadas.has(CASILLA.cierre)
+              ? selectorCierre(cierreId, (c) => {
+                  setCierreId(c);
                   setPage(1);
-                }}
-              />
-              {selectorCierre
-                ? selectorCierre(cierreId, (c) => {
-                    setCierreId(c);
-                    setPage(1);
-                  })
-                : null}
-            </BuscadorFiltros>
-          </section>
+                })
+              : null}
+          </BuscadorFiltros>
         }
         isLoading={data === undefined && isLoading}
         // Solo sin ninguna lectura buena que enseñar; con una, el aviso va arriba y el libro se queda (R49).

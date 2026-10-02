@@ -1,5 +1,5 @@
 import type { SentidoDelSaldo, TipoDeCuenta } from "@/lib/types/estado-cuenta";
-import type { ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
+import { CHIPS_BODEGA, CHIPS_MENSAJERO, CHIPS_TIENDA, type ChipEstadoCuenta } from "@/lib/utils/estado-cuenta-chips";
 
 // FICHA 458-D (T D.1, design §3.2/§5.1; R18–R25, R32) — los textos del ESTADO DE CUENTA de una tienda,
 // un mensajero o una bodega satélite. Fuera del JSX (docs/conventions), sin siglas y sin ningún
@@ -23,6 +23,38 @@ export const CHIP_LABEL: Record<ChipOTodo, string> = {
   declarado: "Declarado",
   recibido: "Recibido",
 };
+
+/**
+ * FICHA 458-D (T D.1, D10; R24) — los chips del estado de cuenta, por tipo de cuenta: tienda «Todo ·
+ * Cierres · Pagos · Cobros · Correcciones», mensajero «Todo · Cierres · Pagos · Premios · Correcciones»,
+ * bodega «Todo · Declarado · Recibido». La lista sale de las MISMAS constantes con las que el servidor
+ * decide el chip de cada fila (`lib/utils/estado-cuenta-chips.ts`): el filtro y la fila no pueden
+ * discrepar.
+ *
+ * FICHA 467 — se muda aquí desde `ChipsEstadoCuenta.tsx` (retirado): los chips ya no son un conmutador
+ * a la vista sino las opciones de la casilla «Tipo de movimiento» de la barra única (R21).
+ */
+export const CHIPS_POR_TIPO: Record<TipoDeCuenta, readonly ChipOTodo[]> = {
+  tienda: [CHIP_TODO, ...CHIPS_TIENDA],
+  mensajero: [CHIP_TODO, ...CHIPS_MENSAJERO],
+  bodega: [CHIP_TODO, ...CHIPS_BODEGA],
+};
+
+/**
+ * FICHA 467 (design §4.5, §8; R7) — las casillas de la barra única del estado de cuenta, en su orden.
+ * «Cierre» solo se ofrece donde la superficie ya filtra por cierre (tienda, mensajero, `/mi-wallet`).
+ */
+export const CASILLA_ESTADO_CUENTA = {
+  periodo: "periodo",
+  tipoMovimiento: "tipoMovimiento",
+  cierre: "cierre",
+} as const;
+
+export const CASILLAS_ESTADO_CUENTA_TEXTO = {
+  periodo: "Periodo",
+  tipoMovimiento: "Tipo de movimiento",
+  cierre: "Cierre",
+} as const;
 
 /** El monto sin su signo, como TEXTO (no se convierte a número): la frase dice el sentido. */
 export function sinSigno(monto: string): string {
@@ -132,9 +164,6 @@ export const ESTADO_CUENTA_TEXTO = {
   periodo: (nombre: string) => `Periodo del estado de cuenta de ${nombre}`,
   desde: "Desde",
   hasta: "Hasta",
-  aplicar: "Aplicar",
-  limpiar: "Quitar periodo",
-  periodoInvalido: "«Desde» no puede ser posterior a «hasta».",
   /**
    * FICHA 463 (R23/R26/R27) — el placeholder del buscador del extracto. En la oficina alcanza la
    * descripción y quién registró; en `/mi-wallet` SOLO la descripción (la tienda no ve los nombres de
@@ -156,7 +185,7 @@ export const ESTADO_CUENTA_TEXTO = {
    */
   limiteDescarga: (total: number, limite: number) =>
     `El estado de cuenta tiene ${total} movimientos con estos filtros y la descarga admite hasta ${limite}. ` +
-    "Elegí un periodo más corto, un chip o un cierre y volvé a descargar.",
+    "Elegí un periodo más corto, un tipo de movimiento o un cierre y volvé a descargar.",
 } as const;
 
 /** R25 — la leyenda de una fila anulada: quién, cuándo y por qué (o «motivo no registrado»). */

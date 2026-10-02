@@ -13,7 +13,7 @@
 // conserva la red de la composición (`SelectorBuscable` + `useCierresDeLaCuenta` +
 // `CIERRE_SELECTOR_TEXTOS`) y el estado de cuenta se mide por R2 (ningún control pide un id).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactNode } from "react";
@@ -55,6 +55,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 // FICHA 463/467: la categoría de la caja es la casilla «Concepto» de la barra única del libro; el periodo
 // llega ya aplicado por la prop de la wallet.
 import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
+import { elegirEnBarra } from "@/tests/fixtures/barra-libro-wallet";
 import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { useState } from "react";
 import { SelectorBuscable } from "@/components/shared/SelectorBuscable";
@@ -187,7 +188,7 @@ describe("TA.3 → 458-D — `/mi-wallet`: el filtro por concepto es el chip, si
   it("R13/R36: el chip «Cobros» lee SU estado de cuenta sin `tiendaId` ni `cuenta`, y rotula desde la tienda", async () => {
     miEstadoCuentaMock.mockResolvedValue({ status: "ok", estado: estado() });
     conSWR(<MiEstadoCuenta inicial={estado()} cierres={{ opciones: [], hayMas: false, disponible: true }} />);
-    fireEvent.click(screen.getByRole("button", { name: "Cobros" }));
+    await elegirEnBarra(userEvent.setup(), document.body, "Tipo de movimiento", "Cobros");
     await waitFor(() => expect(miEstadoCuentaMock).toHaveBeenLastCalledWith({ chip: "cobros", page: 1, pageSize: 20 }));
     for (const [input] of miEstadoCuentaMock.mock.calls) {
       expect(input).not.toHaveProperty("tiendaId");
@@ -251,13 +252,13 @@ describe("458-D — los estados de cuenta de tienda y mensajero: ningún control
     expect(screen.queryByPlaceholderText(/ID|identificador/i)).toBeNull();
     expect(document.body.textContent ?? "").not.toMatch(/\bID\b|identificador|pegá|copiá su dirección/i);
     expect(document.body.textContent ?? "").not.toMatch(UUID);
-    // FICHA 463: el periodo es el calendario de la zona de la wallet; el único campo que se escribe es
-    // el buscador del libro (R23), que busca por la descripción o quién registró.
+    // FICHA 463/467: el periodo es un calendario (casilla «Periodo» de la barra única); el único campo
+    // que se escribe es el buscador del libro (R23), que busca por la descripción o quién registró.
     expect(screen.getAllByRole("searchbox")).toHaveLength(1);
     expect(screen.getByRole("searchbox", { name: "Buscar en el libro" })).toHaveAttribute(
       "placeholder",
       "Buscar por descripción o quién registró",
     );
-    expect(screen.getByRole("button", { name: "Periodo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtros/ })).toBeInTheDocument();
   });
 });
