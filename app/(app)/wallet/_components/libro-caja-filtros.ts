@@ -82,7 +82,7 @@ export function seleccionDeCaja(fw: FiltrosWallet, fl: FiltrosLibro): FilterSele
   return {
     ...seleccionDePeriodo(fw.desde, fw.hasta),
     ...(fl.tipo === "" ? {} : { [CASILLA.direccion]: [fl.tipo] }),
-    ...(fl.categoria === "" ? {} : { [CASILLA.concepto]: [fl.categoria] }),
+    ...(fl.categoria !== "" ? { [CASILLA.concepto]: [fl.categoria] } : {}),
   };
 }
 

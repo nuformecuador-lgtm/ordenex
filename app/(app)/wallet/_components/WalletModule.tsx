@@ -66,8 +66,9 @@ import {
   type FiltrosLibro,
   type FiltrosWallet,
 } from "./wallet-filtros-input";
-import { WalletFiltrosCaja, seleccionDePeriodo } from "./WalletFiltrosCaja";
 import { LibroCajaBarra } from "./LibroCajaBarra";
+import { CASILLA, casillasConValor, deSeleccion } from "./libro-caja-filtros";
+import { aQuienDeValor } from "./a-quien-selector";
 import type { FilterSelection } from "@/components/shared/FilterComponent";
 import { RegistrarMovimientoDialog } from "@/components/shared/wallet/RegistrarMovimientoDialog";
 import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
@@ -179,6 +180,22 @@ const CLAVES_LIBRO = ["tipo", "categoria", "termino", "sortDir"] as const satisf
 function mismoLibro(a: FiltrosLibro, b: FiltrosLibro): boolean {
   // Campo a campo por sus claves: los filtros del libro son cuatro cadenas y ninguna se interpreta aquí.
   return CLAVES_LIBRO.every((clave) => a[clave] === b[clave]);
+}
+
+/**
+ * FICHA 467 (design §3.3) — ¿dos juegos de filtros de la wallet piden lo mismo? Es la guarda de «sin
+ * cambio» del Periodo y de «A quién»: la poda que emite el orquestador al desmarcar una casilla trae la
+ * misma selección que el módulo ya pidió, y no debe releer (R10).
+ */
+function mismaWallet(a: FiltrosWallet, b: FiltrosWallet): boolean {
+  return (
+    a.desde === b.desde && a.hasta === b.hasta && JSON.stringify(a.aQuien ?? null) === JSON.stringify(b.aQuien ?? null)
+  );
+}
+
+/** R27 — las casillas marcadas, más las que tienen valor en lo vigente, en el orden en que llegaron. */
+function unirCasillas(activos: readonly string[], conValor: readonly string[]): string[] {
+  return [...activos, ...conValor.filter((k) => !activos.includes(k))];
 }
 
 /** El tope de ids por lectura de autoría: el del borde (`autoriaLibroCajaSchema`, = página máxima). */
@@ -296,16 +313,27 @@ export function WalletModule({
   // R9 — el conteo de la tarjeta es de la WALLET: no lo mueven el término ni los filtros del libro.
   const [totalWallet, setTotalWallet] = useState(initialTotal);
   /**
-   * FICHA 463 (R49, tercera vuelta B3/B4) — qué lectura está en vuelo. `todo` = la zona de la wallet
-   * (cifras + libro, ATÓMICA); `libro` = solo el libro. Deshabilita los controles que tocan.
+   * FICHA 463 (R49, tercera vuelta B3/B4) — qué lectura está en vuelo. `todo` = la wallet (cifras +
+   * libro, ATÓMICA); `libro` = solo el libro. FICHA 467 (R29): ya no deshabilita ningún control de la
+   * barra; solo dice a la tabla y a la paginación que se está leyendo.
    */
   const [cargando, setCargando] = useState<"todo" | "libro" | null>(null);
-  const cargandoWallet = cargando === "todo";
-  // R49 — si una lectura falla, el control del periodo vuelve a decir el periodo APLICADO y el buscador
-  // el término APLICADO (su `siembra`, que no emite).
-  const [siembraPeriodo, setSiembraPeriodo] = useState<{ senal: number; seleccion: FilterSelection } | undefined>(
-    undefined,
-  );
+  /**
+   * FICHA 467 (R8–R11, R27) — las casillas marcadas de la barra. Las posee el módulo y no la barra
+   * porque, tras un fallo, hay que reponerlas junto con los valores (R28). Se entra sin ninguna (R11).
+   */
+  const [activos, setActivos] = useState<string[]>([]);
+  /**
+   * FICHA 467 — lo PEDIDO en estado (espejo de `pedidoWallet`/`pedidoLibro`): es lo que dicen los
+   * controles de la barra mientras viaja una lectura. Si falla, vuelve a lo aplicado (R28).
+   */
+  const [pedidoVista, setPedidoVista] = useState<{ wallet: FiltrosWallet; libro: FiltrosLibro }>({
+    wallet: FILTROS_WALLET_VACIOS,
+    libro: FILTROS_LIBRO_INICIALES,
+  });
+  // R49/R28 — si una lectura falla, los orquestadores reponen la selección aplicada (sube la señal) y el
+  // buscador el término APLICADO (su `siembra`). Ninguna de las dos emite.
+  const [senalSiembra, setSenalSiembra] = useState(0);
   const [siembraTermino, setSiembraTermino] = useState<{ senal: number; termino: string } | undefined>(undefined);
 
   /**
@@ -364,18 +392,30 @@ export function WalletModule({
     }
   }
 
+  /** Apunta lo PEDIDO (refs para las lecturas, estado para los controles). */
+  function anotarPedido(fw: FiltrosWallet, fl: FiltrosLibro) {
+    pedidoWallet.current = fw;
+    pedidoLibro.current = fl;
+    setPedidoVista({ wallet: fw, libro: fl });
+  }
+
   /**
    * R49 — la lectura falló (con respuesta de error o lanzando): se avisa, la pantalla se queda TAL
-   * CUAL (nada se pintó) y lo pedido vuelve a lo aplicado, con el periodo y el término de los controles.
+   * CUAL (nada se pintó) y lo pedido vuelve a lo aplicado, con los controles y el término.
+   *
+   * FICHA 467 (R27/R28) — y las casillas: como mínimo, las de los filtros que siguen APLICADOS. Si se
+   * desmarcó una casilla con valor y la lectura que la quitaba falló, la casilla vuelve con su valor: la
+   * pantalla no puede filtrar por algo que no se ve.
    */
   function fallo(status: "forbidden" | "unauthenticated" | "validation_error" | null, pedido: FiltrosLibro) {
     if (status === null) toast.error(LECTURA_CAJA_FALLO);
     else manejarError(status);
-    pedidoWallet.current = aplicadoWallet.current;
-    pedidoLibro.current = aplicadoLibro.current;
     const fw = aplicadoWallet.current;
-    const termino = aplicadoLibro.current.termino;
-    setSiembraPeriodo((s) => ({ senal: (s?.senal ?? 0) + 1, seleccion: seleccionDePeriodo(fw.desde, fw.hasta) }));
+    const fl = aplicadoLibro.current;
+    anotarPedido(fw, fl);
+    const termino = fl.termino;
+    setActivos((a) => unirCasillas(a, casillasConValor(fw, fl)));
+    setSenalSiembra((n) => n + 1);
     // Revisión 463 m9 — el buscador solo se resiembra si la lectura que falló pedía OTRO término. Si falló
     // por otra cosa (un conmutador, el periodo), lo que el usuario está tecleando y aún no se envió se
     // queda en el campo y su espera sigue: se pedirá sobre lo aplicado al cumplirse, como cualquier tecleo.
@@ -408,8 +448,7 @@ export function WalletModule({
    * lecturas salieron bien; si una falla o lanza, no se pinta nada y se avisa.
    */
   async function recargarTodo(fw: FiltrosWallet, fl: FiltrosLibro, nextPage: number) {
-    pedidoWallet.current = fw;
-    pedidoLibro.current = fl;
+    anotarPedido(fw, fl);
     const mio = tomarTurno("todo");
     const entradaWallet = paginado(inputDeWallet(fw), nextPage, pageSize);
     const conFiltrosDeLibro = hayFiltrosDeLibro(fl);
@@ -450,7 +489,7 @@ export function WalletModule({
    * cifras de la wallet ni se piden ni se tocan. Se lee con la wallet APLICADA (la que dicen las cifras).
    */
   async function recargarLibro(fl: FiltrosLibro, nextPage: number) {
-    pedidoLibro.current = fl;
+    anotarPedido(pedidoWallet.current, fl);
     const mio = tomarTurno("libro");
     const fw = aplicadoWallet.current;
     try {
@@ -479,21 +518,72 @@ export function WalletModule({
     else void recargarLibro(fl, nextPage);
   }
 
-  /** R8/R19/R20 — la zona de la wallet: periodo aplicado o quitado, «A quién» elegido o quitado. */
-  function cambiarWallet(fw: FiltrosWallet) {
-    void recargarTodo(fw, pedidoLibro.current, 1); // R8: vuelve a la primera página
+  /**
+   * FICHA 467 (R10, R12, R13) — EL ÚNICO CAMINO de un cambio de filtros de la barra. Se compone sobre lo
+   * PEDIDO. Si cambia la wallet (Periodo, «A quién») se relee TODO —cifras y libro, página 1— en UNA
+   * lectura, aunque cambie también el libro; si solo cambia el libro, solo el libro; si no cambia nada,
+   * nada (la guarda que absorbe la poda del orquestador tras desmarcar).
+   */
+  function aplicarCambio(fw: FiltrosWallet, fl: FiltrosLibro) {
+    if (!mismaWallet(fw, pedidoWallet.current)) void recargarTodo(fw, fl, 1);
+    else if (!mismoLibro(fl, pedidoLibro.current)) pedirLibro(fl, 1);
   }
 
-  /** R9/R29 — un control de la zona del libro: se compone con lo PEDIDO y vuelve a la página 1. */
+  /** R12/R17 — lo que emite el orquestador del Periodo (tras su espera estándar, sin botón). */
+  function cambiarPeriodo(seleccion: FilterSelection) {
+    const { desde, hasta } = deSeleccion(seleccion);
+    aplicarCambio({ ...pedidoWallet.current, desde, hasta }, pedidoLibro.current);
+  }
+
+  /** R13 — lo que emite el orquestador de Entra/Sale y Concepto: solo el libro. */
+  function cambiarLibroSeleccion(seleccion: FilterSelection) {
+    const { tipo, categoria } = deSeleccion(seleccion);
+    aplicarCambio(pedidoWallet.current, { ...pedidoLibro.current, tipo, categoria });
+  }
+
+  /** R12/R18 — «A quién» se aplica al elegir una opción. */
+  function cambiarAQuien(valor: string | null) {
+    const aQuien = aQuienDeValor(valor);
+    const fw: FiltrosWallet = { desde: pedidoWallet.current.desde, hasta: pedidoWallet.current.hasta };
+    if (aQuien !== undefined) fw.aQuien = aQuien;
+    aplicarCambio(fw, pedidoLibro.current);
+  }
+
+  /** R13 — el término o el orden: se compone con lo PEDIDO y vuelve a la página 1. */
   function cambiarLibro(cambio: Partial<FiltrosLibro>) {
-    const siguiente = { ...pedidoLibro.current, ...cambio };
-    if (mismoLibro(siguiente, pedidoLibro.current)) return;
-    pedirLibro(siguiente, 1);
+    aplicarCambio(pedidoWallet.current, { ...pedidoLibro.current, ...cambio });
   }
 
-  /** R30 — «Limpiar todo» del libro: fuera término, dirección y categoría; el orden se queda. */
-  function limpiarLibro() {
-    cambiarLibro({ tipo: "", categoria: "", termino: "" });
+  /**
+   * FICHA 467 (R8/R10) — marcar o desmarcar casillas. Marcar solo cambia la lista (un control vacío no
+   * filtra: R8, sin lectura). Desmarcar una casilla CON valor quita ese filtro por el mismo camino que
+   * vaciarlo, en UNA lectura: el módulo no espera a la poda del orquestador, que al desmarcar la última
+   * casilla se desmonta y ya no emite.
+   */
+  function cambiarActivos(claves: string[]) {
+    const salen = new Set(activos.filter((k) => !claves.includes(k)));
+    setActivos(claves);
+    const fw: FiltrosWallet = { ...pedidoWallet.current };
+    const fl: FiltrosLibro = { ...pedidoLibro.current };
+    if (salen.has(CASILLA.periodo)) {
+      fw.desde = "";
+      fw.hasta = "";
+    }
+    if (salen.has(CASILLA.aQuien)) delete fw.aQuien;
+    if (salen.has(CASILLA.direccion)) fl.tipo = "";
+    if (salen.has(CASILLA.concepto)) fl.categoria = "";
+    aplicarCambio(fw, fl);
+  }
+
+  /**
+   * FICHA 467 (R25) — «Limpiar todo»: fuera el término, el valor de todos los filtros y todas las
+   * casillas; el ORDEN se queda. Con Periodo o «A quién» puestos, cifras y libro en UNA lectura; si no,
+   * solo el libro. (Cambio respecto de la 463, que conservaba el periodo: ahora todo vive en la misma
+   * barra y «Limpiar todo» hace lo que hace en `/ordenes`.)
+   */
+  function limpiarTodo() {
+    setActivos([]);
+    aplicarCambio(FILTROS_WALLET_VACIOS, { ...pedidoLibro.current, tipo: "", categoria: "", termino: "" });
   }
 
   function cambiarPagina(nextPage: number) {
@@ -534,14 +624,8 @@ export function WalletModule({
           />
         </div>
 
-        {/* FICHA 463 (R1–R3) — la ZONA DE LA WALLET, antes de las cifras: el periodo y «A quién». */}
-        <WalletFiltrosCaja
-          aplicado={filtrosWallet}
-          onCambiar={cambiarWallet}
-          siembra={siembraPeriodo}
-          disabled={cargandoWallet}
-        />
-
+        {/* FICHA 467 (R1) — la tarjeta de filtros de la 463 ya no está aquí: Periodo y «A quién» viven en
+            la barra única del libro y siguen moviendo estas cifras (R12). */}
         <CajaResumenCard resumen={resumen} movimientos={totalWallet} />
       </section>
 
@@ -651,15 +735,22 @@ export function WalletModule({
                       filaDescargaMovimientoCaja(f.movimiento, f.autoria),
                     )
               }
-              // FICHA 463 (R1/R5) — la ZONA DEL LIBRO, encima de la tabla y junto a la descarga.
+              // FICHA 467 (R1/R2) — la BARRA ÚNICA, encima de la tabla y en la fila de «Descargar».
               filtros={
                 <LibroCajaBarra
                   filtrosWallet={filtrosWallet}
-                  valor={filtrosLibro}
-                  onCambiar={cambiarLibro}
-                  onLimpiar={limpiarLibro}
+                  libroAplicado={filtrosLibro}
+                  pedido={pedidoVista}
+                  activos={activos}
+                  onActivos={cambiarActivos}
+                  onPeriodo={cambiarPeriodo}
+                  onLibro={cambiarLibroSeleccion}
+                  onAQuien={cambiarAQuien}
+                  onOrden={(sortDir) => cambiarLibro({ sortDir })}
+                  onTermino={(termino) => cambiarLibro({ termino })}
+                  onLimpiar={limpiarTodo}
+                  senalSiembra={senalSiembra}
                   siembraTermino={siembraTermino}
-                  disabled={loading}
                 />
               }
             />

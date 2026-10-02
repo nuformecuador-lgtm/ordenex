@@ -452,8 +452,8 @@ describe("Ledgers de dinero · descarga", () => {
     const user = userEvent.setup();
     renderCaja();
 
-    // FICHA 463: el periodo es el calendario de la ZONA DE LA WALLET, con «Aplicar».
-    await aplicarPeriodo(user, screen.getByRole("region", { name: "Filtros de toda la wallet" }), 1, 28);
+    // FICHA 467: el periodo es la casilla «Periodo» de la barra única del libro, y se aplica solo.
+    await aplicarPeriodo(user, screen.getByRole("region", { name: "Libro de movimientos" }), 1, 28);
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
 
     // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.

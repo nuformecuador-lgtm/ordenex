@@ -618,15 +618,11 @@ describe("WalletPage — el libro de caja de la 458-E (R53–R57)", () => {
     expect(ganancia.textContent).toContain(money("1500.00"));
     expect(ganancia.textContent).not.toContain(money("11500.00"));
 
-    // R54: el filtro segmentado, con «Todo» elegido al entrar.
-    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
-    expect(
-      within(grupo).getAllByRole("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]),
-    ).toEqual([
-      ["Todo", "true"],
-      ["Entra", "false"],
-      ["Sale", "false"],
-    ]);
+    // R54 (467 R11) — se entra sin filtrar por dirección: la barra única nace sin casillas marcadas, así
+    // que no hay control de Entra/Sale montado; «Filtros» lo ofrece.
+    const libro = screen.getByRole("region", { name: "Libro de movimientos" });
+    expect(within(libro).getByRole("button", { name: /^Filtros/ })).toHaveTextContent(/^Filtros$/);
+    expect(within(libro).queryByRole("combobox", { name: "Entra/Sale" })).toBeNull();
 
     // R56/R57: UNA lectura de la autoría con los ids de la página pre-obtenida.
     const autoria = vi.mocked(autoriaDelLibroCajaAction);

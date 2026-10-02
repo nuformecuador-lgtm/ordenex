@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { alternarCasillas, elegirEnBarra, textoDelControl } from "@/tests/fixtures/barra-libro-wallet";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
@@ -461,42 +462,43 @@ describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarje
   // FICHA 463 (R9/R12) — REESCRITO: hasta la 463, Entra/Sale viajaba también a las tarjetas y al
   // desglose. Desde la 463 es un filtro de la ZONA DEL LIBRO: relee solo el libro y las cifras de la
   // wallet ni se piden ni cambian (pregunta abierta 1, decidida por defecto al aprobar el spec).
-  it("R54 + 463 R9: «Entra» se aplica al pulsarlo y viaja como `tipo` SOLO al libro; las tarjetas no cambian", async () => {
+  // FICHA 467 — Entra/Sale es la casilla «Entra/Sale» de la barra única: se entra sin ella (todo) y
+  // quitarla vuelve a los dos sentidos.
+  it("R54 + 463 R9: «Entra» se aplica al elegirlo y viaja como `tipo` SOLO al libro; las tarjetas no cambian", async () => {
     const user = pintarModulo();
     resumenMock.mockResolvedValue({ status: "ok", resumen: RESUMEN_ENTRA, composicion: COMPOSICION });
+    const libro = screen.getByRole("region", { name: "Libro de movimientos" });
 
-    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
-    expect(within(grupo).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(grupo).getByRole("button", { name: "Entra" }));
+    expect(textoDelControl(libro, "Entra/Sale")).toBeNull();
+    await elegirEnBarra(user, libro, "Entra/Sale", "Entra");
 
     const esperado = { tipo: "ingreso", page: 1, pageSize: 20 };
     await waitFor(() => expect(listarMock).toHaveBeenCalledWith(esperado));
     expect(resumenMock).not.toHaveBeenCalled();
     expect(desgloseMock).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(within(grupo).getByRole("button", { name: "Entra" })).toHaveAttribute("aria-pressed", "true"),
-    );
+    await waitFor(() => expect(textoDelControl(libro, "Entra/Sale")).toBe("Entra/Sale: Entra"));
     // La tarjeta de la ganancia sigue con el resumen de la wallet (el de la entrada), no el «de Entra».
     expect(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }).textContent).toContain(money("20000.00"));
     // R13 con la dirección: los conceptos del filtro se piden para lo que ENTRA.
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", tipo: "ingreso" }));
 
-    await user.click(within(grupo).getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, libro, "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ tipo: "egreso", page: 1, pageSize: 20 }));
 
-    await user.click(within(grupo).getByRole("button", { name: "Todo" }));
+    await alternarCasillas(user, libro, "Entra/Sale");
     await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 }));
   });
 
-  // FICHA 463 (R8/R12/R42) — REESCRITO: el periodo vive ahora en la ZONA DE LA WALLET (calendario +
-  // «Aplicar»). Se suma a la dirección en el LIBRO y en la descarga; las cifras lo reciben sin el tipo.
+  // FICHA 463 (R8/R12/R42) — REESCRITO: el periodo mueve toda la wallet (467: casilla «Periodo» de la
+  // barra única, sin «Aplicar»). Se suma a la dirección en el LIBRO y en la descarga; las cifras lo
+  // reciben sin el tipo.
   it("R54 + 463 R8/R12/R42: el periodo se suma a la dirección en el libro y la descarga; las cifras, sin tipo", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    const zona = screen.getByRole("region", { name: "Libro de movimientos" });
+    await elegirEnBarra(user, zona, "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Sale" })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(textoDelControl(zona, "Entra/Sale")).toBe("Entra/Sale: Sale"));
 
-    const zona = screen.getByRole("region", { name: "Filtros de toda la wallet" });
     await aplicarPeriodo(user, zona, 1, 28);
     const periodo = { desde: diaDelMesActual(1), hasta: diaDelMesActual(28) };
     const esperado = { tipo: "egreso", ...periodo };
@@ -534,7 +536,7 @@ describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", (
 
   it("R60: anular desde el panel relee libro, tarjetas + composición y desglose con los filtros VIGENTES", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, screen.getByRole("region", { name: "Libro de movimientos" }), "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument());
     vi.clearAllMocks();
@@ -557,7 +559,7 @@ describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", (
       destino: { libro: "caja", movimientoId: SUELDO.id },
       motivo: "Registrado dos veces",
     }));
-    // FICHA 463: el libro con los filtros VIGENTES de sus dos zonas; las cifras, solo con la de la wallet.
+    // FICHA 463/467: el libro con TODOS los filtros vigentes; las cifras, solo con los de la wallet.
     const vigentes = { tipo: "egreso", page: 1, pageSize: 20 };
     await waitFor(() => expect(listarMock).toHaveBeenCalledWith(vigentes));
     expect(resumenMock).toHaveBeenCalledWith({ page: 1, pageSize: 20 }); // tarjetas + composición (misma respuesta)

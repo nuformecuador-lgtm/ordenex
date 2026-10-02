@@ -52,7 +52,8 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
-// FICHA 463: la categoría de la caja vive en la zona del libro; el periodo, en la de la wallet.
+// FICHA 463/467: la categoría de la caja es la casilla «Concepto» de la barra única del libro; el periodo
+// llega ya aplicado por la prop de la wallet.
 import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
 import { MiEstadoCuenta } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import { useState } from "react";
@@ -125,13 +126,13 @@ async function opcionesDe(combobox: HTMLElement): Promise<string[]> {
 
 describe("TA.3 — `/wallet`: el filtro de categoría (libro de caja)", () => {
   it("R13: pide los conceptos del periodo APLICADO y el tipo vigente y los ofrece con su número", async () => {
-    const { rerender } = conSWR(<LibroCajaBarraControlada />);
+    const { rerender } = conSWR(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja" }));
 
     // FICHA 463: el periodo llega de la zona de la wallet, ya aplicado.
     rerender(
       <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <LibroCajaBarraControlada filtrosWallet={{ desde: "2026-09-01", hasta: "2026-09-30" }} />
+        <LibroCajaBarraControlada activosIniciales={["categoria"]} filtrosWallet={{ desde: "2026-09-01", hasta: "2026-09-30" }} />
       </SWRConfig>,
     );
     await waitFor(() =>
@@ -141,35 +142,39 @@ describe("TA.3 — `/wallet`: el filtro de categoría (libro de caja)", () => {
     await waitFor(async () => {
       expect(conceptosMock).toHaveBeenCalled();
     });
-    const opciones = await opcionesDe(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
-    expect(opciones[0]).toBe("Todas las categorías");
-    expect(opciones).toContain("Sueldo (2)");
+    const opciones = await opcionesDe(screen.getByRole("combobox", { name: "Concepto" }));
+    // FICHA 467: sin la opción «Todas las categorías» (sin elección, el disparador ya dice «Todos»).
+    expect(opciones).not.toContain("Todas las categorías");
+    expect(opciones[0]).toBe("Sueldo (2)");
     for (const o of opciones) expect(o).not.toMatch(/_/);
   });
 
   it("R15: la categoría elegida se conserva, con 0, cuando el periodo la deja sin movimientos", async () => {
     const user = userEvent.setup();
     const proveedor = new Map();
+    const onCambiar = vi.fn();
     const montar = (desde: string) => (
       <SWRConfig value={{ provider: () => proveedor, dedupingInterval: 0 }}>
-        <LibroCajaBarraControlada filtrosWallet={{ desde, hasta: "" }} />
+        <LibroCajaBarraControlada activosIniciales={["categoria"]} filtrosWallet={{ desde, hasta: "" }} onCambiar={onCambiar} />
       </SWRConfig>
     );
     const { rerender } = render(montar(""));
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(screen.getByRole("combobox", { name: "Concepto" }));
     await user.click(await screen.findByRole("option", { name: "Sueldo (2)" }));
+    // FICHA 467: la elección se aplica tras la espera estándar del orquestador.
+    await waitFor(() => expect(onCambiar).toHaveBeenCalledWith(expect.objectContaining({ categoria: "egreso_sueldo" })));
 
     conceptosMock.mockResolvedValue({ status: "ok", conceptos: [{ categoria: "ingreso_flete", movimientos: 7 }] });
     rerender(montar("2026-01-01"));
 
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Filtrar por categoría" })).toHaveTextContent("Sueldo (0)"),
+      expect(screen.getByRole("combobox", { name: "Concepto" })).toHaveTextContent("Sueldo (0)"),
     );
   });
 
   it("si la lectura falla, lo dice (y el filtro sigue usable con «todas»)", async () => {
     conceptosMock.mockResolvedValue({ status: "forbidden" });
-    conSWR(<LibroCajaBarraControlada />);
+    conSWR(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
     expect(await screen.findByText("No pudimos cargar los conceptos del periodo.")).toBeInTheDocument();
   });
 });
