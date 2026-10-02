@@ -49,12 +49,15 @@ const { EstadoCuentaService } = await import("@/lib/services/EstadoCuentaService
 const { DetalleEnLoteService } = await import("@/lib/services/DetalleEnLoteService");
 const { CierreAporteRepository } = await import("@/lib/repositories/CierreAporteRepository");
 const { WalletTiendaMovimientoRepository } = await import("@/lib/repositories/WalletTiendaMovimientoRepository");
+const { EstadoCuentaRepository } = await import("@/lib/repositories/EstadoCuentaRepository");
 
 function afirmarDetalleReal(d: unknown) {
   expect(d).toBeInstanceOf(DetalleEnLoteService);
-  const interno = d as { aportes: unknown; movimientosDeTienda: unknown };
+  const interno = d as { aportes: unknown; movimientosDeTienda: unknown; movimientosDeMensajero: unknown };
   expect(interno.aportes).toBeInstanceOf(CierreAporteRepository);
   expect(interno.movimientosDeTienda).toBeInstanceOf(WalletTiendaMovimientoRepository);
+  // FICHA 468 (R31/R55): el lote gana el libro del MENSAJERO, y el root lo PASA.
+  expect(interno.movimientosDeMensajero).toBeInstanceOf(EstadoCuentaRepository);
 }
 
 describe("464 — los roots de las tres acciones PASAN sus dependencias reales", () => {

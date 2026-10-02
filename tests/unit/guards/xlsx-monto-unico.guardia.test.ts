@@ -26,6 +26,7 @@ const OPCIONALES = [
   "lib/utils/detalle-por-guia.ts",
   "lib/utils/caja-kardex.ts",
   "lib/utils/estado-cuenta-kardex.ts",
+  "lib/utils/libro-kardex.ts",
 ];
 
 function rutaDeDescarga(): string[] {

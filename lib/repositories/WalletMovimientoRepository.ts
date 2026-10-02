@@ -12,6 +12,7 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { ISaldoCorridoCajaRepository } from "@/lib/interfaces/repositories/ISaldoCorridoCajaRepository";
 import type {
   AgregadoCajaRow,
   WalletMovimientoCategoria,
@@ -155,7 +156,7 @@ async function categoriasConAQuien(
  * INMUTABLE (R3/R47): no expone `update` ni `delete`, y con la 173 sigue sin exponerlos —
  * una correccion es un movimiento compensatorio, no una edicion.
  */
-export class WalletMovimientoRepository implements IWalletMovimientoRepository {
+export class WalletMovimientoRepository implements IWalletMovimientoRepository, ISaldoCorridoCajaRepository {
   constructor(private readonly prisma: WalletPrismaClient) {}
 
   /** R6/R13: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
@@ -342,6 +343,48 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       tipo: g.tipo,
       total: (g._sum.monto ?? new Prisma.Decimal(0)).toFixed(2),
     }));
+  }
+
+  /**
+   * Ficha 468 (design §3.4, R12/R15) — el saldo de la caja ENTERA tras cada movimiento de la descarga.
+   *
+   * Molde de `EstadoCuentaRepository.paginaDeTienda`: la ventana corre sobre TODO el libro (hasta el
+   * corte), con el MISMO orden total que `listar` en ascendente (fecha, `created_at`, `id`), y la consulta
+   * exterior se queda con los ids pedidos (≤ tope de descarga). La suma la hace el motor: aqui no se suma
+   * ningun importe en JavaScript.
+   *
+   * El signo lo da el TIPO y la cubeta la lista `efectivo` que manda el servicio (derivada de
+   * `LIQUIDEZ_POR_CATEGORIA`, igual que `acumular` de `derivarCaja`): un cargo a tienda no mueve el saldo.
+   * El servicio AFIRMA que el saldo de la ultima fila es el `enCaja` de la tarjeta.
+   */
+  async saldosTrasMovimientos(
+    ids: readonly string[],
+    efectivo: readonly WalletMovimientoCategoria[],
+    hasta?: Date,
+  ): Promise<Map<string, string>> {
+    const saldos = new Map<string, string>();
+    if (ids.length === 0) return saldos;
+    const corte = hasta === undefined ? Prisma.sql`TRUE` : Prisma.sql`w."fecha_movimiento" < ${hasta}`;
+    const filas = await this.prisma.$queryRaw<{ id: string; saldo: Prisma.Decimal | null }[]>(Prisma.sql`
+      SELECT t."id", t."saldo"
+      FROM (
+        SELECT w."id",
+               SUM(
+                 CASE
+                   WHEN w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'ingreso' THEN w."monto"
+                   WHEN w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'egreso' THEN -w."monto"
+                   ELSE 0
+                 END
+               ) OVER (
+                 ORDER BY w."fecha_movimiento" ASC, w."created_at" ASC, w."id" ASC
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+               ) AS "saldo"
+        FROM "wallet_movimiento" w
+        WHERE ${corte}
+      ) t
+      WHERE t."id" = ANY(${[...ids]}::text[])`);
+    for (const f of filas) saldos.set(f.id, (f.saldo ?? new Prisma.Decimal(0)).toFixed(2));
+    return saldos;
   }
 
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */

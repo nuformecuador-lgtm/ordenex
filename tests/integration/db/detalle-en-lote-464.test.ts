@@ -330,7 +330,7 @@ async function sembrar(tx: TxDeTest, cat: Catalogo459): Promise<Escenario> {
     s,
     aportes,
     fila: new DetalleMovimientoService(cajaRepo, tiendaRepo, aportes, new EstadoCuentaRepository(cliente)),
-    lote: new DetalleEnLoteService(aportes, tiendaRepo),
+    lote: new DetalleEnLoteService(aportes, tiendaRepo, new EstadoCuentaRepository(cliente)),
     remisionDe: (clave) => {
       const r = remisiones.get(clave);
       if (r === undefined) throw new Error(`sin remision para ${clave}`);

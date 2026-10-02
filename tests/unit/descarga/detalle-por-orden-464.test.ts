@@ -76,6 +76,7 @@ function mov(n: number, over: Partial<WalletMovimientoDTO> = {}): WalletMovimien
 
 function orden(n: number, aporte: string, over: Partial<OrdenDelLoteDTO> = {}): OrdenDelLoteDTO {
   return {
+    clave: `o-${n}`, // ficha 468: el enlace en memoria (nunca se pinta)
     guia: `${1000 + n}`,
     remision: `REM-${n}`,
     destinatario: `Destinatario ${n}`,

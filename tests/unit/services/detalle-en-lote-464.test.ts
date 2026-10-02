@@ -112,11 +112,14 @@ function montar(opciones: {
   const listarPorIdsDeTienda = vi.fn<(ids: readonly string[], tiendaId: string) => Promise<WalletTiendaMovimientoDTO[]>>(async (ids) =>
     (opciones.movimientosDeTienda ?? []).filter((m) => ids.includes(m.id)),
   );
+  // FICHA 468: el libro del mensajero (su superficie se prueba en detalle-en-lote-468.test.ts).
+  const listarPorIdsDeMensajero = vi.fn(async () => []);
   const servicio = new DetalleEnLoteService(
     { contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres },
     { listarPorIdsDeTienda },
+    { listarPorIdsDeMensajero },
   );
-  return { servicio, contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres, listarPorIdsDeTienda };
+  return { servicio, contarAportesPorCierre, listarAportesDeCierres, cabecerasDeCierres, listarPorIdsDeTienda, listarPorIdsDeMensajero };
 }
 
 function llamadasALaBase(m: ReturnType<typeof montar>): number {
@@ -365,12 +368,16 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
     expect(llamadasALaBase(m)).toBe(0);
   });
 
-  it("la orden sin guia congelada sale con guia null y su remision; ningun id interno en la DTO", async () => {
+  // FICHA 468 (design §4.1) — SUSTITUYE a «…ningun id interno en la DTO»: la orden viaja con `clave` (su id),
+  // el enlace del bloque de una orden sin guia en la hoja «Detalle por guía». Viaja y NUNCA se pinta: la
+  // guardia de columnas sensibles mide que no llega a una celda.
+  it("468 (antes 464 R30): la orden sin guia sale con guia null, su remision y su `clave` de enlace", async () => {
     const sinGuia = { ...orden("c-1", 1), numGuia: null };
     const m = montar({ filas: [sinGuia] });
     const r = await m.servicio.detallar({ superficie: "caja", movimientos: [movCaja({ id: "m" })] }, MAESTRO);
     if (r.status !== "ok" || r.detalle[0].modo !== "ordenes") throw new Error("se esperaba ok con ordenes");
     expect(r.detalle[0].ordenes[0]).toEqual({
+      clave: "o-c-1-1",
       guia: null,
       remision: "REM-1",
       destinatario: "Dest 1",
@@ -378,7 +385,9 @@ describe("464 — R18/R20/R24: forma y orden de la salida", () => {
       resultados: ["entregado"],
       aporte: "1000.00",
     });
-    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain("o-c-1-1");
+    // Y ningun OTRO identificador: ni el del cierre ni el del movimiento.
+    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain('"c-1"');
+    expect(JSON.stringify(r.detalle[0].ordenes)).not.toContain('"m"');
   });
 });
 

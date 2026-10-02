@@ -87,7 +87,8 @@ const DETALLE: DetalleDeMovimientoLoteDTO[] = [
 
 function detalleEspia(r: DetalleEnLoteServiceResult = { status: "ok", detalle: DETALLE }) {
   const detallar = vi.fn<IDetalleEnLoteService["detallar"]>(async () => r);
-  const servicio: IDetalleEnLoteService = { detallar };
+  // FICHA 468: el lote gana `contar` (los orquestadores de la 464 no lo usan).
+  const servicio: IDetalleEnLoteService = { detallar, contar: vi.fn() };
   return { servicio, detallar };
 }
 

@@ -19,6 +19,11 @@ import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 
 /** Una orden que aporta al importe de un movimiento, con lo congelado en SU cierre (R29). */
 export interface OrdenDelLoteDTO {
+  /**
+   * Ficha 468 (design §4.1) — el id de la orden: la clave del bloque de una orden SIN guia en la hoja
+   * «Detalle por guia». Es un ENLACE en memoria y NUNCA se pinta (R30 de la 464 sigue vigente).
+   */
+  clave: string;
   /** `cierre_detail.num_guia` congelado, como texto; `null` si la orden nunca llego a tener guia. */
   guia: string | null;
   /** `cierre_detail.num_remision` congelado. */
@@ -60,6 +65,14 @@ export type DetalleEnLoteServiceResult =
   | { status: "ok"; detalle: DetalleDeMovimientoLoteDTO[] }
   /** R39/R40: el detalle pasaria del tope. SOLO conteos: no se leyo ni una fila de ordenes. */
   | { status: "limite_excedido"; total: number; limite: number }
+  | { status: "forbidden" };
+
+/**
+ * Ficha 468 (design §7.3, R18/R61) — solo los CONTEOS del lote: cuantas ordenes componen cada movimiento
+ * recibido, en su orden (`null` = no repartible). No se lee ni una fila de ordenes.
+ */
+export type ContarEnLoteServiceResult =
+  | { status: "ok"; ordenes: (number | null)[] }
   | { status: "forbidden" };
 
 /**

@@ -21,6 +21,9 @@ import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
 import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
 import { CajaConDetalleService } from "@/lib/services/LibroConDetalleService";
+import { CajaKardexService } from "@/lib/services/LibroKardexService";
+import type { ICajaKardexService } from "@/lib/interfaces/services/ICajaKardexService";
+import type { LibroCajaKardexConDetalleServiceResult, LibroCajaKardexServiceResult } from "@/lib/types/libro-kardex";
 import { WalletService } from "@/lib/services/WalletService";
 import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
@@ -190,9 +193,50 @@ function buildCajaConDetalleService(): ICajaConDetalleService {
   const prisma = getPrismaClient();
   return new CajaConDetalleService(
     buildService(),
-    new DetalleEnLoteService(new CierreAporteRepository(prisma), new WalletTiendaMovimientoRepository(prisma)),
+    buildDetalleEnLote(prisma),
   );
 }
+
+/**
+ * Ficha 468 — el lote del detalle por guia sobre sus TRES repositorios reales (aportes, libro de la
+ * tienda y libro del mensajero). Lo comparten el composition root de la 464 y el del kardex.
+ */
+function buildDetalleEnLote(prisma: ReturnType<typeof getPrismaClient>): DetalleEnLoteService {
+  return new DetalleEnLoteService(
+    new CierreAporteRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new EstadoCuentaRepository(prisma),
+  );
+}
+
+/**
+ * Ficha 468 (design §3.4/§4.3) — el composition root del libro de la caja como KARDEX: el servicio del
+ * libro de SIEMPRE (`buildService`, la misma hoja y el mismo guard que la descarga de antes), el
+ * repositorio REAL de la caja para el saldo corrido y las cifras de la tarjeta, y el lote real (conteos y
+ * detalle). Ninguna dependencia es opcional (`tests/unit/actions/libro-kardex-468.action.test.ts`).
+ */
+function buildCajaKardexService(): ICajaKardexService {
+  const prisma = getPrismaClient();
+  return new CajaKardexService(buildService(), new WalletMovimientoRepository(prisma), buildDetalleEnLote(prisma));
+}
+
+/** Ficha 468 — dependencias de la descarga del kardex de la caja, inyectables en test. */
+export interface CajaKardexDeps {
+  service?: ICajaKardexService;
+  getActor?: () => Promise<Actor | null>;
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 468 — el resultado en el BORDE: las filas con su origen legible + `kardex` (y `porGuia`). */
+export type LibroCajaKardexActionResult =
+  | ConOrigenEnItems<LibroCajaKardexServiceResult>
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type LibroCajaKardexConDetalleActionResult =
+  | ConOrigenEnItems<LibroCajaKardexConDetalleServiceResult>
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 /** Ficha 464 — dependencias de la descarga con detalle, inyectables en test. */
 export interface CajaConDetalleDeps {
@@ -308,6 +352,53 @@ export async function listarMovimientosCompletoConDetalleAction(
     const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildCajaConDetalleService();
     const r = await service.cajaConDetalle(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (design §3–§4, R5–R16, R53, R57, R61) — la descarga «Solo los movimientos · una hoja» del libro
+ * de la caja como KARDEX: la MISMA entrada que `listarMovimientosCompletoAction` (filtros, termino;
+ * `.strict()`), con el orden FORZADO a cronologico ascendente en el servidor (R7) y, junto a las filas, el
+ * `kardex` (saldo inicial y final de la tarjeta, la columna y el saldo de cada fila, totales y el «N
+ * guía(s)» de los conteos, sin leer ninguna orden).
+ *
+ * @sin-superficie FICHA 468 (Bloque B pendiente): la cablea el frontend en la descarga del libro de `/wallet` (`WalletModule.tsx`); hasta entonces la descarga sigue en `listarMovimientosCompletoAction`. Al cablearla se borra esta anotacion.
+ */
+export async function libroCajaKardexAction(
+  input: unknown,
+  deps: CajaKardexDeps = {},
+): Promise<LibroCajaKardexActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCajaKardexService();
+    const r = await service.kardex(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (R26, R33–R46, R53) — la descarga «Movimientos y detalle por guía · dos hojas» de la caja, en
+ * UNA peticion: el kardex de `libroCajaKardexAction` y el detalle AGRUPADO por guia (`porGuia`), cuyo
+ * TOTAL GENERAL el servidor afirma igual al «Total del periodo». Topes: el de la hoja de movimientos y el
+ * del detalle (`limite_excedido` con `hoja`).
+ *
+ * @sin-superficie FICHA 468 (Bloque B pendiente): la cablea el frontend en la descarga con detalle del libro de `/wallet` (`WalletModule.tsx`), sustituyendo a `listarMovimientosCompletoConDetalleAction`. Al cablearla se borra esta anotacion.
+ */
+export async function libroCajaKardexConDetalleAction(
+  input: unknown,
+  deps: CajaKardexDeps = {},
+): Promise<LibroCajaKardexConDetalleActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {});
+    const service = deps.service ?? buildCajaKardexService();
+    const r = await service.kardexConDetalle(data, actor);
     return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
