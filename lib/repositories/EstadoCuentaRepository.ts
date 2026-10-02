@@ -14,6 +14,7 @@ import type {
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
 import type {
   IMovimientosMensajeroEnLoteRepository,
   MovimientoDeMensajeroEnLoteRow,
@@ -107,6 +108,22 @@ function terminoSql(v: Pick<VentanaDeLibro, "termino" | "conNombreRegistrador">)
   return v.conNombreRegistrador
     ? Prisma.sql` AND (l.descripcion ILIKE ${patron} OR ${NOMBRE_SQL} ILIKE ${patron})`
     : Prisma.sql` AND l.descripcion ILIKE ${patron}`;
+}
+
+/**
+ * FICHA 469 (design §3.2, R8–R10, R16/R17) — la busqueda del libro: por GUIA si el servicio resolvio
+ * pares, de TEXTO (la de la 463) si no. EXCLUYENTES: con `porGuia` el termino no se escribe (R10). En el
+ * `WHERE` EXTERIOR, despues de la ventana (como el chip): el corrido no cambia (R17). Lista vacia ⇒
+ * ` AND FALSE` (R22). No decide nada: es el molde de `filtroDeChip`.
+ */
+function busquedaSql(v: Pick<VentanaDeLibro, "termino" | "conNombreRegistrador" | "porGuia">): Prisma.Sql {
+  if (v.porGuia === undefined) return terminoSql(v);
+  if (v.porGuia.length === 0) return Prisma.sql` AND FALSE`;
+  const una = (p: ParDeGuia) =>
+    p.origenTipo === "cierre_dia"
+      ? Prisma.sql`(l.origen_tipo = ${p.origenTipo} AND l.origen_id = ${p.origenId} AND l.categoria = ${p.categoria})`
+      : Prisma.sql`(l.origen_tipo = ${p.origenTipo} AND l.origen_id = ${p.origenId})`;
+  return Prisma.sql` AND (${Prisma.join(v.porGuia.map(una), " OR ")})`;
 }
 
 /**
@@ -261,6 +278,8 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository, IMovimie
                  OVER (ORDER BY mv.fecha_movimiento, mv.orden, mv.id) AS saldo_corrido
         FROM mov mv${hasta}
       )`;
+    // FICHA 469 (R36): la bodega busca SOLO texto (`terminoSql`, no `busquedaSql`): aunque una ventana
+    // trajera `porGuia`, aqui no se aplicaria.
     const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, false)}${terminoSql(v)}`;
     const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
@@ -286,7 +305,7 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository, IMovimie
     conPremio: boolean,
     filtroDeCierre: Prisma.Sql,
   ): Promise<PaginaDeLibro> {
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}${terminoSql(v)}`;
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}${busquedaSql(v)}`;
     const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}

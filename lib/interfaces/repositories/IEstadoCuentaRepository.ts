@@ -1,5 +1,6 @@
 import type { MetodoPagoValue } from "@prisma/client";
 
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
@@ -43,6 +44,13 @@ export interface VentanaDeLibro {
    * con la descripcion y, solo si `conNombreRegistrador`, con el nombre de quien registro.
    */
   termino?: string;
+  /**
+   * FICHA 469 (design §3.2, R8–R10, R16/R17) — la busqueda por GUIA: la lista CERRADA de pares que
+   * calculo `BusquedaPorGuiaService`. EXCLUYENTE con `termino` (si viene, el texto no cuenta). Va en el
+   * `WHERE` EXTERIOR, despues de la ventana, como el chip: el corrido de cada fila no cambia (R17). `[]` =
+   * ninguna fila (R22). La bodega no la recibe (R36): el servicio no la resuelve para ella.
+   */
+  porGuia?: readonly ParDeGuia[];
   /**
    * FICHA 463 (R33/R36/R37) — el sentido del `ORDER BY` FINAL. La ventana del saldo corrido sigue
    * siempre cronologica (ascendente): el corrido de una fila es el mismo en los dos sentidos.

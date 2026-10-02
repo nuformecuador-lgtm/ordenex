@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ModoBusquedaLibro } from "@/lib/types/busqueda-por-guia";
 import type {
   CajaResumenDTO,
   ComposicionGananciaDTO,
@@ -22,6 +23,12 @@ export interface ListarMovimientosPayload {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * FICHA 469 (design §2.4, R21/R23) — como resolvio el servidor el termino del libro: `guia` (solo los
+   * movimientos a los que esa orden aporta) o `texto` (la busqueda de la 463). AUSENTE si la lectura no
+   * llevaba termino, y en las lecturas que no son el libro (el detalle de una fila de la composicion).
+   */
+  modoBusqueda?: ModoBusquedaLibro;
 }
 
 export type ListarMovimientosServiceResult =

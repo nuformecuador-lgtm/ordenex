@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
 import type { AQuienCuentaTipo, AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { WalletMovimientoCategoria, WalletMovimientoTipo, WalletOrigenTipo } from "@/lib/types/wallet";
 import { CATEGORIAS_CONTRA_ASIENTO_ANOTADO } from "@/lib/utils/anotacion-de-fila";
@@ -313,16 +314,36 @@ export function condicionTerminoCajaSql(termino: string): Prisma.Sql {
 }
 
 /**
+ * FICHA 469 (design §3.1, R8–R10, R14) — la busqueda por GUIA sobre la fila `w`: el `OR` de la lista
+ * CERRADA de pares que calculo `BusquedaPorGuiaService` (origen y, en los de cierre, la categoria). Aqui
+ * no se decide nada —ni criterio de aporte ni dinero—: es el molde de `filtroDeChip`. Lista vacia ⇒
+ * `FALSE` (ninguna fila, R22), nunca «sin filtro».
+ */
+export function condicionPorGuiaSql(pares: readonly ParDeGuia[]): Prisma.Sql {
+  if (pares.length === 0) return Prisma.sql`FALSE`;
+  const una = (p: ParDeGuia) =>
+    p.origenTipo === "cierre_dia"
+      ? Prisma.sql`(w."origen_tipo"::text = ${p.origenTipo} AND w."origen_id" = ${p.origenId} AND w."categoria"::text = ${p.categoria})`
+      : Prisma.sql`(w."origen_tipo"::text = ${p.origenTipo} AND w."origen_id" = ${p.origenId})`;
+  return Prisma.sql`(${Prisma.join(pares.map(una), " OR ")})`;
+}
+
+/**
  * El WHERE del libro de la caja con lo que el `where` de Prisma no expresa: «A quién» (458-E) y/o el
  * termino (463). Los dos son opcionales; los demas filtros son los de `buildWhere`, uno a uno
  * (`condicionesComunesSql`). Con «A quién» y sin termino es, condicion a condicion, `whereLibroCajaSql`.
+ *
+ * FICHA 469 (design §3.1, R10/R16): `porGuia` es EXCLUYENTE con el termino de texto. Si viene, la
+ * condicion del texto NO se escribe (una nota que lleva la guia en su descripcion no sale) y los demas
+ * filtros siguen en `AND`.
  */
 export function whereLibroCajaConTerminoSql(
-  f: FiltrosComunesSql & { aQuien?: AQuienFiltro; termino?: string },
+  f: FiltrosComunesSql & { aQuien?: AQuienFiltro; termino?: string; porGuia?: readonly ParDeGuia[] },
 ): Prisma.Sql {
   const partes: Prisma.Sql[] = [];
   if (f.aQuien !== undefined) partes.push(condicionAQuienSql(f.aQuien));
   partes.push(...condicionesComunesSql(f));
-  if (f.termino !== undefined) partes.push(condicionTerminoCajaSql(f.termino));
+  if (f.porGuia !== undefined) partes.push(condicionPorGuiaSql(f.porGuia));
+  else if (f.termino !== undefined) partes.push(condicionTerminoCajaSql(f.termino));
   return whereOVerdadero(partes);
 }

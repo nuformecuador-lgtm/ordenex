@@ -7,6 +7,7 @@ import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { BUSQUEDA_LIBRO_MAX_CHARS, BUSQUEDA_LIBRO_MIN_CHARS, CAMPOS_ORDEN_LIBRO } from "@/lib/config/libro-wallet";
 import { esquemaOrdenamiento } from "@/lib/types/ordenamiento-listado";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
+import type { ModoBusquedaLibro } from "@/lib/types/busqueda-por-guia";
 import { diaCalendarioSchema } from "@/lib/types/filtro-dias-cr";
 import type { DestinoMovimiento } from "@/lib/types/wallet-anulacion";
 import type { DesgloseTiendaDTO } from "@/lib/types/wallet-tienda";
@@ -132,6 +133,13 @@ export const ordenesDeFilaSchema = z
       .min(1)
       .max(detalleMovimientoConfig.MAX_PAGE_SIZE)
       .default(detalleMovimientoConfig.DEFAULT_PAGE_SIZE),
+    /**
+     * FICHA 469 (design §4.1, R25–R29) — el termino del libro, para destacar la guia buscada. Mismo
+     * esquema que `q` (recortado, minimo y maximo de `lib/config/libro-wallet`). La pantalla lo manda SOLO
+     * si la ultima lectura del libro volvio con `modoBusqueda === "guia"`; si el termino no identifica
+     * ninguna orden del alcance, el detalle sale igual que sin el (R28).
+     */
+    resaltar: z.string().trim().min(BUSQUEDA_LIBRO_MIN_CHARS).max(BUSQUEDA_LIBRO_MAX_CHARS).optional(),
   })
   .strict();
 
@@ -237,6 +245,12 @@ export interface EstadoCuentaDTO {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * FICHA 469 (design §2.4, R21/R23) — como resolvio el servidor el termino (`q`): `guia` (solo los
+   * movimientos a los que esa orden aporta) o `texto` (la busqueda de la 463). AUSENTE si la lectura no
+   * llevaba termino. En la bodega satelite es siempre `texto` (R36).
+   */
+  modoBusqueda?: ModoBusquedaLibro;
 }
 
 export type VerEstadoCuentaResult =
