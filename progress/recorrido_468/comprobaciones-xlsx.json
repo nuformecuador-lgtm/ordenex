@@ -1,0 +1,180 @@
+{
+  "caja": {
+    "hojasConDetalle": [
+      "Libro de movimientos",
+      "Detalle por guía"
+    ],
+    "hojasSolo": [
+      "Libro de movimientos"
+    ],
+    "encabezadosHoja1": [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "A quién",
+      "Es dinero de",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas",
+      "Saldo",
+      "Registró"
+    ],
+    "encabezadosHoja2": [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Tienda",
+      "Mensajero",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas"
+    ],
+    "movimientos": {
+      "errores": [],
+      "celdasMontoNumericas": 77,
+      "movimientos": 36,
+      "saldoInicial": 0,
+      "saldoFinal": 13483932.72,
+      "total": {
+        "entra": 13524733.22,
+        "sale": 40800.5,
+        "cobradoATiendas": 43729.9
+      },
+      "conAviso": false,
+      "ok": true
+    },
+    "detallePorGuia": {
+      "errores": [],
+      "bloques": 17,
+      "filasDeConcepto": 56,
+      "movimientosSinGuia": 3,
+      "diferencias": 17,
+      "totalGeneral": {
+        "Entra": 13524733.22,
+        "Sale": 40800.5,
+        "Cobrado a tiendas": 43729.9
+      },
+      "igualAHoja1": true,
+      "ok": true
+    },
+    "R57_hoja1Identica": true
+  },
+  "tienda": {
+    "hojasConDetalle": [
+      "Estado de cuenta de Tania Tien…",
+      "Detalle por guía"
+    ],
+    "hojasSolo": [
+      "Estado de cuenta de Tania Tien…"
+    ],
+    "encabezadosHoja1": [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Saldo",
+      "Registró"
+    ],
+    "encabezadosHoja2": [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Mensajero",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale"
+    ],
+    "movimientos": {
+      "errores": [],
+      "celdasMontoNumericas": 58,
+      "movimientos": 27,
+      "saldoInicial": 0,
+      "saldoFinal": 147670.1,
+      "total": {
+        "entra": 191400,
+        "sale": 43729.9
+      },
+      "conAviso": false,
+      "ok": true
+    },
+    "detallePorGuia": {
+      "errores": [],
+      "bloques": 15,
+      "filasDeConcepto": 40,
+      "movimientosSinGuia": 0,
+      "diferencias": 14,
+      "totalGeneral": {
+        "Entra": 191400,
+        "Sale": 43729.9
+      },
+      "igualAHoja1": true,
+      "ok": true
+    },
+    "R57_hoja1Identica": true
+  },
+  "mensajero": {
+    "hojasConDetalle": [
+      "Estado de cuenta de Marco Mens…",
+      "Detalle por guía"
+    ],
+    "hojasSolo": [
+      "Estado de cuenta de Marco Mens…"
+    ],
+    "encabezadosHoja1": [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Saldo",
+      "Registró"
+    ],
+    "encabezadosHoja2": [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Tienda",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale"
+    ],
+    "movimientos": {
+      "errores": [],
+      "celdasMontoNumericas": 24,
+      "movimientos": 10,
+      "saldoInicial": 0,
+      "saldoFinal": 5100,
+      "total": {
+        "entra": 20700,
+        "sale": 15600
+      },
+      "conAviso": false,
+      "ok": true
+    },
+    "detallePorGuia": {
+      "errores": [],
+      "bloques": 9,
+      "filasDeConcepto": 9,
+      "movimientosSinGuia": 7,
+      "diferencias": 2,
+      "totalGeneral": {
+        "Entra": 20700,
+        "Sale": 15600
+      },
+      "igualAHoja1": true,
+      "ok": true
+    },
+    "R57_hoja1Identica": true
+  }
+}

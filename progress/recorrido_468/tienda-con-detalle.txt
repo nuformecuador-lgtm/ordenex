@@ -1,0 +1,65 @@
+== Hoja «Estado de cuenta de Tania Tien…» (29 filas de datos)
+Fecha | Concepto | Detalle | Entra | Sale | Saldo | Registró
+**  | Saldo al inicio del periodo |  |  |  | 0 (num) | 
+   2026-08-12 | Comisión de contra-entrega cobrada a la tienda | Cierre del día · 2026-08-12 · Marco Mensajero · 0 guías |  | 4343.5 (num) | -4343.5 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | IVA del flete cobrado a la tienda | Cierre del día · 2026-08-12 · Marco Mensajero · 0 guías |  | 1560 (num) | -5903.5 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | Contra-entrega cobrado a los clientes de la tienda | Cierre del día · 2026-08-12 · Marco Mensajero · 6 guías | 124100 (num) |  | 118196.5 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | IVA de la comisión cobrado a la tienda | Cierre del día · 2026-08-12 · Marco Mensajero · 0 guías |  | 564.66 (num) | 117631.84 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | Flete cobrado a la tienda | Cierre del día · 2026-08-12 · Marco Mensajero · 0 guías |  | 12000 (num) | 105631.84 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | IVA del flete cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 520 (num) | 105111.84 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Contra-entrega cobrado a los clientes de la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 2 guías | 16300 (num) |  | 121411.84 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | IVA de la comisión cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 74.17 (num) | 121337.67 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Flete cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 4000 (num) | 117337.67 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Comisión de contra-entrega cobrada a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 570.5 (num) | 116767.17 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | IVA del flete cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 260 (num) | 116507.17 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Flete cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 2000 (num) | 114507.17 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Comisión de contra-entrega cobrada a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 437.5 (num) | 114069.67 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Contra-entrega cobrado a los clientes de la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías | 12500 (num) |  | 126569.67 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | IVA de la comisión cobrado a la tienda | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías |  | 56.88 (num) | 126512.79 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | Contra-entrega cobrado a los clientes de la tienda | Cierre del día · 2026-09-24 · Rita Recorrido · 5 guías | 32500 (num) |  | 159012.79 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | IVA del flete cobrado a la tienda | Cierre del día · 2026-09-24 · Rita Recorrido · 5 guías |  | 1300 (num) | 157712.79 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | Flete cobrado a la tienda | Cierre del día · 2026-09-24 · Rita Recorrido · 5 guías |  | 10000 (num) | 147712.79 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | Comisión de contra-entrega cobrada a la tienda | Cierre del día · 2026-09-24 · Rita Recorrido · 5 guías |  | 1137.5 (num) | 146575.29 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | IVA de la comisión cobrado a la tienda | Cierre del día · 2026-09-24 · Rita Recorrido · 5 guías |  | 147.89 (num) | 146427.4 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-09-24 | Comisión de contra-entrega cobrada a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 210 (num) | 146217.4 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | IVA del flete cobrado a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 390 (num) | 145827.4 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | IVA de la comisión cobrado a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 27.3 (num) | 145800.1 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | Flete por devolución a origen cobrado a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 1000 (num) | 144800.1 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | IVA del flete por devolución a origen cobrado a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 130 (num) | 144670.1 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | Contra-entrega cobrado a los clientes de la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía | 6000 (num) |  | 150670.1 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+   2026-09-24 | Flete cobrado a la tienda | Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía |  | 3000 (num) | 147670.1 (num) | Automático · Aprobación del cierre por Sat QUEPOS
+**  | Total del periodo |  | 191400 (num) | 43729.9 (num) | 147670.1 (num) | 
+
+== Hoja «Detalle por guía» (86 filas de datos)
+Guía | Remisión | Destinatario | Mensajero | Cierre | Resultado | Concepto | Detalle | Entra | Sale
+** 990001 | QA-R-0001 | Karla Vargas | Marco Mensajero | 2026-08-12 | Reprogramado · Reprogramado |  |  |  | 
+   990001 |  |  |  | 2026-08-12 | Reprogramado · Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 12500 (num) | 
+** 990001 |  |  |  |  |  | Total de la guía |  | 12500 (num) | 0 (num)
+** 990003 | QA-R-0003 | Sofia Rojas | Marco Mensajero | 2026-08-12 | Reprogramado |  |  |  | 
+   990003 |  |  |  | 2026-08-12 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 34000 (num) | 
+** 990003 |  |  |  |  |  | Total de la guía |  | 34000 (num) | 0 (num)
+** 990005 | QA-R-0005 | Mariana Solis | Marco Mensajero | 2026-08-12 | Reprogramado |  |  |  | 
+   990005 |  |  |  | 2026-08-12 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 21000 (num) | 
+** 990005 |  |  |  |  |  | Total de la guía |  | 21000 (num) | 0 (num)
+** 990006 | QA-R-0006 | Luis Jimenez | Marco Mensajero | 2026-08-12 | Reprogramado |  |  |  | 
+   990006 |  |  |  | 2026-08-12 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 5600 (num) | 
+** 990006 |  |  |  |  |  | Total de la guía |  | 5600 (num) | 0 (num)
+** 990008 | QA-R-0008 | Fernando Castro | Marco Mensajero | 2026-08-12 | Incidente |  |  |  | 
+   990008 |  |  |  | 2026-08-12 | Incidente | Contra-entrega cobrado a los clientes de la tienda |  | 45000 (num) | 
+** 990008 |  |  |  |  |  | Total de la guía |  | 45000 (num) | 0 (num)
+** 990009 | QA-R-0009 | Gabriela Nunez | Marco Mensajero | 2026-08-12 | Reprogramado |  |  |  | 
+   990009 |  |  |  | 2026-08-12 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 18500 (num) | 
+** 990009 |  |  |  |  |  | Total de la guía |  | 18500 (num) | 0 (num)
+** 990014 | QA-R-0014 | Esteban Ramirez | Marco Mensajero | 2026-08-13 | Reprogramado |  |  |  | 
+   990014 |  |  |  | 2026-08-13 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 9800 (num) | 
+** 990014 |  |  |  |  |  | Total de la guía |  | 9800 (num) | 0 (num)
+** 990015 | QA-R-0015 | Carolina Vega | Marco Mensajero | 2026-08-13 | Reprogramado |  |  |  | 
+   990015 |  |  |  | 2026-08-13 | Reprogramado | Contra-entrega cobrado a los clientes de la tienda |  | 6500 (num) | 
+** 990015 |  |  |  |  |  | Total de la guía |  | 6500 (num) | 0 (num)
+** 38589325 | Q454-02 | Cliente Quepos 2 | Quino QUEPOS | 2026-09-24 | Entregado |  |  |  | 
+   38589325 |  |  |  | 2026-09-24 | Entregado | Comisión de contra-entrega cobrada a la tienda |  |  | 210 (num)
+   38589325 |  |  |  | 2026-09-24 | Entregado | IVA del flete cobrado a la tienda |  |  | 390 (num)
+   38589325 |  |  |  | 2026-09-24 | Entregado | IVA de la comisión cobrado a la tienda |  |  | 27.3 (num)
+   38589325 |  |  |  | 2026-09-24 | Entregado | Contra-entrega cobrado a los clientes de la tienda |  | 6000 (num) | 
+   38589325 |  |  |  | 2026-09-24 | Entregado | Flete cobrado a la tienda |  |  | 3000 (num)
+… (56 filas más)

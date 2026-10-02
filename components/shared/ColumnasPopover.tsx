@@ -186,6 +186,9 @@ export function ColumnasPopover<T>({
                       // disponibles para volver a activarse.
                       // R51 (468): una columna fija tampoco.
                       disabled={fija || (marcada && enElMinimo)}
+                      // La casilla de base-ui marca el bloqueo con `data-disabled` (no con el atributo
+                      // `disabled`), así que el `disabled:` de la primitiva no la atenúa: se dice aquí.
+                      className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
                       aria-labelledby={idEtiqueta}
                       onCheckedChange={() => alternar(clave)}
                     />

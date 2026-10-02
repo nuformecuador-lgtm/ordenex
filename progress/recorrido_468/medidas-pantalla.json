@@ -1,0 +1,38 @@
+{
+  "caja": {
+    "opciones": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "casillasFijasDeshabilitadas": 5
+  },
+  "tienda": {
+    "opciones": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "casillasFijasDeshabilitadas": 4
+  },
+  "mensajero": {
+    "opciones": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "casillasFijasDeshabilitadas": 4
+  },
+  "detalleContraEntrega": {
+    "texto": "Cierre del día 2026-09-24\nMensajero: Quino QUEPOS\n1 de 2 órdenes del cierre aportan a este concepto\nImporte del movimiento: ₡6.000\nDescargar\nGuía\tDestinatario\tTienda\tResultado\tAporte\n38589325\tCliente Quepos 2\tTania\t\nEntregado\n\t₡6.000\n1-1 de 1\n‹\n›",
+    "listaGuias": true,
+    "dicePárrafoViejo": false
+  },
+  "detalleMensajero": {
+    "boton": "Ver las órdenes que componen Pago devengado del 2026-08-12",
+    "texto": "Cierre del día 2026-08-12\nMensajero: Marco Mensajero\n7 de 12 órdenes del cierre aportan a este concepto\nImporte del movimiento: ₡10.200\nDescargar\nGuía\tDestinatario\tTienda\tResultado\tAporte\n990001\tKarla Vargas\tTania\t\nReprogramado · Reprogramado\n\t₡1.700\n990003\tSofia Rojas\tTania\t\nReprogramado\n\t₡1.700\n990005\tMariana Solis\tTania\t\nReprogramado\n\t₡1.700\n990006\tLuis Jimenez\tTania\t\nReprogramado\n\t₡1.700\n990007\tPaula Herrera\tTania\t\nReprogramado\n\t₡1.700\n990008\tFernando Castro\tTania\t\nIncidente\n\t₡1.700\n990009\tGabriela Nunez\tTania\t\nReprogramado\n\t₡1.700\n1-7 de 7\n‹\n›"
+  }
+}
