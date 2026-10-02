@@ -1,3 +1,8 @@
+# ESTADO 2026-10-02 (mañana) — fichas 467 y 468 con spec escrito, esperando aprobación
+
+- **467** (barra del libro como la de órdenes, 37 R) y **468** (Excel kardex + detalle por guía, 61 R): specs en `dev` (`10dcff61`, `506596b5`). T1 de la 468 medido: 100 % cuadra (`progress/medicion_468.md`).
+- Orden de implementación recomendado: 467 primero (se cruzan en `WalletModule` y `EstadoCuenta`).
+
 # ESTADO 2026-10-02 (madrugada) — 463, 464, 465 y 466 HECHAS en `dev`, SIN DESPLEGAR
 
 - **En `dev`:** 465 (#837), 466 (#838), 463 (#839), 464 (#840). Gates post-merge verdes hasta la 463; y el de la 464 también: 32.800 tests (`progress/gate_dev_tras_840.log`).
