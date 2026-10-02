@@ -5691,3 +5691,15 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - R1–R37; mapa R→test en `progress/impl_467.md`. Revisión APROBADA (`progress/review_467.md`), PR #841.
 - Deuda menor de la revisión: m3 la guardia no mira el `Select` del cierre de `/mi-wallet`; m5 un
   instante con los conteos anteriores al recontar conceptos; m7 un caso débil de desmarcar Periodo.
+
+## 2026-10-02 — 468: Excel del libro de la wallet en kardex con detalle por guía que cuadra
+- Hoja 1 kardex (Entra, Sale, Saldo corrido, saldo inicial y final, montos numéricos; «Cobrado a tiendas»
+  solo en la caja, saldo = tarjeta). Hoja 2 por guía con «Total de la guía», «Movimientos sin guía», fila
+  «Diferencia sin repartir» y TOTAL GENERAL = hoja 1 afirmado en el servidor.
+- Contra-entrega, pago al mensajero e indemnización se reparten por guía con los snapshots de
+  `gestion_orden` (prod: 100 % cuadra, `progress/medicion_468.md`); el detalle de fila los lista.
+- R1–R61; mapa en `progress/impl_468.md`. Revisión APROBADA (`progress/review_468.md`), PR #842.
+  Las 33 diferencias del recorrido local son 3 cierres sembrados incoherentes de agosto.
+- Deuda: T16 medir en prod los seis conceptos del feed tras desplegar; m3 la hoja 1 conserva el título de
+  cada pantalla; m4 tres acciones `@sin-superficie` por retirar; m5 cabecera con dos cierres el mismo día;
+  m7 «Efectivo · Efectivo» en liquidaciones del mensajero.

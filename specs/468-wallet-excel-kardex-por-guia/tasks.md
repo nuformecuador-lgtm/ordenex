@@ -10,7 +10,7 @@
 
 ## Bloque 0 — Medición (sin código)
 
-- [ ] **T1** Medir en producción, en solo lectura y con el MCP de Supabase, las consultas 1 y 2 de
+- [x] **T1** Medir en producción, en solo lectura y con el MCP de Supabase, las consultas 1 y 2 de
   `design.md §9.2` (`pago_devengado` contra Σ `pago_mensajero` y `cod_recaudado` de la tienda contra Σ
   `monto_recibido`).
   - **Hecho:** los dos números (movimientos / cuadran / importe) anotados en `progress/impl_468.md`. Si
@@ -19,7 +19,7 @@
 
 ## Bloque A — Backend
 
-- [ ] **T2** [P] Generador común: `formato: "monto"` en `DescargaColumna`, `filasDestacadas` en
+- [x] **T2** [P] Generador común: `formato: "monto"` en `DescargaColumna`, `filasDestacadas` en
   `DescargaConfig`/`DescargaHoja`, `celdaMonto` en `lib/utils/xlsx-monto.ts` con la comprobación de la
   vuelta y `numFmt` `#,##0.00`, y la negrita en `buildXlsxLibro` (`design.md §5`).
   - **Hecho:** unitarios de `celdaMonto` (9999999999.99, −1500.00, 0.10, «abc» → texto, «1.5» → texto).
@@ -30,7 +30,7 @@
     `formato` sigue saliendo como texto (R58).
   - Depende de: —
 
-- [ ] **T3** Catálogo de reparto (`design.md §2`): `FuenteDeAporte.snapshot_gestion`, los criterios
+- [x] **T3** Catálogo de reparto (`design.md §2`): `FuenteDeAporte.snapshot_gestion`, los criterios
   `CRITERIO_PAGO_MENSAJERO` / `CRITERIO_INDEMNIZACION`, `exigePagoMensajero` / `exigeIndemnizacion`,
   `satisfaceCriterio`, `aporteDeOrden` con `acumularCampo`, `FUENTE_CAJA` y `FUENTE_MENSAJERO` según la
   tabla §2.1, retirada de `suma_del_libro_por_tienda` y `otro_productor` y nuevo texto de
@@ -42,7 +42,7 @@
     ningún motivo contiene «snapshot», «productor», «ledger» ni «feed» (R19).
   - Depende de: T1
 
-- [ ] **T4** Repositorio de aportes: `buildWhere` con `pagoMensajero > 0` / `indemnizacion > 0` y los
+- [x] **T4** Repositorio de aportes: `buildWhere` con `pagoMensajero > 0` / `indemnizacion > 0` y los
   selects de gestiones con `pagoMensajero` e `indemnizacion` (`CierreAporteRepository`). Repositorio nuevo
   `IMovimientosMensajeroEnLoteRepository` + su implementación con el mensajero en el `WHERE`. `clave`
   (id de la orden) en `OrdenAporteEnLoteRow` → `OrdenDelLoteDTO`.
@@ -53,7 +53,7 @@
     mensajero no vuelve de `listarPorIdsDeMensajero`.
   - Depende de: T3
 
-- [ ] **T5** [P] Kardex de las cuentas (`design.md §3.1–§3.3`): `lib/types/libro-kardex.ts`,
+- [x] **T5** [P] Kardex de las cuentas (`design.md §3.1–§3.3`): `lib/types/libro-kardex.ts`,
   `columnaDeCuenta` y `kardex` en `leerCompleto` / `leerMiTiendaCompleto`, con `conOtrosFiltros` y la
   afirmación de cuadre con `derivarBalance`.
   - **Hecho:** unitarios de `columnaDeCuenta` en las tres cuentas. En la bodega, `declarado` va a `entra`
@@ -63,7 +63,7 @@
     (R16). Una mutación del mapeo de la bodega lo pone rojo.
   - Depende de: T2 (tipos de monto, solo por contrato)
 
-- [ ] **T6** [P] Kardex de la caja (`design.md §3.1`, `§3.4`): `columnaDeCaja`, `antesDe` en
+- [x] **T6** [P] Kardex de la caja (`design.md §3.1`, `§3.4`): `columnaDeCaja`, `antesDe` en
   `agregarPorCategoriaYTipo`, `saldosTrasMovimientos` (ventana con las listas derivadas de
   `LIQUIDEZ_POR_CATEGORIA`) y `kardex` en `listarMovimientosCompleto` con la afirmación contra
   `derivarCaja`.
@@ -77,7 +77,7 @@
     de la ventana») deben ponerlo rojo.
   - Depende de: T2
 
-- [ ] **T7** Lote: superficie `mensajero_oficina` en `DetalleEnLoteService.detallar`, método `contar` (sin
+- [x] **T7** Lote: superficie `mensajero_oficina` en `DetalleEnLoteService.detallar`, método `contar` (sin
   leer órdenes, R61) y `ordenesPorMovimiento`.
   - **Hecho:** unitarios del guard (`forbidden` sin acceso total, sin tocar ningún doble de repositorio,
     R55) y del tope (`limite_excedido` sin llamar a `listarAportesDeCierres`, R56). `contar` no llama a
@@ -86,7 +86,7 @@
     `verDetalleDeFilaDeCuenta` (R28).
   - Depende de: T4
 
-- [ ] **T8** `agruparPorGuia` (`lib/utils/detalle-por-guia.ts`, `design.md §4.2`).
+- [x] **T8** `agruparPorGuia` (`lib/utils/detalle-por-guia.ts`, `design.md §4.2`).
   - **Hecho:** unitarios con cada regla. Una guía en dos cierres da un bloque con dos días en `cierres`
     y la cabecera del más reciente (R38, R39). Una orden con dos gestiones. Una orden sin guía va al final
     con su remisión (R37). El orden numérico de guías funciona sin `Number` («9» < «10»). Un movimiento
@@ -96,7 +96,7 @@
     las diferencias hace saltar la afirmación.
   - Depende de: T5, T6 (tipos), T7 (`clave`)
 
-- [ ] **T9** Orquestación y bordes: `CajaConDetalleService` y `EstadoCuentaConDetalleService.cuentaConDetalle`
+- [x] **T9** Orquestación y bordes: `CajaConDetalleService` y `EstadoCuentaConDetalleService.cuentaConDetalle`
   (tienda | mensajero) devuelven `kardex` + `porGuia`. El refine del borde cambia a `!== "bodega"`. Los
   completos sin detalle llaman a `contar`. Composition roots en `lib/actions/wallet.ts` y
   `lib/actions/estado-cuenta.ts`.
@@ -111,7 +111,7 @@
 
 ## Bloque B — Frontend
 
-- [ ] **T10** [P] Contrato del control: retirar `columnaEnlace`/`columnaEstado`; añadir
+- [x] **T10** [P] Contrato del control: retirar `columnaEnlace`/`columnaEstado`; añadir
   `fijasPrincipal`/`fijasDetalle` y `fijas` en `ColumnasPopover` (casillas marcadas y deshabilitadas);
   `filasDestacadas*` en `DescargaFilasResult`; textos «Detalle por guía» (`design.md §6`).
   - **Hecho:** test del popover: una columna fija no se puede desmarcar y se puede reordenar (R51). Una
@@ -120,7 +120,7 @@
     «Solo los movimientos · una hoja» y «Movimientos y detalle por guía · dos hojas» (R24).
   - Depende de: T2
 
-- [ ] **T11** [P] Adaptador `components/shared/wallet/libro-kardex-descarga.ts` + textos en
+- [x] **T11** [P] Adaptador `components/shared/wallet/libro-kardex-descarga.ts` + textos en
   `libro-kardex-labels.ts` (`design.md §7.2–§7.4`).
   - **Hecho:** unitarios de `filasKardex`. La primera fila es «Saldo al inicio del periodo» con las
     columnas de monto vacías (R5). La última con montos es «Total del periodo» con los totales y el saldo
@@ -132,7 +132,7 @@
     verde.
   - Depende de: T9 (tipos), T10
 
-- [ ] **T12** Catálogos por superficie (`design.md §7.1`), con la reescritura de los tests de la 464 que
+- [x] **T12** Catálogos por superficie (`design.md §7.1`), con la reescritura de los tests de la 464 que
   afirmaban «N.º», «Detalle por orden», los catálogos R25–R27 y los montos como texto. Se borran
   `detalle-por-orden-descarga.ts` y `enlazarHojas` junto con sus tests, sustituidos por los nuevos.
   - **Hecho:** un `toEqual` literal por catálogo y hoja (R1, R2, R3, R29, R30, R31, R32). Test de que
@@ -143,7 +143,7 @@
     `clave` nunca sale en una celda.
   - Depende de: T10, T11
 
-- [ ] **T13** Cableado: caja (`WalletModule`), estado de cuenta (`EstadoCuenta` y las cuatro superficies)
+- [x] **T13** Cableado: caja (`WalletModule`), estado de cuenta (`EstadoCuenta` y las cuatro superficies)
   con la entrada forzada a `sortBy: "fecha", sortDir: "asc"` (R7), las dos opciones (R24, R25 en la
   bodega), la autoría de la caja como hoy (R20) y `ordenes` en el Detalle en los dos modos (R57).
   - **Hecho:** test de cada superficie con dobles del borde. La descarga envía el orden ascendente aunque
@@ -153,14 +153,14 @@
     guardia de ámbitos (`ambito-columnas.guardia`) está verde con `wallet-mensajero-detalle-guia`.
   - Depende de: T12
 
-- [ ] **T14** [P] Textos: barrido de los textos nuevos y de los motivos (R19, R60).
+- [x] **T14** [P] Textos: barrido de los textos nuevos y de los motivos (R19, R60).
   - **Hecho:** test que recorre `libro-kardex-labels.ts`, los dos diccionarios de motivos y los catálogos:
     no contienen «SLA», «snapshot», «productor», «ledger» ni «feed».
   - Depende de: T11, T3
 
 ## Bloque C — Verificación
 
-- [ ] **T15** Gate y la app real. `./init.sh` completo con `INIT_EXIT=$?` escrito dentro del log y los
+- [x] **T15** Gate y la app real. `./init.sh` completo con `INIT_EXIT=$?` escrito dentro del log y los
   `skipped` revisados (los tests de `integration/db` deben haber corrido). Después, en el dev server local
   con datos sembrados, **descargar el archivo real** en la caja, en una tienda, en un mensajero, en
   `/mi-wallet` y en una bodega, con y sin detalle y con y sin un filtro de concepto, y abrirlo con exceljs.
@@ -172,7 +172,7 @@
     dos opciones y las columnas fijas deshabilitadas.
   - Depende de: T13, T14
 
-- [ ] **T16** Medición posterior al despliegue de los seis conceptos del feed (`design.md §9.2.3`). Tarea
+- [x] **T16** Medición posterior al despliegue de los seis conceptos del feed (`design.md §9.2.3`). Tarea
   del leader tras la release, no del implementer.
   - **Hecho:** se descarga en producción la caja de todo el historial con detalle. El número de filas
     «Diferencia sin repartir» queda anotado en `progress/` con su cierre y su concepto si no es 0. Si hay

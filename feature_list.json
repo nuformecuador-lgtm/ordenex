@@ -5590,11 +5590,11 @@
       "title": "Excel del libro de la wallet: kardex y detalle por guia que cuadran",
       "description": "Hoja 1 en kardex (Entra, Sale, Saldo corrido, saldo inicial y final, montos numericos); hoja 2 agrupada por guia con todos los conceptos y total igual al de la hoja 1.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 464. Decidido: detalle agrupado por guia con subtotal; los movimientos sin guia en seccion final; total hoja 2 = total hoja 1, siempre. Medido en prod: COD (206/206), pago mensajero (207/207) e indemnizacion (1/1) cuadran con gestion_orden.monto_recibido/pago_mensajero/indemnizacion. Si algo no cuadra, fila visible de diferencia. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults: columna 'Cobrado a tiendas' solo en caja; kardex siempre ascendente; Detalle dice '1 guia'; el detalle en pantalla de los 4 conceptos pasa a listar ordenes; pago tomado del efectivo en 'Movimientos sin guia'. T1 medido 100% (progress/medicion_468.md). Arranca tras mergear la 467. || 2026-10-02: implementacion arrancada tras mergear la 467 (backend_dev -> frontend_dev en worktree).",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 464. Decidido: detalle agrupado por guia con subtotal; los movimientos sin guia en seccion final; total hoja 2 = total hoja 1, siempre. Medido en prod: COD (206/206), pago mensajero (207/207) e indemnizacion (1/1) cuadran con gestion_orden.monto_recibido/pago_mensajero/indemnizacion. Si algo no cuadra, fila visible de diferencia. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults: columna 'Cobrado a tiendas' solo en caja; kardex siempre ascendente; Detalle dice '1 guia'; el detalle en pantalla de los 4 conceptos pasa a listar ordenes; pago tomado del efectivo en 'Movimientos sin guia'. T1 medido 100% (progress/medicion_468.md). Arranca tras mergear la 467. || 2026-10-02: implementacion arrancada tras mergear la 467 (backend_dev -> frontend_dev en worktree). || HECHA 2026-10-02, en dev por PR #842. NO desplegada. Revision APROBADA; gate completo verde 32950. PENDIENTE TRAS DESPLEGAR: T16 medir diferencias de los 6 conceptos del feed en prod.",
       "branch": "feature/468-wallet-excel-kardex-por-guia"
     },
     {
@@ -5602,11 +5602,11 @@
       "title": "buscar una guia en el libro de la wallet",
       "description": "El buscador del libro (caja y estados de cuenta) encuentra por numero de guia o remision los movimientos en los que esa orden aporta dinero.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "depends_on": 468,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada. || 2026-10-02: implementacion arrancada tras mergear la 468.",
       "branch": "feature/469-wallet-buscar-guia"
     }
   ]
