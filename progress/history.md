@@ -5682,3 +5682,12 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
   297 «Sí», 197 «No» (194 sin zona + 3 varias zonas), tarifa general «Sí» = 0 = SQL.
 - Deuda: M5/M6 de la revisión (fecha CR probada en la función común; ambigüedad por tildes no modelada,
   0 casos medidos).
+
+## 2026-10-02 — 467: barra del libro de la wallet igual a la de órdenes
+- Caja y cuatro estados de cuenta con una sola barra: orden en íconos, buscador ancho, «Filtros» con
+  casillas (Periodo, A quién, Entra/Sale, Concepto, Tipo de movimiento, Cierre), Descargar y Columnas.
+  Fuera la tarjeta con «Aplicar», los textos de zona, el `Select` de categorías y `ChipsEstadoCuenta`.
+- Solo componentes compartidos; se retira el modo «Aplicar» de `FilterComponent`. Sin servidor.
+- R1–R37; mapa R→test en `progress/impl_467.md`. Revisión APROBADA (`progress/review_467.md`), PR #841.
+- Deuda menor de la revisión: m3 la guardia no mira el `Select` del cierre de `/mi-wallet`; m5 un
+  instante con los conteos anteriores al recontar conceptos; m7 un caso débil de desmarcar Periodo.

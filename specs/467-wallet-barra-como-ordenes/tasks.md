@@ -10,33 +10,33 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
 
 ## Bloque 1 — Componentes compartidos
 
-- [ ] **T1 — Orden con iconos** (deps: ninguna) [P]
+- [x] **T1 — Orden con iconos** (deps: ninguna) [P]
   - `components/shared/wallet/zonas-filtros-labels.ts`: `Icono` en `ORDEN_LIBRO.opciones`
     (`ArrowDownWideNarrow` / `ArrowUpNarrowWide`); fuera `ZONA_WALLET_TEXTO` y
     `ZONA_LIBRO_TEXTO.alcance` cuando T5/T6 dejen de importarlos (en esta task solo se AÑADE).
   - **Hecho:** test unitario que afirma, como literal, etiquetas «Más recientes»/«Más antiguas» y que
     los iconos son los mismos objetos que `OPCIONES_DIRECCION.created_at` de órdenes (R4).
 
-- [ ] **T2 — `SelectorBuscable`: `rotuloVisible`** (deps: ninguna) [P]
+- [x] **T2 — `SelectorBuscable`: `rotuloVisible`** (deps: ninguna) [P]
   - Prop opcional (design §4.2).
   - **Hecho:** test de componente: con la prop, el disparador muestra «A quién: Todos» y, tras elegir,
     «A quién: <rótulo>» (R23); sin la prop, el texto y el `aria-label` del disparador son idénticos a
     hoy (R33). Suites existentes de `SelectorBuscable` y de sus consumidores verdes.
 
-- [ ] **T3 — `opcionesDeConceptos` sin «Todas»** (deps: ninguna) [P]
+- [x] **T3 — `opcionesDeConceptos` sin «Todas»** (deps: ninguna) [P]
   - Modo sin la opción «todas» (design §3.1); el modo de hoy sigue igual para sus otros importadores.
   - **Hecho:** test unitario de los dos modos; el elegido con 0 movimientos sigue ofrecido (R20).
 
 ## Bloque 2 — Caja
 
-- [ ] **T4 — Declaraciones de la caja** (deps: T3)
+- [x] **T4 — Declaraciones de la caja** (deps: T3)
   - `app/(app)/wallet/_components/libro-caja-filtros.ts` (design §3.1), con `seleccionDePeriodo` /
     `periodoDeSeleccion` mudadas desde `WalletFiltrosCaja.tsx`.
   - **Hecho:** test unitario: `CASILLAS_CAJA` es exactamente Periodo, A quién, Entra/Sale, Concepto en
     ese orden, como literal (R6); ida y vuelta `seleccionDeCaja` ↔ `deSeleccion`; Entra/Sale ofrece
     «Entra» y «Sale» sin «Todo» (R19).
 
-- [ ] **T5 — `LibroCajaBarra` + `WalletModule`** (deps: T1, T2, T4)
+- [x] **T5 — `LibroCajaBarra` + `WalletModule`** (deps: T1, T2, T4)
   - Reescribir `LibroCajaBarra.tsx` (design §3.2) y recablear `WalletModule.tsx` (design §3.3); borrar
     `WalletFiltrosCaja.tsx`; adaptar `tests/fixtures/libro-caja-barra.tsx`.
   - Actualizar los tests que localizan la tarjeta de zona, el `Select` de categoría o los conmutadores
@@ -56,7 +56,7 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
 
 ## Bloque 3 — Estados de cuenta
 
-- [ ] **T6 — `EstadoCuenta` con la barra única** (deps: T1, T2)
+- [x] **T6 — `EstadoCuenta` con la barra única** (deps: T1, T2)
   - `EstadoCuenta.tsx` (design §4.5); `SelectorCierreDeCuenta` y `SelectorMiCierre` (design §4.3);
     retirar `ChipsEstadoCuenta` si queda sin importadores (conservando `CHIPS_POR_TIPO`).
   - Actualizar los tests que localizan la sección de periodo, el botón «Aplicar», los chips o el
@@ -71,7 +71,7 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
 
 ## Bloque 4 — Limpieza, ayuda y guardias
 
-- [ ] **T7 — Retirar el modo «Aplicar» de `FilterComponent`** (deps: T5, T6)
+- [x] **T7 — Retirar el modo «Aplicar» de `FilterComponent`** (deps: T5, T6)
   - Leer ENTEROS `filter-component-aplicar-463.test.tsx` y `filter-component-url-aplicar-463.test.tsx`;
     mudar a la suite general de `FilterComponent` toda aserción del camino SIN la prop; después borrar
     los dos archivos y la prop (design §4.4). Retirar `ZONA_WALLET_TEXTO`, `ZONA_LIBRO_TEXTO.alcance`,
@@ -81,7 +81,7 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
     `FilterComponent`, `/ordenes`, cierres y novedades verdes (R33); anotado en `progress/impl_467.md`
     qué aserciones se mudaron y adónde.
 
-- [ ] **T8 — Ayuda y guardias** (deps: T5, T6) [P con T7]
+- [x] **T8 — Ayuda y guardias** (deps: T5, T6) [P con T7]
   - `docs/ayuda/oficina/wallet-caja.md`, `wallet-tiendas.md`, `wallet-mensajeros.md`, la ayuda del
     estado de cuenta de satélites (localizarla por sus `fuentes`) y `docs/ayuda/tienda/mi-wallet.md`:
     describir la barra única y «Filtros» con sus casillas; quitar «Aplicar», «Quitar periodo» y las dos
@@ -97,7 +97,7 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
 
 ## Bloque 5 — Verificación
 
-- [ ] **T9 — Verificación en la app** (deps: T7, T8)
+- [x] **T9 — Verificación en la app** (deps: T7, T8)
   - Dev server local (si ya hay uno de otro agente, no levantar otro). Playwright, como admin: capturas
     a 1440 px de `/ordenes` y `/wallet`, y de un estado de cuenta de tienda, de mensajero, de satélite y
     `/mi-wallet` (como tienda). Guardar en el scratchpad y citar las rutas en `progress/impl_467.md`.
@@ -112,7 +112,7 @@ aprobar (Abonos/Cargos, campo de orden, «Aplicar»), este desglose se ajusta pr
   - **Hecho:** capturas + números de las medidas en `progress/impl_467.md`; cualquier diferencia visible
     con la barra de `/ordenes` explicada o corregida.
 
-- [ ] **T10 — Gate** (deps: T9)
+- [x] **T10 — Gate** (deps: T9)
   - `./init.sh --rapido` en verde, revisando los `skipped` (no solo el código de salida). Revisar
     `gh pr checks` (build de Vercel) antes de pedir el merge.
   - **Hecho:** log con `INIT_EXIT=0` citado en `progress/impl_467.md` y mapa R→test completo.
