@@ -364,7 +364,7 @@ export const VER_COMPROBANTE_RESPUESTA = {
 /**
  * La opción «todas» del `Select` de categoría del libro. El resto de opciones ya NO sale del
  * catálogo completo (458-A, R13/R14): son los conceptos con movimientos del periodo, que lee
- * `WalletFiltros` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
+ * `LibroCajaBarra` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
  */
 export const CATEGORIA_TODAS_OPTION = { value: "", label: "Todas las categorías" } as const;
 

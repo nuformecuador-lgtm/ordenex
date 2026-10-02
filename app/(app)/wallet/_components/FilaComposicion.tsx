@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { DETALLE_FILA_NOMBRE } from "./composicion-detalle-labels";
 import { DetalleFilaComposicion } from "./DetalleFilaComposicion";
-import type { WalletFiltrosValue } from "./WalletFiltros";
+import type { WalletFiltrosValue } from "./wallet-filtros-input";
 import { money } from "./wallet-labels";
 
 // Ficha 339 (T5.3, design 5.1/5.2) — UNA fila de concepto de la tarjeta de la ganancia,

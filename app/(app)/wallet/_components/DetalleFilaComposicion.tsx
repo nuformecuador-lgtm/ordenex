@@ -17,7 +17,7 @@ import {
   COMPOSICION_DETALLE_VACIO,
   DETALLE_FILA_NOMBRE,
 } from "./composicion-detalle-labels";
-import { inputDeFiltros, type WalletFiltrosValue } from "./WalletFiltros";
+import { inputDeFiltros, type WalletFiltrosValue } from "./wallet-filtros-input";
 import { CATEGORIA_LABEL, ORIGEN_LABEL, money } from "./wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 

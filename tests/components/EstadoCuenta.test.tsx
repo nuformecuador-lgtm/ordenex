@@ -316,12 +316,19 @@ describe("«Ver» → el panel de la 458-C, y H6", () => {
 });
 
 describe("R5 (171) / R82 — el fallo se dice y el permiso lo decide el servidor", () => {
-  it("si la lectura de otra página falla, el extracto lo dice; las tarjetas siguen en pie", async () => {
+  // FICHA 463 (R49) — el contrato pasa de «el aviso SUSTITUYE la tabla» a «el aviso va JUNTO al libro,
+  // que se queda con la última lectura buena, y el filtro vuelve a la de esa lectura».
+  it("si la lectura con otro chip falla, se dice JUNTO al libro, que sigue en pie con las tarjetas y el chip de antes", async () => {
     montarTienda(estado());
+    const filasAntes = filasDeLaTabla().map((f) => f.textContent);
     verEstadoCuentaMock.mockResolvedValue({ status: "forbidden" });
     fireEvent.click(screen.getByRole("button", { name: "Pagos" }));
-    expect(await screen.findByText("No se pudo cargar el estado de cuenta.")).toBeInTheDocument();
+    const aviso = await screen.findByText(/^No se pudo cargar el estado de cuenta\. Se sigue mostrando lo último/);
+    expect(aviso).toHaveAttribute("role", "alert");
     expect(screen.getByRole("region", { name: "Saldo de Tania Tienda" })).toBeInTheDocument();
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+    expect(filasAntes.length).toBeGreaterThan(1);
+    expect(screen.getByRole("button", { name: "Pagos" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("sin permiso de registrar (lo decide la página con `esAccesoTotal`), no hay acciones", () => {

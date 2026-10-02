@@ -6,7 +6,7 @@ import {
   FILTROS_WALLET_VACIOS,
   type FiltrosLibro,
   type FiltrosWallet,
-} from "@/app/(app)/wallet/_components/WalletFiltros";
+} from "@/app/(app)/wallet/_components/wallet-filtros-input";
 
 // FICHA 463 — la zona del libro de la caja montada como la monta `WalletModule`: CONTROLADA, con lo
 // aplicado en estado. Los tests que antes montaban la barra de una sola banda (`WalletFiltros`, ya

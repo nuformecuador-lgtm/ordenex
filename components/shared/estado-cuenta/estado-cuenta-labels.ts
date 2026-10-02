@@ -119,6 +119,11 @@ export const ESTADO_CUENTA_TEXTO = {
   registro: (quien: string) => `Registró: ${quien}`,
   vacio: "No hay movimientos en este periodo.",
   error: "No se pudo cargar el estado de cuenta.",
+  /**
+   * FICHA 463 (R49) — una lectura falló y la pantalla se queda con la última buena: lo dice junto al
+   * libro (no en su lugar) y explica que los filtros volvieron a los de esa lectura.
+   */
+  errorConservado: "Se sigue mostrando lo último que se cargó, con sus filtros.",
   errorDescarga: "No se pudo leer el estado de cuenta para descargarlo.",
   tabla: (nombre: string) => `Estado de cuenta de ${nombre}`,
   chips: (nombre: string) => `Filtrar el estado de cuenta de ${nombre}`,

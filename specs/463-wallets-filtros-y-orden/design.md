@@ -247,3 +247,38 @@ se conserva.
 | Saldo inicial en página equivocada con DESC | Test de componente para R38/R39 con `total` múltiplo y no múltiplo de `pageSize` |
 | Fuga de nombres de Ordenex a la tienda por la búsqueda | R27: integración con un registrador de nombre conocido; buscarlo en `/mi-wallet` devuelve lo mismo que buscar un texto ausente |
 | Guardias de censo (`censo-tablas`, contadores de cabecera) | Correr `./init.sh --rapido`; si una guardia lista archivos, actualizar su censo en la misma task |
+
+## 9. Desvíos de la implementación (anotados en la revisión, m6)
+
+Decisiones técnicas del frontend (`progress/impl_463.md`) que se apartan de lo escrito arriba. La
+revisión (`progress/review_463.md`, m6) las juzgó aceptables; se anotan aquí para que el diseño diga lo
+que hay.
+
+1. **Categoría (caja) y cierre (estado de cuenta) a la vista, no detrás del selector «Filtros»**
+   (§5.2/§5.3). Son el único filtro extra de cada barra: esconderlos costaba un clic sin ganar sitio.
+   R5/R7 se cumplen igual: están en la zona del libro.
+2. **`WalletFiltros.tsx` no se retiró: pasó a ser el módulo de traducción sin JSX** (§5.2/T7 decían
+   retirarlo). Ahí viven `FiltrosWallet`/`FiltrosLibro`, `inputDeWallet`/`inputDeLibro`,
+   `filtrosDeWallet` e `inputDeFiltros`, que usan la composición y el detalle de fila. En la vuelta de
+   revisión se renombró a `app/(app)/wallet/_components/wallet-filtros-input.ts` (sin componente, el
+   `PascalCase.tsx` chocaba con `docs/conventions.md`), con todos sus importadores, los tests y la
+   fuente que declara la ayuda `oficina/wallet-caja.md`.
+3. **El orden por defecto no viaja.** «Más recientes» es lo que el borde aplica sin pedirlo (R34, probado
+   en SCH/ACT); solo «Más antiguas» manda `sortBy: "fecha", sortDir: "asc"`. La clave SWR lleva el
+   orden explícito (R41), así que dos órdenes no comparten caché.
+4. **El periodo del estado de cuenta pasa al calendario de `FilterComponent`** (§5.3 decía conservar el
+   aviso del formulario Desde/Hasta propio). Con el calendario un «Desde» posterior a «Hasta» no se puede
+   elegir (los extremos se ordenan solos); R18 queda como red del modo «Aplicar» por unitario (siembra
+   invertida en `filter-component-aplicar-463`).
+
+Y, de la vuelta de revisión:
+
+5. **§6 / R49 en el estado de cuenta** (B1): §6 solo contaba la caja. `EstadoCuenta` guarda cada lectura
+   buena JUNTO a la selección que la pidió (periodo, chip, cierre, término, orden, página y tamaño). Si
+   una lectura falla, sigue pintando esa lectura (tarjetas y libro), devuelve todos los controles a su
+   selección —el periodo por la `siembra` de `FilterComponent` y el término por la de
+   `BuscadorFiltros`, como la caja— y avisa JUNTO al libro (`role="alert"`), no en su lugar. La posición
+   del saldo inicial se calcula con la selección de lo pintado, no con lo pedido (m2).
+6. **Conmutadores del libro de la caja durante una lectura** (m1): no se deshabilitan ni se tragan el
+   clic. El módulo compone el cambio con lo PEDIDO y le da turno (`turnoLibro`): se pinta la última
+   lectura pedida.

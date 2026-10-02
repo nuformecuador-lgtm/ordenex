@@ -7,7 +7,7 @@ import { ZONA_WALLET_TEXTO } from "@/components/shared/wallet/zonas-filtros-labe
 
 import { A_QUIEN_FILTRO, A_QUIEN_SELECTOR_TEXTOS, aQuienDeValor, valorDeAQuien } from "./a-quien-selector";
 import { useQuienesDelLibroCaja } from "./use-quienes-del-libro-caja";
-import type { FiltrosWallet } from "./WalletFiltros";
+import type { FiltrosWallet } from "./wallet-filtros-input";
 
 // FICHA 463 (T7, design §5.2; R1–R3, R8, R15–R20, R31) — la ZONA DE LA WALLET de la caja: el periodo y
 // «A quién», ENCIMA de las cifras. Lo que se elige aquí mueve toda la wallet: resumen, composición,

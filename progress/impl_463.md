@@ -420,3 +420,168 @@ Una corrida previa (sonda) dio 2 rojos, los dos propios y corregidos: la guardia
 
 **Veredicto:** ficha 463 completa (backend + frontend), R1–R49 mapeados, gate completo verde y vista en
 la app.
+
+---
+
+# Vuelta de revisión (RECHAZADO en `progress/review_463.md`): B1, B2, m1–m6
+
+Agente: frontend_dev, worktree aislado, rama `fix/463` desde `origin/feature/463-wallets-filtros-y-orden`
+@ `b5bb07e1`, empujada a `feature/463-wallets-filtros-y-orden`.
+
+Búsqueda de código: el MCP `codebase-memory` no estaba en el conjunto de herramientas de este agente;
+se usó `grep` y lectura directa de archivos (el informe de revisión ya nombraba cada archivo).
+
+Mutaciones medidas con un aplicador en el scratchpad (sustitución exacta, 1 coincidencia exigida), y
+restauradas copiando el original; `tsc` y las suites en verde tras cada restauración.
+
+## B1 — R49 en los cuatro estados de cuenta (`components/shared/estado-cuenta/EstadoCuenta.tsx`)
+
+- Cada lectura de SWR devuelve `{ seleccion, estado }`: la página Y la selección que la pidió (periodo,
+  chip, cierre, término, orden, página, tamaño). La de entrada es `lecturaInicial` (memo sobre `inicial`).
+- `onError` de SWR (solo lo llama si la clave que falló sigue vigente) → `conservarLoUltimo()`: con
+  `keepPreviousData`, `data` sigue siendo la última lectura buena; todos los controles vuelven a SU
+  selección (`setPeriodo/Chip/CierreId/Termino/SortDir/Page/PageSize`), el calendario por la `siembra`
+  de `FilterComponent` y el campo por la `siembra` de `BuscadorFiltros` (como la caja), sin emitir.
+- El aviso (`role="alert"`: «No se pudo cargar el estado de cuenta. Se sigue mostrando lo último que se
+  cargó, con sus filtros.», `ESTADO_CUENTA_TEXTO.errorConservado`) va ENCIMA del libro, no en su lugar;
+  se ve mientras lo pintado sea la lectura sobre la que falló (`falloSobre === data`), así que una
+  lectura buena posterior lo quita sola. El error de `DataTable` solo sale sin ninguna lectura que enseñar.
+- `shouldRetryOnError: false`: un fallo no se reintenta solo por detrás.
+- **m2 de paso**: `posicionSaldoInicial` y el día del saldo inicial salen de `data.seleccion` (lo PINTADO),
+  no de lo pedido.
+
+Tests (EC = `tests/components/EstadoCuenta463.test.tsx`, bloque «463 R49» y «463 R38/R39 (revisión m2)»):
+- «aplicar un periodo que falla…»: aviso con `role=alert`, tarjetas y filas idénticas a las de antes
+  (saldo inicial al final), «Periodo» vuelve a «Cualquier fecha», sin «Quitar periodo», «Aplicar»
+  apagado, y la siguiente lectura (chip) se pide SIN el periodo que falló.
+- «con un periodo ya aplicado, uno nuevo que falla devuelve el control al APLICADO, no a vacío».
+- «cambiar un chip que falla…»: sobre una lectura buena en «Más antiguas»: «Cobros» `aria-pressed=false`,
+  «Todo» y «Más antiguas» pulsados, filas y tarjetas = las de la lectura buena.
+- «un término y un orden que fallan…»: el campo vuelve a vacío, el orden a «Más recientes», libro intacto.
+- «una lectura buena después quita el aviso».
+- m2: «mientras llega «Más antiguas», las filas de «Más recientes» siguen con el saldo inicial al final».
+- `EstadoCuenta.test` «R5 (171)» REESCRITO al contrato nuevo (no debilitado): antes el aviso SUSTITUÍA
+  la tabla; ahora afirma aviso `role=alert` + las MISMAS filas + el chip de vuelta a no pulsado.
+
+| Mutación | Resultado |
+| --- | --- |
+| B1a no restaurar el periodo (`setPeriodo(buena.periodo)` fuera) — la pedida por el leader | **Muerta**: EC «aplicar un periodo que falla» (sobrevivía a la primera versión del test, que solo miraba lo pintado: el control vuelve por la siembra; se añadió que la lectura siguiente va sin el periodo) |
+| B1b no sembrar el calendario (`setSiembraPeriodo` fuera) | **Muerta**: 2 rojos (los dos de periodo) |
+| B1c no restaurar el chip | **Muerta**: 2 rojos (EC chip y `EstadoCuenta.test` R5/171) |
+| B1d el libro se borra al fallar (`estado={hayFallo ? undefined : …}`) | **Muerta**: 4 rojos |
+| B1e no sembrar el término | **Muerta**: EC término/orden |
+| B1f no restaurar el orden | **Muerta**: EC término/orden |
+| B1g sin aviso (`setFalloSobre` fuera) | **Muerta**: 6 rojos |
+| m2 posición con lo PEDIDO (`posicionSaldoInicial(sortDir, page, pageSize, …)`) | **Muerta**: EC m2 |
+| (equivalente) `error={error !== undefined}` en `DataTable` | Sobrevive y es equivalente en el flujo: tras el fallo la clave vuelve a la buena, que no tiene error. La red del libro visible es B1d |
+
+## B2 — R12, el detalle de una fila de la composición
+
+CJ (`tests/components/WalletCaja463.test.tsx`) «463 R12 (revisión B2)»: periodo aplicado + «Sale» +
+categoría «Sueldo» + «Más antiguas» en el libro; abrir «Ver los movimientos de Pagos de Ordenex a
+mensajeros» ⇒ `listarMovimientosDeFilaAction` recibe EXACTAMENTE `{ fila, desde, hasta, page: 1 }`, sin
+`tipo`, `categoria`, `q`, `sortBy` ni `sortDir`.
+
+| Mutación | Resultado |
+| --- | --- |
+| M1b de la revisión: `ComposicionGananciaCard filtros={{ ...filtrosDeWallet(..), tipo, categoria }}` | **Muerta**: CJ R12 (B2) rojo |
+
+## m1 — clics del libro de la caja mientras se lee (`LibroCajaBarra.tsx`)
+
+Se quitó la guarda `if (!disabled …)` de los dos conmutadores (orden y Todo/Entra/Sale): el clic se pide
+y `WalletModule` lo compone con lo PEDIDO y le da turno (`turnoLibro`); se pinta la última lectura pedida.
+La categoría sigue deshabilitada visiblemente mientras se lee. Test CJ «463 (revisión m1)»: «Sale» en
+vuelo + «Más antiguas» ⇒ segunda lectura `{ tipo: "egreso", sortBy, sortDir: "asc" }`; llegan en orden
+inverso y queda pintada la segunda, con los dos conmutadores pulsados.
+
+| Mutación | Resultado |
+| --- | --- |
+| La guarda de antes (`!disabled &&`) | **Roja** antes del arreglo: «expected to be called 2 times, but got 1» |
+
+## m3 — sentido absoluto del orden en la integración del estado de cuenta
+
+`tests/integration/db/estado-cuenta-busqueda-orden-463.test.ts` «R33/R34: «Mas recientes» empieza por la
+fecha MAYOR y «Mas antiguas» por la MENOR, en las tres cuentas» (Postgres real, datos sembrados del
+escenario 458 + las 3 filas empatadas de la bodega): fechas de `desc` no crecientes, de `asc` no
+decrecientes, primera de `desc` > última, «sin orden» empieza por la mayor; no-vacuidad: >1 fecha
+distinta por cuenta. 11/11 contra el Postgres local.
+
+| Mutación | Resultado |
+| --- | --- |
+| M2 de la revisión: `sentidoSql` invertido (`asc`⇒`DESC`, `desc`⇒`ASC`) | **Muerta**: el test nuevo rojo (antes la integración 463 pasaba entera) |
+
+## m4 — precarga por URL de `FilterComponent` (R22)
+
+`tests/unit/components/filter-component-url-aplicar-463.test.tsx`: sin `aplicarConBoton`, `?destacado=true`
+se emite UNA vez al vencer el debounce (nada a 499 ms, una emisión a 500 ms, ninguna más); con
+`aplicarConBoton`, una vez y en el acto.
+
+| Mutación | Resultado |
+| --- | --- |
+| M5 de la revisión: la rama del modo «Aplicar» para todos (`if (modoAplicar)` ⇒ `if (true)`) | **Muerta**: 1 rojo; las 5 suites `filter-component*` previas siguen verdes con ella (111 pasan) |
+
+## m5 — la ayuda del asistente
+
+`docs/ayuda/oficina/wallet-caja.md`, `wallet-tiendas.md`, `wallet-mensajeros.md`, `docs/ayuda/tienda/mi-wallet.md`
+(`actualizado: 2026-10-01`): dos zonas con su alcance literal, «Periodo» con **Aplicar** / **Quitar
+periodo**, buscador (mínimo 3; en `/mi-wallet` solo la descripción), «Más recientes / Más antiguas» con
+«Más recientes» de entrada, el saldo inicial donde cae en el tiempo (al final con «Más recientes») en
+pantalla y en la descarga, «Limpiar todo» del libro, «Movimiento neto del periodo» solo por periodo o
+«A quién», y el aviso de R49. `wallet-tiendas` gana el buscador del listado (R45). Fuentes: + las
+de las zonas (`WalletFiltrosCaja.tsx`, `LibroCajaBarra.tsx`, `zonas-filtros-labels.ts`).
+
+Tests de la ayuda ajustados (`tests/unit/asistente/contexto-458.test.ts`), al contrato nuevo y sin
+quitar red: «La primera fila es el **saldo inicial**» ⇒ «La línea del **saldo inicial**…» + «con **Más
+recientes**, es la última línea…» + `not.toContain` de la frase vieja (tiendas y `/mi-wallet`); «El saldo
+de la última fila es el mismo de la cifra grande» ⇒ «El saldo de tu movimiento más reciente…»; caja:
+«…cuentan solo lo filtrado» ⇒ «…el detalle de cada fila de la composición y el libro cuentan solo el
+periodo y el» + «Estos **no cambian ninguna cifra**…» + `not.toContain("cuentan solo lo filtrado")`.
+La fecha exacta `2026-09-26` pasa a «2026-09-26 o después» (el patrón de `contexto-457`/`contexto-461`).
+Las 12 suites de `tests/unit/asistente` y las 191 de `tests/unit/guards` en verde.
+
+## m6 — desvíos anotados y renombre
+
+- `specs/463-wallets-filtros-y-orden/design.md` §9: los cuatro desvíos de este archivo + R49 en el
+  estado de cuenta (B1/m2) + los conmutadores (m1).
+- `app/(app)/wallet/_components/WalletFiltros.tsx` ⇒ `wallet-filtros-input.ts` (`git mv`; sin JSX y sin
+  componente, `kebab-case.ts` según `docs/conventions.md`). Importadores actualizados: `ComposicionGananciaCard`,
+  `DesgloseEgresosLista`, `DetalleFilaComposicion`, `FilaComposicion`, `LibroCajaBarra`, `WalletFiltrosCaja`,
+  `WalletModule`; tests `ComposicionGananciaCard`, `DetalleFilaComposicion`, `WalletCaja463`,
+  `WalletFiltroAQuien458E`, `fixtures/libro-caja-barra`, `guards/wallet-sin-uuid`; la fuente declarada en
+  `docs/ayuda/oficina/wallet-caja.md` y su test `contexto-458`. Comentario de `wallet-labels.ts` corregido.
+  Quedan menciones al nombre viejo SOLO en documentos históricos (`progress/`, `specs/` de otras fichas,
+  `feature_list.json`) y en un comentario de `lib/actions/wallet-filtros.ts:56` (backend: fuera del
+  alcance de este agente; no afecta a nada).
+
+## Mapa — filas que cambian
+
+| R | Test |
+| --- | --- |
+| R12 | + CJ «463 R12 (revisión B2)» (detalle de una fila de la composición) |
+| R22 | + `filter-component-url-aplicar-463` (precarga por URL con y sin «Aplicar») |
+| R33/R34 | + ECI «R33/R34: «Mas recientes» empieza por la fecha MAYOR…» (sentido absoluto) |
+| R38/R39 | + EC «463 R38/R39 (revisión m2)» |
+| R49 | CJ «R49» (×2, caja) + EC «463 R49» (×5, estados de cuenta) + `EstadoCuenta.test` «R5 (171)» reescrito |
+
+## Gate de la vuelta (salida real)
+
+`./init.sh` COMPLETO, secuencial, sin dev server ni mutaciones en paralelo, en `progress/gate_463_fix.log`
+(sin `tail`, `INIT_EXIT` escrito dentro):
+
+```
+✓ feature_list.json: sin ids duplicados (461 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio
+✓ typecheck paso
+✖ 220 problems (0 errors, 220 warnings)   (los preexistentes)
+✓ lint paso
+✓ DATABASE_URL resuelta: los 325 archivos de tests contra Postgres SI se ejecutan
+ Test Files  1 failed | 2351 passed (2352)
+      Tests  4 failed | 32673 passed | 26 skipped (32703)
+✗ hay rojos NUEVOS respecto del baseline
+INIT_EXIT=1
+```
+
+El único archivo rojo es AJENO: `tests/integration/db/liberacion-reprogramada-cierre-real.test.ts` (ficha 276),
+4 casos caídos en su `beforeAll` por `Foreign key constraint violated: orden_mensajero_asignado_id_fkey`
+al sembrar — un choque con datos de otro archivo sobre la base local compartida, no una aserción. Esta
+vuelta no toca nada de órdenes, liberación ni Prisma. Repetido AISLADO 3 veces: **4/4 verde las 3**.
+Los 26 `skipped` son los de siempre (`AnaliticaPage` 17, `AnaliticaShell` 9). Todo lo de la 463 verde.

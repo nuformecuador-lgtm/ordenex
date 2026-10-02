@@ -14,6 +14,9 @@ import { ORDEN_LIBRO_POR_DEFECTO } from "@/components/shared/wallet/zonas-filtro
 //  - **Zona del libro** (`FiltrosLibro`): Entra/Sale, la categoría, el término y el orden. Filtran
 //    SOLO el libro y su descarga (R9/R12). La pinta `LibroCajaBarra.tsx`, encima de la tabla.
 //
+// Revisión m6 de la 463: se llamaba `WalletFiltros.tsx`; sin componente ya no es un `PascalCase.tsx`
+// (docs/conventions.md) y pasó a `wallet-filtros-input.ts`.
+//
 // El componente de una sola banda que vivía aquí (con su borrador, «Aplicar» y «Limpiar» al pie del
 // libro) se retiró: movía las cifras con filtros que el usuario leía como del libro.
 

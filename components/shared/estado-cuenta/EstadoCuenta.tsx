@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 
@@ -178,6 +178,31 @@ export interface LibroDeLectura {
 
 const LIBRO_INICIAL: LibroDeLectura = { termino: "", sortDir: ORDEN_LIBRO_POR_DEFECTO };
 
+/**
+ * FICHA 463 (R49, revisión B1/m2) — TODO lo que se eligió en pantalla y pide una lectura: las dos zonas,
+ * la página y su tamaño.
+ */
+interface Seleccion {
+  periodo: Periodo;
+  chip: ChipOTodo;
+  cierreId: string | null;
+  termino: string;
+  sortDir: DireccionOrden;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Una lectura BUENA junto con la selección que la pidió. Lo que se pinta se describe con SU selección
+ * (la posición del saldo inicial, el día del periodo) y no con la pedida: con `keepPreviousData` lo
+ * pintado puede ser la lectura anterior mientras llega la nueva, o para siempre si la nueva falla (m2).
+ * Y si una lectura falla, es la selección a la que vuelven los controles (R49).
+ */
+interface Lectura {
+  seleccion: Seleccion;
+  estado: EstadoCuentaDTO;
+}
+
 /** De lo que se eligió en pantalla a lo que viaja al borde: lo vacío (y el orden por defecto) no viaja. */
 export function filtrosDeLectura(
   periodo: Periodo,
@@ -224,15 +249,17 @@ export function posicionSaldoInicial(
 const CLAVE_PERIODO = "periodo";
 const FILTROS_PERIODO: FilterDef[] = [{ key: CLAVE_PERIODO, label: ZONA_WALLET_TEXTO.periodo, kind: "dateRange" }];
 
-async function leer(
-  lector: LectorEstadoCuenta,
-  filtros: FiltrosDeLectura,
-  page: number,
-  pageSize: number,
-): Promise<EstadoCuentaDTO> {
+/** El periodo como selección del orquestador (la terna `[atajo, desde, hasta]`); sin periodo, `{}`. */
+function seleccionDePeriodo(p: Periodo): FilterSelection {
+  return p.desde === "" && p.hasta === "" ? {} : { [CLAVE_PERIODO]: ["", p.desde, p.hasta] };
+}
+
+async function leer(lector: LectorEstadoCuenta, seleccion: Seleccion): Promise<Lectura> {
+  const { periodo, chip, cierreId, termino, sortDir, page, pageSize } = seleccion;
+  const filtros = filtrosDeLectura(periodo, chip, cierreId, { termino, sortDir });
   const r = await lector.leer({ ...filtros, page, pageSize });
   if (r.status !== "ok") throw new Error(r.status);
-  return r.estado;
+  return { seleccion, estado: r.estado };
 }
 
 /**
@@ -322,6 +349,14 @@ export function EstadoCuenta({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(inicial.pageSize);
   const [abierta, setAbierta] = useState<FilaEstadoCuentaDTO | null>(null);
+  // R49 — si una lectura falla, los controles con estado propio (el calendario del periodo y el campo
+  // del buscador) vuelven a lo de la última lectura buena por su `siembra`, que no emite.
+  const [siembraPeriodo, setSiembraPeriodo] = useState<{ senal: number; seleccion: FilterSelection } | undefined>(
+    undefined,
+  );
+  const [siembraTermino, setSiembraTermino] = useState<{ senal: number; termino: string } | undefined>(undefined);
+  // R49 — la lectura buena sobre la que falló la última: mientras sea la que se pinta, se avisa.
+  const [falloSobre, setFalloSobre] = useState<Lectura | null>(null);
 
   // La primera página del servidor llega en «Más recientes» (R34/R47): es la inicial con ese orden.
   const esLaInicial =
@@ -333,19 +368,66 @@ export function EstadoCuenta({
     sortDir === ORDEN_LIBRO_POR_DEFECTO &&
     page === 1 &&
     pageSize === inicial.pageSize;
+  const seleccion: Seleccion = { periodo, chip, cierreId, termino, sortDir, page, pageSize };
   const filtros = filtrosDeLectura(periodo, chip, cierreId, { termino, sortDir });
+  // La primera página del servidor, con la selección que la pidió (la de entrada).
+  const lecturaInicial = useMemo<Lectura>(
+    () => ({
+      seleccion: {
+        periodo: { desde: "", hasta: "" },
+        chip: CHIP_TODO,
+        cierreId: null,
+        termino: "",
+        sortDir: ORDEN_LIBRO_POR_DEFECTO,
+        page: 1,
+        pageSize: inicial.pageSize,
+      },
+      estado: inicial,
+    }),
+    [inicial],
+  );
   const { data, error, isLoading } = useSWR(
     // R41 — el término y el orden van en la clave: dos lecturas que difieran en ellos no comparten caché.
     claveEstadoCuenta(tipo, id, { ...periodo, chip, page, pageSize, cierre: cierreId ?? "", termino, sortDir }),
-    () => leer(lector, filtros, page, pageSize),
-    // `revalidateIfStale: false`: la primera página YA la leyó el servidor; sin esto SWR la vuelve a
-    // pedir al montar (medido: una lectura de más por visita) y, si esa segunda lectura fallara, la
-    // tabla cambiaría las filas buenas por el aviso de error. Una clave nueva (periodo, chip, cierre,
-    // página) no tiene datos y se lee igual; tras registrar o anular, `refrescarCuenta` relee.
-    { fallbackData: esLaInicial ? inicial : undefined, keepPreviousData: true, revalidateIfStale: false },
+    () => leer(lector, seleccion),
+    {
+      // `revalidateIfStale: false`: la primera página YA la leyó el servidor; sin esto SWR la vuelve a
+      // pedir al montar (medido: una lectura de más por visita). Una clave nueva (periodo, chip,
+      // cierre, página) no tiene datos y se lee igual; tras registrar o anular, `refrescarCuenta` relee.
+      fallbackData: esLaInicial ? lecturaInicial : undefined,
+      keepPreviousData: true,
+      revalidateIfStale: false,
+      // R49 — un fallo no se reintenta solo: la pantalla vuelve a lo último bueno y lo dice; quien
+      // quiera reintentar lo vuelve a pedir.
+      shouldRetryOnError: false,
+      // SWR solo lo llama si la clave que falló sigue siendo la vigente.
+      onError: () => conservarLoUltimo(),
+    },
   );
 
-  const vigente = data ?? inicial;
+  const vigente = data?.estado ?? inicial;
+  const hayFallo = falloSobre !== null && falloSobre === data;
+
+  /**
+   * FICHA 463 (R49) — la lectura falló: se sigue pintando la última buena (`keepPreviousData` ya la
+   * tiene en `data`: tarjetas, libro y su página) y TODOS los filtros vuelven a los de esa lectura
+   * —periodo, chip, cierre, término, orden y página—, para que la pantalla no diga que hay puesto algo
+   * que las cifras no reflejan. El aviso va junto al libro, no en su lugar.
+   */
+  function conservarLoUltimo() {
+    if (data === undefined) return; // nada que conservar: la tabla dice el fallo en su lugar
+    setFalloSobre(data);
+    const buena = data.seleccion;
+    setPeriodo(buena.periodo);
+    setChip(buena.chip);
+    setCierreId(buena.cierreId);
+    setTermino(buena.termino);
+    setSortDir(buena.sortDir);
+    setPage(buena.page);
+    setPageSize(buena.pageSize);
+    setSiembraPeriodo((s) => ({ senal: (s?.senal ?? 0) + 1, seleccion: seleccionDePeriodo(buena.periodo) }));
+    setSiembraTermino((s) => ({ senal: (s?.senal ?? 0) + 1, termino: buena.termino }));
+  }
 
   /** R30 — TODAS las claves de ESTA cuenta; ninguna de otra. */
   async function refrescarCuenta() {
@@ -385,9 +467,12 @@ export function EstadoCuenta({
 
   const detalle = abierta !== null && panel !== undefined ? detalleDe(abierta, rotulos, panel) : null;
   const registroAbierta = abierta?.registro ?? null;
-  // R38/R39 — la línea del saldo inicial, con el orden de lo que se PINTA (la lectura vigente).
+  // R38/R39 — la línea del saldo inicial, con el orden, la página y el tamaño de lo que se PINTA (la
+  // selección de la lectura vigente), no con lo pedido (revisión m2).
   const posicion =
-    data === undefined ? null : posicionSaldoInicial(sortDir, page, pageSize, data.total);
+    data === undefined
+      ? null
+      : posicionSaldoInicial(data.seleccion.sortDir, data.seleccion.page, data.seleccion.pageSize, data.estado.total);
 
   return (
     <div className="flex flex-col gap-6">
@@ -402,6 +487,7 @@ export function EstadoCuenta({
           filters={FILTROS_PERIODO}
           onChange={aplicarPeriodo}
           leerDeUrl={false}
+          siembra={siembraPeriodo}
           aplicarConBoton={{
             etiqueta: ZONA_WALLET_TEXTO.aplicar,
             etiquetaQuitar: ZONA_WALLET_TEXTO.quitar,
@@ -420,10 +506,17 @@ export function EstadoCuenta({
         </section>
       ) : null}
 
+      {/* R49 — el fallo se dice JUNTO al libro; el libro de la última lectura buena sigue debajo. */}
+      {hayFallo ? (
+        <p role="alert" className="text-sm text-destructive">
+          {ESTADO_CUENTA_TEXTO.error} {ESTADO_CUENTA_TEXTO.errorConservado}
+        </p>
+      ) : null}
+
       <TablaEstadoCuenta
-        estado={data}
+        estado={data?.estado}
         rotulos={rotulos}
-        desde={periodo.desde}
+        desde={data?.seleccion.periodo.desde ?? periodo.desde}
         posicionSaldoInicial={posicion}
         // FICHA 463 (R1/R2/R6/R7/R23/R33) — la ZONA DEL LIBRO, encima de la tabla y junto a la descarga:
         // el buscador canónico, el orden, los chips y —si la superficie lo ofrece— el cierre.
@@ -435,6 +528,7 @@ export function EstadoCuenta({
               placeholder={ESTADO_CUENTA_TEXTO.buscarPlaceholder[vista]}
               minChars={BUSQUEDA_LIBRO_MIN_CHARS}
               leerDeUrl={false}
+              siembra={siembraTermino}
               onChange={cambiarTermino}
               onLimpiarTodo={limpiarLibro}
               hayFiltrosAplicados={termino !== "" || chip !== CHIP_TODO || cierreId !== null}
@@ -464,7 +558,8 @@ export function EstadoCuenta({
           </section>
         }
         isLoading={data === undefined && isLoading}
-        error={error !== undefined}
+        // Solo sin ninguna lectura buena que enseñar; con una, el aviso va arriba y el libro se queda (R49).
+        error={error !== undefined && data === undefined}
         onVer={panel === undefined ? undefined : (f) => (seAbre(f) ? setAbierta(f) : undefined)}
         conRegistro={vista === "oficina"}
         detalleDeFila={detalleDeFila}
@@ -475,14 +570,14 @@ export function EstadoCuenta({
           obtenerFilas: () => filasDelPeriodo(lector, filtros, rotulos),
         }}
       />
-      {data !== undefined && data.filas.length === 0 ? (
+      {data !== undefined && data.estado.filas.length === 0 ? (
         <p className="text-sm text-muted-foreground">{ESTADO_CUENTA_TEXTO.vacio}</p>
       ) : null}
 
       <Pagination
         page={page}
         pageSize={pageSize}
-        total={data?.total ?? 0}
+        total={data?.estado.total ?? 0}
         // Solo sin nada que pintar: con la página del servidor en mano se puede paginar mientras SWR
         // revalida (su `isLoading` sigue en `true` con `fallbackData`).
         disabled={data === undefined}

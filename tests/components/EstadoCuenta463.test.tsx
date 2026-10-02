@@ -484,3 +484,133 @@ describe("463 R43 — el Excel: filtros, término y orden vigentes; el saldo ini
     );
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// FICHA 463 (R49, revisión B1) — si una lectura falla, la pantalla se queda con la última BUENA: sus
+// tarjetas, su libro y sus filtros. Lo dice junto al libro, no en su lugar.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+const AVISO_R49 = /^No se pudo cargar el estado de cuenta\. Se sigue mostrando lo último que se cargó, con sus filtros\.$/;
+
+describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nada ni deja filtros que no se ven", () => {
+  it("aplicar un periodo que falla: aviso, tarjetas y libro de antes, y el control del periodo vuelve a «Cualquier fecha»", async () => {
+    const user = userEvent.setup();
+    montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00", abonos: "60.00" }));
+    const tarjetasAntes = tarjetas().textContent;
+    const filasAntes = filasDeLaTabla().map((f) => f.textContent);
+    H.ver.mockResolvedValue({ status: "forbidden" });
+
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.ver).toHaveBeenCalledWith(expect.objectContaining({ desde: diaDelMesActual(1) })));
+
+    const aviso = await screen.findByText(AVISO_R49);
+    expect(aviso).toHaveAttribute("role", "alert");
+    // Las tarjetas y el libro son los de la lectura buena (sin periodo), con su saldo inicial al final.
+    expect(tarjetas().textContent).toBe(tarjetasAntes);
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+    expect(filasAntes).toHaveLength(4);
+    expect(filasAntes[3]).toContain("Saldo inicial");
+    // Y la zona de la wallet NO dice que hay un periodo puesto.
+    await waitFor(() =>
+      expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
+    );
+    expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
+    expect(within(zonaWallet()).getByRole("button", { name: "Aplicar" })).toBeDisabled();
+
+    // Y no solo lo pintado: la siguiente lectura del libro se pide SIN el periodo que falló.
+    H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [TRES[0]], total: 1 }) });
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await waitFor(() =>
+      expect(H.ver).toHaveBeenLastCalledWith({ cuenta: { tipo: "tienda", id: UUID_TIENDA }, chip: "cobros", page: 1, pageSize: 20 }),
+    );
+  });
+
+  it("con un periodo ya aplicado, uno nuevo que falla devuelve el control al APLICADO, no a vacío", async () => {
+    const user = userEvent.setup();
+    H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: TRES, total: 3, saldoInicial: "777.00" }) });
+    montarTienda();
+    await aplicarPeriodo(user, zonaWallet(), 1, 10);
+    await waitFor(() => expect(tarjetas().textContent).toContain("Saldo inicial₡777"));
+    const periodoBueno = within(zonaWallet()).getByRole("button", { name: "Periodo" }).textContent;
+    expect(periodoBueno).not.toContain("Cualquier fecha");
+
+    H.ver.mockResolvedValue({ status: "forbidden" });
+    await aplicarPeriodo(user, zonaWallet(), 12, 28);
+    await screen.findByText(AVISO_R49);
+    expect(tarjetas().textContent).toContain("Saldo inicial₡777");
+    await waitFor(() =>
+      expect(within(zonaWallet()).getByRole("button", { name: "Periodo" }).textContent).toBe(periodoBueno),
+    );
+    expect(within(zonaWallet()).getByRole("button", { name: "Quitar periodo" })).toBeInTheDocument();
+  });
+
+  it("cambiar un chip que falla: aviso, el chip vuelve a «Todo» y siguen el libro, el orden y las tarjetas de la lectura buena", async () => {
+    const user = userEvent.setup();
+    montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00" }));
+    // Una lectura buena que NO es la de entrada: «Más antiguas».
+    H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [...TRES].reverse(), total: 3, saldoInicial: "5.00" }) });
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(filasDeLaTabla()[1].textContent).toContain("2026-09-11"));
+    const tarjetasBuenas = tarjetas().textContent;
+    const filasBuenas = filasDeLaTabla().map((f) => f.textContent);
+    expect(filasBuenas[0]).toContain("Saldo inicial");
+
+    H.ver.mockResolvedValue({ status: "forbidden" });
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await screen.findByText(AVISO_R49);
+
+    expect(within(zonaLibro()).getByRole("button", { name: "Cobros" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(zonaLibro()).getByRole("button", { name: "Más antiguas" })).toHaveAttribute("aria-pressed", "true");
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasBuenas);
+    expect(tarjetas().textContent).toBe(tarjetasBuenas);
+  });
+
+  it("un término y un orden que fallan: el campo vuelve a vacío y el orden a «Más recientes»", async () => {
+    const user = userEvent.setup();
+    montarTienda();
+    const filasAntes = filasDeLaTabla().map((f) => f.textContent);
+    H.ver.mockResolvedValue({ status: "forbidden" });
+    await user.type(buscador(), "etiquetas");
+    await screen.findByText(AVISO_R49, undefined, { timeout: 3000 });
+    await waitFor(() => expect(buscador()).toHaveValue(""));
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ sortDir: "asc" })));
+    await waitFor(() =>
+      expect(within(zonaLibro()).getByRole("button", { name: "Más recientes" })).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(screen.getByText(AVISO_R49)).toBeInTheDocument();
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+  });
+
+  it("una lectura buena después quita el aviso", async () => {
+    const user = userEvent.setup();
+    montarTienda();
+    H.ver.mockResolvedValue({ status: "forbidden" });
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await screen.findByText(AVISO_R49);
+    H.ver.mockResolvedValue({ status: "ok", estado: estado({ filas: [TRES[0]], total: 1 }) });
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Pagos" }));
+    await waitFor(() => {
+      expect(filasDeLaTabla()).toHaveLength(2);
+      expect(filasDeLaTabla()[0].textContent).toContain("2026-09-13");
+    });
+    expect(screen.queryByText(AVISO_R49)).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("463 R38/R39 (revisión m2) — el saldo inicial se coloca con el orden de lo PINTADO", () => {
+  it("mientras llega «Más antiguas», las filas de «Más recientes» siguen con el saldo inicial al final", async () => {
+    const user = userEvent.setup();
+    H.ver.mockImplementation(() => new Promise(() => {})); // la lectura nueva no llega
+    montarTienda();
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.ver).toHaveBeenCalledTimes(1));
+    const filas = filasDeLaTabla();
+    expect(filas).toHaveLength(4);
+    expect(filas[0].textContent).toContain("2026-09-13");
+    expect(filas[3].textContent).toContain("Saldo inicial");
+  });
+});

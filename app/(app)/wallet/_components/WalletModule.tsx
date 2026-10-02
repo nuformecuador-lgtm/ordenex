@@ -49,7 +49,7 @@ import {
   inputDeWallet,
   type FiltrosLibro,
   type FiltrosWallet,
-} from "./WalletFiltros";
+} from "./wallet-filtros-input";
 import { WalletFiltrosCaja, seleccionDePeriodo } from "./WalletFiltrosCaja";
 import { LibroCajaBarra } from "./LibroCajaBarra";
 import type { FilterSelection } from "@/components/shared/FilterComponent";

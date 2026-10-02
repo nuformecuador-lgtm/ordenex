@@ -78,7 +78,7 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
-import { FILTROS_VACIOS, inputDeFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
+import { FILTROS_VACIOS, inputDeFiltros } from "@/app/(app)/wallet/_components/wallet-filtros-input";
 import { aQuienDeValor, opcionesDeAQuien, valorDeAQuien } from "@/app/(app)/wallet/_components/a-quien-selector";
 import { CAJA_RESUMEN_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";

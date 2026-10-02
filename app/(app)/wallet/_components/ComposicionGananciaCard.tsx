@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 
 import { DesgloseEgresosLista } from "./DesgloseEgresosLista";
 import { FilaComposicion } from "./FilaComposicion";
-import type { WalletFiltrosValue } from "./WalletFiltros";
+import type { WalletFiltrosValue } from "./wallet-filtros-input";
 import { CATEGORIA_LABEL, money } from "./wallet-labels";
 
 // Feature 231 (T6.2, design §4.3) — «Cómo se compone la ganancia de Ordenex».

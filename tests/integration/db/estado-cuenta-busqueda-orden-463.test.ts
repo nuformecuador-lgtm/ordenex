@@ -267,6 +267,22 @@ describeSiHayBase("463/T3 — buscador y orden de los estados de cuenta (Postgre
     for (const cuenta of Object.values(m().cuentas)) expect(cuenta.sinOrden).toEqual(cuenta.desc);
   });
 
+  // Revision m3 — el sentido ABSOLUTO, no solo el relativo: «desc» = «asc» al reves pasaria igual con el
+  // `ORDER BY` final invertido en los dos sentidos. Aqui la fecha (primer campo de la linea) manda.
+  it("R33/R34: «Mas recientes» empieza por la fecha MAYOR y «Mas antiguas» por la MENOR, en las tres cuentas", () => {
+    const fechas = (lineas: string[]) => lineas.map((l) => l.split("|")[0]);
+    for (const [nombre, cuenta] of Object.entries(m().cuentas)) {
+      const desc = fechas(cuenta.desc);
+      const asc = fechas(cuenta.asc);
+      // No-vacuidad: hay al menos dos fechas distintas, asi que el sentido se puede medir.
+      expect(new Set(desc).size, nombre).toBeGreaterThan(1);
+      expect(desc, nombre).toEqual([...desc].sort().reverse());
+      expect(asc, nombre).toEqual([...asc].sort());
+      expect(desc[0] > desc[desc.length - 1], nombre).toBe(true);
+      expect(fechas(cuenta.sinOrden)[0], nombre).toBe(desc[0]);
+    }
+  });
+
   it("R24/R26: en la oficina el termino casa con la descripcion (sin distinguir mayusculas) y con quien registro", () => {
     const { busquedas: b, enteras, maestroNombre } = m();
     const esperadaDescripcion = enteras.tienda

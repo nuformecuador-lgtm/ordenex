@@ -31,6 +31,7 @@ const H = vi.hoisted(() => ({
   quienes: vi.fn(),
   autoria: vi.fn(),
   toastError: vi.fn(),
+  fila: vi.fn(),
   params: "",
 }));
 
@@ -38,7 +39,7 @@ vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => H.listar(...a),
   listarMovimientosCompletoAction: (...a: unknown[]) => H.completo(...a),
   verResumenCajaAction: (...a: unknown[]) => H.resumen(...a),
-  listarMovimientosDeFilaAction: vi.fn(),
+  listarMovimientosDeFilaAction: (...a: unknown[]) => H.fila(...a),
   registrarMovimientoManualAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/wallet-egresos", () => ({
@@ -88,7 +89,7 @@ import {
   FILTROS_LIBRO_INICIALES,
   inputDeLibro,
   inputDeWallet,
-} from "@/app/(app)/wallet/_components/WalletFiltros";
+} from "@/app/(app)/wallet/_components/wallet-filtros-input";
 
 function mov(n: number, over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
   return {
@@ -203,6 +204,7 @@ beforeEach(() => {
   H.desglose.mockResolvedValue({ status: "ok", desglose: DESGLOSE });
   H.conceptos.mockResolvedValue({ status: "ok", conceptos: [{ categoria: "egreso_sueldo", movimientos: 3 }] });
   H.quienes.mockResolvedValue({ status: "ok", opciones: [], hayMas: false });
+  H.fila.mockResolvedValue({ status: "ok", data: { movimientos: [], total: 0, page: 1, pageSize: 10 } });
   H.autoria.mockImplementation(async ({ movimientoIds }: { movimientoIds: string[] }) => ({ status: "ok", filas: movimientoIds.map(() => null).filter(Boolean) }));
 });
 
@@ -528,5 +530,64 @@ describe("463 R49 — si una lectura falla, la pantalla se queda con lo que ten�
       expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
     );
     expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("463 R12 (revisión B2) — el detalle de una fila de la composición es de la WALLET", () => {
+  it("con Entra/Sale y categoría puestas en el libro, el detalle de la fila recibe solo fila, periodo y página", async () => {
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ tipo: "egreso" })));
+    await user.click(within(zonaLibro()).getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(await screen.findByRole("option", { name: "Sueldo (3)" }));
+    await waitFor(() =>
+      expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ tipo: "egreso", categoria: "egreso_sueldo" })),
+    );
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.listar).toHaveBeenLastCalledWith(expect.objectContaining({ sortDir: "asc" })));
+
+    await user.click(screen.getByRole("button", { name: "Ver los movimientos de Pagos de Ordenex a mensajeros" }));
+    await waitFor(() => expect(H.fila).toHaveBeenCalledTimes(1));
+
+    // El conjunto del detalle es el del importe de esa fila: el periodo de la wallet y nada del libro.
+    expect(H.fila).toHaveBeenCalledWith({
+      fila: "egreso_pago_mensajero",
+      desde: diaDelMesActual(1),
+      hasta: diaDelMesActual(28),
+      page: 1,
+    });
+    const input = H.fila.mock.calls[0][0] as Record<string, unknown>;
+    for (const clave of ["tipo", "categoria", "q", "sortBy", "sortDir"]) expect(input).not.toHaveProperty(clave);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+describe("463 (revisión m1) — los conmutadores del libro no se tragan un clic mientras se lee", () => {
+  it("pulsar «Más antiguas» con una lectura del libro en vuelo se pide y es lo que queda pintado", async () => {
+    const pendientes: Array<(v: unknown) => void> = [];
+    H.listar.mockImplementation(() => new Promise((r) => pendientes.push(r)));
+    const user = pintar();
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+    await waitFor(() => expect(H.listar).toHaveBeenCalledTimes(1));
+
+    // Con «Sale» todavía en vuelo: el clic NO se ignora; se pide el libro con los dos cambios.
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.listar).toHaveBeenCalledTimes(2));
+    expect(H.listar).toHaveBeenLastCalledWith({ tipo: "egreso", sortBy: "fecha", sortDir: "asc", page: 1, pageSize: 20 });
+
+    // Llega antes la segunda y después la primera, ya vieja: manda la última pedida.
+    pendientes[1](paginaOk([mov(1), mov(2)], 2));
+    pendientes[0](paginaOk(PAGINA, 42));
+    await waitFor(() =>
+      expect(within(zonaLibro()).getByRole("button", { name: "Más antiguas" })).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(within(zonaLibro()).getByRole("button", { name: "Sale" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => {
+      expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(2);
+      expect(within(tabla()).getAllByRole("row")[1].textContent).toContain("2026-09-21");
+    });
   });
 });

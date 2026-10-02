@@ -12,7 +12,7 @@ vi.mock("@/lib/actions/wallet", () => ({
 }));
 
 import { ComposicionGananciaCard } from "@/app/(app)/wallet/_components/ComposicionGananciaCard";
-import { FILTROS_VACIOS } from "@/app/(app)/wallet/_components/WalletFiltros";
+import { FILTROS_VACIOS } from "@/app/(app)/wallet/_components/wallet-filtros-input";
 import { CATEGORIA_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
   conceptoPorId,

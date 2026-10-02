@@ -13,7 +13,7 @@ import type { WalletMovimientoTipo } from "@/lib/types/wallet";
 
 import { BUSCADOR_LIBRO_CAJA_PLACEHOLDER, FILTRO_DIRECCION, type DireccionFiltro } from "./libro-caja-labels";
 import { CATEGORIA_LABEL, CATEGORIA_TODAS_OPTION } from "./wallet-labels";
-import { hayFiltrosDeLibro, type FiltrosLibro, type FiltrosWallet } from "./WalletFiltros";
+import { hayFiltrosDeLibro, type FiltrosLibro, type FiltrosWallet } from "./wallet-filtros-input";
 
 // FICHA 463 (T7, design §5.2; R1, R2, R5, R9, R13, R23–R25, R29–R33) — la ZONA DEL LIBRO de la caja,
 // encima de la tabla y en la misma línea que la descarga (`filtros` de `DataTable`, como `/ordenes`).
@@ -38,7 +38,10 @@ export interface LibroCajaBarraProps {
   onCambiar: (cambio: Partial<FiltrosLibro>) => void;
   /** R30 — «Limpiar todo»: término, dirección y categoría fuera; el orden se queda. */
   onLimpiar: () => void;
-  /** Deshabilita los conmutadores y la categoría mientras se relee. El buscador NUNCA (R32). */
+  /**
+   * Deshabilita la categoría mientras se relee. El buscador NUNCA (R32), y los conmutadores tampoco:
+   * su clic se pide igual y el módulo, con sus turnos, pinta el último (revisión m1).
+   */
   disabled?: boolean;
 }
 
@@ -80,19 +83,16 @@ export function LibroCajaBarra({ filtrosWallet, valor, onCambiar, onLimpiar, dis
         <SegmentedToggle<DireccionOrden>
           options={ORDEN_LIBRO.opciones}
           valor={valor.sortDir}
-          onChange={(sortDir) => {
-            if (!disabled && sortDir !== valor.sortDir) onCambiar({ sortDir });
-          }}
+          // Revisión m1: un clic mientras se lee NO se ignora. El módulo lo compone con lo PEDIDO y
+          // le da turno propio (`turnoLibro`): se pinta la última lectura pedida, no la primera.
+          onChange={(sortDir) => onCambiar({ sortDir })}
           ariaLabel={ORDEN_LIBRO.nombre}
         />
         {/* FICHA 458-E (R54): Todo / Entra / Sale. Mismo `tipo` del borde de siempre. */}
         <SegmentedToggle
           options={FILTRO_DIRECCION.opciones}
           valor={direccionDe(valor.tipo)}
-          onChange={(d) => {
-            const siguiente = d === "todo" ? "" : d;
-            if (!disabled && siguiente !== valor.tipo) onCambiar({ tipo: siguiente });
-          }}
+          onChange={(d) => onCambiar({ tipo: d === "todo" ? "" : d })}
           ariaLabel={FILTRO_DIRECCION.nombre}
         />
         <Label htmlFor="wallet-filtro-categoria" className="sr-only">

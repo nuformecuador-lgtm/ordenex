@@ -14,7 +14,7 @@ import { ComposicionGananciaCard } from "@/app/(app)/wallet/_components/Composic
 import {
   FILTROS_VACIOS,
   type WalletFiltrosValue,
-} from "@/app/(app)/wallet/_components/WalletFiltros";
+} from "@/app/(app)/wallet/_components/wallet-filtros-input";
 import type {
   CajaResumenDTO,
   ComposicionGananciaDTO,
