@@ -585,3 +585,62 @@ El único archivo rojo es AJENO: `tests/integration/db/liberacion-reprogramada-c
 al sembrar — un choque con datos de otro archivo sobre la base local compartida, no una aserción. Esta
 vuelta no toca nada de órdenes, liberación ni Prisma. Repetido AISLADO 3 veces: **4/4 verde las 3**.
 Los 26 `skipped` son los de siempre (`AnaliticaPage` 17, `AnaliticaShell` 9). Todo lo de la 463 verde.
+
+
+# Tercera vuelta (segunda revisión RECHAZADA en `review/463` @ `db39431a`): B3, B4, m7, m8
+
+Base: `origin/feature/463-wallets-filtros-y-orden` @ `c1998d88`. Búsqueda: el delta nombra cada archivo
+(lectura directa + `grep` para los restos de `turnoLibro`). Decisión del leader anotada en
+`design.md` §9.7.
+
+## B3 + B4 — R49 en la caja (`app/(app)/wallet/_components/WalletModule.tsx`)
+
+- `recargarTodo` y `recargarLibro` llevan `catch`: una lectura que LANZA es un fallo con toast
+  (`LECTURA_CAJA_FALLO`, en `wallet-labels.ts`) y vuelta a lo aplicado. Los fallos con respuesta conservan
+  su toast por status.
+- Zona de la wallet ATÓMICA: cifras, desglose, composición, conteo y libro se pintan juntos, solo si las
+  cuatro lecturas salen bien. Ya no hay «pintar las cifras y el libro solo si nadie pidió otro libro».
+- UN turno (`turno`) para toda lectura: lo superado nunca pinta ni avisa (antes `turnoLibro`/`turnoWallet`).
+- Un cambio del libro (o de página) con la wallet en vuelo se suma a ella (`pedirLibro` → `recargarTodo`
+  con el periodo pedido); sin wallet en vuelo, `recargarLibro` lee con la wallet APLICADA (antes con la
+  PEDIDA, origen de la secuencia A).
+- `fallo()` restaura los pedidos a lo aplicado (refs `aplicadoWallet`/`aplicadoLibro`) y siembra el
+  periodo (calendario) y el término (buscador: `LibroCajaBarra` gana la prop `siembraTermino`).
+- Arreglo colateral: un `recargarTodo` que superaba un `recargarLibro` dejaba `cargandoLibro` en `true`
+  para siempre (nadie lo apagaba); con un solo estado `cargando` y un solo turno ya no puede pasar.
+
+Tests (CJ = `tests/components/WalletCaja463.test.tsx`):
+- «463 R49 (revisión B3)»: la wallet lanza al aplicar un periodo; el libro lanza (orden y buscador).
+- «463 R49 (revisión B4)»: A (wallet bien + libro falla), B (libro bien + wallet LANZA), C (B por el
+  buscador, wallet `forbidden`), y «las dos bien» (se pintan juntas). En A/B/C la lectura de la
+  selección superada llega después y BIEN y se comprueba que no se pinta.
+- Contra el `WalletModule.tsx` de `c1998d88`: **6/6 rojos** (los nuevos de B3/B4).
+
+## m7 — `EstadoCuenta` con una acción que LANZA
+
+Dos tests en EC (`tests/components/EstadoCuenta463.test.tsx`, «(m7)»): periodo que lanza; chip y término
+que lanzan. **Verdes sin cambiar código**: el fetcher de SWR convierte el rechazo en `onError`
+→ `conservarLoUltimo`. Queda fijado.
+
+## m8
+
+`git rm progress/review_463.md` de la rama de la feature (el informe vive en `review/463`).
+
+## Mutaciones (arnés de un solo uso: comprueba que el archivo CAMBIÓ, corre CJ, restaura y verifica)
+
+| # | Mutación en `WalletModule.tsx` | Resultado |
+| --- | --- | --- |
+| M1 | quitar los dos `catch` | **Muerta**: 3 rojos + 3 rechazos no manejados (B3 ×2, B4-B) |
+| M2 | pintar resumen/composición antes de mirar el libro | **Muerta**: 1 rojo (B4-A) |
+| M3 | no sembrar el periodo en `fallo()` | **Muerta**: 5 rojos (R49 status, B3 wallet, B4 A/B/C) |
+| M4 | no sumar el libro a la wallet en vuelo | **Muerta**: 3 rojos (B4 B/C, «las dos bien») |
+| M5 | sin chequeo de turno en `recargarTodo` | **Muerta**: 4 rojos (B4 A/B/C, «las dos bien») |
+| M6 | no sembrar el término en `fallo()` | **Muerta**: 2 rojos (B3 libro, B4-C) |
+
+Restaurado: `true` (comparación byte a byte con el original).
+
+## Suites puntuales
+
+`tsc` exit 0; `eslint` de lo tocado limpio; 42 archivos / **539 tests verdes** (CJ, EC, `EstadoCuenta`,
+`WalletFiltroAQuien458E`, `WalletLibroCaja458E`, `CajaComposicionBarra`, `tests/components/descarga`,
+`tests/unit/asistente`, `wallet-page-cobros-pendientes`).

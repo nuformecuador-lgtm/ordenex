@@ -584,6 +584,46 @@ describe("463 R49 — en el estado de cuenta, una lectura que falla no borra nad
     expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
   });
 
+  // Revisión m7 — la acción que LANZA (red caída, 500, tiempo agotado), no solo la que responde un error.
+  it("(m7) aplicar un periodo cuya lectura LANZA: aviso, tarjetas y libro de antes, y el periodo vuelve a «Cualquier fecha»", async () => {
+    const user = userEvent.setup();
+    montarTienda(estado({ filas: TRES, total: 3, saldoInicial: "5.00", abonos: "60.00" }));
+    const tarjetasAntes = tarjetas().textContent;
+    const filasAntes = filasDeLaTabla().map((f) => f.textContent);
+    H.ver.mockRejectedValue(new Error("Failed to fetch"));
+
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.ver).toHaveBeenCalledWith(expect.objectContaining({ desde: diaDelMesActual(1) })));
+
+    expect(await screen.findByText(AVISO_R49)).toHaveAttribute("role", "alert");
+    expect(tarjetas().textContent).toBe(tarjetasAntes);
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+    await waitFor(() =>
+      expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
+    );
+    expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
+  });
+
+  it("(m7) un chip y un término cuya lectura LANZA: aviso, vuelven a «Todo» y a vacío, y el libro sigue", async () => {
+    const user = userEvent.setup();
+    montarTienda();
+    const filasAntes = filasDeLaTabla().map((f) => f.textContent);
+    H.ver.mockRejectedValue(new Error("Failed to fetch"));
+
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Cobros" }));
+    await screen.findByText(AVISO_R49);
+    expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+
+    await user.type(buscador(), "etiquetas");
+    await waitFor(() => expect(H.ver).toHaveBeenLastCalledWith(expect.objectContaining({ q: "etiquetas" })), {
+      timeout: 3000,
+    });
+    await waitFor(() => expect(buscador()).toHaveValue(""));
+    expect(screen.getByText(AVISO_R49)).toBeInTheDocument();
+    expect(filasDeLaTabla().map((f) => f.textContent)).toEqual(filasAntes);
+  });
+
   it("una lectura buena después quita el aviso", async () => {
     const user = userEvent.setup();
     montarTienda();

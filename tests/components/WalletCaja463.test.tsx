@@ -534,6 +534,153 @@ describe("463 R49 — si una lectura falla, la pantalla se queda con lo que ten�
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
+// FICHA 463 (R49, segunda revisión B3/B4) — una lectura que LANZA y un fallo con las dos zonas en
+// vuelo. Decisión (design §9): un cambio de la zona de la wallet es ATÓMICO —cifras y libro se pintan
+// juntos o no se pinta nada—; uno del libro solo relee el libro. Lo tardío nunca se pinta.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// El aviso de una lectura que no responde, escrito a mano (contrato, R48/R49).
+const AVISO_SIN_RESPUESTA = "No se pudo cargar la caja. Se sigue mostrando lo último que se cargó, con sus filtros.";
+
+/** Lo que dice la pantalla de entrada: cifras sin periodo, libro de 3 filas, «Todo», «Más recientes». */
+async function sigueLaPantallaDeEntrada() {
+  expect(ganancia().textContent).toContain(money("-20000.00"));
+  expect(ganancia().textContent).not.toContain(money("-1234.00"));
+  const filas = within(tabla()).getAllByRole("row").slice(1);
+  expect(filas).toHaveLength(3);
+  expect(filas[0].textContent).toContain("2026-09-23");
+  expect(within(zonaLibro()).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(zonaLibro()).getByRole("button", { name: "Sale" })).toHaveAttribute("aria-pressed", "false");
+  await waitFor(() =>
+    expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).toHaveTextContent("Cualquier fecha"),
+  );
+  expect(within(zonaWallet()).queryByRole("button", { name: "Quitar periodo" })).toBeNull();
+}
+
+/** Una promesa que el test suelta cuando quiere. */
+function diferida() {
+  let soltar: (v: unknown) => void = () => {};
+  const promesa = new Promise((r) => (soltar = r));
+  return { promesa, soltar };
+}
+
+describe("463 R49 (revisión B3) — una lectura que LANZA avisa y deja la pantalla de antes", () => {
+  it("la wallet lanza al aplicar un periodo: aviso, cifras, libro y periodo de antes", async () => {
+    const user = pintar();
+    H.resumen.mockRejectedValue(new Error("Failed to fetch"));
+    H.listar.mockResolvedValue(paginaOk([mov(1)], 1));
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith(AVISO_SIN_RESPUESTA));
+    await sigueLaPantallaDeEntrada();
+
+    // Y lo pedido volvió a lo aplicado: la siguiente lectura del libro va SIN el periodo que falló.
+    H.listar.mockResolvedValue(paginaOk(PAGINA, 42));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() =>
+      expect(H.listar).toHaveBeenLastCalledWith({ sortBy: "fecha", sortDir: "asc", page: 1, pageSize: 20 }),
+    );
+  });
+
+  it("el libro lanza: aviso, libro, orden y buscador de antes, y las cifras intactas", async () => {
+    const user = pintar();
+    H.listar.mockRejectedValue(new Error("Failed to fetch"));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Más antiguas" }));
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith(AVISO_SIN_RESPUESTA));
+    expect(within(zonaLibro()).getByRole("button", { name: "Más recientes" })).toHaveAttribute("aria-pressed", "true");
+    await sigueLaPantallaDeEntrada();
+
+    H.toastError.mockClear();
+    await user.type(buscador(), "Juan");
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith(AVISO_SIN_RESPUESTA), { timeout: 3000 });
+    await waitFor(() => expect(buscador()).toHaveValue(""));
+    await sigueLaPantallaDeEntrada();
+    expect(H.resumen).not.toHaveBeenCalled();
+  });
+});
+
+describe("463 R49 (revisión B4) — un fallo con las dos zonas en vuelo no mezcla selecciones", () => {
+  it("A: periodo en vuelo + «Sale»; la wallet responde bien y el libro falla ⇒ toda la pantalla de antes", async () => {
+    const primera = diferida();
+    H.resumen.mockReturnValueOnce(primera.promesa);
+    H.listar.mockImplementation(async (input: Record<string, unknown>) =>
+      input.tipo === "egreso" && input.pageSize === 20 ? { status: "validation_error" } : paginaOk([mov(1)], 1),
+    );
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith("Los filtros no son válidos. Revisá el rango de fechas."));
+    await sigueLaPantallaDeEntrada();
+
+    // La lectura de la wallet de la selección superada llega tarde y BIEN: no se pinta.
+    primera.soltar({ status: "ok", resumen: RESUMEN_PERIODO, composicion: COMPOSICION });
+    await new Promise((r) => setTimeout(r, 50));
+    await sigueLaPantallaDeEntrada();
+  });
+
+  it("B: periodo en vuelo + «Sale»; el libro responde bien y la wallet LANZA ⇒ toda la pantalla de antes", async () => {
+    const primera = diferida();
+    H.resumen.mockReturnValueOnce(primera.promesa).mockRejectedValue(new Error("Failed to fetch"));
+    H.listar.mockResolvedValue(paginaOk([mov(2)], 1));
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith(AVISO_SIN_RESPUESTA));
+    await sigueLaPantallaDeEntrada();
+
+    primera.soltar({ status: "ok", resumen: RESUMEN_PERIODO, composicion: COMPOSICION });
+    await new Promise((r) => setTimeout(r, 50));
+    await sigueLaPantallaDeEntrada();
+  });
+
+  it("C: periodo en vuelo + buscar «Juan»; el libro responde bien y la wallet falla ⇒ toda la pantalla de antes", async () => {
+    const primera = diferida();
+    H.resumen.mockReturnValueOnce(primera.promesa).mockResolvedValue({ status: "forbidden" });
+    H.listar.mockResolvedValue(paginaOk(BUSCADO, 1));
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    await user.type(buscador(), "Juan");
+
+    await waitFor(() => expect(H.toastError).toHaveBeenCalledWith("No tenés permiso para ver la wallet."), {
+      timeout: 3000,
+    });
+    await sigueLaPantallaDeEntrada();
+    await waitFor(() => expect(buscador()).toHaveValue(""));
+
+    primera.soltar({ status: "ok", resumen: RESUMEN_PERIODO, composicion: COMPOSICION });
+    await new Promise((r) => setTimeout(r, 50));
+    await sigueLaPantallaDeEntrada();
+  });
+
+  it("las dos bien: cifras y libro de la selección nueva se pintan JUNTOS, con su periodo y «Sale»", async () => {
+    const primera = diferida();
+    H.resumen.mockReturnValueOnce(primera.promesa);
+    H.listar.mockResolvedValue(paginaOk([mov(2)], 1));
+    const user = pintar();
+    await aplicarPeriodo(user, zonaWallet(), 1, 28);
+    await waitFor(() => expect(H.resumen).toHaveBeenCalledTimes(1));
+    await user.click(within(zonaLibro()).getByRole("button", { name: "Sale" }));
+
+    await waitFor(() => expect(ganancia().textContent).toContain(money("-1234.00")));
+    expect(within(tabla()).getAllByRole("row").slice(1)).toHaveLength(1);
+    expect(within(zonaLibro()).getByRole("button", { name: "Sale" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(zonaWallet()).getByRole("button", { name: "Periodo" })).not.toHaveTextContent("Cualquier fecha");
+    // El libro pintado se pidió con el periodo Y «Sale».
+    expect(H.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ desde: diaDelMesActual(1), hasta: diaDelMesActual(28), tipo: "egreso", pageSize: 20 }),
+    );
+    expect(H.toastError).not.toHaveBeenCalled();
+    primera.soltar({ status: "forbidden" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(H.toastError).not.toHaveBeenCalled();
+    expect(ganancia().textContent).toContain(money("-1234.00"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
 describe("463 R12 (revisión B2) — el detalle de una fila de la composición es de la WALLET", () => {
   it("con Entra/Sale y categoría puestas en el libro, el detalle de la fila recibe solo fila, periodo y página", async () => {
     const user = pintar();

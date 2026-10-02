@@ -40,6 +40,7 @@ import {
 } from "./CobrosRechazoTiendaPendientesPanel";
 import { WalletLedger, type AutoriaDelLibro } from "./WalletLedger";
 import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
+import { LECTURA_CAJA_FALLO } from "./wallet-labels";
 import {
   FILTROS_LIBRO_INICIALES,
   FILTROS_WALLET_VACIOS,
@@ -243,12 +244,18 @@ export function WalletModule({
   const [filtrosLibro, setFiltrosLibro] = useState<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
   // R9 — el conteo de la tarjeta es de la WALLET: no lo mueven el término ni los filtros del libro.
   const [totalWallet, setTotalWallet] = useState(initialTotal);
-  const [cargandoWallet, setCargandoWallet] = useState(false);
-  const [cargandoLibro, setCargandoLibro] = useState(false);
-  // R49 — si una lectura falla, el control del periodo vuelve a decir el periodo APLICADO.
+  /**
+   * FICHA 463 (R49, tercera vuelta B3/B4) — qué lectura está en vuelo. `todo` = la zona de la wallet
+   * (cifras + libro, ATÓMICA); `libro` = solo el libro. Deshabilita los controles que tocan.
+   */
+  const [cargando, setCargando] = useState<"todo" | "libro" | null>(null);
+  const cargandoWallet = cargando === "todo";
+  // R49 — si una lectura falla, el control del periodo vuelve a decir el periodo APLICADO y el buscador
+  // el término APLICADO (su `siembra`, que no emite).
   const [siembraPeriodo, setSiembraPeriodo] = useState<{ senal: number; seleccion: FilterSelection } | undefined>(
     undefined,
   );
+  const [siembraTermino, setSiembraTermino] = useState<{ senal: number; termino: string } | undefined>(undefined);
 
   /**
    * Lo último PEDIDO en cada zona (no lo aplicado): el buscador avisa con su propia espera y los
@@ -258,12 +265,20 @@ export function WalletModule({
   const pedidoWallet = useRef<FiltrosWallet>(FILTROS_WALLET_VACIOS);
   const pedidoLibro = useRef<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
   /**
-   * Turnos de lectura: solo pinta la ÚLTIMA pedida. Una respuesta lenta de un término viejo no puede
-   * pisar la del término nuevo. El libro tiene su turno y la wallet el suyo: releer la wallet entera
-   * también relee el libro, así que toma turno en los dos.
+   * Lo APLICADO —lo que dice la pantalla— en refs, para que un fallo restaure lo vigente al LLEGAR la
+   * respuesta y no lo que había en el render que la pidió.
    */
-  const turnoLibro = useRef(0);
-  const turnoWallet = useRef(0);
+  const aplicadoWallet = useRef<FiltrosWallet>(FILTROS_WALLET_VACIOS);
+  const aplicadoLibro = useRef<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
+  /**
+   * FICHA 463 (R49, tercera vuelta B4) — UN solo turno para toda lectura de la caja. Solo la ÚLTIMA
+   * pedida pinta o avisa: una respuesta de una selección ya superada —buena o mala, de la zona que
+   * sea— se descarta. Con dos turnos (uno por zona) un fallo de una zona dejaba pintado lo que la
+   * otra había leído con OTRA selección (libro de un periodo, cifras de otro).
+   */
+  const turno = useRef(0);
+  /** La lectura en vuelo es de la zona de la wallet: un cambio del libro se le suma (B4). */
+  const vueloTodo = useRef(false);
 
   // FICHA 458-E (R56/R57) — la autoría de la página que se está viendo. La clave son los ids de la
   // página: cambiar de filtro, de página o releer tras registrar/anular trae filas nuevas y la
@@ -298,14 +313,33 @@ export function WalletModule({
     }
   }
 
-  /** R49 — la lectura falló: lo pedido vuelve a lo aplicado y el periodo del control también. */
-  function deshacerPedido() {
-    pedidoWallet.current = filtrosWallet;
-    pedidoLibro.current = filtrosLibro;
-    setSiembraPeriodo((s) => ({
-      senal: (s?.senal ?? 0) + 1,
-      seleccion: seleccionDePeriodo(filtrosWallet.desde, filtrosWallet.hasta),
-    }));
+  /**
+   * R49 — la lectura falló (con respuesta de error o lanzando): se avisa, la pantalla se queda TAL
+   * CUAL (nada se pintó) y lo pedido vuelve a lo aplicado, con el periodo y el término de los controles.
+   */
+  function fallo(status: "forbidden" | "unauthenticated" | "validation_error" | null) {
+    if (status === null) toast.error(LECTURA_CAJA_FALLO);
+    else manejarError(status);
+    pedidoWallet.current = aplicadoWallet.current;
+    pedidoLibro.current = aplicadoLibro.current;
+    const fw = aplicadoWallet.current;
+    const termino = aplicadoLibro.current.termino;
+    setSiembraPeriodo((s) => ({ senal: (s?.senal ?? 0) + 1, seleccion: seleccionDePeriodo(fw.desde, fw.hasta) }));
+    setSiembraTermino((s) => ({ senal: (s?.senal ?? 0) + 1, termino }));
+  }
+
+  /** Toma el turno: desde aquí, cualquier lectura anterior llega tarde y no pinta. */
+  function tomarTurno(tipo: "todo" | "libro"): number {
+    vueloTodo.current = tipo === "todo";
+    setCargando(tipo);
+    return ++turno.current;
+  }
+
+  /** Suelta el turno si sigue siendo el último. */
+  function soltarTurno(mio: number) {
+    if (mio !== turno.current) return;
+    vueloTodo.current = false;
+    setCargando(null);
   }
 
   /**
@@ -315,13 +349,16 @@ export function WalletModule({
    *
    * El conteo de la tarjeta (R9) es el del libro sin filtros del libro: si hay alguno puesto, se pide
    * aparte una página de una fila con la zona de la wallet, que trae el `total` del conjunto.
+   *
+   * FICHA 463 (R49, tercera vuelta) — ATÓMICA: cifras y libro se pintan JUNTOS y solo si TODAS las
+   * lecturas salieron bien; si una falla o lanza, no se pinta nada y se avisa.
    */
   async function recargarTodo(fw: FiltrosWallet, fl: FiltrosLibro, nextPage: number) {
-    const miLibro = ++turnoLibro.current;
-    const miWallet = ++turnoWallet.current;
+    pedidoWallet.current = fw;
+    pedidoLibro.current = fl;
+    const mio = tomarTurno("todo");
     const entradaWallet = paginado(inputDeWallet(fw), nextPage, pageSize);
     const conFiltrosDeLibro = hayFiltrosDeLibro(fl);
-    setCargandoWallet(true);
     try {
       const [movRes, resRes, desRes, totRes] = await Promise.all([
         listarMovimientosAction(paginado(inputDeLibro(fw, fl), nextPage, pageSize)),
@@ -329,61 +366,67 @@ export function WalletModule({
         verDesgloseEgresosAction(entradaWallet),
         conFiltrosDeLibro ? listarMovimientosAction(paginado(inputDeWallet(fw), 1, 1)) : Promise.resolve(null),
       ]);
-      if (miWallet !== turnoWallet.current) return; // llegó otra lectura de la wallet después
+      if (mio !== turno.current) return; // una selección posterior manda
 
       for (const r of [movRes, resRes, desRes, totRes]) {
-        if (r !== null && r.status !== "ok") {
-          manejarError(r.status);
-          deshacerPedido();
-          return;
-        }
+        if (r !== null && r.status !== "ok") return fallo(r.status);
       }
       if (movRes.status !== "ok" || resRes.status !== "ok" || desRes.status !== "ok") return;
 
+      aplicadoWallet.current = fw;
+      aplicadoLibro.current = fl;
       setResumen(resRes.resumen);
       setComposicion(resRes.composicion);
       setDesglose(desRes.desglose);
       setTotalWallet(totRes !== null && totRes.status === "ok" ? totRes.data.total : movRes.data.total);
       setFiltrosWallet(fw);
-      // El libro de esta respuesta solo se pinta si nadie pidió otro libro mientras tanto.
-      if (miLibro === turnoLibro.current) {
-        setMovimientos(movRes.data.movimientos);
-        setTotal(movRes.data.total);
-        setPage(movRes.data.page);
-        setFiltrosLibro(fl);
-      }
+      setMovimientos(movRes.data.movimientos);
+      setTotal(movRes.data.total);
+      setPage(movRes.data.page);
+      setFiltrosLibro(fl);
+    } catch {
+      if (mio === turno.current) fallo(null);
     } finally {
-      if (miWallet === turnoWallet.current) setCargandoWallet(false);
+      soltarTurno(mio);
     }
   }
 
   /**
    * FICHA 463 (R9/R29/R35) — relee SOLO el libro: término, Entra/Sale, categoría, orden o página. Las
-   * cifras de la wallet ni se piden ni se tocan.
+   * cifras de la wallet ni se piden ni se tocan. Se lee con la wallet APLICADA (la que dicen las cifras).
    */
   async function recargarLibro(fl: FiltrosLibro, nextPage: number) {
-    const miLibro = ++turnoLibro.current;
-    setCargandoLibro(true);
+    pedidoLibro.current = fl;
+    const mio = tomarTurno("libro");
+    const fw = aplicadoWallet.current;
     try {
-      const movRes = await listarMovimientosAction(paginado(inputDeLibro(pedidoWallet.current, fl), nextPage, pageSize));
-      if (miLibro !== turnoLibro.current) return;
-      if (movRes.status !== "ok") {
-        manejarError(movRes.status);
-        pedidoLibro.current = filtrosLibro;
-        return;
-      }
+      const movRes = await listarMovimientosAction(paginado(inputDeLibro(fw, fl), nextPage, pageSize));
+      if (mio !== turno.current) return;
+      if (movRes.status !== "ok") return fallo(movRes.status);
+      aplicadoLibro.current = fl;
       setMovimientos(movRes.data.movimientos);
       setTotal(movRes.data.total);
       setPage(movRes.data.page);
       setFiltrosLibro(fl);
+    } catch {
+      if (mio === turno.current) fallo(null);
     } finally {
-      if (miLibro === turnoLibro.current) setCargandoLibro(false);
+      soltarTurno(mio);
     }
+  }
+
+  /**
+   * Un cambio de la zona del libro. Si hay una lectura de la WALLET en vuelo, la selección nueva aún no
+   * está confirmada: el cambio se suma a ella y se relee TODO junto (B4), en vez de leer un libro con
+   * un periodo que todavía puede fallar.
+   */
+  function pedirLibro(fl: FiltrosLibro, nextPage: number) {
+    if (vueloTodo.current) void recargarTodo(pedidoWallet.current, fl, 1);
+    else void recargarLibro(fl, nextPage);
   }
 
   /** R8/R19/R20 — la zona de la wallet: periodo aplicado o quitado, «A quién» elegido o quitado. */
   function cambiarWallet(fw: FiltrosWallet) {
-    pedidoWallet.current = fw;
     void recargarTodo(fw, pedidoLibro.current, 1); // R8: vuelve a la primera página
   }
 
@@ -391,8 +434,7 @@ export function WalletModule({
   function cambiarLibro(cambio: Partial<FiltrosLibro>) {
     const siguiente = { ...pedidoLibro.current, ...cambio };
     if (mismoLibro(siguiente, pedidoLibro.current)) return;
-    pedidoLibro.current = siguiente;
-    void recargarLibro(siguiente, 1);
+    pedirLibro(siguiente, 1);
   }
 
   /** R30 — «Limpiar todo» del libro: fuera término, dirección y categoría; el orden se queda. */
@@ -401,16 +443,20 @@ export function WalletModule({
   }
 
   function cambiarPagina(nextPage: number) {
-    void recargarLibro(filtrosLibro, nextPage);
+    pedirLibro(pedidoLibro.current, nextPage);
   }
 
   /** R60 — tras registrar, anular o adjuntar: relee todo con los filtros vigentes Y la autoría. */
   async function recargarTrasCambio() {
-    await recargarTodo(filtrosWallet, filtrosLibro, page);
+    // Con un cambio aún en vuelo se relee lo PEDIDO (página 1); si no, lo aplicado en su página.
+    const fw = pedidoWallet.current;
+    const fl = pedidoLibro.current;
+    const sinPendientes = fw === aplicadoWallet.current && fl === aplicadoLibro.current;
+    await recargarTodo(fw, fl, sinPendientes ? page : 1);
     setVersionAutoria((v) => v + 1);
   }
 
-  const loading = cargandoWallet || cargandoLibro;
+  const loading = cargando !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -554,6 +600,7 @@ export function WalletModule({
                   valor={filtrosLibro}
                   onCambiar={cambiarLibro}
                   onLimpiar={limpiarLibro}
+                  siembraTermino={siembraTermino}
                   disabled={loading}
                 />
               }

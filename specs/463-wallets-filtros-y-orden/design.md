@@ -216,7 +216,8 @@ Término / Entra-Sale / categoría / orden ──► recargarLibro(fw, fl, 1)
 ```
 
 Si una de las lecturas falla: toast y NO se pisa ningún estado (R49) — hoy ya es así en `recargar`,
-se conserva.
+se conserva. (Precisado en la tercera vuelta: ver §9.7 —zona de la wallet ATÓMICA, excepciones
+incluidas, un único turno—.)
 
 ## 7. Alternativas descartadas
 
@@ -281,4 +282,26 @@ Y, de la vuelta de revisión:
    del saldo inicial se calcula con la selección de lo pintado, no con lo pedido (m2).
 6. **Conmutadores del libro de la caja durante una lectura** (m1): no se deshabilitan ni se tragan el
    clic. El módulo compone el cambio con lo PEDIDO y le da turno (`turnoLibro`): se pinta la última
-   lectura pedida.
+   lectura pedida. (En la tercera vuelta los dos turnos pasan a ser uno solo: ver 7.)
+
+Y, de la segunda revisión (B3/B4, decisión del leader):
+
+7. **R49 en la caja: la zona de la wallet es ATÓMICA y un fallo es también una lectura que LANZA**
+   (`WalletModule.tsx`). Un cambio de la zona superior (periodo / «A quién») pide cifras Y libro; solo si
+   TODAS las lecturas salen bien se pintan JUNTAS y se confirma la selección. Si cualquiera falla —con
+   respuesta de error o lanzando (red caída, 500, tiempo agotado: `catch`)—, se conserva la última
+   pantalla buena completa (cifras + libro + controles; el periodo por la `siembra` del calendario y el
+   término por la del buscador) y se avisa (toast; el de «sin respuesta» es `LECTURA_CAJA_FALLO`). Un
+   cambio de la zona del libro (término, orden, Entra/Sale, categoría, página) relee solo el libro, con
+   la wallet APLICADA; si falla o lanza, el libro y sus controles vuelven a la última lectura buena.
+   - **Un solo turno** (`turno`) para toda lectura de la caja en lugar de uno por zona: la respuesta de
+     una selección ya superada —buena o mala, de cualquier zona— nunca se pinta ni avisa. Con dos turnos
+     un fallo de una zona dejaba pintado lo que la otra había leído con otra selección (B4).
+   - **Un cambio del libro con la wallet en vuelo se SUMA a ella**: la selección nueva aún no está
+     confirmada, así que se relee todo junto (periodo pedido + libro nuevo) en vez de leer un libro con
+     un periodo que todavía puede fallar. Cuesta repetir las lecturas de las cifras en ese caso raro; a
+     cambio, la pantalla nunca muestra cifras de una selección y libro de otra.
+   - Lo aplicado vive además en refs (`aplicadoWallet`/`aplicadoLibro`) para que el fallo restaure lo
+     vigente al llegar la respuesta, no lo del render que la pidió.
+   - Estado de cuenta (m7): una acción que LANZA ya avisaba y restauraba (el fetcher de SWR convierte el
+     rechazo en `onError`); queda fijado por test, sin cambio de código.

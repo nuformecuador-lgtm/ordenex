@@ -43,6 +43,11 @@ export interface LibroCajaBarraProps {
    * su clic se pide igual y el módulo, con sus turnos, pinta el último (revisión m1).
    */
   disabled?: boolean;
+  /**
+   * FICHA 463 (R49, tercera vuelta) — si una lectura falla, el módulo REPONE en el campo el término que
+   * sigue aplicado. No emite: no vuelve a leer.
+   */
+  siembraTermino?: { senal: number; termino: string };
 }
 
 /** El `tipo` aplicado ↔ la opción del filtro segmentado («» = todo). */
@@ -50,7 +55,14 @@ function direccionDe(tipo: string): DireccionFiltro {
   return tipo === "ingreso" || tipo === "egreso" ? tipo : "todo";
 }
 
-export function LibroCajaBarra({ filtrosWallet, valor, onCambiar, onLimpiar, disabled = false }: Readonly<LibroCajaBarraProps>) {
+export function LibroCajaBarra({
+  filtrosWallet,
+  valor,
+  onCambiar,
+  onLimpiar,
+  disabled = false,
+  siembraTermino,
+}: Readonly<LibroCajaBarraProps>) {
   const tipo = (valor.tipo || undefined) as WalletMovimientoTipo | undefined;
 
   // R13: los conceptos del periodo y «A quién» APLICADOS y de la dirección vigente, no del catálogo.
@@ -76,6 +88,7 @@ export function LibroCajaBarra({ filtrosWallet, valor, onCambiar, onLimpiar, dis
         placeholder={BUSCADOR_LIBRO_CAJA_PLACEHOLDER}
         minChars={BUSQUEDA_LIBRO_MIN_CHARS}
         leerDeUrl={false}
+        siembra={siembraTermino}
         onChange={(termino) => onCambiar({ termino })}
         onLimpiarTodo={onLimpiar}
         hayFiltrosAplicados={hayFiltrosDeLibro(valor)}
@@ -84,7 +97,7 @@ export function LibroCajaBarra({ filtrosWallet, valor, onCambiar, onLimpiar, dis
           options={ORDEN_LIBRO.opciones}
           valor={valor.sortDir}
           // Revisión m1: un clic mientras se lee NO se ignora. El módulo lo compone con lo PEDIDO y
-          // le da turno propio (`turnoLibro`): se pinta la última lectura pedida, no la primera.
+          // le da turno (`turno`, uno para toda la caja): se pinta la última lectura pedida, no la primera.
           onChange={(sortDir) => onCambiar({ sortDir })}
           ariaLabel={ORDEN_LIBRO.nombre}
         />
