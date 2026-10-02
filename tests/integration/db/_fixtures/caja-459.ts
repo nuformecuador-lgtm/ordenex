@@ -66,6 +66,7 @@ import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { sinRetenidas } from "@/tests/fixtures/retenidas-doble";
 
 import { clienteConSavepoint, serializarEscriturasReales, type TxDeTest } from "../_postgres-real";
+import { busquedaPorGuiaDe } from "./busqueda-469";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 459 / T0.1 — EL ESCENARIO QUE EJERCE TODOS LOS CAMINOS QUE ESCRIBEN EN LA CAJA O EN EL
@@ -318,7 +319,7 @@ export function montarServicios459(tx: TxDeTest) {
       // Ficha 458-C (revision B3, R71): el pago de Ordenex a una tienda y el premio del ranking.
       pagosATienda: new PagoTiendaCajaDocumentosRepository(c),
       premios: new PremioCajaDocumentosRepository(c),
-    }),
+    }, undefined, busquedaPorGuiaDe(c)), // FICHA 469: como `buildService()`, con la busqueda por guia
     // Ficha 459 (T B.14) — los dos escritores nuevos, cableados como su `buildService()`.
     pagoPorCuenta: new PagoPorCuentaTiendaService(
       new PagoPorCuentaTiendaRepository(c),

@@ -19,6 +19,7 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import type { TxDeTest } from "../_postgres-real";
 import { montarServicios459, type Catalogo459 } from "./caja-459";
 import { montarEstadoCuenta } from "./wallet-458";
+import { busquedaPorGuiaDe } from "./busqueda-469";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 468 — EL ESCENARIO DEL LIBRO EN EXCEL (kardex + detalle por guia), CONTRA POSTGRES.
@@ -346,7 +347,7 @@ export async function sembrar468(tx: TxDeTest, cat: Catalogo459): Promise<Escena
     aportes,
     cajaRepo,
     lote,
-    fila: new DetalleMovimientoService(cajaRepo, tiendaRepo, aportes, ecRepo),
+    fila: new DetalleMovimientoService(cajaRepo, tiendaRepo, aportes, ecRepo, busquedaPorGuiaDe(cliente)),
     caja: new CajaKardexService(s.wallet, cajaRepo, lote),
     cuenta: new CuentaKardexService(montarEstadoCuenta(s), lote),
     ordenDe: (clave) => {

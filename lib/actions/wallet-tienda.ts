@@ -54,6 +54,7 @@ import {
 } from "@/lib/types/detalle-movimiento";
 import { separarComprobante } from "@/lib/types/wallet-laterales";
 import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
+import { buildBusquedaPorGuia } from "@/lib/actions/_shared/busqueda-por-guia";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -140,6 +141,7 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
     new EstadoCuentaRepository(prisma), // 458-D (servidor, R19): la fila del mensajero; este borde no la usa
+    buildBusquedaPorGuia(prisma), // FICHA 469 (R25–R29): la guia buscada, con la tienda del actor
   );
 }
 

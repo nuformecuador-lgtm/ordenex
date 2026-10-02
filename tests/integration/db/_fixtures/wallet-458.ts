@@ -13,6 +13,7 @@ import type { EstadoCuentaDTO, EstadoCuentaInput, FilaEstadoCuentaDTO } from "@/
 
 import type { TxDeTest } from "../_postgres-real";
 import { montarServicios459, type Catalogo459, type Servicios459 } from "./caja-459";
+import { busquedaPorGuiaDe } from "./busqueda-469";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-B / TB.1 — EL ESCENARIO DE LA FOTOGRAFIA DE LAS CUENTAS (design §8.1).
@@ -359,6 +360,7 @@ export function montarEstadoCuenta(s: Servicios459): EstadoCuentaService {
     new EstadoCuentaRepository(s.cliente),
     new RechazoTiendaCobroAnulacionRepository(s.cliente),
     new OrigenLegibleService(new OrigenLegibleRepository(s.cliente)),
+    busquedaPorGuiaDe(s.cliente), // FICHA 469: como `buildService()`
   );
 }
 

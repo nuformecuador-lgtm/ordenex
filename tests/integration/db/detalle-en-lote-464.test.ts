@@ -24,6 +24,7 @@ import { CRITERIO_COD_RECAUDADO, CRITERIO_DE_APORTE, type CriterioDeAporte } fro
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, type TxDeTest } from "./_postgres-real";
 import { cargarCatalogo459, enTransaccionRevertida459, montarServicios459, type Catalogo459 } from "./_fixtures/caja-459";
 import { montarEstadoCuenta } from "./_fixtures/wallet-458";
+import { busquedaPorGuiaDe } from "./_fixtures/busqueda-469";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 464 / T4 + T6 — EL DETALLE POR ORDEN EN LOTE, CONTRA POSTGRES DE VERDAD.
@@ -331,7 +332,7 @@ async function sembrar(tx: TxDeTest, cat: Catalogo459): Promise<Escenario> {
     cliente,
     s,
     aportes,
-    fila: new DetalleMovimientoService(cajaRepo, tiendaRepo, aportes, new EstadoCuentaRepository(cliente)),
+    fila: new DetalleMovimientoService(cajaRepo, tiendaRepo, aportes, new EstadoCuentaRepository(cliente), busquedaPorGuiaDe(cliente)),
     lote: new DetalleEnLoteService(aportes, tiendaRepo, new EstadoCuentaRepository(cliente)),
     remisionDe: (clave) => {
       const r = remisiones.get(clave);

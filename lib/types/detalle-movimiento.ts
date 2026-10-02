@@ -66,10 +66,15 @@ export interface OrdenAporteDTO {
   resultados: GestionResultado[];
   /** STRING escala 2 (R44). Ni el borde ni la pantalla lo recalculan. */
   aporte: string;
-  /**
-   * FICHA 469 (design §4.1, R26) — esta orden es una de las que identifico la busqueda por guia
-   * (`resaltar`). Siempre `false` sin busqueda por guia (R28) y en el archivo del detalle.
-   */
+}
+
+/**
+ * FICHA 469 (design §4.1, R26) — una fila de la PAGINA del detalle: la de siempre mas `resaltada`.
+ * Tipo aparte (y no un campo de `OrdenAporteDTO`) porque el ARCHIVO del detalle no resalta nada y sigue
+ * con `OrdenAporteDTO` tal cual. Desviacion menor del design §4.1, anotada en `progress/impl_469.md`.
+ */
+export interface OrdenDeDetalleDTO extends OrdenAporteDTO {
+  /** Esta orden es una de las que identifico la busqueda por guia (`resaltar`). `false` sin ella (R28). */
   resaltada: boolean;
 }
 
@@ -90,7 +95,7 @@ export interface DetalleMovimientoPayload {
   total: number;
   page: number;
   pageSize: number;
-  ordenes: OrdenAporteDTO[];
+  ordenes: OrdenDeDetalleDTO[];
   /**
    * FICHA 469 (design §4.1, R25/R27/R29) — las ordenes identificadas por la busqueda por guia que APORTAN
    * a este movimiento, TODAS (no solo las de la pagina visible), con la MISMA forma y el MISMO aporte que
