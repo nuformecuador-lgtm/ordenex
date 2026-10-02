@@ -149,8 +149,10 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
         tiendaNombre: "Tienda A",
         resultados: ["entregado"],
         aporte: "1000.00", // el flete congelado, re-derivado
+        resaltada: false, // FICHA 469 (R28): sin busqueda por guia nada sale resaltado
       },
     ]);
+    expect(r.data.destacadas).toEqual([]); // FICHA 469 (R28): sin bloque destacado
     // El `total` NO es el largo de la pagina: aqui hay 1 fila y 14 aportantes.
     expect(r.data.total).not.toBe(r.data.ordenes.length);
     // Y la caja no se acota por tienda: la clave no viaja al repositorio.
