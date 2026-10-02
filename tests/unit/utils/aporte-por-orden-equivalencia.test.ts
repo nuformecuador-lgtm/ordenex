@@ -6,6 +6,8 @@ import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import {
   CRITERIO_COD_RECAUDADO,
   CRITERIO_DE_APORTE,
+  CRITERIO_INDEMNIZACION,
+  CRITERIO_PAGO_MENSAJERO,
   satisfaceCriterio,
 } from "@/lib/utils/aporte-por-orden";
 import { CRITERIO_RECAUDO_ENTREGA } from "@/lib/utils/dinero-por-producto";
@@ -94,6 +96,8 @@ function satisface(
     // Asi es como el `WHERE` lo lee: `monto_cobrar > 0` deja fuera tambien el NULL.
     hayMontoCobrar: hechos.montoCobrar !== null && new Prisma.Decimal(hechos.montoCobrar).gt(0),
     hayMontoRecibido: false,
+    hayPagoMensajero: false,
+    hayIndemnizacion: false,
   });
 }
 
@@ -203,6 +207,8 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
             hayTarifa: false,
             hayMontoCobrar: false,
             hayMontoRecibido,
+            hayPagoMensajero: false,
+            hayIndemnizacion: false,
           }),
           `celda cod_recaudado / ${resultado} / hayMontoRecibido=${hayMontoRecibido}`,
         ).toBe(hayMontoRecibido);
@@ -233,6 +239,8 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
                 hayTarifa,
                 hayMontoCobrar: false,
                 hayMontoRecibido,
+                hayPagoMensajero: false,
+                hayIndemnizacion: false,
               }),
               `celda recaudo_entrega / ${resultado} / com=${cobraComision} / tar=${hayTarifa} / rec=${hayMontoRecibido}`,
             ).toBe(esperado);
@@ -259,6 +267,8 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
         hayTarifa: false,
         hayMontoCobrar: false,
         hayMontoRecibido: true,
+        hayPagoMensajero: false,
+        hayIndemnizacion: false,
       };
       expect(satisfaceCriterio(CRITERIO_COD_RECAUDADO, hechos), resultado).toBe(true);
       expect(satisfaceCriterio(CRITERIO_RECAUDO_ENTREGA, hechos), resultado).toBe(false);
@@ -274,12 +284,78 @@ describe("ficha 344 — el criterio de aporte y la formula no pueden divergir (R
       "exigeTarifa", // cierre_detail.tarifa_id
       "exigeMontoCobrar", // cierre_detail.monto_cobrar
       "exigeMontoRecibido", // gestion_orden.monto_recibido
+      "exigePagoMensajero", // gestion_orden.pago_mensajero (ficha 468)
+      "exigeIndemnizacion", // gestion_orden.indemnizacion (ficha 468)
     ];
     for (const concepto of WALLET_INGRESO_CONCEPTO_SEED) {
       expect(Object.keys(CRITERIO_DE_APORTE[concepto]).sort()).toEqual(
         [...HECHOS_PERMITIDOS].sort(),
       );
     }
-    expect(Object.keys(CRITERIO_COD_RECAUDADO).sort()).toEqual([...HECHOS_PERMITIDOS].sort());
+    for (const criterio of [CRITERIO_COD_RECAUDADO, CRITERIO_PAGO_MENSAJERO, CRITERIO_INDEMNIZACION]) {
+      expect(Object.keys(criterio).sort()).toEqual([...HECHOS_PERMITIDOS].sort());
+    }
+  });
+});
+
+/**
+ * FICHA 468 (T3, design §2.2, R27) — los criterios de los dos snapshots por gestion contra lo que HACE
+ * su feed. El pago al mensajero (`WalletMensajeroFeedService` lee `total_pago_mensajero`, la suma de
+ * `pago_mensajero` de TODA gestion del cierre) no mira el resultado; la indemnizacion
+ * (`WalletIndemnizacionFeedService`) suma solo las gestiones `incidente` con monto. En los dos, lo que
+ * vale 0 o NULL no aporta (supresion de ceros, exacta: suma de montos no negativos).
+ *
+ * Se recorren las 5 x 2^6 = 320 combinaciones de hechos: ningun hecho ajeno puede colarse en el
+ * criterio sin poner rojo una celda. MUTACION EJECUTADA (impl_468): quitar la rama
+ * `exigePagoMensajero` de `satisfaceCriterio` pone rojo el primer caso.
+ */
+describe("ficha 468 — R27: los criterios del pago al mensajero y de la indemnizacion", () => {
+  function* combinaciones() {
+    for (const resultado of RESULTADOS) {
+      for (const cobraComision of [true, false]) {
+        for (const hayTarifa of [true, false]) {
+          for (const hayMontoCobrar of [true, false]) {
+            for (const hayMontoRecibido of [true, false]) {
+              for (const hayPagoMensajero of [true, false]) {
+                for (const hayIndemnizacion of [true, false]) {
+                  yield { resultado, cobraComision, hayTarifa, hayMontoCobrar, hayMontoRecibido, hayPagoMensajero, hayIndemnizacion };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  it("R27: el pago al mensajero aporta EXACTAMENTE cuando la gestion tiene pago > 0, sea cual sea el resto", () => {
+    let celdas = 0;
+    for (const hechos of combinaciones()) {
+      expect(satisfaceCriterio(CRITERIO_PAGO_MENSAJERO, hechos), JSON.stringify(hechos)).toBe(hechos.hayPagoMensajero);
+      celdas += 1;
+    }
+    expect(celdas).toBe(320);
+  });
+
+  it("R27: la indemnizacion aporta EXACTAMENTE en una gestion `incidente` con indemnizacion > 0", () => {
+    let celdas = 0;
+    let aportan = 0;
+    for (const hechos of combinaciones()) {
+      const esperado = hechos.resultado === "incidente" && hechos.hayIndemnizacion;
+      expect(satisfaceCriterio(CRITERIO_INDEMNIZACION, hechos), JSON.stringify(hechos)).toBe(esperado);
+      if (esperado) aportan += 1;
+      celdas += 1;
+    }
+    expect(celdas).toBe(320);
+    expect(aportan, "ninguna celda aporta: el caso no mediria nada").toBe(32);
+  });
+
+  it("R27: los criterios anteriores no miran los dos hechos nuevos (ni el COD recaudado ni los seis del feed)", () => {
+    for (const hechos of combinaciones()) {
+      const sinNuevos = { ...hechos, hayPagoMensajero: false, hayIndemnizacion: false };
+      for (const criterio of [CRITERIO_COD_RECAUDADO, ...Object.values(CRITERIO_DE_APORTE)]) {
+        expect(satisfaceCriterio(criterio, hechos)).toBe(satisfaceCriterio(criterio, sinNuevos));
+      }
+    }
   });
 });

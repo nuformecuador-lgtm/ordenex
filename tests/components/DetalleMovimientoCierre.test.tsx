@@ -429,8 +429,9 @@ describe("Ficha 344 — el concepto que no se reparte (R48)", () => {
     // MUTACIÓN QUE ESTE CASO MATA: que la rama `sin_reparto` se quede MUDA (un panel vacío, o
     // el mismo estado vacío de la tabla). El panel tiene que REDACTAR de dónde sale el importe:
     // un panel en blanco se lee como «la pantalla está rota», que es justo lo que R48 prohíbe.
+    // FICHA 468 (design §2.4, R19): el texto del motivo ya no dice «snapshot» ni «total del cierre».
     expect(
-      await within(region).findByText(/el total que el cierre del día dejó anotado/),
+      await within(region).findByText(/se le pagó al mensajero con el efectivo que entregó/),
     ).toBeInTheDocument();
     expect((region.textContent ?? "").trim().length).toBeGreaterThan(80);
 
@@ -439,15 +440,15 @@ describe("Ficha 344 — el concepto que no se reparte (R48)", () => {
     expect(within(region).queryByRole("button", { name: /^Descargar/ })).toBeNull();
   });
 
-  it("R48/R49: los TRES conceptos sin reparto tienen frase propia, ninguno queda mudo", async () => {
+  // FICHA 468 (R19/R27) — SUSTITUYE a «R48/R49: los TRES conceptos sin reparto…»: el contra-entrega y la
+  // indemnización de la caja ya se reparten por guía; quedan DOS motivos, cada uno con su frase.
+  it("468 R19/R27 (antes 344 R48/R49): los DOS motivos sin reparto tienen frase propia, ninguno queda mudo", async () => {
     const motivos = [
-      ["snapshot_del_cierre", /el total que el cierre del día dejó anotado/],
-      ["suma_del_libro_por_tienda", /la suma de lo que ese mismo cierre le acreditó a cada tienda/],
-      ["otro_productor", /la indemnización anotada en cada gestión/],
+      ["snapshot_del_cierre", /se le pagó al mensajero con el efectivo que entregó/],
       ["no_nace_de_un_cierre", /no nace del cierre del día/],
     ] as const;
     // El catálogo es un `Record` TOTAL: si mañana nace un motivo sin frase, el build no compila.
-    expect(motivos).toHaveLength(4);
+    expect(motivos).toHaveLength(2);
 
     for (const [motivo, frase] of motivos) {
       detalleMock.mockReset();

@@ -101,7 +101,7 @@ function enlazarCaja(movs: WalletMovimientoDTO[], detalle: DetalleDeMovimientoLo
     filaDe: (m) => filaDescargaMovimientoCaja(m),
     detalle,
     filaDetalleDe: filaDetallePorOrdenCaja,
-    textoEstado: (d) => textoDetallePorOrden(d, { no_nace_de_un_cierre: "NO NACE", snapshot_del_cierre: "SNAPSHOT", suma_del_libro_por_tienda: "SUMA", otro_productor: "OTRO" }),
+    textoEstado: (d) => textoDetallePorOrden(d, { no_nace_de_un_cierre: "NO NACE", snapshot_del_cierre: "SNAPSHOT" }),
     claveEnlace: COLUMNA_NUMERO_MOVIMIENTO.clave,
     claveEstado: COLUMNA_DETALLE_POR_ORDEN.clave,
   });
@@ -195,11 +195,12 @@ describe("464 R16/R23 — el texto de «Detalle por orden»", () => {
     );
   });
 
-  it("sin reparto: el motivo, sacado del diccionario de la superficie (el MISMO del panel)", () => {
+  // FICHA 468 (design §2.4, R19): el texto del motivo cambio (sin «snapshot»); el diccionario sigue siendo
+  // el MISMO del panel en las dos superficies.
+  it("468 R19 (antes 464): sin reparto, el motivo sale del diccionario de la superficie (el MISMO del panel)", () => {
     expect(textoDetallePorOrden({ movimientoId: "m", modo: "sin_reparto", motivo: "snapshot_del_cierre" }, SIN)).toBe("b");
-    expect(DETALLE_DESCARGA_WALLET_TIENDA.sinReparto.snapshot_del_cierre).toContain("pagarle al mensajero");
-    // `/mi-wallet` lo dice desde la tienda, con su propio texto (el de su panel).
-    expect(DETALLE_DESCARGA_MI_WALLET.sinReparto.snapshot_del_cierre).toContain("tus órdenes");
+    expect(DETALLE_DESCARGA_WALLET_TIENDA.sinReparto.snapshot_del_cierre).toContain("efectivo que entregó");
+    expect(DETALLE_DESCARGA_MI_WALLET.sinReparto.snapshot_del_cierre).toContain("efectivo que entregó");
   });
 });
 
@@ -315,7 +316,7 @@ describe("464 R28–R31 — las proyecciones de una orden", () => {
     const b = mov(2);
     const { filas, filasDetalle } = enlazarCaja(
       [a, b],
-      [conOrdenes(a.id, [orden(1, "4.00")], "4.00"), { movimientoId: b.id, modo: "sin_reparto", motivo: "otro_productor" }],
+      [conOrdenes(a.id, [orden(1, "4.00")], "4.00"), { movimientoId: b.id, modo: "sin_reparto", motivo: "snapshot_del_cierre" }],
     );
     for (const fila of [...filas, ...filasDetalle]) {
       for (const celda of Object.values(fila)) expect(String(celda)).not.toMatch(UUID);

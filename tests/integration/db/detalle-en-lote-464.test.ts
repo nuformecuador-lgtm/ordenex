@@ -307,14 +307,15 @@ async function sembrar(tx: TxDeTest, cat: Catalogo459): Promise<Escenario> {
     expect(porTienda.length, `el feed por tienda no emitio nada para ${clave}`).toBeGreaterThan(0);
     expect(await tiendaRepo.crearMovimientos(cliente, porTienda)).toBe(porTienda.length);
   }
-  // Un movimiento de cierre SIN reparto en la misma ventana (su importe es un snapshot del cierre).
+  // Un movimiento SIN reparto en la misma ventana. FICHA 468 (R27): el pago al mensajero de un cierre ya se
+  // reparte; la que sigue sin reparto es la indemnizacion que nace de un INCIDENTE (fuera de alcance).
   await cajaRepo.crearMovimientos(cliente, [
     {
       tipo: "egreso",
-      categoria: "egreso_pago_mensajero",
+      categoria: "egreso_indemnizacion",
       monto: "12345.67",
-      origenTipo: "cierre_dia",
-      origenId: cierres.C1,
+      origenTipo: "orden_incidente",
+      origenId: randomUUID(),
       fechaMovimiento: new Date(FECHA_C1.getTime() + 60_000),
     },
   ]);
@@ -440,8 +441,9 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
       expect(o3).toHaveLength(2);
       expect(new Map(o3.map((f) => [f.cierreId, f.gestiones]))).toEqual(
         new Map([
-          [e.c1, [{ resultado: "reprogramado", montoRecibido: "500.00" }]],
-          [e.c2, [{ resultado: "entregado", montoRecibido: "7000.00" }]],
+          // FICHA 468: la gestion trae tambien sus dos snapshots (NULL en este escenario).
+          [e.c1, [{ resultado: "reprogramado", montoRecibido: "500.00", pagoMensajero: null, indemnizacion: null }]],
+          [e.c2, [{ resultado: "entregado", montoRecibido: "7000.00", pagoMensajero: null, indemnizacion: null }]],
         ]),
       );
       // o2: sus DOS gestiones de C1, en el orden del detalle de la fila. Dentro de la transaccion del
@@ -513,7 +515,7 @@ describeSiHayBase("464 — detalle por orden en lote (Postgres real)", () => {
         expect(o.destinatario).toMatch(/^Destinatario o\d$/);
       }
       const pago = conDetalle.detalle.find((d) => d.modo === "sin_reparto");
-      expect(pago).toMatchObject({ modo: "sin_reparto", motivo: "snapshot_del_cierre" });
+      expect(pago).toMatchObject({ modo: "sin_reparto", motivo: "no_nace_de_un_cierre" }); // 468: antes snapshot_del_cierre
       // El flete de C1 tiene sus 4 ordenes, o3 incluida NO.
       const fleteC1 = conDetalle.items.findIndex((m) => m.categoria === "ingreso_flete" && m.origenId === e.c1);
       const dC1 = conDetalle.detalle[fleteC1];

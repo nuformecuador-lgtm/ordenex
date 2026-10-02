@@ -34,21 +34,27 @@ import type { MotivoSinReparto } from "@/lib/types/detalle-movimiento";
 export type FuenteDeAporte =
   | { tipo: "concepto_ordenex"; concepto: WalletIngresoConcepto }
   | { tipo: "cod_recaudado" }
+  // FICHA 468 (design §2.1, R27) — un SNAPSHOT por gestion que el cierre ya guardo y cuya suma ES el
+  // importe del movimiento (medido en produccion el 2026-10-02: 100 % cuadra, `progress/medicion_468.md`).
+  | { tipo: "snapshot_gestion"; campo: CampoDeSnapshot }
   | { tipo: "sin_reparto"; motivo: MotivoSinReparto };
+
+/** FICHA 468 — las dos columnas de `gestion_orden` que se reparten tal cual por gestion. */
+export type CampoDeSnapshot = "pago_mensajero" | "indemnizacion";
 
 /**
  * R49 — el catalogo de la CAJA PRINCIPAL. `Record` TOTAL sobre el union de categorias: una
  * categoria nueva en el enum rompe el BUILD en vez de caer en un `default` silencioso. Es el
  * mismo recurso con el que `NATURALEZA_POR_CATEGORIA` clasifica el dueno del dinero.
  *
- * Los seis conceptos del feed del cierre se reparten por orden. Los tres que NO, con su motivo:
+ * Los seis conceptos del feed del cierre se reparten por orden. FICHA 468 (R27): tambien los tres
+ * que antes no, porque su importe ES la suma de una columna por gestion (medido, 100 % cuadra):
  *
- *  - `egreso_pago_mensajero`  -> su importe es el snapshot `cierre_dia.total_pago_mensajero`.
- *  - `ingreso_cod_recaudado`  -> es la suma de los creditos que ese cierre dejo en el libro POR
- *                               TIENDA. Repartirlo exigiria afirmar una invariante entre dos
- *                               snapshots que esta ficha NO ha medido.
- *  - `egreso_indemnizacion`   -> su fuente por orden EXISTE (`gestion_orden.indemnizacion`),
- *                               pero la emite un tercer productor; follow-up declarado.
+ *  - `egreso_pago_mensajero`  -> Σ `gestion_orden.pago_mensajero` del cierre (= `total_pago_mensajero`).
+ *  - `ingreso_cod_recaudado`  -> Σ `gestion_orden.monto_recibido` del cierre, sin acotar por tienda.
+ *  - `egreso_indemnizacion`   -> Σ `gestion_orden.indemnizacion` de las gestiones `incidente` del
+ *                               cierre. La que nace de un INCIDENTE (origen `orden_incidente`) sigue
+ *                               sin reparto: `fuenteDeMovimiento` la declara `no_nace_de_un_cierre`.
  *
  * Todo lo demas (`*_ajuste`, `egreso_gasto*`, `egreso_sueldo`, `egreso_pago_tienda`,
  * `ingreso_reverso_pago_tienda`) no nace de un cierre: no hay ordenes que ensenar.
@@ -63,9 +69,9 @@ export const FUENTE_CAJA: Record<WalletMovimientoCategoria, FuenteDeAporte> = {
     concepto: "ingreso_iva_flete_devolucion",
   },
   ingreso_iva_comision_cod: { tipo: "concepto_ordenex", concepto: "ingreso_iva_comision_cod" },
-  egreso_pago_mensajero: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
-  ingreso_cod_recaudado: { tipo: "sin_reparto", motivo: "suma_del_libro_por_tienda" },
-  egreso_indemnizacion: { tipo: "sin_reparto", motivo: "otro_productor" },
+  egreso_pago_mensajero: { tipo: "snapshot_gestion", campo: "pago_mensajero" },
+  ingreso_cod_recaudado: { tipo: "cod_recaudado" },
+  egreso_indemnizacion: { tipo: "snapshot_gestion", campo: "indemnizacion" },
   ingreso_ajuste: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   egreso_ajuste: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   egreso_gasto: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
@@ -136,19 +142,20 @@ export const FUENTE_TIENDA: Record<WalletTiendaMovimientoCategoria, FuenteDeApor
 /**
  * FICHA 458-D (servidor, R19) — el catalogo del LIBRO DEL MENSAJERO. `Record` TOTAL, mismo motivo.
  *
- * NINGUN concepto del mensajero se reparte por orden, y es un hecho medido, no una omision:
+ * FICHA 468 (R27, R43):
  *
- *  - `pago_devengado` es `cierre_dia.total_pago_mensajero` y `pago_efectivo` es `min(P, E)` del cierre
- *    (`WalletMensajeroFeedService`): los dos son SNAPSHOT del cierre entero, y `cierre_detail` no
- *    congela ningun pago por orden (no hay columna de la que sacarlo). Mismo motivo que
+ *  - `pago_devengado` es `cierre_dia.total_pago_mensajero` = Σ `gestion_orden.pago_mensajero` del
+ *    cierre (medido: 208 de 208 cuadran). Se reparte por guia con esa columna, igual que
  *    `egreso_pago_mensajero` en la caja.
+ *  - `pago_efectivo` es `min(P, E)` del cierre: repartirlo obligaria a decidir a que guias se carga el
+ *    faltante de efectivo, que seria una formula de dinero nueva. Sigue sin reparto (R43).
  *  - el resto (liquidacion, ajustes, premio del ranking) no nace de un cierre.
  *
  * La fila de cierre se abre igual y dice de donde sale su importe; el enlace a SU cierre lo da el
  * origen de la fila (R7).
  */
 export const FUENTE_MENSAJERO: Record<PagoMensajeroMovimientoCategoria, FuenteDeAporte> = {
-  pago_devengado: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
+  pago_devengado: { tipo: "snapshot_gestion", campo: "pago_mensajero" },
   pago_efectivo: { tipo: "sin_reparto", motivo: "snapshot_del_cierre" },
   liquidacion: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
   ajuste_devengo: { tipo: "sin_reparto", motivo: "no_nace_de_un_cierre" },
@@ -189,6 +196,10 @@ export interface CriterioDeAporte {
   exigeMontoCobrar: boolean;
   /** `gestion_orden.monto_recibido > 0`. Solo la usa `cod_recaudado`, por el mismo motivo. */
   exigeMontoRecibido: boolean;
+  /** FICHA 468 — `gestion_orden.pago_mensajero > 0` (supresion de ceros del pago al mensajero). */
+  exigePagoMensajero: boolean;
+  /** FICHA 468 — `gestion_orden.indemnizacion > 0` (supresion de ceros de la indemnizacion). */
+  exigeIndemnizacion: boolean;
 }
 
 /**
@@ -220,6 +231,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
   ingreso_iva_flete: {
     resultados: ["entregado"],
@@ -227,6 +240,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
   // FICHA 301 (2026-08-28): SOLO `rechazada`. La `devuelta` estuvo aqui y se fue por decision de
   // negocio. Volver a meterla sin tocar `derivarIngresoOrden` pone rojo el test de equivalencia,
@@ -237,6 +252,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
   ingreso_iva_flete_devolucion: {
     resultados: ["devolucion_a_origen_por_rechazo"],
@@ -244,6 +261,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: false,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
   // La comision COD y su IVA solo existen si la orden COBRA comision (R8/R26 de la 42). El
   // `exigeMontoCobrar` es la supresion de ceros, no parte de la formula.
@@ -253,6 +272,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: true,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
   ingreso_iva_comision_cod: {
     resultados: ["entregado"],
@@ -260,6 +281,8 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
     exigeTarifa: true,
     exigeMontoCobrar: true,
     exigeMontoRecibido: false,
+    exigePagoMensajero: false,
+    exigeIndemnizacion: false,
   },
 };
 
@@ -270,12 +293,59 @@ export const CRITERIO_DE_APORTE: Record<WalletIngresoConcepto, CriterioDeAporte>
  * ceros, que aqui SI es exacta: la suma de montos no negativos es mayor que cero exactamente
  * cuando alguno de ellos lo es.
  */
+const TODOS_LOS_RESULTADOS: readonly GestionResultado[] = [
+  "entregado",
+  "reprogramado",
+  "novedad",
+  "devolucion_a_origen_por_rechazo",
+  "incidente",
+];
+
 export const CRITERIO_COD_RECAUDADO: CriterioDeAporte = {
-  resultados: ["entregado", "reprogramado", "novedad", "devolucion_a_origen_por_rechazo", "incidente"],
+  resultados: TODOS_LOS_RESULTADOS,
   exigeCobraComision: false,
   exigeTarifa: false,
   exigeMontoCobrar: false,
   exigeMontoRecibido: true,
+  exigePagoMensajero: false,
+  exigeIndemnizacion: false,
+};
+
+/**
+ * FICHA 468 (design §2.2) — el criterio del PAGO AL MENSAJERO de un cierre (caja y libro del
+ * mensajero). El feed toma `total_pago_mensajero`, que es la suma de `pago_mensajero` de TODA gestion
+ * del cierre: no mira el resultado. Lo unico que se le anade es la supresion de ceros, exacta por el
+ * mismo motivo que la del recaudo (suma de montos no negativos).
+ */
+export const CRITERIO_PAGO_MENSAJERO: CriterioDeAporte = {
+  resultados: TODOS_LOS_RESULTADOS,
+  exigeCobraComision: false,
+  exigeTarifa: false,
+  exigeMontoCobrar: false,
+  exigeMontoRecibido: false,
+  exigePagoMensajero: true,
+  exigeIndemnizacion: false,
+};
+
+/**
+ * FICHA 468 (design §2.2) — el criterio de la INDEMNIZACION de un cierre: el MISMO predicado del feed
+ * (`WalletIndemnizacionFeedService`: `{ cierreId, resultado: "incidente" }`, ignorando el NULL) mas la
+ * supresion de ceros.
+ */
+export const CRITERIO_INDEMNIZACION: CriterioDeAporte = {
+  resultados: ["incidente"],
+  exigeCobraComision: false,
+  exigeTarifa: false,
+  exigeMontoCobrar: false,
+  exigeMontoRecibido: false,
+  exigePagoMensajero: false,
+  exigeIndemnizacion: true,
+};
+
+/** FICHA 468 — el criterio de cada snapshot por gestion. `Record` total sobre el union de campos. */
+export const CRITERIO_DE_SNAPSHOT: Record<CampoDeSnapshot, CriterioDeAporte> = {
+  pago_mensajero: CRITERIO_PAGO_MENSAJERO,
+  indemnizacion: CRITERIO_INDEMNIZACION,
 };
 
 /** Los cinco hechos ALMACENADOS de un par (orden congelada, gestion del cierre). */
@@ -287,6 +357,10 @@ export interface HechosDeAporte {
   hayMontoCobrar: boolean;
   /** `monto_recibido > 0` (un NULL cuenta como `false`: esa gestion no recaudo nada). */
   hayMontoRecibido: boolean;
+  /** FICHA 468 — `pago_mensajero > 0` (un NULL cuenta como `false`). */
+  hayPagoMensajero: boolean;
+  /** FICHA 468 — `indemnizacion > 0` (un NULL cuenta como `false`). */
+  hayIndemnizacion: boolean;
 }
 
 /**
@@ -300,6 +374,8 @@ export function satisfaceCriterio(criterio: CriterioDeAporte, hechos: HechosDeAp
   if (criterio.exigeCobraComision && !hechos.cobraComision) return false;
   if (criterio.exigeMontoCobrar && !hechos.hayMontoCobrar) return false;
   if (criterio.exigeMontoRecibido && !hechos.hayMontoRecibido) return false;
+  if (criterio.exigePagoMensajero && !hechos.hayPagoMensajero) return false;
+  if (criterio.exigeIndemnizacion && !hechos.hayIndemnizacion) return false;
   return true;
 }
 
@@ -307,6 +383,7 @@ export function satisfaceCriterio(criterio: CriterioDeAporte, hechos: HechosDeAp
 export function criterioDeFuente(fuente: FuenteDeAporte): CriterioDeAporte | null {
   if (fuente.tipo === "concepto_ordenex") return CRITERIO_DE_APORTE[fuente.concepto];
   if (fuente.tipo === "cod_recaudado") return CRITERIO_COD_RECAUDADO;
+  if (fuente.tipo === "snapshot_gestion") return CRITERIO_DE_SNAPSHOT[fuente.campo];
   return null;
 }
 
@@ -354,10 +431,35 @@ export interface OrdenCongelada {
   tarifa: TarifaVigente | null;
 }
 
-/** Una gestion de ESA orden en ESE cierre. `montoRecibido` STRING escala 2, o `null`. */
+/** Una gestion de ESA orden en ESE cierre. Los importes, STRING escala 2, o `null`. */
 export interface GestionDelCierre {
   resultado: GestionResultado;
   montoRecibido: string | null;
+  /** FICHA 468 — `gestion_orden.pago_mensajero` (snapshot del pago de ESA gestion). */
+  pagoMensajero: string | null;
+  /** FICHA 468 — `gestion_orden.indemnizacion` (NULL si la gestion no es `incidente`). */
+  indemnizacion: string | null;
+}
+
+type ImporteDeGestion = "montoRecibido" | "pagoMensajero" | "indemnizacion";
+
+/** La columna de la gestion que acumula cada fuente por snapshot. */
+const CAMPO_DE_GESTION: Record<"cod_recaudado" | CampoDeSnapshot, ImporteDeGestion> = {
+  cod_recaudado: "montoRecibido",
+  pago_mensajero: "pagoMensajero",
+  indemnizacion: "indemnizacion",
+};
+
+/**
+ * FICHA 468 (design §2.2) — Σ `g[campo] ?? 0` sobre las gestiones de ESA orden en ESE cierre. Es la MISMA
+ * acumulacion que el feed hizo sobre TODO el cierre, particionada por orden: sumas de valores a escala 2,
+ * exactas. `undefined` si no hay gestiones (la orden no aporta).
+ */
+function acumularCampo(gestiones: readonly GestionDelCierre[], campo: ImporteDeGestion): Prisma.Decimal | undefined {
+  if (gestiones.length === 0) return undefined;
+  let total = new Prisma.Decimal(0);
+  for (const g of gestiones) total = total.plus(new Prisma.Decimal(g[campo] ?? "0"));
+  return total;
 }
 
 /**
@@ -386,12 +488,8 @@ export function aporteDeOrden(
 ): Prisma.Decimal | undefined {
   if (fuente.tipo === "sin_reparto") return undefined;
 
-  if (fuente.tipo === "cod_recaudado") {
-    if (gestiones.length === 0) return undefined;
-    let recaudado = new Prisma.Decimal(0);
-    for (const g of gestiones) recaudado = recaudado.plus(new Prisma.Decimal(g.montoRecibido ?? "0"));
-    return recaudado;
-  }
+  if (fuente.tipo === "cod_recaudado") return acumularCampo(gestiones, CAMPO_DE_GESTION.cod_recaudado);
+  if (fuente.tipo === "snapshot_gestion") return acumularCampo(gestiones, CAMPO_DE_GESTION[fuente.campo]);
 
   let total: Prisma.Decimal | undefined;
   for (const g of gestiones) {

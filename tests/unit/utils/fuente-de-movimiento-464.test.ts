@@ -4,6 +4,7 @@ import {
   CRITERIO_COD_RECAUDADO,
   CRITERIO_DE_APORTE,
   FUENTE_CAJA,
+  FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   fuenteDeMovimiento,
 } from "@/lib/utils/aporte-por-orden";
@@ -44,18 +45,12 @@ describe("464 / T3 — fuenteDeMovimiento", () => {
     });
   });
 
-  it("concepto sin reparto -> su motivo del catalogo, aunque nazca de un cierre", () => {
-    expect(fuenteDeMovimiento(DE_CIERRE, FUENTE_CAJA.egreso_pago_mensajero)).toEqual({
+  // FICHA 468 (R27/R43) — SUSTITUYE los tres casos de la caja: esos conceptos ya se reparten; el que sigue
+  // sin reparto aunque nazca de un cierre es el pago tomado del efectivo del mensajero.
+  it("468 R43 (antes 464): concepto sin reparto -> su motivo del catalogo, aunque nazca de un cierre", () => {
+    expect(fuenteDeMovimiento(DE_CIERRE, FUENTE_MENSAJERO.pago_efectivo)).toEqual({
       tipo: "sin_reparto",
       motivo: "snapshot_del_cierre",
-    });
-    expect(fuenteDeMovimiento(DE_CIERRE, FUENTE_CAJA.ingreso_cod_recaudado)).toEqual({
-      tipo: "sin_reparto",
-      motivo: "suma_del_libro_por_tienda",
-    });
-    expect(fuenteDeMovimiento(DE_CIERRE, FUENTE_CAJA.egreso_indemnizacion)).toEqual({
-      tipo: "sin_reparto",
-      motivo: "otro_productor",
     });
     expect(fuenteDeMovimiento(DE_CIERRE, FUENTE_TIENDA.pago_tienda)).toEqual({
       tipo: "sin_reparto",
