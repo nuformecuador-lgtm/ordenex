@@ -5530,11 +5530,11 @@
       "title": "wallets: buscador y filtros canonicos en dos niveles, con selector de orden",
       "description": "Todas las wallets usan el buscador y los filtros compartidos: arriba los que mueven toda la wallet, junto al libro los que solo filtran el libro, y un selector de orden (lo mas nuevo primero por defecto).",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Espera cupo fullstack (466 y 465 en curso) y comparte rotulos de wallet con la 466.",
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Espera cupo fullstack (466 y 465 en curso) y comparte rotulos de wallet con la 466. || HECHA 2026-10-01, en dev por PR #839 (91be5d75). NO desplegada. Tres revisiones: la 1a y la 2a rechazaron por R49 (fallo de lectura descuadraba controles, cifras y libro en estados de cuenta y luego en la caja); arreglado con cambio de periodo atomico. 3a APROBADA. Gate completo verde 32685 (progress/gate_463_merge.log). Menores m9-m12 de la 3a revision (texto tecleado se pierde al fallar; tests de la guarda soltarTurno y de pedidoLibro; mapa R49) pasan a la 464.",
       "branch": "feature/463-wallets-filtros-y-orden"
     },
     {
@@ -5542,12 +5542,12 @@
       "title": "el excel de las wallets: columnas a elegir y el detalle de cada orden",
       "description": "La descarga de las wallets usa el selector de columnas y trae cada orden con sus dineros, no solo la fila del cierre.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": 463,
       "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 2). Decision por defecto del leader: segunda hoja 'Detalle por orden' enlazada al movimiento. Falta lectura en lote (hoy verDetalleDeMovimiento/verOrdenesDeFila son de una fila). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con las decisiones por defecto (detalle largo en 2a hoja, arranca con detalle, montos como texto en ficha aparte). Arranca con la 463 done.",
-      "branch": null
+      "branch": "feature/464-wallets-excel-por-orden"
     },
     {
       "id": 465,
