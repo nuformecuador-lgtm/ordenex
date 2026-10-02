@@ -263,3 +263,7 @@ que las dos hojas cuadren»*.
    reparte por orden»: sale la lista de órdenes con su monto. ¿De acuerdo con que la pantalla gane eso en
    esta misma ficha?
 5. **Pago tomado del efectivo (mensajero).** Va en «Movimientos sin guía» (R43), no repartido. ¿Correcto?
+
+## Aprobación
+
+Aprobado por el humano el 2026-10-02 con las propuestas por defecto: (1) columna «Cobrado a tiendas» solo en la caja; (2) kardex siempre cronológico ascendente; (3) «Detalle» dice «N guía(s)», no «orden»; (4) el detalle en pantalla de los cuatro conceptos pasa a listar órdenes en esta ficha; (5) el pago tomado del efectivo del mensajero va en «Movimientos sin guía» sin repartir. T1 medido: 100 % cuadra (`progress/medicion_468.md`).

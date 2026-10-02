@@ -177,3 +177,7 @@ referencia es la barra de `/ordenes`: una sola línea con el orden en iconos, el
    el primer y el segundo clic del calendario pasa más de medio segundo, las cifras se recalculan una vez
    con el rango de un día y enseguida con el rango completo (sin mezcla: se pinta solo la última
    lectura). **Propuesta:** se acepta por coherencia con órdenes. ¿Conforme?
+
+## Aprobación
+
+Aprobado por el humano el 2026-10-02 con las propuestas por defecto de las preguntas abiertas: sin Entra/Sale en los estados de cuenta (queda para otra ficha) y periodo sin «Aplicar».
