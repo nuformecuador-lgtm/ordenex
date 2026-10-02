@@ -644,3 +644,26 @@ Restaurado: `true` (comparación byte a byte con el original).
 `tsc` exit 0; `eslint` de lo tocado limpio; 42 archivos / **539 tests verdes** (CJ, EC, `EstadoCuenta`,
 `WalletFiltroAQuien458E`, `WalletLibroCaja458E`, `CajaComposicionBarra`, `tests/components/descarga`,
 `tests/unit/asistente`, `wallet-page-cobros-pendientes`).
+
+## Gate de la tercera vuelta (salida real)
+
+`./init.sh` COMPLETO sobre `988f8649`, secuencial, sin dev server ni mutaciones en paralelo (con otro gate
+completo corriendo en otro worktree sobre la misma base local), en `progress/gate_463_fix2.log` (sin `tail`,
+`INIT_EXIT` escrito dentro):
+
+```
+✓ feature_list.json: sin ids duplicados (461 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 325 archivos de tests contra Postgres SI se ejecutan
+ Test Files  1 failed | 2351 passed (2352)
+      Tests  9 failed | 32676 passed | 26 skipped (32711)
+✗ hay rojos NUEVOS respecto del baseline
+INIT_EXIT=1
+```
+
+El único archivo rojo es AJENO: `tests/integration/db/cierre-sin-gestion-tope-sql-real.test.ts` (ficha 276),
+9 casos con `Foreign key constraint violated: cierre_dia_resuelto_por_fkey` en
+`CierresAdminRepository.resolverCierre` — el usuario actor desaparecido por otro archivo/gate sobre la base
+local compartida, no una aserción. Esta vuelta no toca cierres, órdenes ni Prisma. Repetido AISLADO 3 veces:
+**9/9 verde las 3**. Los 26 `skipped` son los de siempre. Todo lo de la 463 verde.
