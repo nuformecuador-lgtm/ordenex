@@ -365,3 +365,118 @@ disparar. Con B3 y B4 arreglados, m1 queda bien como está.
 2. B4: un fallo en una zona no deja el libro y las cifras de periodos distintos + tests de las secuencias A y B.
 3. `./init.sh` completo en verde (repetir el rojo ajeno contra `dev` limpio si vuelve a salir).
 4. Opcional: m7.
+
+---
+
+# Tercera revisión — `origin/feature/463-wallets-filtros-y-orden` @ `c3599d0e` (fix `988f8649` sobre `c1998d88`)
+
+Revisor en worktree aislado, desacoplado en `c3599d0e`. Búsqueda: el delta nombra cada archivo;
+lectura directa del diff y de `WalletModule.tsx` entero (no hizo falta el grafo). Restricción del leader:
+sin `./init.sh`, sin `tests/integration`, sin dev server (gate completo ajeno sobre la base compartida).
+
+## Veredicto: **OK**
+
+B3 y B4 están cerrados en el código y con red que los mata; m7 y m8 cerrados. Las preguntas del leader
+sobre las carreras tienen respuesta «no» en el código actual, salvo una pérdida acotada de texto tecleado
+(m9, menor). Quedan dos huecos de RED (no de código): dos guardas correctas que ninguna prueba fija (m10,
+m11). Condición ya conocida y no nueva: el gate completo del implementador sale rojo por un archivo ajeno
+(ficha 276, FK por base compartida, 9/9 verde aislado x3); repetirlo verde antes de mergear, como se dijo
+en la segunda revisión.
+
+## Checklist
+
+- [x] **B3** — `recargarTodo` y `recargarLibro` llevan `catch` → `fallo(null)` con toast `LECTURA_CAJA_FALLO`
+      (literal escrito a mano en el test: contrato), respetando el turno. Tests CJ «revisión B3» (wallet
+      lanza / libro lanza por orden y por buscador). M1 del implementador (quitar los `catch`) consta muerta.
+- [x] **B4** — zona de la wallet atómica (las cuatro lecturas en `Promise.all`; nada se pinta si una falla
+      o lanza), un solo `turno`, libro con la wallet APLICADA, `pedirLibro` suma el cambio del libro a la
+      wallet en vuelo. Tests CJ «revisión B4» A/B/C + «las dos bien», cada uno soltando DESPUÉS la lectura
+      superada con respuesta buena y comprobando que no pinta.
+- [x] **m7** — EC «(m7)» x2 con `mockRejectedValue` (periodo; chip y término). Verdes sin código: el fetcher
+      de SWR lleva el rechazo a `onError` → `conservarLoUltimo` (`EstadoCuenta.tsx:404`).
+- [x] **m8** — `progress/review_463.md` añadido en `c1998d88` y borrado en `988f8649`: neto CERO contra
+      `dev` (el árbol de `c3599d0e` no lo contiene). Sin conflicto con `review/463`.
+- [x] `design.md` §9.7 recoge la decisión del leader (atómico / solo libro / lo superado no pinta).
+- [x] Trazabilidad: `impl_463.md` (tercera vuelta) mapea B3/B4/m7 a tests concretos. La fila R49 de los
+      mapas anteriores no se actualizó (ver m12).
+- [x] `tasks.md`: 0 casillas sin marcar.
+- [x] `tsc --noEmit` exit 0; `eslint app` + los dos tests: 0 errores, ningún aviso en lo tocado.
+- [x] Suites corridas por el revisor: 44 archivos / **573 tests verdes** (CJ, EC, `EstadoCuenta`,
+      `WalletFiltroAQuien458E`, `WalletLibroCaja458E`, `CajaComposicionBarra`, `WalletRefrescoDirigido`,
+      `WalletLedgerVer458C`, `WalletFiltros458`, `tests/components/descarga`, `tests/unit/asistente`).
+- [x] Merge limpio contra `origin/dev` (merge-tree), que va 1 commit por delante.
+- [ ] `./init.sh` completo: no corrido por el revisor (restricción). El del implementador
+      (`progress/gate_463_fix2.log`, `INIT_EXIT=1`) tiene como único rojo `cierre-sin-gestion-tope-sql-real`
+      (276), ajeno al delta (solo frontend de la caja). Repetir antes de mergear.
+
+## Razonamiento de las carreras (`WalletModule.tsx` @ `c3599d0e`)
+
+Invariantes que sostienen el código: (1) toda lectura toma `++turno` y solo la del turno vigente pinta,
+avisa o suelta `cargando`; (2) `recargarLibro` solo arranca con `vueloTodo === false`, y en ese estado
+`pedidoWallet === aplicadoWallet` (un `recargarTodo` acabado o bien confirmó `aplicado = pedido` o bien
+`fallo()` devolvió `pedido = aplicado`) — por eso leer con `pedidoWallet` (R3 abajo) es equivalente hoy;
+(3) `recargarTodo` asigna `aplicadoWallet` y `aplicadoLibro` y TODOS los `set*` en el mismo bloque síncrono.
+
+- **¿Cifras y libro de selecciones distintas?** No. El libro solo se pinta (a) junto con las cifras en
+  `recargarTodo`, con el mismo `fw`, o (b) en `recargarLibro` con `aplicadoWallet`, que es lo que dicen las
+  cifras pintadas y no puede cambiar mientras esa lectura es la vigente (cambiarlo exige un `recargarTodo`
+  con turno posterior). El control del periodo se compone desde lo aplicado y queda deshabilitado mientras
+  `cargando === "todo"`; un fallo lo resiembra a lo aplicado.
+- **¿`cargando` para siempre?** No. Una sola variable; la pone cada `tomarTurno` y la apaga el `finally` del
+  turno vigente, que siempre corre (`try/catch/finally`). Lo único fuera del `try` tras tomar el turno son
+  funciones puras (`paginado`, `inputDeWallet`, `hayFiltrosDeLibro`). El colateral de la segunda vuelta
+  (`cargandoLibro` colgado al superar un libro con un todo) desaparece con el estado único.
+- **¿Se pierde un cambio del usuario?** Un clic nunca: compone sobre lo PEDIDO y toma turno; si falla, lo
+  restaurado es lo aplicado y el aviso lo dice. Sí se pierde **texto tecleado y aún no emitido** (m9).
+
+## Mutaciones del revisor
+
+Arnés de un solo uso que comprueba que el archivo CAMBIÓ y restaura byte a byte desde una copia
+(restaurado `true` las 7 veces); CJ entero en cada una; arnés y logs borrados.
+
+| # | Mutación en `WalletModule.tsx` | Resultado |
+| --- | --- | --- |
+| M2 (repetida) | pintar `resumen`/`composicion` tras el chequeo de turno y ANTES de mirar los status | **Muerta**: 1 rojo (B4-A) |
+| M5 (repetida) | quitar `if (mio !== turno.current) return` de `recargarTodo` | **Muerta**: 4 rojos (B4 A/B/C, «las dos bien») |
+| R1 (nueva) | quitar el chequeo de turno de `recargarLibro` | **Muerta**: 1 rojo (m1 «Más antiguas» en vuelo) |
+| R2 (nueva) | `fallo()` no devuelve `pedidoLibro` a lo aplicado | **SOBREVIVE** (29/29) → m11 |
+| R3 (nueva) | `recargarLibro` lee con `pedidoWallet` en vez de `aplicadoWallet` | Sobrevive; **equivalente** por el invariante (2) |
+| R4 (nueva) | `soltarTurno` sin la guarda `mio !== turno.current` | **SOBREVIVE** (29/29) → m10 |
+| R5 (nueva) | el éxito de `recargarTodo` no asigna `aplicadoWallet` | **Muerta**: 1 rojo (R30) |
+
+## Hallazgos
+
+### m9 — menor — Un fallo borra el texto tecleado que aún no se había emitido
+
+`fallo()` siembra siempre el término aplicado en el buscador, y la `siembra` de `BuscadorFiltros` cancela el
+debounce en vuelo (500 ms). **Medido** (sonda de componente, borrada): pulsar «Sale» con su lectura
+pendiente, teclear «Juan», la lectura de «Sale» responde `validation_error` → toast, el campo queda vacío
+y no se pide nada más (`listar` x1). El usuario ve el campo vaciarse junto al aviso, así que no hay pantalla
+incoherente ni dato equivocado; pero tecleó algo que no llegó a pedirse y se descarta. Es coherente con la
+letra de la decisión («los controles vuelven a lo aplicado»), por eso no bloquea. Si se quiere afinar:
+sembrar el término solo cuando la lectura que falló llevaba un término distinto del aplicado.
+
+### m10 — menor — La guarda de `soltarTurno` no la fija ningún test
+
+R4 sobrevive a CJ. Sin la guarda, una lectura SUPERADA que termina apaga `cargando` y `vueloTodo` mientras la
+vigente sigue en vuelo; el siguiente cambio del libro va por `recargarLibro` con la wallet anterior y el
+periodo pedido se pierde sin resiembra — el control diría 01–28 y las cifras serían las de sin periodo (el
+síntoma de B1). **Medido** con sonda (borrada): periodo en vuelo (T1) → «Sale» (T2) → soltar T1 bien →
+«Más antiguas»; con el código actual `resumen` se pide 3 veces y el libro lleva `desde` + `egreso` + `asc`
+(verde); con R4, `resumen` x2 (rojo). Añadir ese test a CJ.
+
+### m11 — menor — Que `fallo()` devuelva `pedidoLibro` a lo aplicado no lo fija ningún test
+
+R2 sobrevive. Sin esa línea, tras un fallo del libro (p. ej. «Más antiguas») el siguiente cambio se compone
+con el orden que falló aunque el conmutador diga «Más recientes». El test B3 «el libro lanza» ya teclea
+«Juan» después del fallo: basta afirmar que esa lectura va SIN `sortDir: "asc"`.
+
+### m12 — menor — La fila R49 de los mapas R → test de `impl_463.md` no nombra los tests nuevos
+
+Las filas R49 (líneas ~354 y ~564) siguen citando «CJ R49 x2»; los bloques «revisión B3» y «revisión B4» solo
+aparecen en la sección de la tercera vuelta. Actualizar la fila al cerrar la ficha.
+
+## Para mergear
+
+1. `./init.sh` completo en verde (o el rojo ajeno de la 276 repetido contra `dev` limpio).
+2. Opcional, antes o en ficha aparte: tests de m10 y m11 (son dos aserciones), m9 si el humano lo pide, m12.
