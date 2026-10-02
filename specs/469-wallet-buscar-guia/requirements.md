@@ -173,3 +173,7 @@ un número de guía no encuentra nada, o encuentra filas que por casualidad llev
 3. **Guía y remisión a la vez.** Si una remisión numérica coincide con la guía de otra orden, se toman las
    dos órdenes (son ambas «identificadas») y el aviso dice «guía o remisión». **Propuesta por defecto: así**,
    sin pedir al usuario que elija.
+
+## Aprobación
+
+Aprobado por el humano el 2026-10-02 con las propuestas por defecto: (1) los movimientos de una sola orden que no nacen de un cierre (cobro por devolución, indemnización por incidente y sus anulaciones) salen en la búsqueda por guía, sin resaltado; (2) la bodega satélite queda fuera: su buscador sigue siendo solo de texto (ficha aparte si se pide); (3) remisión numérica igual a la guía de otra orden: se toman las dos y el aviso dice «guía o remisión».
