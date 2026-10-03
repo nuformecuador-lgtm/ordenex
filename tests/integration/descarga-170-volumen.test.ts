@@ -18,7 +18,7 @@
  * Va en `tests/integration/` y no en unitarios porque atraviesa piezas reales de tres capas
  * —proyección de columnas, adaptadores de cliente y generador binario— sin dobles.
  */
-import { describe, it, expect } from "vitest";
+import { vi, describe, it, expect } from "vitest";
 
 import {
   COLUMNAS_DESCARGA_ORDENES,
@@ -28,6 +28,15 @@ import { filasLocales, filasDesdeResultado } from "@/components/shared/descarga-
 import { descargaConfig } from "@/lib/config/descarga";
 import { construirDescarga } from "@/lib/utils/descarga-dataset";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+
+// Ficha 470 (T1.3, riesgo K6) — el tope real de la descarga es ahora el limite de Excel
+// (1.048.575 filas). Este archivo prueba la MECANICA del tope (N entra, N+1 no), que no depende
+// del valor: lo fija en 5000 para no construir un millon de filas por caso. Patron de
+// `tests/integration/db/estado-cuenta-servidor-458d.test.ts`.
+vi.mock("@/lib/config/descarga", async (original) => {
+  const real = await original<typeof import("@/lib/config/descarga")>();
+  return { ...real, descargaConfig: { ...real.descargaConfig, MAX_FILAS: 5000 } };
+});
 
 /** El tope ÚNICO de la app (P5). No se escribe 5000: si cambia, este test cambia con él. */
 const N = descargaConfig.MAX_FILAS;

@@ -212,7 +212,8 @@ describe("R76 · el tope, y que NO sale de un numero nuevo", () => {
     // Decision del humano: no se inventa una constante nueva. `descargaConfig.MAX_FILAS` es el
     // MISMO tope con el que `DetalleMovimientoService.comoArchivo` dice `limite_excedido`, y es
     // el mismo criterio —«o van todas, o no va ninguna»— sobre el mismo tipo de conjunto.
-    expect(descargaConfig.MAX_FILAS).toBe(5000);
+    // Ficha 470: ese tope comun vale ahora el limite de Excel (1.048.575), fijo en codigo.
+    expect(descargaConfig.MAX_FILAS).toBe(1_048_575);
   });
 
   it("si vuelven MAS filas que el tope, NO se sirve ninguna cifra", async () => {
