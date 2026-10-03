@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 import { Pagination } from "@/components/shared/Pagination";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
@@ -223,6 +224,11 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 interface RecursosGrupoNovedad {
   listarPagina: (input: { page: number }) => Promise<ListarNovedadesActionResult>;
   listarCompleto: () => Promise<ListarNovedadesCompletoActionResult>;
+  /**
+   * Ficha 470 (R24) — la lectura completa PARA LA DESCARGA, por la preparación de descargas (el
+   * conjunto grande viaja por el almacén temporal). `listarCompleto` sigue directo: pinta la pantalla.
+   */
+  descargarCompleto: () => Promise<ListarNovedadesCompletoActionResult>;
   tituloDescarga: string;
   columnasDescarga: DescargaColumna[];
   filaDescarga: (novedad: NovedadDTO) => DescargaFila;
@@ -232,6 +238,7 @@ const RECURSOS_POR_GRUPO = {
   ayuda: {
     listarPagina: listarAyudaTiendaAction,
     listarCompleto: listarAyudaTiendaCompletoAction,
+    descargarCompleto: () => descargarDatos("listarAyudaTiendaCompleto", undefined),
     tituloDescarga: TITULO_DESCARGA_AYUDA,
     columnasDescarga: COLUMNAS_DESCARGA_AYUDA,
     filaDescarga: filaDescargaAyuda,
@@ -239,6 +246,7 @@ const RECURSOS_POR_GRUPO = {
   devolucion: {
     listarPagina: listarNovedadesAction,
     listarCompleto: listarNovedadesCompletoAction,
+    descargarCompleto: () => descargarDatos("listarNovedadesCompleto", undefined),
     tituloDescarga: TITULO_DESCARGA_NOVEDADES,
     columnasDescarga: COLUMNAS_DESCARGA_NOVEDADES,
     filaDescarga: filaDescargaNovedad,
@@ -689,7 +697,7 @@ export function NovedadesModule({
           titulo={recursos.tituloDescarga}
           columnas={recursos.columnasDescarga}
           obtenerFilas={() =>
-            filasDesdeResultado(recursos.listarCompleto(), recursos.filaDescarga)
+            filasDesdeResultado(recursos.descargarCompleto(), recursos.filaDescarga)
           }
           // Sin `formatos`: descarga DIRECTA en xlsx, como las ~27 tablas de la app. El menú de
           // elección lo montan solo los dos exports de analítica, que sí declaran varios.

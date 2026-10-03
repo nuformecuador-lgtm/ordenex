@@ -21,7 +21,6 @@ import {
   consultarImpactoCambioUsuario,
   obtenerUsuario,
   listarUsuarios,
-  listarUsuariosCompleto,
   restablecerContrasenaUsuario,
 } from "@/lib/actions/usuarios";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
@@ -51,6 +50,7 @@ import {
 } from "./seleccion-a-filtro-usuarios";
 import { ContrasenaGeneradaPanel } from "./ContrasenaGeneradaPanel";
 import { UsuarioForm, type UsuarioFormHandle } from "./UsuarioForm";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /** R12/R13: nombre visible del listado; da nombre a la hoja, al archivo y al control. */
 const TITULO_DESCARGA = "Usuarios";
@@ -537,7 +537,7 @@ export function UsuariosModule({ initialData }: UsuariosModuleProps) {
           columnas: COLUMNAS_DESCARGA_USUARIOS,
           obtenerFilas: () =>
             filasDesdeResultado(
-              listarUsuariosCompleto(hayFiltro ? filtro : {}),
+              descargarDatos("listarUsuariosCompleto", hayFiltro ? filtro : {}),
               filaDescargaUsuario,
             ),
         }}

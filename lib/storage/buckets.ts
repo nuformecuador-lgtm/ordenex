@@ -20,6 +20,12 @@ export const BUCKETS = {
    * `lib/config/wallet-comprobante.ts` (sobreescribible por entorno). Se crea a mano, PRIVADO.
    */
   WALLET_COMPROBANTES: "wallet-comprobantes",
+  /**
+   * Objetos temporales de las descargas grandes (ficha 470): `tmp/<uuid>.json.gz`, leidos una vez por
+   * URL firmada de 5 min y purgados por `/api/cron/purga-descargas`. Se crea solo, en el primer uso,
+   * PRIVADO (`SupabaseAlmacenDescargas`). El nombre efectivo lo resuelve `lib/config/descarga.ts`.
+   */
+  DESCARGAS: "descargas",
 } as const;
 
 /** Union de los nombres validos de bucket. */

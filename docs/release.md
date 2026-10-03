@@ -205,6 +205,16 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-10-02 — 463 a 469 (wallet: barra, búsqueda por guía, Excel kardex; devolución a origen; cobertura)
+
+- **PR #844** (`dev` → `prod`, merge commit), `prod` = `fafb00bb`, build `dpl_7canKeGmgHvCyJVW42wrTxxPBcU3` READY a las 22:37 CR, alias `ordenex.co` con `aliasError: null`. Orden del humano: «despliega».
+- **Sin migraciones:** `_prisma_migrations` sigue en 229, la última `20260928120100_wallet_458_tablas` (aplicada el 2026-09-27). Las 2 filas revertidas son el P3009 del SINPE del 2026-09-27, ya resuelto.
+- **Corrección de estado:** `progress/current.md` decía «SF-001 y 454–462 sin desplegar»; falso desde el 2026-09-27 (#835 y el hotfix #836 ya estaban en `prod`). Esta release solo llevaba 463–469. El bucket `wallet-comprobantes` ya existía en producción (creado el 2026-09-27, privado).
+- **Gate sobre `c99327a6` (= `origin/dev`):** 32.988 verdes, 3 rojos = flake R5 (deadlock 40P01 de la 205, que arrastró dos de la 461 en la misma corrida; 35 skipped por los 9 del archivo de la 205). Los tres archivos verdes aislados 3/3 (`progress/rerun_release_843_*.log`).
+- **API:** sin ruptura (CHANGELOG 2026-10-01, solo descripciones).
+- **Después:** 0 errores de runtime en los 15 min siguientes; `prod` traído a `dev` (`rev-list origin/dev..origin/prod` = 0).
+- **Pendiente tras desplegar:** T16 de la 468 (descargar la caja de todo el historial con detalle y contar las filas «Diferencia sin repartir»; se espera 0) y repetir `get_runtime_errors` mañana.
+
 ## Release del 2026-09-21 (2.ª) — la 453, y SF-001 sigue esperando
 
 **`prod` = `3965b568`** (PR #818, merge commit con 2 padres) · `dpl_HjyBpMcrngoc5LvQpZ1hm4P8GGzh`

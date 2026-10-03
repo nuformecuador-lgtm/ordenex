@@ -10,6 +10,7 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { OrdenesFilterUI } from "@/app/(app)/ordenes/_components/serializar-filtro";
 
@@ -33,6 +34,16 @@ const listarOrderStatusMock = vi.fn();
 vi.mock("@/lib/actions/order-status", () => ({
   listarOrderStatus: (...a: unknown[]) => listarOrderStatusMock(...a),
 }));
+
+// Ficha 470 (T4.5) — la preparación de descargas corre REAL por defecto (la acción de arriba llega por el
+// registro); un caso puede sustituir UNA respuesta para simular el almacén temporal o su fallo.
+const P470 = vi.hoisted(() => ({ preparar: vi.fn() }));
+vi.mock("@/lib/actions/descargas", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/actions/descargas")>();
+  P470.preparar.mockImplementation(real.prepararDescargaAction);
+  return { ...real, prepararDescargaAction: (...a: unknown[]) => P470.preparar(...a) };
+});
+const URL_FIRMADA_470 = "https://x.supabase.co/storage/v1/object/sign/descargas/tmp/0b8f7c3e-1a2b-4c3d-8e4f-123456789abc.json.gz?token=t";
 
 // El side effect de entrega se mockea y se verifica: el anchor de descarga ya lo
 // cubren las features 143/148 y `DescargarDataset.test.tsx`.
@@ -122,11 +133,13 @@ function botonDescarga() {
   return screen.getByRole("button", { name: "Descargar Órdenes" });
 }
 
-/** Fecha local de hoy en `YYYY-MM-DD`, misma convención que el nombre de archivo. */
+/**
+ * Hoy en `YYYY-MM-DD` con la MISMA convención que el nombre de archivo: el día calendario de COSTA
+ * RICA (`fechaCalendarioCR`, ficha 457 O3), no el del reloj local. Con la fecha local, entre las
+ * 00:00 y la 01:00 de una máquina en UTC−5 el test esperaba el día siguiente al del archivo.
+ */
 function hoyISO(): string {
-  const d = new Date();
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  return fechaCalendarioCR(new Date());
 }
 
 beforeEach(() => {
@@ -246,6 +259,27 @@ describe("Listado de órdenes · descarga del dataset completo", () => {
     expect(nombreArchivo).toBe(`ordenes-${hoyISO()}.xlsx`);
   });
 
+  it("en la franja 00:00-01:00 de Bogotá el nombre lleva el día de Costa Rica (aún el anterior)", async () => {
+    // 2026-10-03T05:30Z = 00:30 en Bogotá (UTC−5) y 23:30 del día 2 en Costa Rica (UTC−6). Literal a
+    // propósito: comparar con `fechaCalendarioCR` sería comparar el código consigo mismo.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-03T05:30:00.000Z"));
+    try {
+      const user = userEvent.setup();
+      envolver(<OrdenesModule permitirDescarga />);
+
+      await screen.findByText("Destinatario 1");
+      await user.click(botonDescarga());
+
+      await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+      const [, , nombreArchivo] = descargarBlobMock.mock.calls[0];
+      expect(nombreArchivo).toBe("ordenes-2026-10-02.xlsx");
+      expect(hoyISO()).toBe("2026-10-02");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("muestra el error de tope, con total y límite, y no descarga archivo", async () => {
     const user = userEvent.setup();
     listarOrdenesCompletoMock.mockResolvedValue({
@@ -301,5 +335,35 @@ describe("Listado de órdenes · descarga del dataset completo", () => {
     // Mientras no se descarga, la action del dataset completo no se llama nunca.
     expect(listarOrdenesCompletoMock).not.toHaveBeenCalled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
+  });
+});
+
+describe("470 R15/R16 — el transporte del conjunto falla en Órdenes", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("R16: la URL firmada ya no se puede leer (caducada) ⇒ aviso, sin archivo", async () => {
+    P470.preparar.mockResolvedValueOnce({ modo: "almacen", url: URL_FIRMADA_470 });
+    const fetchMock = vi.fn(async () => new Response("expired", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    envolver(<OrdenesModule permitirDescarga />);
+    await screen.findByText("Destinatario 1");
+    await user.click(botonDescarga());
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(String(errorMock.mock.calls.at(-1)?.[0])).toContain("No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.");
+    expect(fetchMock).toHaveBeenCalledWith(URL_FIRMADA_470, expect.objectContaining({ credentials: "omit" }));
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  it("R15: el almacén o la firma fallan en el servidor ⇒ aviso, sin archivo", async () => {
+    P470.preparar.mockResolvedValueOnce({ status: "error", code: "INTERNAL", message: "Error interno" });
+    const user = userEvent.setup();
+    envolver(<OrdenesModule permitirDescarga />);
+    await screen.findByText("Destinatario 1");
+    await user.click(botonDescarga());
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(String(errorMock.mock.calls.at(-1)?.[0])).toContain("No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.");
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });

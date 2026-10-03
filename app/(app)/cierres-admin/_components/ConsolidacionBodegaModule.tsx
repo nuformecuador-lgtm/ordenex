@@ -20,7 +20,6 @@ import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
 import {
   solicitarCierreBodega,
-  listarConsolidablesCompleto,
   listarConsolidablesPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumenLite } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -45,6 +44,7 @@ import {
   COLUMNAS_DESCARGA_CONSOLIDABLES,
   filaDescargaConsolidable,
 } from "./cierres-bodega-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /** Nombre visible del listado de consolidables: hoja, archivo y control (R12/R13). */
 const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
@@ -179,7 +179,7 @@ function descargaConsolidables(filtros: FiltrosCierresBodega): DataTableDescarga
     ambitoColumnas: AMBITO_DESCARGA_CONSOLIDABLES,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarConsolidablesCompleto({ filtros }),
+        descargarDatos("listarConsolidablesCompleto", { filtros }),
         filaDescargaConsolidable,
       ),
   };

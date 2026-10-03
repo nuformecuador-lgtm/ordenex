@@ -1,7 +1,9 @@
-# ESTADO 2026-10-02 (mañana) — fichas 467 y 468 con spec escrito, esperando aprobación
+# ESTADO 2026-10-02 (noche) — RELEASE 463–469 DESPLEGADA (PR #844, 22:37 CR)
+
+**AUTORIZACIÓN (2026-10-02 noche):** Carlos se fue y dejó dicho, sobre la ficha 470 (descargas sin tope): «regístrala con todas las tablas de la app y saca esto lo más rápido que podás a producción… cuando vuelva creo que ya habrás terminado y lo habrás subido a producción». Cubre: spec aprobado de antemano, implementar, revisar, mergear y DESPLEGAR a `prod` la 470. Nada más. Y después: «cuando termines y saques esto a producción, después apaga el pc» (apagar solo tras desplegar y dejar todo pusheado).
 
 - **467** (barra del libro como la de órdenes, 37 R) y **468** (Excel kardex + detalle por guía, 61 R): specs en `dev` (`10dcff61`, `506596b5`). T1 de la 468 medido: 100 % cuadra (`progress/medicion_468.md`).
-- **467** (#841), **468** (#842) y **469** (#843) HECHAS en dev, sin desplegar. 468 deja T16 (medir en prod los 6 conceptos del feed) para tras la release. in_progress = 0.
+- **463–469 en producción** (PR #844). OJO: SF-001 y 454–462 ya estaban en prod desde el 2026-09-27 (#835, #836); las notas de abajo que dicen «sin desplegar» están caducas. Pendiente: T16 de la 468 (contar «Diferencia sin repartir» en el Excel de la caja de todo el historial, esperado 0) y runtime errors mañana. WhatsApp: siguiente sesión (lista de las 54 conversaciones sin mensaje).
 - WhatsApp (consultado 2026-10-02): 124 fallos 131042 «pagos pendientes en Meta» del 16 al 30-sep, parado desde el 30; 54 conversaciones sin mensaje. 131026 de fondo (<0,5 %).
 
 # ESTADO 2026-10-02 (madrugada) — 463, 464, 465 y 466 HECHAS en `dev`, SIN DESPLEGAR

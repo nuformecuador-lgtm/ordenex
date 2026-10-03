@@ -21,7 +21,6 @@ import { money } from "@/lib/config/moneda";
 import type { DescargaFila } from "@/lib/types/descarga";
 import {
   deshacerGestion,
-  listarCierresPasadosCompleto,
   listarCierresPasadosPaginado,
   solicitarCierre,
   verCierrePasado,
@@ -98,6 +97,7 @@ import {
   filaDescargaDiaRechazada,
   filaDescargaDiaReprogramada,
 } from "./cierre-dia-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 37 (T15, R3-R7/R10/R11/R18): módulo cliente del "Cierre del día". Recibe
 // del Server Component padre los grupos ya resueltos (por resultado), los totales
@@ -395,7 +395,7 @@ const DESCARGA_CIERRES_PASADOS: DataTableDescarga = {
   ambitoColumnas: AMBITO_DESCARGA_DIA_CIERRES_PASADOS,
   obtenerFilas: () =>
     filasDesdeResultado(
-      listarCierresPasadosCompleto(),
+      descargarDatos("listarCierresPasadosCompleto", undefined),
       filaDescargaDiaCierrePasado,
     ),
 };

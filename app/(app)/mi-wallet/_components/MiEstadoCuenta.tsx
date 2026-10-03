@@ -5,8 +5,6 @@ import { EstadoCuenta, type LectorEstadoCuenta } from "@/components/shared/estad
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { AMBITO_DESCARGA_MI_ESTADO_CUENTA } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import {
-  miEstadoCuentaKardexAction,
-  miEstadoCuentaKardexConDetalleAction,
   verMiEstadoCuentaAction,
 } from "@/lib/actions/estado-cuenta";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
@@ -23,6 +21,7 @@ import { opcionesDeCierre, type CierresDeLaTienda } from "./mi-wallet-cierres";
 // Ficha 461 (R44, P4): la tienda lee su libro DESDE LA TIENDA («Ordenex te cobró»), no con el nombre
 // desde Ordenex que ve la oficina en `/wallet/tiendas`.
 import { CATEGORIA_MI_WALLET_LABEL, ORIGEN_TIENDA_LABEL } from "./mi-wallet-labels";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // FICHA 458-D (T D.5, design §5; R34–R36, R78, R19) — `/mi-wallet` como ESTADO DE CUENTA de la propia
 // tienda, en SOLO LECTURA: el MISMO módulo que ve la oficina (tarjetas con la frase del saldo, chips,
@@ -44,8 +43,8 @@ export const LECTOR_MI_TIENDA: LectorEstadoCuenta = {
   leer: (f) => verMiEstadoCuentaAction(f),
   // FICHA 468 (R3/R26/R32) — el kardex y, con detalle, la hoja «Detalle por guía», en UNA petición cada
   // uno; tampoco aquí viaja la tienda.
-  leerKardex: (f) => miEstadoCuentaKardexAction(f),
-  leerKardexConDetalle: (f) => miEstadoCuentaKardexConDetalleAction(f),
+  leerKardex: (f) => descargarDatos("miEstadoCuentaKardex", f),
+  leerKardexConDetalle: (f) => descargarDatos("miEstadoCuentaKardexConDetalle", f),
 };
 
 function categoria(f: FilaEstadoCuentaDTO): WalletTiendaMovimientoCategoria {

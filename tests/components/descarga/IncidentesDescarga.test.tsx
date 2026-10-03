@@ -313,7 +313,9 @@ describe("Incidentes · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarPendientesIncidentesCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarPendientesIncidentesCompleto).mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(vi.mocked(listarPendientesIncidentesCompleto).mock.calls[0]).toEqual([undefined]);
     expect(listarIncidentes).not.toHaveBeenCalled();
     // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
     // de degradar el archivo.
@@ -433,7 +435,9 @@ describe("Incidentes · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarHistoricoIncidentesCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarHistoricoIncidentesCompleto).mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(vi.mocked(listarHistoricoIncidentesCompleto).mock.calls[0]).toEqual([undefined]);
     expect(listarIncidentes).not.toHaveBeenCalled();
     expect(listarHistoricoIncidentesPaginado).toHaveBeenCalledTimes(1);
   });

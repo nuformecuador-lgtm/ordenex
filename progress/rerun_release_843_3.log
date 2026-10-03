@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+
+ Test Files  3 passed (3)
+      Tests  35 passed (35)
+   Start at  22:33:07
+   Duration  6.16s (transform 1.92s, setup 162ms, import 8.04s, tests 1.91s, environment 0ms)
+

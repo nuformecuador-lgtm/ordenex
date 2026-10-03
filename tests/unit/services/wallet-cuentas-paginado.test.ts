@@ -16,6 +16,15 @@ import {
 } from "@/lib/types/wallet-mensajero";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 
+// Ficha 470 (T1.3, riesgo K6) — el tope real de la descarga es ahora el limite de Excel
+// (1.048.575 filas). Este archivo prueba la MECANICA del tope (N entra, N+1 no), que no depende
+// del valor: lo fija en 5000 para no construir un millon de filas por caso. Patron de
+// `tests/integration/db/estado-cuenta-servidor-458d.test.ts`.
+vi.mock("@/lib/config/descarga", async (original) => {
+  const real = await original<typeof import("@/lib/config/descarga")>();
+  return { ...real, descargaConfig: { ...real.descargaConfig, MAX_FILAS: 5000 } };
+});
+
 // Feature 170 — FASE 2, T L.1 (R40/R41/R45/R51) — «Cuentas por pagar a mensajeros» paginado.
 //
 // Es la pantalla de riesgo ALTO de la tanda L, y el riesgo tiene nombre: hoy el maestro recibe

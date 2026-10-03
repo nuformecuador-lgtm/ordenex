@@ -41,6 +41,20 @@ export function mensajeLimiteDetalle(total: number, limite: number): string {
   return `El detalle por guía tendría ${total} filas y la descarga admite hasta ${limite}. Acota el periodo, o elige «Solo los movimientos» y vuelve a intentarlo.`;
 }
 
+/** Miles con punto («1.048.575»), deterministas: no dependen del ICU del navegador. */
+function conMiles(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * Ficha 470 (design §4.4, R2) — el aviso cuando una HOJA del archivo pasaría del límite de Excel al
+ * armarlo en el navegador: nombra la hoja, cuántas filas tendría, el máximo de Excel y qué hacer.
+ * Solo conteos, nunca datos. Es el único texto de aviso nuevo de la ficha (decisión 5).
+ */
+export function mensajeLimiteExcel(hoja: string, filas: number, limite: number): string {
+  return `La hoja «${hoja}» tendría ${conMiles(filas)} filas y Excel admite hasta ${conMiles(limite)} por hoja. Acota el periodo o los filtros y vuelve a intentarlo.`;
+}
+
 // R27 — Cola accionable del resto de fallos: el mensaje canónico del error dice QUÉ
 // pasó; esto dice qué hacer a continuación.
 //
@@ -87,10 +101,10 @@ export async function filasDesdeResultado<T>(
  * mismo mensaje accionable (R26/R27). Nunca trunca: o están todas las filas o no hay
  * archivo (R28).
  *
- * `descargaConfig.MAX_FILAS` es el tope ÚNICO de la app (P5). En el navegador
- * `DESCARGA_MAX_FILAS` no está definido (Next solo expone `NEXT_PUBLIC_*`), así que aquí
- * rige el default de 5000 de `lib/config/descarga.ts`; se lee de la config y no de un
- * literal para que el día que ese tope cambie no haya un segundo número que actualizar.
+ * `descargaConfig.MAX_FILAS` es el tope ÚNICO de la app (P5). Desde la ficha 470 vale el
+ * límite de Excel (1.048.575, fijo, R1/R23): el conjunto ya está en el navegador y no cruza
+ * ninguna respuesta de Vercel, así que no hay otro máximo que aplicar. Se lee de la config y
+ * no de un literal para que no haya un segundo número que actualizar.
  *
  * Es `async` aunque no espere nada: `obtenerFilas` devuelve una promesa, y así el cableado
  * de cada tabla es la misma línea que en Familia A.

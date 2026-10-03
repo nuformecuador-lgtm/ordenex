@@ -12,7 +12,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { walletMensajeroConfig } from "@/lib/config/wallet-mensajero";
 import {
-  listarCuentasPorPagarCompletoAction,
   listarCuentasPorPagarPaginadoAction,
 } from "@/lib/actions/wallet-mensajero";
 import { normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-listado";
@@ -33,6 +32,7 @@ import {
   SIGNO_BADGE,
   money,
 } from "./wallet-mensajeros-labels";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 44 (T14, R18/R19/R21/R22) — tabla-resumen de CUENTAS POR PAGAR a mensajeros (una fila
 // por mensajero: devengado / pagado / cuenta por pagar, con estado por signo). El maestro ve a
@@ -292,7 +292,7 @@ export function CuentasPorPagarTable({ initialData }: CuentasPorPagarTableProps)
           ambitoColumnas: AMBITO_DESCARGA_CUENTAS_POR_PAGAR,
           obtenerFilas: () =>
             filasDesdeResultado(
-              listarCuentasPorPagarCompletoAction({ busqueda: aplicada }),
+              descargarDatos("listarCuentasPorPagarCompleto", { busqueda: aplicada }),
               filaDescargaCuentaPorPagar,
             ),
         }}

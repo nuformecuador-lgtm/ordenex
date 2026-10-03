@@ -170,9 +170,10 @@ describe("las contrapruebas: la guardia CAZA lo que dice cazar", () => {
       `${DIRECTORIO}/_components/HistorialAccionesModule.tsx`,
     );
     expect(especificadores(fuente)).toContain(MODULO_DE_LECTURAS);
-    expect(nombresImportadosDe(fuente, MODULO_DE_LECTURAS).sort()).toEqual(
-      ["listarHistorialAccionesCompleto", "listarHistorialAccionesPaginado"].sort(),
-    );
+    // Ficha 470 (R24): la lectura COMPLETA ya no se importa aquí; la descarga la pide por
+    // `descargarDatos("listarHistorialAccionesCompleto", …)`, que solo ejecuta lecturas del registro.
+    expect(nombresImportadosDe(fuente, MODULO_DE_LECTURAS).sort()).toEqual(["listarHistorialAccionesPaginado"]);
+    expect(fuente).toMatch(/descargarDatos\("listarHistorialAccionesCompleto", input\)/);
   });
 });
 
