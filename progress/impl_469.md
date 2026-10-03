@@ -182,3 +182,103 @@ Gate completo `INIT_EXIT=0`: 2.378 archivos, **32.981 tests en verde, 26 skipped
 ## Veredicto
 
 Servidor terminado. Pendiente: parte de pantalla (tareas de frontend de tasks.md) sobre esta misma rama.
+
+
+---
+
+# Parte de pantalla (frontend) — T11–T13, T15, T16
+
+> Rama local `fe469` sobre `origin/feature/469-wallet-buscar-guia` @ `146f718b`. Búsqueda de código: el MCP
+> `codebase-memory` NO estaba en el conjunto de herramientas de este agente; se usó `grep` y lectura de
+> archivos. No se tocó servidor.
+
+## Lo hecho
+
+| Tarea | Qué | Archivos |
+| --- | --- | --- |
+| T11 | Textos compartidos: aviso (R21), vacío (R22), «Guía buscada» y el nombre del bloque. Placeholders (R24): caja, oficina y `/mi-wallet` nombran guía y remisión; la satélite gana su clave propia `bodega` y sigue sin nombrar la guía (R36). | `components/shared/wallet/busqueda-por-guia-labels.ts` (nuevo), `app/(app)/wallet/_components/libro-caja-labels.ts`, `components/shared/estado-cuenta/estado-cuenta-labels.ts` |
+| T12 | Caja: `WalletModule` apunta `modoBusqueda` JUNTO con las filas, solo cuando la lectura llegó bien; aviso encima de la barra y vacío propio en el libro. Estado de cuenta: `terminoDeGuia(lectura pintada)`; aviso junto a la barra y vacío propio. En los dos, lo que manda es la lectura PINTADA (si la nueva falla, el aviso sigue siendo el de lo que se ve). | `WalletModule.tsx`, `WalletLedger.tsx` (props `resaltar`, `emptyMessage`), `components/shared/estado-cuenta/EstadoCuenta.tsx` |
+| T13 | `FuenteDetalleMovimiento.leer(movimientoId, page, resaltar?)`; clave SWR `[prefijo, movimientoId, page, resaltar ?? ""]` en los dos paneles; `resaltar` llega a cada panel por `DetalleDeFila.render(…, { resaltar })` solo en modo guía. Bloque «Guía buscada» encima de la tabla (guía, destinatario, tienda en la caja/cuentas, resultado y aporte con `money` sin operar) y fila resaltada con fondo `bg-info-soft` + insignia de texto «Guía buscada» (R26, no solo color). | `DetalleMovimientoCierre.tsx`, `ordenes-de-fila-cuenta.ts`, `DetalleMiMovimientoCierre.tsx`, `EstadoCuentaTienda.tsx`, `EstadoCuentaMensajero.tsx`, `MiEstadoCuenta.tsx` |
+| T14 | Sin código: la descarga ya lleva `q` (comprobado en la app, abajo). | — |
+
+Tests tocados (literal de contrato que la ficha CAMBIA a propósito, R24; se sustituye por el literal
+nuevo, no por su fuente): `EstadoCuenta463`, `EstadoCuentaBarra467`, `MiWalletFiltros`, `WalletFiltros458`,
+`zonas-filtros-labels-463` (más un caso nuevo de la satélite y su texto en la guardia de «SLA»).
+
+## Mapa R → test (pantalla)
+
+`FE` = `tests/components/BusquedaPorGuia469.test.tsx`; `LBL` = `tests/unit/components/zonas-filtros-labels-463.test.ts`.
+
+| R | Test |
+| --- | --- |
+| R1 | `FE` (el mismo buscador de la barra, sin control nuevo: todos los casos escriben en «Buscar en el libro») |
+| R21 | `FE` «R21/R22: el aviso y el vacío, literales»; «R21/R23: con la guía sale el aviso…» (cuenta); «R21/R23/R18…» (caja) |
+| R22 | `FE` «R22: búsqueda por guía sin movimientos…» (cuenta) y «R22: guía sin movimientos…» (caja) |
+| R23 | `FE` «R21/R23…» (cuenta y caja), «`terminoDeGuia` solo da término con la lectura en modo guía» |
+| R24 | `FE` «R24: oficina y /mi-wallet nombran la guía y la remisión»; `LBL` «caja (469 R24)», «oficina (469 R24)» |
+| R25 | `FE` «R25/R26/R27: en modo guía viaja `resaltar`; bloque arriba…», «/mi-wallet (R25/R28)», «mensajero…», caja «R25/R28» |
+| R26 | `FE` «R25/R26/R27» (insignia «Guía buscada» en la fila buscada y no en la otra; fondo solo en esa) |
+| R27 | `FE` «R25/R26/R27» (el mismo string `2950.50` pintado igual en el bloque y en su fila) |
+| R28 | `FE` «R28: en modo texto el detalle se pide SIN `resaltar`…»; caja «R25/R28» (texto ⇒ sin `resaltar`) |
+| R35 | `FE` «R35: los textos nuevos no usan la sigla…»; `LBL` guardia de «SLA» con el placeholder de la satélite |
+| R36 | `FE` «R36: la bodega satélite NO nombra la guía»; `LBL` «469 R36» |
+| R49 (463) | `FE` «R49 (463): si la lectura nueva falla, el aviso sigue siendo el de la lectura pintada» |
+| design §4.3 | `FE` «dos términos ⇒ dos claves SWR» |
+
+El resto (R2–R20, R29–R34) es de servidor y está en el mapa de arriba.
+
+**Mutaciones (una a una, revertidas):** `terminoDeGuia` sin mirar `modoBusqueda` ⇒ 3 rojos en `FE`;
+`WalletLedger` sin pasar `resaltar` al panel ⇒ rojo «R25/R28» de la caja.
+
+## Desviaciones (técnicas, decididas)
+
+1. **Textos de la búsqueda por guía en UN módulo compartido** (`components/shared/wallet/busqueda-por-guia-labels.ts`)
+   en lugar de duplicarlos en `libro-caja-labels.ts` y `estado-cuenta-labels.ts` (design §5): el aviso y el
+   vacío son contrato y dos copias pueden divergir.
+2. **El aviso va encima de la barra** (dentro de la tarjeta del libro en la caja; justo antes del extracto
+   en las cuentas), no dentro de la fila de la barra: la barra de la 467 ya va justa de ancho (R4 de la 467).
+   Es un `<p role="status">`.
+3. **El bloque «Guía buscada» no nombra la tienda en móvil** (como la lista móvil del panel, que la apila);
+   en `/mi-wallet` no hay columna tienda (R14 de la 344).
+4. **`claveDetalle` (caja) y `claveDetalleMiMovimiento` se exportan** para poder medir «dos términos ⇒ dos
+   claves» sin montar SWR.
+
+## Verificación en la app (T15) — dev server propio, Playwright, base local, 2026-10-02
+
+Capturas y volcados en `progress/recorrido_469/` (`volcado.json`, `volcado-mi-wallet.json`, dos `.xlsx`).
+Datos: guía **38589325** (remisión `Q454-02`, tienda Tania, cierre del 2026-09-24 de Quino QUEPOS; ese cierre
+emitió **7** movimientos en la caja).
+
+| Comprobación | Resultado medido |
+| --- | --- |
+| Caja sin buscar | 36 movimientos (1-20 de 36) |
+| Caja, guía 38589325 | Aviso R21 visible; **5** filas (contra-entrega ₡6.000, flete ₡3.000, IVA flete ₡390, comisión ₡210, IVA comisión ₡27,30) de las 7 del cierre: NO salen los dos de devolución (R9). Paginación «1-5 de 5». Tarjetas: texto idéntico antes y después (R18). |
+| Abrir la contra-entrega | Bloque «Guía buscada: 38589325 · Cliente Quepos 2 · Tania · Entregado · ₡6.000»; en la lista, 1 fila resaltada (`bg-info-soft`) con la insignia «Guía buscada» y el mismo ₡6.000 (R25–R27). Cabecera «1 de 2 órdenes del cierre». |
+| Caja, remisión `Q454-02` | Aviso visible; las **mismas 5 filas** que con la guía (comparadas texto a texto). |
+| Caja, `99999999` (no es guía de ninguna orden) | Sin aviso; búsqueda de texto: «No hay movimientos que coincidan con los filtros.» (R6) |
+| Caja, texto «Combustible» | Sin aviso; 1 fila (la corrección «Combustible flota»): sigue buscando por texto. |
+| Descarga de la caja con la guía puesta | Hojas «Libro de movimientos» y «Detalle por guía». Hoja 1: 5 movimientos, «Total del periodo» Entra **6000** · Sale **0** · Cobrado a tiendas **3627,3**; aviso de filtros presente (R32). Hoja 2: un bloque (38589325), TOTAL GENERAL **6000 · 0 · 3627,3** = hoja 1 (R31). |
+| Estado de cuenta de Tania | Placeholder con guía y remisión; aviso; 5 filas + saldo inicial, cada una con el saldo corrido de la cuenta entera (₡147.670,10 en la más reciente, el flete); tarjetas iguales (texto idéntico antes y después). Detalle del flete: bloque con 38589325 y ₡3.000. Descarga: «Total del periodo» Entra **6000** · Sale **3627,3**; TOTAL GENERAL **6000 · 3627,3** = hoja 1. |
+| Estado de cuenta de Quino (su libro está vacío) | Aviso + vacío R22 «Esa guía o remisión no aporta dinero…» (1 coincidencia). |
+| Estado de cuenta de Marco | Sin buscar: 10 movimientos. Guía **990004** (en su cierre del 2026-08-12 pero sin pago al mensajero): aviso y 0 filas (R9). Guía **990006** (aporta ₡1.700): 1 fila, el pago devengado de ₡10.200 con su saldo corrido ₡10.200 igual que sin buscar (R17); NO sale el «Pago del efectivo» del mismo cierre (R13). Tarjetas iguales. Detalle: bloque «990006 · Luis Jimenez · Tania · Reprogramado · ₡1.700». |
+| Satélite (GUANACASTE) | Placeholder «Buscar por descripción o quién registró»; con la guía escrita, sin aviso (R36). |
+| `/mi-wallet` de Tania (`tienda.qa`) | Placeholder «Buscar por guía, remisión o descripción»; aviso; 5 filas + saldo inicial; detalle con bloque «38589325 · Cliente Quepos 2 · Entregado · ₡3.000» (sin tienda). |
+
+No verificado en la app: `/mi-wallet` de OTRA tienda con esa guía (R5/R29), porque en la base local no hay
+ninguna orden con guía de otra tienda (consultado). Lo cubre la integración de servidor («tienda (oficina)
+y /mi-wallet», «T10»).
+
+Nota del recorrido: en `dev` aparece al entrar un diálogo «Confirmá el SINPE de GAM» (SF-001) que deja el
+resto de la página `aria-hidden` hasta pulsar «Ahora no»; el script lo cierra. No es de esta ficha.
+
+## Gate
+
+`./init.sh` completo, `progress/gate_469_frontend.log`: **`INIT_EXIT=0`**, 2.379 archivos, **32.999 tests en
+verde, 26 skipped** (los de Analítica, preexistentes; 0 integraciones saltadas: `.env` presente).
+Primera corrida (`progress/gate_469_frontend_1.log`) en rojo por MI test: la guardia `ancla-de-carga` cazó una
+espera anclada solo a un conteo de botones; se cambió por un ancla de contenido (`1d10556f`) y la segunda
+corrida salió verde.
+
+## Veredicto (pantalla)
+
+Pantalla terminada y verificada en la app; ficha completa (servidor + pantalla) en esta rama, sin PR.
