@@ -282,3 +282,36 @@ corrida salió verde.
 ## Veredicto (pantalla)
 
 Pantalla terminada y verificada en la app; ficha completa (servidor + pantalla) en esta rama, sin PR.
+
+## Arreglo de B1 (revisión `progress/review_469.md`)
+
+**Qué:** `dark:bg-info/15` en el `section` «Guía buscada» y en el `rowClassName` de la fila resaltada,
+en `wallet/_components/DetalleMovimientoCierre.tsx` y `mi-wallet/_components/DetalleMiMovimientoCierre.tsx`
+(4 sitios). Es el idioma que ya usa el repo para `bg-info-soft` en oscuro (`components/ui/badge.tsx` info,
+`NotificationsBell`, `cierre-confirmacion-fisica.tsx`): `--color-info-soft` no gira en `.dark`.
+
+**Test:** `tests/components/BusquedaPorGuia469.test.tsx` fija `dark:bg-info/15` en bloque y fila de `/wallet`
+(tienda) y de `/mi-wallet`, y que la fila NO buscada no lo lleva. Mutación: quitar la variante de la fila de
+`/mi-wallet` o del bloque de `/wallet` pone rojo su caso (1 failed | 15 passed en cada una). Componentes de la
+469 (`BusquedaPorGuia469`, `DetalleMovimientoCierre`, `DetalleMiMovimientoCierre`): 63/63 en verde.
+
+**Medido en el navegador** (`/wallet`, `admin.qa`, guía 38589325, fila de contra-entrega; Playwright con
+`colorScheme` + cookie `ordenex_tema`). Conversión por canvas (entiende `lab()` y compone el alpha sobre los
+fondos ancestros); el medidor se autocomprueba (#767676/blanco = 4.54, negro/blanco = 21, `lab()` rojo y
+`oklch()` blanco bien convertidos) y lee dos veces con 600 ms de separación (iguales). Datos en
+`progress/recorrido_469/medidas_contraste.json`, capturas `{claro,oscuro}_{bloque_guia_buscada,tabla_fila_resaltada}.png`.
+
+| Elemento | Claro (fondo #eff6ff) | Oscuro (fondo #142b5a = info/15 sobre card) |
+|---|---|---|
+| Bloque · título «Guía buscada» (`text-info-strong`) | #1d4ed8 → 6.16 | #93b4f7 → 6.64 |
+| Bloque · destinatario (foreground) | #12233f → 14.42 | #e6ecf8 → 11.63 |
+| Bloque · tienda/resultado (muted) | #4a5368 → 7.07 | #9fadc9 → 6.10 |
+| Fila resaltada · texto | #12233f → 14.42 | #e6ecf8 → 11.63 |
+| Fila resaltada · insignia «Guía buscada» | #1d4ed8 → 6.16 | #93b4f7 → 6.64 |
+
+Antes del arreglo (calculado, no medido): #e6ecf8 sobre #eff6ff ≈ 1.1:1, lo que señaló el revisor.
+No medido en el navegador: `/mi-wallet` (la cuenta de tienda pide OTP); mismo par de clases, fijado por el test.
+
+**Gate:** `--rapido` se niega por cimientos (el diff de la rama toca `lib/types/`), `progress/gate_469_fix.log`
+`INIT_EXIT=1`. Completo con `.env`, `progress/gate_469_fix_completo.log`: **`INIT_EXIT=0`**, 2.379 archivos,
+**32.999 passed, 26 skipped** (los de Analítica, como antes).
