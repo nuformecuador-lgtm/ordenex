@@ -1,7 +1,7 @@
 # ESTADO 2026-10-02 (mañana) — fichas 467 y 468 con spec escrito, esperando aprobación
 
 - **467** (barra del libro como la de órdenes, 37 R) y **468** (Excel kardex + detalle por guía, 61 R): specs en `dev` (`10dcff61`, `506596b5`). T1 de la 468 medido: 100 % cuadra (`progress/medicion_468.md`).
-- **467** (PR #841) y **468** (PR #842) HECHAS en dev, sin desplegar. 468 deja T16 para tras la release. **469 in_progress**.
+- **467** (#841), **468** (#842) y **469** (#843) HECHAS en dev, sin desplegar. 468 deja T16 (medir en prod los 6 conceptos del feed) para tras la release. in_progress = 0.
 - WhatsApp (consultado 2026-10-02): 124 fallos 131042 «pagos pendientes en Meta» del 16 al 30-sep, parado desde el 30; 54 conversaciones sin mensaje. 131026 de fondo (<0,5 %).
 
 # ESTADO 2026-10-02 (madrugada) — 463, 464, 465 y 466 HECHAS en `dev`, SIN DESPLEGAR

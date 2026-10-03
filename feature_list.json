@@ -5602,11 +5602,11 @@
       "title": "buscar una guia en el libro de la wallet",
       "description": "El buscador del libro (caja y estados de cuenta) encuentra por numero de guia o remision los movimientos en los que esa orden aporta dinero.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": 468,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada. || 2026-10-02: implementacion arrancada tras mergear la 468.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada. || 2026-10-02: implementacion arrancada tras mergear la 468. || HECHA 2026-10-02, en dev por PR #843. NO desplegada. Revision: B1 contraste oscuro corregido y medido. Gate completo verde 32999.",
       "branch": "feature/469-wallet-buscar-guia"
     }
   ]

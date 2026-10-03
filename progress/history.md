@@ -5703,3 +5703,15 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - Deuda: T16 medir en prod los seis conceptos del feed tras desplegar; m3 la hoja 1 conserva el título de
   cada pantalla; m4 tres acciones `@sin-superficie` por retirar; m5 cabecera con dos cierres el mismo día;
   m7 «Efectivo · Efectivo» en liquidaciones del mensajero.
+
+## 2026-10-02 — 469: buscar una guía en el libro de la wallet
+- El buscador del libro (caja, estados de cuenta de tienda y mensajero, `/mi-wallet`) reconoce una guía o
+  remisión y muestra solo los movimientos a los que esa orden aporta, con el criterio de aporte existente.
+  Saldo corrido y tarjetas intactos; descarga filtrada cuadra. Detalle con bloque «Guía buscada» y fila
+  resaltada. Satélite fuera (solo texto), por decisión del humano.
+- T1 medido en prod: 0 diferencias guía/remisión (5.695 filas), 9,6 ms, sin índice.
+- R1–R36; mapa en `progress/impl_469.md`. Revisión RECHAZADA por B1 (contraste en oscuro), corregido con
+  test y medida en navegador (≥ 6,1:1). PR #843. Tres agentes de servidor cayeron por red; el WIP se
+  rescató y se completó con tests.
+- Deuda menor: m3 `incidentesDeOrdenes` sin filtro de tienda (sin efecto hoy); m4 la integración no caza
+  `identificar` sin tienda (lo caza el unitario); m5 la página del detalle no vuelve a 1 al cambiar término.
