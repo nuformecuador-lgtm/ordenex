@@ -35,6 +35,16 @@ vi.mock("@/lib/actions/order-status", () => ({
   listarOrderStatus: (...a: unknown[]) => listarOrderStatusMock(...a),
 }));
 
+// Ficha 470 (T4.5) — la preparación de descargas corre REAL por defecto (la acción de arriba llega por el
+// registro); un caso puede sustituir UNA respuesta para simular el almacén temporal o su fallo.
+const P470 = vi.hoisted(() => ({ preparar: vi.fn() }));
+vi.mock("@/lib/actions/descargas", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/actions/descargas")>();
+  P470.preparar.mockImplementation(real.prepararDescargaAction);
+  return { ...real, prepararDescargaAction: (...a: unknown[]) => P470.preparar(...a) };
+});
+const URL_FIRMADA_470 = "https://x.supabase.co/storage/v1/object/sign/descargas/tmp/0b8f7c3e-1a2b-4c3d-8e4f-123456789abc.json.gz?token=t";
+
 // El side effect de entrega se mockea y se verifica: el anchor de descarga ya lo
 // cubren las features 143/148 y `DescargarDataset.test.tsx`.
 vi.mock("@/components/shared/descargar-blob", () => ({ descargarBlob: vi.fn() }));
@@ -325,5 +335,35 @@ describe("Listado de órdenes · descarga del dataset completo", () => {
     // Mientras no se descarga, la action del dataset completo no se llama nunca.
     expect(listarOrdenesCompletoMock).not.toHaveBeenCalled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
+  });
+});
+
+describe("470 R15/R16 — el transporte del conjunto falla en Órdenes", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("R16: la URL firmada ya no se puede leer (caducada) ⇒ aviso, sin archivo", async () => {
+    P470.preparar.mockResolvedValueOnce({ modo: "almacen", url: URL_FIRMADA_470 });
+    const fetchMock = vi.fn(async () => new Response("expired", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    envolver(<OrdenesModule permitirDescarga />);
+    await screen.findByText("Destinatario 1");
+    await user.click(botonDescarga());
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(String(errorMock.mock.calls.at(-1)?.[0])).toContain("No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.");
+    expect(fetchMock).toHaveBeenCalledWith(URL_FIRMADA_470, expect.objectContaining({ credentials: "omit" }));
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+  });
+
+  it("R15: el almacén o la firma fallan en el servidor ⇒ aviso, sin archivo", async () => {
+    P470.preparar.mockResolvedValueOnce({ status: "error", code: "INTERNAL", message: "Error interno" });
+    const user = userEvent.setup();
+    envolver(<OrdenesModule permitirDescarga />);
+    await screen.findByText("Destinatario 1");
+    await user.click(botonDescarga());
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(String(errorMock.mock.calls.at(-1)?.[0])).toContain("No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.");
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });

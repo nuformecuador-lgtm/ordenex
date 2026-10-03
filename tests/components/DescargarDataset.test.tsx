@@ -8,6 +8,8 @@ import { DataTable, type DataTableDescarga } from "@/components/shared/DataTable
 import { descargarBlob } from "@/components/shared/descargar-blob";
 import { construirDescarga } from "@/lib/utils/descarga-dataset";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
+import { TEXTO_PREPARANDO } from "@/components/shared/DescargarDatasetButton";
+import { LimiteExcelExcedidoError } from "@/lib/utils/limite-excel";
 
 // Feature 151 (T8) — prop `descarga` del DataTable + control genérico:
 // R23 (dataset vacío), R24 (opt-in), R25 (obtener → generar → entregar), R26 (carga y
@@ -321,5 +323,94 @@ describe("DataTable · descarga del dataset completo", () => {
     xhrOpen.mockRestore();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
+  });
+});
+
+// Ficha 470 (T4.3) — R21 («Preparando el archivo…» y sin segunda descarga), R22 (nombre del archivo de
+// siempre) y R2 (una hoja que no cabe en Excel: aviso accionable y sin archivo).
+describe("DataTable · descarga · ficha 470", () => {
+  it("R21: mientras se prepara el botón dice «Preparando el archivo…», está deshabilitado y un segundo click no vuelve a obtener", async () => {
+    const user = userEvent.setup();
+    let resolver!: (r: { status: "ok"; filas: DescargaFila[] }) => void;
+    const obtenerFilas = vi.fn(
+      () =>
+        new Promise<{ status: "ok"; filas: DescargaFila[] }>((res) => {
+          resolver = res;
+        }),
+    );
+    renderTabla(descargaConfig({ obtenerFilas }));
+
+    const control = boton();
+    expect(control).toHaveTextContent("Descargar");
+    expect(control).not.toHaveTextContent(TEXTO_PREPARANDO);
+    await user.click(control);
+
+    await waitFor(() => expect(control).toHaveTextContent("Preparando el archivo…"));
+    expect(control).toBeDisabled();
+    expect(control).toHaveAttribute("aria-busy", "true");
+    // El nombre accesible NO cambia: quien localiza el control por él lo sigue encontrando.
+    expect(screen.getByRole("button", { name: "Descargar Órdenes" })).toBe(control);
+    await user.click(control);
+    expect(obtenerFilas).toHaveBeenCalledTimes(1);
+
+    resolver({ status: "ok", filas: FILAS_EXPORT });
+    await waitFor(() => expect(control).not.toBeDisabled());
+    expect(control).not.toHaveTextContent(TEXTO_PREPARANDO);
+    expect(control).toHaveTextContent("Descargar");
+    expect(descargarBlobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("R22: al terminar, descargarBlob recibe `<slug>-AAAA-MM-DD.xlsx` con el día de Costa Rica", async () => {
+    const real = await vi.importActual<typeof import("@/lib/utils/descarga-dataset")>(
+      "@/lib/utils/descarga-dataset",
+    );
+    construirDescargaMock.mockImplementationOnce((config) => real.construirDescarga(config));
+    // 2026-10-02T18:00Z = 12:00 en Costa Rica. Literal: el contrato es el nombre, no la función.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-02T18:00:00.000Z"));
+    try {
+      const user = userEvent.setup();
+      renderTabla(descargaConfig());
+      await user.click(boton());
+      await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+      const [contenido, mime, nombreArchivo] = descargarBlobMock.mock.calls[0];
+      expect(nombreArchivo).toBe("ordenes-2026-10-02.xlsx");
+      expect(mime).toBe(XLSX_MIME);
+      expect((contenido as ArrayBuffer).byteLength).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("R2: una hoja que pasa del límite de Excel da el aviso con hoja, filas y máximo, y no produce archivo", async () => {
+    const user = userEvent.setup();
+    construirDescargaMock.mockRejectedValueOnce(new LimiteExcelExcedidoError("Detalle por guía", 1_048_576));
+    renderTabla(descargaConfig());
+
+    await user.click(boton());
+
+    await waitFor(() => expect(errorMock).toHaveBeenCalledTimes(1));
+    expect(errorMock.mock.calls[0][0]).toBe(
+      "La hoja «Detalle por guía» tendría 1.048.576 filas y Excel admite hasta 1.048.575 por hoja. Acota el periodo o los filtros y vuelve a intentarlo.",
+    );
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(boton()).not.toBeDisabled());
+  });
+
+  it("R15/R16: si obtener las filas LANZA (almacén o lectura temporal caídos), aviso genérico y sin archivo", async () => {
+    const user = userEvent.setup();
+    const obtenerFilas = vi.fn(async () => {
+      throw new Error("descarga temporal: HTTP 400");
+    });
+    renderTabla(descargaConfig({ obtenerFilas }));
+
+    await user.click(boton());
+
+    await waitFor(() => expect(errorMock).toHaveBeenCalledTimes(1));
+    expect(errorMock.mock.calls[0][0]).toBe(
+      "No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.",
+    );
+    expect(construirDescargaMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 });
