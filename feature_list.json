@@ -5608,6 +5608,18 @@
       "depends_on": 468,
       "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada. || 2026-10-02: implementacion arrancada tras mergear la 468. || HECHA 2026-10-02, en dev por PR #843. NO desplegada. Revision: B1 contraste oscuro corregido y medido. Gate completo verde 32999. || DESPLEGADA a prod el 2026-10-02 22:37 CR (PR #844, fafb00bb, dpl_7canKeGmgHvCyJVW42wrTxxPBcU3).",
       "branch": "feature/469-wallet-buscar-guia"
+    },
+    {
+      "id": 470,
+      "title": "descargas sin tope de filas",
+      "description": "Las descargas grandes se arman en el servidor y se bajan con un enlace temporal privado; sin el tope de 5000 filas, en todas las tablas de la app.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB.",
+      "branch": null
     }
   ]
 }
