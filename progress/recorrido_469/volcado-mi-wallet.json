@@ -1,0 +1,33 @@
+[
+ {
+  "k": "trasLogin",
+  "v": "http://localhost:3000/ordenes"
+ },
+ {
+  "k": "sesion",
+  "v": "http://localhost:3000/ordenes"
+ },
+ {
+  "k": "mi:placeholder",
+  "v": "Buscar por guía, remisión o descripción"
+ },
+ {
+  "k": "mi:aviso",
+  "v": true
+ },
+ {
+  "k": "mi:filas",
+  "v": [
+   "2026-09-24 Ordenex te cobró el flete Cierre del día · 2026-09-24 ₡3.000 ₡147.670,10",
+   "2026-09-24 Cobrado a tus clientes en contra-entrega Cierre del día · 2026-09-24 ₡6.000 ₡150.670,10",
+   "2026-09-24 Ordenex te cobró el IVA de la comisión Cierre del día · 2026-09-24 ₡27,30 ₡145.800,10",
+   "2026-09-24 Ordenex te cobró el IVA del flete Cierre del día · 2026-09-24 ₡390 ₡145.827,40",
+   "2026-09-24 Ordenex te cobró la comisión de contra-entrega Cierre del día · 2026-09-24 ₡210 ₡146.217,40",
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "mi:bloque",
+  "v": "Guía buscada 38589325 Cliente Quepos 2 Entregado ₡3.000"
+ }
+]
