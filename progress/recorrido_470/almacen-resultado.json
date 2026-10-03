@@ -1,0 +1,42 @@
+{
+  "etiqueta": "almacen",
+  "descargas": [
+    {
+      "nombre": "caja-con-detalle",
+      "archivo": "almacen-caja-con-detalle-libro-de-movimientos-2026-10-03.xlsx",
+      "sugerido": "libro-de-movimientos-2026-10-03.xlsx",
+      "ms": 7806,
+      "vioPreparando": true,
+      "textoVisto": "Preparando el archivo…",
+      "acciones": [
+        {
+          "peticion": "[\"libroCajaKardexConDetalle\",{\"sortBy\":\"fecha\",\"sortDir\":\"asc\"}]",
+          "status": 200,
+          "bytesRespuesta": 509,
+          "modo": "almacen",
+          "url": "https://scfnwxqbsgkzwsdntdvd.supabase.co/storage/v1/object/sign/descargas/tmp/b5389192-65d8-42be-bdbe-57abcb1ba1e4.json.gz?token=<redactado: JWT caducado, exp = iat + 300 s>"
+        }
+      ]
+    },
+    {
+      "nombre": "ordenes-xlsx",
+      "archivo": "almacen-ordenes-xlsx-ordenes-2026-10-03.xlsx",
+      "sugerido": "ordenes-2026-10-03.xlsx",
+      "ms": 1803,
+      "vioPreparando": true,
+      "textoVisto": "Preparando el archivo…",
+      "acciones": [
+        {
+          "peticion": "[\"listarOrdenesCompleto\",{\"sortBy\":\"created_at\",\"sortDir\":\"desc\"}]",
+          "status": 200,
+          "bytesRespuesta": 509,
+          "modo": "almacen",
+          "url": "https://scfnwxqbsgkzwsdntdvd.supabase.co/storage/v1/object/sign/descargas/tmp/593b3f4f-95f9-4870-b960-a2a8777b52f7.json.gz?token=<redactado: JWT caducado, exp = iat + 300 s>"
+        }
+      ]
+    }
+  ],
+  "walletPie": "1-20 de 36",
+  "walletOpcion": true,
+  "ordenesPie": "1-25 de 85"
+}

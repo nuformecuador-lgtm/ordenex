@@ -192,3 +192,123 @@ baseline: no es un rojo permanente): el test debería usar `fechaCalendarioCR(ne
 ## Veredicto
 
 Servidor de la 470 (T1–T3 + T5 servidor) hecho y verde salvo un rojo de reloj ajeno a la rama; el bloque 4 (pantalla) queda para `frontend_dev` con los contratos de arriba.
+
+---
+
+# 470 — parte de pantalla (frontend)
+
+> `frontend_dev`, 2026-10-03. Rama local `fe470` → `origin/feature/470-descargas-sin-tope`, base `0fdb3ee7`.
+> Alcance: T4.1–T4.7, el arreglo de reloj de `OrdenesDescarga*` (fuera del spec, autorizado) y la
+> verificación T6.1. Búsqueda de código: `grep` + lectura de archivos (los 33 símbolos venían censados
+> con archivo:línea en el design y en la sección del servidor).
+
+## Commits
+
+- `aeca9298` test: `hoyISO()` de `OrdenesDescarga.test.tsx` y `OrdenesDescargaColumnas.test.tsx` pasa a
+  `fechaCalendarioCR(new Date())`, y un caso nuevo fija el reloj en `2026-10-03T05:30Z` (00:30 Bogotá,
+  23:30 CR) y afirma el literal `ordenes-2026-10-02.xlsx`. Corrido dentro de la franja (00:31 local): verde.
+- `ddd743cf` T4.1/T4.2/T4.4/T4.6: `descargarDatos`, cableado de las 33, guardia R24, fuera el `@sin-superficie`.
+- `d69e139b` T4.3/T4.5/T4.7: «Preparando el archivo…», guardia de Excel por hoja, tests de pantalla.
+
+## Archivos
+
+Nuevos: `components/shared/descarga-datos.ts`, `lib/utils/limite-excel.ts`,
+`tests/unit/components/descarga-datos.test.ts`, `tests/unit/components/descarga-resultado-470.test.ts`,
+`tests/unit/utils/descarga-dataset-excel.test.ts`, `tests/unit/guards/descargas-por-registro.guardia.test.ts`.
+
+Modificados (producción): `components/shared/DescargarDatasetButton.tsx`, `components/shared/descarga-resultado.ts`
+(`mensajeLimiteExcel`; comentario de `filasLocales` ya sin «5000»), `lib/utils/descarga-dataset.ts`,
+`lib/actions/descargas.ts` (solo el JSDoc), `components/shared/estado-cuenta/EstadoCuenta.tsx` y 25 archivos de
+`app/(app)/**` (cableado: una llamada y un import cada uno).
+
+## Mapa R → test (pantalla)
+
+| R | Test |
+|---|---|
+| R2 | `tests/unit/utils/descarga-dataset-excel.test.ts` (principal y adicional con 1.048.576 ⇒ `LimiteExcelExcedidoError`, exceljs no invocado; 1.048.575 no lanza por el contador); `tests/components/DescargarDataset.test.tsx` («R2: una hoja que pasa del límite…», texto literal y sin `descargarBlob`) |
+| R6 | `tests/unit/components/descarga-datos.test.ts` («directo»: mismo objeto, sin `fetch`) |
+| R7 | `tests/unit/components/descarga-datos.test.ts` («almacén»: una `fetch` sin credenciales, gzip real, `Date` y `bigint` reconstruidos); T6.1 abajo |
+| R8 | T6.1 abajo (archivo directo = archivo por almacén, celda a celda) |
+| R11 | `tests/unit/components/descarga-datos.test.ts` («los errores PROPIOS de la acción vuelven como resultado») |
+| R15 | `descarga-datos.test.ts` (INTERNAL, validation_error, sobre sin forma ⇒ lanza); pantalla: `OrdenesDescarga.test.tsx`, `WalletCaja468.test.tsx`, `EstadoCuenta468.test.tsx` («470 R15/R16 … R15»); `DescargarDataset.test.tsx` («R15/R16: si obtener las filas LANZA…») |
+| R16 | `descarga-datos.test.ts` (HTTP 400/403/404, red caída, gzip corrupto, JSON ilegible); pantalla: los mismos tres archivos («… R16: la URL firmada ya no se puede leer») |
+| R21 | `tests/components/DescargarDataset.test.tsx` («R21: …Preparando el archivo…», deshabilitado, `aria-busy`, nombre accesible intacto, segundo click sin segunda obtención); T6.1 (captura del botón) |
+| R22 | `tests/components/DescargarDataset.test.tsx` («R22: … `<slug>-AAAA-MM-DD.xlsx` con el día de Costa Rica», reloj fijado, generador real); `OrdenesDescarga.test.tsx` (franja 00:00–01:00) |
+| R23 | `tests/unit/components/descarga-resultado-470.test.ts` (5.001 y 20.000 ⇒ ok, todas, en orden, sin red; tope fijado en 10 ⇒ aviso) |
+| R24 | `tests/unit/guards/descargas-por-registro.guardia.test.ts` |
+
+Mutaciones medidas: volver a poner `listarOrdenesCompleto({` en `OrdenesModule` ⇒ la guardia R24 da 2 rojos
+(uso directo y clave sin `descargarDatos`). El caso de reloj fijado afirma un literal: con el `hoyISO()` local
+antiguo daría `2026-10-03`.
+
+## Desviaciones
+
+1. **`LimiteExcelExcedidoError` vive en `lib/utils/limite-excel.ts`** (sin dependencias; `descarga-dataset.ts` lo
+   reexporta y llama a `comprobarLimiteExcel`). El botón necesita reconocer el error con `instanceof` y no puede
+   importar estáticamente `descarga-dataset` sin arrastrar el generador al bundle inicial (va por `import()`).
+2. **`mensajeLimiteExcel(hoja, filas, limite)`** recibe también el límite y formatea los miles con punto a mano
+   («1.048.575»), sin depender del ICU del navegador.
+3. **T4.5 sin mockear `descargarDatos`**: en los tres archivos de pantalla se mockea `@/lib/actions/descargas` con
+   un doble que **delega en la acción real** por defecto y en el caso sustituye UNA respuesta (`modo: "almacen"` +
+   `fetch` 400, o `status: "error", code: "INTERNAL"`). Así el `descargarDatos` y el `leerDesdeAlmacen` que corren
+   son los reales. Ningún test construye el cliente de Storage (el umbral por defecto deja todo en `directo`).
+4. **Excepciones de la guardia R24 por archivo + símbolo, con UN uso permitido**, no por número de línea (las
+   líneas se mueven con cualquier edición). Novedades (`NovedadesModule.tsx`, pintar la pestaña) y `cargar-kpis.ts`
+   (KPIs). La guardia lee el mapa clave → símbolo del propio registro, tiene auto-prueba en las dos direcciones,
+   descarta literales de texto (la clave `"listarOrdenesCompleto"` coincide con el símbolo) y exige ≥ 500 fuentes
+   leídas (hay 672 en `app/` + `components/`; el 800 que puse primero era una suposición).
+5. **Tests existentes adaptados al contrato nuevo, sin borrar ninguno**: 6 aserciones `mock.calls[0]).toEqual([])`
+   pasan a `[undefined]` (el envoltorio del registro llama SIEMPRE con un argumento, R13) en
+   `SaldosTiendasBuscador463`, `descarga/CierresDescarga`, `descarga/IncidentesDescarga` (2) y
+   `descarga/WalletPropsDescarga` (2). Tres guardias que fijaban el camino viejo: `adaptador-conjunto.guardia`
+   (el control positivo acepta `descargarDatos("<clave>"` además de la llamada directa),
+   `cierres-descarga-detallada-puerta` (`accion={(f) => descargarDatos("…", f)}`) e
+   `historial-acciones-solo-lectura.guardia` (el módulo ya no importa la lectura completa; se afirma la llamada
+   por `descargarDatos`).
+6. `HistorialAccionesModule`: el default es una función de módulo (`listarHistorialAccionesCompletoDescarga`) para
+   que su identidad sea estable; los tests siguen inyectando por `acciones.listarCompleto`.
+7. **T6.1 paso 2: `/ordenes` solo ofrece Excel** (no declara `formatos`), así que no hay CSV que comparar.
+
+## Gate
+
+`./init.sh` completo sobre `d69e139b`, con el `.env` del árbol principal (borrado al acabar). Log:
+`progress/gate_470_frontend.log` (sin commitear, como los demás logs).
+
+```
+✓ typecheck paso
+✓ lint paso
+✓ DATABASE_URL resuelta: los 329 archivos de tests contra Postgres SI se ejecutan
+ Test Files  2390 passed (2390)
+      Tests  33130 passed | 26 skipped (33156)
+INIT_EXIT=0
+```
+
+`skipped` = 26, los de siempre. Ningún flake. Duración 955 s.
+
+## T6.1 — verificación en la app (`progress/recorrido_470/`)
+
+Dev server propio (`pnpm dev -p 3470`), Playwright como `admin.qa@ordenex.test`. Dos corridas: umbral por defecto
+(2 MB, vía directa) y `DESCARGA_UMBRAL_ALMACEN_BYTES=1` en la línea de arranque (vía del almacén). **K1:** la
+segunda escribió **2 objetos temporales privados** en el bucket `descargas` del Storage de **producción**
+(`tmp/b5389192-….json.gz` y `tmp/593b3f4f-….json.gz`), que purgará el cron de prod; si el bucket no existía, lo
+creó esa corrida (privado). Dev server parado al acabar.
+
+| Caso | Vía | Respuesta de la acción | Tiempo click → archivo | Archivo |
+|---|---|---|---|---|
+| `/wallet` caja, «Movimientos y detalle por guía», sin periodo (todo) | directo | 41.007 B, `modo: "directo"` | 1,5 s | 2 hojas: «Libro de movimientos» 39 filas (cabecera + saldo inicial + **36** movimientos + total; la tabla dice «1-20 de 36»), «Detalle por guía» 113 filas (112 + cabecera) |
+| idem | almacén | **509 B**, `modo: "almacen"`, URL `…/object/sign/descargas/tmp/<uuid>.json.gz?token=…` | 7,8 s (incluye subir a Storage de prod la primera vez) | **idéntico** al directo, celda a celda y negritas |
+| `/ordenes` sin filtros, Excel | directo | 178.730 B, `modo: "directo"` | 0,5 s | 86 filas = cabecera + **85** (la tabla dice «1-25 de 85»), 22 columnas |
+| idem | almacén | **509 B**, `modo: "almacen"` | 1,8 s | **idéntico** al directo |
+
+- **R21:** en las 4 descargas el botón mostró «Preparando el archivo…» (sondeo cada 25 ms; capturas `*-boton-preparando.png`).
+- **Montos numéricos:** Entra/Sale/Cobrado a tiendas/Saldo son `number` en las dos hojas de la caja; «Monto a cobrar» y «Nº Guía» numéricos en órdenes (`comparacion.json` → `tipos`).
+- **Hoja 2 = hoja 1:** «Total del periodo» (Entra 13.524.733,22 · Sale 40.800,5 · Cobrado 43.729,9) = «TOTAL GENERAL» del detalle.
+- **R10/TTL:** las dos URLs firmadas llevan `exp − iat = 300`; pedidas a los 384–395 s responden **400 `InvalidJWT` «"exp" claim timestamp check failed»** (`ttl-url-firmada.json`; los tokens están redactados en `almacen-resultado.json`).
+- Nombre del archivo con el día de CR: la corrida directa cayó a las 23:5x de CR (`…-2026-10-02.xlsx`) y la de almacén pasada la medianoche de CR (`…-2026-10-03.xlsx`).
+
+Lo que el recorrido NO pudo medir: un conjunto local de verdad grande (la caja local tiene 36 movimientos y 85
+órdenes); el caso real de 14.153 filas queda para T7.2 en producción.
+
+## Veredicto (pantalla)
+
+Bloque 4 hecho, gate completo verde (33.130 / 26 skipped) y verificado en la app por las dos vías con archivos idénticos.
