@@ -5614,12 +5614,12 @@
       "title": "descargas sin tope de filas",
       "description": "Las descargas grandes se arman en el servidor y se bajan con un enlace temporal privado; sin el tope de 5000 filas, en todas las tablas de la app.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB.",
-      "branch": null
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB. || SPEC escrito (24 R) y aprobado de antemano; desviacion A1 aceptada por el leader (datos por bucket privado 'descargas' + URL firmada 5 min, el xlsx lo sigue armando el navegador). backend_dev -> frontend_dev en worktree.",
+      "branch": "feature/470-descargas-sin-tope"
     }
   ]
 }
