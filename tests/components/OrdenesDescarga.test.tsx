@@ -10,6 +10,7 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 import type { OrdenesFilterUI } from "@/app/(app)/ordenes/_components/serializar-filtro";
 
@@ -122,11 +123,13 @@ function botonDescarga() {
   return screen.getByRole("button", { name: "Descargar Órdenes" });
 }
 
-/** Fecha local de hoy en `YYYY-MM-DD`, misma convención que el nombre de archivo. */
+/**
+ * Hoy en `YYYY-MM-DD` con la MISMA convención que el nombre de archivo: el día calendario de COSTA
+ * RICA (`fechaCalendarioCR`, ficha 457 O3), no el del reloj local. Con la fecha local, entre las
+ * 00:00 y la 01:00 de una máquina en UTC−5 el test esperaba el día siguiente al del archivo.
+ */
 function hoyISO(): string {
-  const d = new Date();
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  return fechaCalendarioCR(new Date());
 }
 
 beforeEach(() => {
@@ -244,6 +247,27 @@ describe("Listado de órdenes · descarga del dataset completo", () => {
     // R37: `ordenes-YYYY-MM-DD.xlsx` — el listado y el día de la descarga.
     const [, , nombreArchivo] = descargarBlobMock.mock.calls[0];
     expect(nombreArchivo).toBe(`ordenes-${hoyISO()}.xlsx`);
+  });
+
+  it("en la franja 00:00-01:00 de Bogotá el nombre lleva el día de Costa Rica (aún el anterior)", async () => {
+    // 2026-10-03T05:30Z = 00:30 en Bogotá (UTC−5) y 23:30 del día 2 en Costa Rica (UTC−6). Literal a
+    // propósito: comparar con `fechaCalendarioCR` sería comparar el código consigo mismo.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-03T05:30:00.000Z"));
+    try {
+      const user = userEvent.setup();
+      envolver(<OrdenesModule permitirDescarga />);
+
+      await screen.findByText("Destinatario 1");
+      await user.click(botonDescarga());
+
+      await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+      const [, , nombreArchivo] = descargarBlobMock.mock.calls[0];
+      expect(nombreArchivo).toBe("ordenes-2026-10-02.xlsx");
+      expect(hoyISO()).toBe("2026-10-02");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("muestra el error de tope, con total y límite, y no descarga archivo", async () => {
