@@ -25,9 +25,9 @@ describe("codec de descarga · ida y vuelta (R8)", () => {
   });
 
   it("bigint vuelve como bigint exacto (mas alla de Number.MAX_SAFE_INTEGER)", () => {
-    const r = ida({ n: 9007199254740993n, lista: [1n, -2n] });
-    expect(r.n).toBe(9007199254740993n);
-    expect(r.lista).toEqual([1n, -2n]);
+    const r = ida({ n: BigInt("9007199254740993"), lista: [BigInt(1), BigInt(-2)] });
+    expect(r.n).toBe(BigInt("9007199254740993"));
+    expect(r.lista).toEqual([BigInt(1), BigInt(-2)]);
   });
 
   it("arrays conservan el orden; null, numeros, booleanos y strings raros sobreviven", () => {
