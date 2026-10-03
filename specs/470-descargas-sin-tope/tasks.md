@@ -11,19 +11,19 @@
 
 ## Bloque 1 — Sin tope propio (backend)
 
-- [ ] **T1.1** `lib/config/descarga.ts`: `EXCEL_MAX_FILAS_DATOS = 1_048_575`; `MAX_FILAS` fijo a ese valor
+- [x] **T1.1** `lib/config/descarga.ts`: `EXCEL_MAX_FILAS_DATOS = 1_048_575`; `MAX_FILAS` fijo a ese valor
   (deja de leer `DESCARGA_MAX_FILAS`); nuevos `UMBRAL_ALMACEN_BYTES`, `TTL_URL_SEGUNDOS`,
   `RETENCION_MINUTOS`, `BUCKET` con `readPositiveInt`/string y sus defaults (design §3.1). Comentario de
   cabecera explicando por qué el tope ya no es configurable.
   - Hecho: `tests/unit/config/descarga-config.test.ts` reescrito: `MAX_FILAS === 1048575` con y sin
     `DESCARGA_MAX_FILAS="2000"` (**R3**); defaults y env válidas/inválidas de las 4 nuevas.
-- [ ] **T1.2** Confirmar que ningún servicio necesita cambio: con el tope en 1.048.575, cada `limite_excedido`
+- [x] **T1.2** Confirmar que ningún servicio necesita cambio: con el tope en 1.048.575, cada `limite_excedido`
   significa «supera Excel». Test nuevo `tests/unit/services/wallet-caja-kardex-470.test.ts` (o ampliar el de
   la 468): `kardexConDetalle` con 14.153 filas de detalle (doble de repo) devuelve `ok` con las dos hojas,
   no `limite_excedido` (**R4**, **R1**).
   - Hecho: test verde; con un tope mockeado a 10, el mismo test devuelve `limite_excedido` (la mutación
     lo mata).
-- [ ] **T1.3** Adaptar los tests que dependían del 5.000 (riesgo K6): `dinero-productos-sql.test.ts:215`
+- [x] **T1.3** Adaptar los tests que dependían del 5.000 (riesgo K6): `dinero-productos-sql.test.ts:215`
   (afirma 5000) al nuevo contrato; los que crean `MAX_FILAS + 1` objetos o un xlsx de `MAX_FILAS` filas
   (`tests/integration/descarga-170-volumen.test.ts`, `tests/unit/services/*-completo.test.ts`,
   `export-financiero-vacio`, `historial-accion/lectura-borde-y-servicio`, componentes de `tests/components/descarga/`)
@@ -35,11 +35,11 @@
 
 ## Bloque 2 — Almacén y purga (backend)
 
-- [ ] **T2.1** [P] `lib/utils/codec-descarga.ts` (design §3.2) + `tests/unit/descarga/codec-descarga.test.ts`:
+- [x] **T2.1** [P] `lib/utils/codec-descarga.ts` (design §3.2) + `tests/unit/descarga/codec-descarga.test.ts`:
   ida y vuelta de `Date`, `bigint`, anidados, arrays (orden), `null`, strings con comillas/saltos/emoji;
   `Map`/`Set`/función ⇒ lanza nombrando el tipo.
   - Hecho: test verde. Cubre **R8** (parte de transporte).
-- [ ] **T2.2** [P] `lib/interfaces/external/IAlmacenDescargas.ts` + `lib/storage/SupabaseAlmacenDescargas.ts`
+- [x] **T2.2** [P] `lib/interfaces/external/IAlmacenDescargas.ts` + `lib/storage/SupabaseAlmacenDescargas.ts`
   (design §3.3) + entrada `DESCARGAS` en `lib/storage/buckets.ts`. Tests con doble de `StorageClientLike`
   (`tests/unit/storage/almacen-descargas.test.ts`):
   - ruta = `tmp/<uuid v4>.json.gz`, regex estricta, dos llamadas ⇒ dos rutas distintas (**R9**);
@@ -51,7 +51,7 @@
   - `purgarAnterioresA`: borra solo los `created_at < corte`, pagina, respeta `maximo`, bucket inexistente
     ⇒ 0, error del SDK en `remove` ⇒ lanza (**R17**).
   - Hecho: tests verdes; construir la clase sin cliente inyectado NO llama a `createServerClient` (perezoso).
-- [ ] **T2.3** `lib/services/PurgaDescargasService.ts` (+ interfaz) y `app/api/cron/purga-descargas/route.ts`
+- [x] **T2.3** `lib/services/PurgaDescargasService.ts` (+ interfaz) y `app/api/cron/purga-descargas/route.ts`
   (clon de `purga-pdf-cargas`, design §3.6) + entrada en `vercel.json` `*/15 * * * *`.
   Tests `tests/unit/api/cron-purga-descargas.test.ts`:
   - sin header / secreto incorrecto / secreto no configurado ⇒ 401 y el servicio NO se construye (**R19**);
@@ -62,11 +62,11 @@
 
 ## Bloque 3 — Entrega y registro (backend)
 
-- [ ] **T3.1** Re-censo del inventario (design §2.1): `grep` de `filasDesdeResultado|obtenerFilas|Completo\(|Kardex`
+- [x] **T3.1** Re-censo del inventario (design §2.1): `grep` de `filasDesdeResultado|obtenerFilas|Completo\(|Kardex`
   en `app/` y `components/`. Toda descarga de Familia A que falte en la tabla se añade al registro y a
   `progress/impl_470.md` con archivo:línea.
   - Hecho: lista final en `progress/impl_470.md` (33 o más entradas) con las exclusiones razonadas.
-- [ ] **T3.2** `lib/types/descarga-preparada.ts` + `lib/services/EntregaDescargaService.ts` (+ interfaz)
+- [x] **T3.2** `lib/types/descarga-preparada.ts` + `lib/services/EntregaDescargaService.ts` (+ interfaz)
   (design §3.4). Tests `tests/unit/services/entrega-descarga.test.ts` (umbral inyectado):
   - resultado ≤ umbral ⇒ `{ modo: "directo", resultado }` con el MISMO objeto y CERO llamadas al almacén
     (**R6**);
@@ -76,7 +76,7 @@
     intacto (**R11**);
   - fallo de `guardar` o de `firmar` ⇒ lanza con contexto (**R15**, lado servidor).
   - Hecho: tests verdes; mutar `<=` por `<` o quitar la rama del umbral pone rojo algún test.
-- [ ] **T3.3** `lib/actions/_shared/registro-descargas.ts` (imports estáticos, design §3.5) y
+- [x] **T3.3** `lib/actions/_shared/registro-descargas.ts` (imports estáticos, design §3.5) y
   `lib/actions/descargas.ts` con `prepararDescargaAction(nombre, input, deps)`. Tests
   `tests/unit/actions/preparar-descarga.test.ts` (registro y entrega inyectados):
   - nombre fuera del registro (`"borrarTodo"`, `""`, `123`) ⇒ `validation_error`, ninguna acción del
@@ -87,7 +87,7 @@
   - `entregar` lanza ⇒ `ActionError` (no excepción) (**R15**).
   - Hecho: tests verdes; `superficie-de-uso.guardia` verde (las acciones registradas siguen alcanzables
     y no aparece ninguna anotación caducada).
-- [ ] **T3.4** Archivo idéntico, extremo a extremo sin red: `tests/unit/descarga/archivo-identico-470.test.ts`.
+- [x] **T3.4** Archivo idéntico, extremo a extremo sin red: `tests/unit/descarga/archivo-identico-470.test.ts`.
   Con fixtures realistas de (a) el resultado de `libroCajaKardexConDetalleAction` (kardex + `porGuia`, con
   fechas) y (b) `listarOrdenesCompleto`: pasar cada uno por `EntregaDescargaService` con umbral 1 byte y un
   almacén en memoria, recuperar los bytes guardados, gunzip + `deserializarDescarga`, y comparar con el
@@ -98,7 +98,7 @@
 
 ## Bloque 4 — Frontend (`frontend_dev`, tras Bloque 3 en la misma rama)
 
-- [ ] **T4.1** `components/shared/descarga-datos.ts` con `descargarDatos` y `leerDesdeAlmacen` (design §4.1).
+- [x] **T4.1** `components/shared/descarga-datos.ts` con `descargarDatos` y `leerDesdeAlmacen` (design §4.1).
   Tests `tests/unit/components/descarga-datos.test.ts` (`prepararDescargaAction` y `fetch` mockeados):
   - `directo` ⇒ devuelve `resultado` sin llamar a `fetch` (**R6**);
   - `almacen` ⇒ `fetch(url)` una vez, descomprime y deserializa al objeto original (gz real producido con
@@ -106,11 +106,11 @@
   - `fetch` con 403/404/red caída o gzip corrupto ⇒ lanza (**R16**);
   - sobre con `ActionError` ⇒ lanza (**R15**).
   - Hecho: tests verdes.
-- [ ] **T4.2** Cablear las 33 descargas del inventario (design §2.1, §4.2) a `descargarDatos`, incluidos los
+- [x] **T4.2** Cablear las 33 descargas del inventario (design §2.1, §4.2) a `descargarDatos`, incluidos los
   casos con inyección (`DescargarGestionesDialog`, `HistorialAccionesModule`, `NovedadesModule`,
   `EstadoCuenta`, `MiEstadoCuenta`). Nada aguas abajo cambia.
   - Hecho: `pnpm typecheck` verde; diff limitado a las llamadas (revisable a ojo).
-- [ ] **T4.3** `DescargarDatasetButton`: «Preparando el archivo…» mientras `generando` (`TEXTO_PREPARANDO`
+- [x] **T4.3** `DescargarDatasetButton`: «Preparando el archivo…» mientras `generando` (`TEXTO_PREPARANDO`
   exportada), `aria-busy`, `aria-label` intacto; `catch` de `LimiteExcelExcedidoError` con
   `mensajeLimiteExcel`. `lib/utils/descarga-dataset.ts`: `LimiteExcelExcedidoError` + comprobación por hoja
   antes de exceljs (design §4.4). Tests:
@@ -122,29 +122,29 @@
     (probarlo con el contador de la guardia, sin armar el libro) (**R2**);
   - el control muestra `mensajeLimiteExcel` y no produce archivo (**R2**).
   - Hecho: tests verdes.
-- [ ] **T4.4** Arreglar los tests de componentes que se rompan por el cableado (K8): si un test mockeaba el
+- [x] **T4.4** Arreglar los tests de componentes que se rompan por el cableado (K8): si un test mockeaba el
   módulo de la acción, el mock sigue interceptando a través del registro (vitest mockea por módulo);
   si alguno falla por un import nuevo, mockear el módulo afectado. Nada de borrar aserciones.
   - Hecho: `pnpm exec vitest run tests/components` verde, mismo número de tests que en `dev` o más.
-- [ ] **T4.5** Errores por pantalla tipo (**R15**, **R16**): tres tests de componente —Órdenes
+- [x] **T4.5** Errores por pantalla tipo (**R15**, **R16**): tres tests de componente —Órdenes
   (`filasDesdeResultado`), libro de la caja con detalle (`WalletModule`), estado de cuenta con detalle
   (`EstadoCuenta`)— con `descargarDatos` rechazando: aviso en toast y `descargarBlob` NO llamado.
   - Hecho: tests verdes.
-- [ ] **T4.6** Guardia `tests/unit/guards/descargas-por-registro.guardia.test.ts` (**R24**): para cada clave
+- [x] **T4.6** Guardia `tests/unit/guards/descargas-por-registro.guardia.test.ts` (**R24**): para cada clave
   del registro, ningún archivo de `app/` o `components/` usa el símbolo de la acción (llamada o referencia,
   sin contar líneas de `import` ni comentarios), salvo la lista de excepciones con motivo
   (`useNovedadesFiltro.ts`, `cargar-kpis.ts`); y cada clave aparece en algún `descargarDatos("<clave>"`.
   Auto-prueba del detector en las dos direcciones (un fuente sintético con llamada directa ⇒ la detecta;
   uno limpio ⇒ no) y tamaño mínimo del árbol leído (lección de `superficie-de-uso.guardia`).
   - Hecho: guardia verde; volver a poner `listarOrdenesCompleto(` en `OrdenesModule` la pone roja.
-- [ ] **T4.7** [P] Familia B (**R23**): `tests/unit/components/descarga-resultado.test.ts` — `filasLocales`
+- [x] **T4.7** [P] Familia B (**R23**): `tests/unit/components/descarga-resultado.test.ts` — `filasLocales`
   con 5.001 y con 20.000 filas devuelve `ok` con todas, en orden, sin llamadas de red; con más de
   `MAX_FILAS` (tope mockeado pequeño) devuelve el aviso.
   - Hecho: test verde.
 
 ## Bloque 5 — Medición (backend_dev o frontend_dev, tras T4.3)
 
-- [ ] **T5** Script de un solo uso (scratchpad, NO en el repo) que mida con el código real: `construirDescarga`
+- [x] **T5** Script de un solo uso (scratchpad, NO en el repo) que mida con el código real: `construirDescarga`
   con 50.000 y 200.000 filas × 15 columnas (xlsx y csv) y `serializarDescarga` + gzip de 50.000 filas:
   tiempo, pico de `heapUsed`/`rss` y tamaño del gz. Anotar en `progress/impl_470.md`.
   - Hecho: números escritos. Criterio informativo, no bloqueante: si 50.000 filas tardan > 60 s o pasan
@@ -152,7 +152,7 @@
 
 ## Bloque 6 — Recorrido en la app (frontend_dev o leader, tras el gate verde)
 
-- [ ] **T6.1** Dev server local con `DESCARGA_UMBRAL_ALMACEN_BYTES=1` en la línea de arranque (no en `.env`),
+- [x] **T6.1** Dev server local con `DESCARGA_UMBRAL_ALMACEN_BYTES=1` en la línea de arranque (no en `.env`),
   para forzar la vía de almacén con los datos locales. **Riesgo K1, anotar en el informe:** esto escribe
   objetos temporales en el bucket `descargas` del Storage de PRODUCCIÓN (y lo crea si no existe); son
   privados, ilegibles a los 5 min y los borra el cron de prod.
