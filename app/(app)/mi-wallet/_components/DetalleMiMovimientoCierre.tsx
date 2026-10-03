@@ -189,7 +189,7 @@ function BloqueGuiaBuscada({
   return (
     <section
       aria-label={nombre}
-      className="flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm"
+      className="flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15"
     >
       <h4 className="font-medium text-info-strong">{BUSQUEDA_POR_GUIA_TEXTO.guiaBuscada}</h4>
       <ul className="flex flex-col gap-1">
@@ -413,7 +413,7 @@ export function DetalleMiMovimientoCierre({
           data={ordenes}
           rowKey="ordenId"
           // FICHA 469 (R26) — la fila buscada con fondo; el texto lo lleva su celda de guía.
-          rowClassName={(o) => (o.resaltada ? "bg-info-soft" : undefined)}
+          rowClassName={(o) => (o.resaltada ? "bg-info-soft dark:bg-info/15" : undefined)}
           ariaLabel={DETALLE_MI_MOVIMIENTO_NOMBRE.tabla(concepto, fecha)}
           isLoading={isLoading}
           /* R7: el fallo se cuenta DENTRO de esta fila; el libro entero sigue en pie. */

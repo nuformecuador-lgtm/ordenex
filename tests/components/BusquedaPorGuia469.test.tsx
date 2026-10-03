@@ -331,6 +331,11 @@ describe("469 T13 — el detalle de una fila: `resaltar` solo en modo guía", ()
     expect(within(otra).queryByText("Guía buscada")).toBeNull();
     expect(filaBuscada.className).toMatch(/bg-info-soft/);
     expect(otra.className).not.toMatch(/bg-info-soft/);
+    // B1 (revisión 469): `--color-info-soft` no gira en `.dark` y el texto sí; sin la variante
+    // oscura el bloque y la fila quedaban a ~1,1:1. Mismo idioma que `Badge` info.
+    expect(bloque.className.split(/\s+/)).toContain("dark:bg-info/15");
+    expect(filaBuscada.className.split(/\s+/)).toContain("dark:bg-info/15");
+    expect(otra.className).not.toMatch(/dark:bg-info/);
   });
 
   it("mensajero: también manda `resaltar` en modo guía", async () => {
@@ -356,7 +361,12 @@ describe("469 T13 — el detalle de una fila: `resaltar` solo en modo guía", ()
     await screen.findByText(AVISO);
     await user.click(abrir());
     await waitFor(() => expect(H.detalleMi).toHaveBeenCalledWith({ movimientoId: UUID_MOV(1), page: 1, resaltar: GUIA }));
-    expect(await screen.findByRole("region", { name: /^Guía buscada en / })).toBeInTheDocument();
+    const bloque = await screen.findByRole("region", { name: /^Guía buscada en / });
+    // B1 (revisión 469): la variante oscura también en /mi-wallet, bloque y fila resaltada.
+    expect(bloque.className.split(/\s+/)).toContain("dark:bg-info/15");
+    const tabla = screen.getByRole("table", { name: /^Órdenes que componen/ });
+    const filaBuscada = within(tabla).getByText("Ana Quesada").closest("tr")!;
+    expect(filaBuscada.className.split(/\s+/)).toEqual(expect.arrayContaining(["bg-info-soft", "dark:bg-info/15"]));
   });
 
   it("design §4.3: dos términos ⇒ dos claves SWR; sin término, la clave de siempre con «»", () => {
