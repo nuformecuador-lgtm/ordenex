@@ -1,3 +1,7 @@
+# ESTADO 2026-10-03 — 470 DESPLEGADA (PR #846, 11:12 CR); in_progress = 0
+
+- Pendiente de la 470: que Carlos repita en prod la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros. WhatsApp (54 conversaciones sin mensaje): siguiente sesión. T16 de la 468 (contar «Diferencia sin repartir» en el Excel de la caja de todo el historial): ahora posible con la 470.
+
 # ESTADO 2026-10-02 (noche) — RELEASE 463–469 DESPLEGADA (PR #844, 22:37 CR)
 
 **AUTORIZACIÓN (2026-10-02 noche):** Carlos se fue y dejó dicho, sobre la ficha 470 (descargas sin tope): «regístrala con todas las tablas de la app y saca esto lo más rápido que podás a producción… cuando vuelva creo que ya habrás terminado y lo habrás subido a producción». Cubre: spec aprobado de antemano, implementar, revisar, mergear y DESPLEGAR a `prod` la 470. Nada más. Y después: «cuando termines y saques esto a producción, después apaga el pc» (apagar solo tras desplegar y dejar todo pusheado).

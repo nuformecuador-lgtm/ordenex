@@ -5715,3 +5715,12 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
   rescató y se completó con tests.
 - Deuda menor: m3 `incidentesDeOrdenes` sin filtro de tienda (sin efecto hoy); m4 la integración no caza
   `identificar` sin tienda (lo caza el unitario); m5 la página del detalle no vuelve a 1 al cambiar término.
+
+## 2026-10-03 — 470: descargas sin tope de filas
+- Las 33 descargas de servidor pasan por `prepararDescargaAction` (registro cerrado, misma sesión y permisos);
+  si los datos pasan de 2 MB viajan comprimidos por el bucket privado `descargas` con URL firmada de 300 s y el
+  navegador arma el mismo archivo. Las 9 de cliente solo pierden el tope. Único límite: Excel (1.048.575/hoja).
+  Cron `purga-descargas` cada 15 min (borra > 60 min). Arreglado el test de `OrdenesDescarga` de 00:00–01:00.
+- R1–R24; mapa en `progress/impl_470.md`. Revisión APROBADA (`progress/review_470.md`). PR #845, release #846.
+- Medido (T5): servidor 200k filas 3 s; navegador 200k filas ~2,2 GB de heap → si algún día hace falta, armar el
+  xlsx en el servidor (Q1). Menores: novedades y KPIs pierden el corte sin pasar por el almacén (K4).

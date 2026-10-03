@@ -205,6 +205,14 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-10-03 — la 470, descargas sin tope de filas
+
+- **PR #846** (`dev` → `prod`, merge commit), `prod` = `ebc375ce`, build `dpl_CVwSKejGK2o4aV48MkbGmt3HNmf3` READY a las 11:12 CR, alias `ordenex.co` con `aliasError: null`. Autorización del humano: «sácalo lo más rápido que podás a producción».
+- **Sin migraciones.** Bucket `descargas` en producción: privado (`public = false`), creado por el recorrido T6.1 la noche anterior. `DESCARGA_MAX_FILAS` no existe en Vercel (T7.1).
+- **Gate sobre `27d437e5` (= `origin/dev`):** INIT_EXIT=0, 33.130 tests, 26 skipped preexistentes, sin flakes (`progress/gate_release_470.log`).
+- **La noche se perdió 9 h** porque un subagente pidió un permiso a la 01:18 con el humano ausente (memoria «Si el humano se va: autonomía total»).
+- **Pendiente:** T7.2/T7.4 repetir en producción, con sesión real, la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros (el leader no tiene credencial de producción); T7.3 la purga, ver abajo.
+
 ## Release del 2026-10-02 — 463 a 469 (wallet: barra, búsqueda por guía, Excel kardex; devolución a origen; cobertura)
 
 - **PR #844** (`dev` → `prod`, merge commit), `prod` = `fafb00bb`, build `dpl_7canKeGmgHvCyJVW42wrTxxPBcU3` READY a las 22:37 CR, alias `ordenex.co` con `aliasError: null`. Orden del humano: «despliega».

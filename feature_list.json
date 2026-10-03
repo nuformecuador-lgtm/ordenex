@@ -5614,11 +5614,11 @@
       "title": "descargas sin tope de filas",
       "description": "Las descargas grandes se arman en el servidor y se bajan con un enlace temporal privado; sin el tope de 5000 filas, en todas las tablas de la app.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB. || SPEC escrito (24 R) y aprobado de antemano; desviacion A1 aceptada por el leader (datos por bucket privado 'descargas' + URL firmada 5 min, el xlsx lo sigue armando el navegador). backend_dev -> frontend_dev en worktree.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB. || SPEC escrito (24 R) y aprobado de antemano; desviacion A1 aceptada por el leader (datos por bucket privado 'descargas' + URL firmada 5 min, el xlsx lo sigue armando el navegador). backend_dev -> frontend_dev en worktree. || HECHA y DESPLEGADA a prod el 2026-10-03 11:12 CR (PR #845 a dev, release PR #846, ebc375ce, dpl_CVwSKejGK2o4aV48MkbGmt3HNmf3). Gate de release verde 33130. Bucket descargas privado. PENDIENTE: T7.2/T7.4 repetir en prod la descarga de la caja con detalle (14.153 filas) y la de ordenes sin filtros, con sesion real (el leader no tiene credencial de prod).",
       "branch": "feature/470-descargas-sin-tope"
     }
   ]
