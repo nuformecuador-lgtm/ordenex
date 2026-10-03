@@ -15,7 +15,6 @@ import {
 } from "@/components/shared/conciliacion/conciliacion-labels";
 import {
   listarConsolidacionesSateliteAction,
-  listarConsolidacionesSateliteCompletoAction,
 } from "@/lib/actions/conciliacion-satelites";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import type { ConsolidacionSateliteDTO } from "@/lib/types/conciliacion-satelites";
@@ -38,6 +37,7 @@ import {
   estadoConciliacionDe,
   money,
 } from "./satelites-labels";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // ⭑ FICHA 431 (T21, R22/R24/R25) — LA CONCILIACIÓN DE UNA BODEGA SATÉLITE.
@@ -336,7 +336,7 @@ export function ConciliacionSatelite({
             columnas: COLUMNAS_DESCARGA_CONSOLIDACIONES_SATELITE,
             obtenerFilas: () =>
               filasDesdeResultado(
-                listarConsolidacionesSateliteCompletoAction(buildInputCompleto(zonaId, filtro)),
+                descargarDatos("listarConsolidacionesSateliteCompleto", buildInputCompleto(zonaId, filtro)),
                 filaDescargaConsolidacionSatelite,
               ),
           }}

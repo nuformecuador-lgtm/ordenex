@@ -528,7 +528,9 @@ describe("Dinero por props · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarSaldosTiendasCompletoAction).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarSaldosTiendasCompletoAction).mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(vi.mocked(listarSaldosTiendasCompletoAction).mock.calls[0]).toEqual([undefined]);
     expect(listarSaldosTiendasAction).not.toHaveBeenCalled();
 
     // ANTI-VACUIDAD, en dos pasos, porque «cero llamadas» pasa igual con un doble muerto o
@@ -656,7 +658,9 @@ describe("Dinero por props · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarPlantillasCompletoAction).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarPlantillasCompletoAction).mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(vi.mocked(listarPlantillasCompletoAction).mock.calls[0]).toEqual([undefined]);
     expect(listarPlantillasAction).not.toHaveBeenCalled();
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];

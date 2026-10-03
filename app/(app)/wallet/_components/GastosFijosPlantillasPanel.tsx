@@ -24,7 +24,6 @@ import { useToast } from "@/hooks/useToast";
 import { gastoFijoConfig } from "@/lib/config/gasto-fijo";
 import {
   eliminarPlantillaAction,
-  listarPlantillasCompletoAction,
   listarPlantillasPaginadoAction,
   setActivaPlantillaAction,
 } from "@/lib/actions/gasto-fijo-plantilla";
@@ -47,6 +46,7 @@ import {
   plantillaEliminadaTexto,
 } from "./cobro-gasto-fijo-labels";
 import { money, periodicidadLegible, proximoCobroTexto } from "./wallet-labels";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /** Nombre visible del panel: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA = "Plantillas de gasto fijo";
@@ -476,7 +476,7 @@ export function GastosFijosPlantillasPanel({
                * fecha en la columna «Próximo cobro».
                */
               obtenerFilas: () =>
-                filasDesdeResultado(listarPlantillasCompletoAction(), (p) =>
+                filasDesdeResultado(descargarDatos("listarPlantillasGastoFijoCompleto", undefined), (p) =>
                   filaDescargaGastoFijo(p, ahora),
                 ),
             }}

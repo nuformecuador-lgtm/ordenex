@@ -45,7 +45,8 @@ function buildEntrega(): IEntregaDescargaService {
 }
 
 /**
- * @sin-superficie FICHA 470 (backend antes que pantalla): la cablea `components/shared/descarga-datos.ts` (`descargarDatos`) en el bloque 4 de la MISMA rama, que borra esta anotacion al hacerlo; el backend se entrega primero para que el frontend lo consuma.
+ * Ficha 470 — la consume `components/shared/descarga-datos.ts` (`descargarDatos`), unica via de las
+ * descargas de Familia A (R24).
  */
 export async function prepararDescargaAction(
   nombre: unknown,

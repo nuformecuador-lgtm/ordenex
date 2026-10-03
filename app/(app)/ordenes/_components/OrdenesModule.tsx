@@ -17,7 +17,7 @@ import { CeldaSeleccion } from "@/components/shared/CeldaSeleccion";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
-import { listarOrdenes, listarOrdenesCompleto } from "@/lib/actions/ordenes";
+import { listarOrdenes } from "@/lib/actions/ordenes";
 import type { OrdenListItemDTO, SortField } from "@/lib/types/orden";
 import {
   claveDeOrden,
@@ -40,6 +40,7 @@ import { HistorialOrdenSheet } from "./HistorialOrdenSheet";
 import { EtiquetaOrdenAccion } from "./EtiquetaOrdenAccion";
 import { ReportarIncidenteAccion } from "./ReportarIncidenteAccion";
 import { CorregirDatosClienteAccion } from "./CorregirDatosClienteAccion";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Acción por lote ofrecida en la barra contextual cuando hay filas seleccionadas.
@@ -609,7 +610,7 @@ export function OrdenesModule({
         // nuevo que abrir.
         obtenerFilas: () =>
           filasDesdeResultado(
-            listarOrdenesCompleto({
+            descargarDatos("listarOrdenesCompleto", {
               ...(filter ? { filter } : {}),
               ...(orden ?? {}),
             }),

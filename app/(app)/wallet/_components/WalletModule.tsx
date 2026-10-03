@@ -19,8 +19,6 @@ import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { ModoBusquedaLibro } from "@/lib/types/busqueda-por-guia";
 import { useToast } from "@/hooks/useToast";
 import {
-  libroCajaKardexAction,
-  libroCajaKardexConDetalleAction,
   listarMovimientosAction,
   verResumenCajaAction,
   type LibroCajaKardexActionResult,
@@ -72,6 +70,7 @@ import {
   GastosFijosPlantillasPanel,
   type GastosFijosPlantillasPagina,
 } from "./GastosFijosPlantillasPanel";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 42 (T12, R18/R20/R21) — módulo cliente de la wallet. Recibe TODO por props
 // desde el Server Component padre (que ya validó rol y pre-fetch, R21): el cliente NUNCA
@@ -226,11 +225,11 @@ async function descargaLibroCaja(input: Record<string, unknown>, conDetalle: boo
   const entrada = { ...input, sortBy: "fecha", sortDir: "asc" };
   const desde = typeof input.desde === "string" ? input.desde : null;
   if (conDetalle) {
-    const res = await libroCajaKardexConDetalleAction(entrada);
+    const res = await descargarDatos("libroCajaKardexConDetalle", entrada);
     if (res.status !== "ok") return errorDeDescargaCaja(res);
     return colocarLibroCaja(res.items, res.kardex, res.porGuia, desde);
   }
-  const res = await libroCajaKardexAction(entrada);
+  const res = await descargarDatos("libroCajaKardex", entrada);
   if (res.status !== "ok") return errorDeDescargaCaja(res);
   return colocarLibroCaja(res.items, res.kardex, undefined, desde);
 }

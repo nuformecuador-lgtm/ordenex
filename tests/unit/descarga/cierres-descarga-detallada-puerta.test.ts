@@ -61,12 +61,14 @@ describe("puerta única de la descarga detallada de cierres (R13/R36)", () => {
 
     // (d) Cada pantalla le pasa la acción de SU listado, y ninguna le pasa la de la otra: los
     // dos conjuntos son disjuntos (design §2.6) y cruzarlos daría un archivo fuera de alcance.
+    // Ficha 470 (R24): la acción llega por la preparación de descargas (`descargarDatos("<clave>", f)`),
+    // que la ejecuta a través del registro con la MISMA entrada; la clave es el nombre de la acción.
     const cierresDia = sinComentarios(fuente(PANTALLA_CIERRES_DIA));
-    expect(cierresDia).toMatch(/accion=\{listarGestionesCierresAdminCompleto\}/);
+    expect(cierresDia).toMatch(/accion=\{\(f\) => descargarDatos\("listarGestionesCierresAdminCompleto", f\)\}/);
     expect(cierresDia).not.toMatch(/listarGestionesCierresBodegaCompleto/);
 
     const bodega = sinComentarios(fuente(PANTALLA_BODEGA));
-    expect(bodega).toMatch(/accion=\{listarGestionesCierresBodegaCompleto\}/);
+    expect(bodega).toMatch(/accion=\{\(f\) => descargarDatos\("listarGestionesCierresBodegaCompleto", f\)\}/);
     expect(bodega).not.toMatch(/listarGestionesCierresAdminCompleto/);
   });
 

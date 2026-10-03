@@ -78,7 +78,9 @@ describe("463 R45 — el buscador de `/wallet/tiendas`", () => {
     const user = montar();
     await user.click(screen.getByRole("button", { name: "Descargar Saldos de tiendas" }));
     await waitFor(() => expect(H.completo).toHaveBeenCalledTimes(1));
-    expect(H.completo.mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(H.completo.mock.calls[0]).toEqual([undefined]);
 
     await user.type(buscador(), "tania");
     await waitFor(() => expect(H.pagina).toHaveBeenLastCalledWith(expect.objectContaining({ busqueda: "tania" })), {

@@ -18,7 +18,6 @@ import { useAnchoDelScrollHorizontal } from "@/hooks/useAnchoDelScrollHorizontal
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   verDetalleDeMiMovimientoAction,
-  verDetalleDeMiMovimientoCompletoAction,
 } from "@/lib/actions/wallet-tienda";
 import { detalleMovimientoConfig } from "@/lib/config/detalle-movimiento";
 import type {
@@ -45,6 +44,7 @@ import {
 } from "./detalle-mi-movimiento-labels";
 import { money } from "./mi-wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Ficha 344 (T7.1, design §5) — LAS ÓRDENES QUE COMPONEN EL IMPORTE de una fila del libro de
 // movimientos de LA PROPIA TIENDA.
@@ -123,7 +123,7 @@ async function detalleFetcher(movimientoId: string, page: number, resaltar?: str
  * formas de `ListarCompletoResult`.
  */
 async function obtenerFilasDescarga(movimientoId: string): Promise<DescargaFilasResult> {
-  const res = await verDetalleDeMiMovimientoCompletoAction({ movimientoId });
+  const res = await descargarDatos("verDetalleDeMiMovimientoCompleto", { movimientoId });
   if (res.status === "sin_reparto") {
     return { status: "error", mensaje: DETALLE_MI_MOVIMIENTO_SIN_REPARTO[res.motivo] };
   }

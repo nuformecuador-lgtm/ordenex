@@ -1010,7 +1010,9 @@ describe("Cierres · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarCierresPasadosCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarCierresPasadosCompleto).mock.calls[0]).toEqual([]);
+    // Ficha 470 (R13): la accion llega por el registro de descargas, cuyo envoltorio la llama
+    // SIEMPRE con UN argumento (la entrada; aqui ninguna). «Sin entrada» es `[undefined]`.
+    expect(vi.mocked(listarCierresPasadosCompleto).mock.calls[0]).toEqual([undefined]);
     expect(listarCierreDia).not.toHaveBeenCalled();
     // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
     // de degradar el archivo.

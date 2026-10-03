@@ -16,7 +16,6 @@ import {
 import { Pagination } from "@/components/shared/Pagination";
 import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
 import {
-  listarHistorialAccionesCompleto,
   listarHistorialAccionesPaginado,
 } from "@/lib/actions/historial-acciones";
 import type {
@@ -52,6 +51,7 @@ import {
   claveDeFiltroHistorial,
   type FiltroHistorialAccionUI,
 } from "./seleccion-a-filtro";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // FICHA 362 / T5.4 y T5.5 (design §5.3/§5.4, R21/R22/R27/R30/R34-R37) — el MODULO de cliente
 // del historial de acciones.
@@ -166,6 +166,15 @@ export async function obtenerFilasDescargaHistorial(
   );
 }
 
+/**
+ * Ficha 470 (R24) — la lectura completa por defecto va por la preparación de descargas: el conjunto
+ * grande viaja por el almacén temporal y no en la respuesta de la acción. A nivel de módulo para que
+ * su identidad sea estable. Los tests siguen inyectando su doble por `acciones.listarCompleto`.
+ */
+function listarHistorialAccionesCompletoDescarga(input: unknown) {
+  return descargarDatos("listarHistorialAccionesCompleto", input);
+}
+
 export function HistorialAccionesModule({
   actores,
   acciones,
@@ -173,7 +182,7 @@ export function HistorialAccionesModule({
   debounceMs,
 }: Readonly<HistorialAccionesModuleProps>) {
   const listar = acciones?.listar ?? listarHistorialAccionesPaginado;
-  const listarCompleto = acciones?.listarCompleto ?? listarHistorialAccionesCompleto;
+  const listarCompleto = acciones?.listarCompleto ?? listarHistorialAccionesCompletoDescarga;
 
   const [termino, setTermino] = useState("");
   const [filtrosControles, setFiltrosControles] = useState<FiltroHistorialAccionUI>({});

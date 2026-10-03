@@ -11,7 +11,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { walletTiendaConfig } from "@/lib/config/wallet-tienda";
 import {
-  listarSaldosTiendasCompletoAction,
   listarSaldosTiendasPaginadoAction,
 } from "@/lib/actions/wallet-tienda";
 import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
@@ -25,6 +24,7 @@ import {
   filaDescargaSaldoTienda,
 } from "./saldos-tiendas-descarga-columnas";
 import { SALDO_SIGNO_LABEL } from "./saldo-tienda-signo-label";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 43 (T16, R20/R21) — tabla de saldos a favor de TODAS las tiendas, para que el
 // maestro liquide. Datos por props desde el Server Component padre (que ya valido rol
@@ -213,7 +213,7 @@ export function SaldosTiendasTable({ initialData }: SaldosTiendasTableProps) {
           obtenerFilas: () =>
             filasDesdeResultado(
               // FICHA 463 (R45): el término aplicado viaja también a la descarga; sin él, la llamada de siempre.
-              busqueda === "" ? listarSaldosTiendasCompletoAction() : listarSaldosTiendasCompletoAction({ busqueda }),
+              busqueda === "" ? descargarDatos("listarSaldosTiendasCompleto", undefined) : descargarDatos("listarSaldosTiendasCompleto", { busqueda }),
               filaDescargaSaldoTienda,
             ),
         }}

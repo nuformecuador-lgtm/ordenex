@@ -9,7 +9,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
-  listarCierresBodegaSolicitadosCompleto,
   listarCierresBodegaSolicitadosPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -21,6 +20,7 @@ import {
   COLUMNAS_DESCARGA_BODEGA_SOLICITADOS,
   filaDescargaBodegaSolicitado,
 } from "./cierres-bodega-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Feature 170 — FASE 2 (T I.2, R43/R44/R52): «Cierres de bodega solicitados», el histórico
@@ -94,7 +94,7 @@ export function descargaBodegaSolicitados(filtros: FiltrosCierresBodega): DataTa
     ambitoColumnas: AMBITO_DESCARGA_BODEGA_SOLICITADOS,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarCierresBodegaSolicitadosCompleto({ filtros }),
+        descargarDatos("listarCierresBodegaSolicitadosCompleto", { filtros }),
         filaDescargaBodegaSolicitado,
       ),
   };

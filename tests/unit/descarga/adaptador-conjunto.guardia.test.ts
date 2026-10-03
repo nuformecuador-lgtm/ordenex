@@ -243,6 +243,26 @@ const RELECTURAS_SIN_CONSUMIDOR = [
   },
 ] as const;
 
+/**
+ * Ficha 470 (R24) — las lecturas dedicadas de una DESCARGA ya no se llaman directo desde la pantalla:
+ * se piden por `descargarDatos("<clave>", …)`, que las ejecuta a través del registro de descargas
+ * (`lib/actions/_shared/registro-descargas.ts`). La clave no siempre es el nombre del símbolo.
+ */
+const CLAVE_DE_REGISTRO_470: Record<(typeof RELECTURAS_SIN_CONSUMIDOR)[number]["dedicadas"][number], string> = {
+  listarPendientesCierresBodegaCompleto: "listarPendientesCierresBodegaCompleto",
+  listarHistoricoCierresBodegaCompleto: "listarHistoricoCierresBodegaCompleto",
+  listarPlantillasCompletoAction: "listarPlantillasGastoFijoCompleto",
+  listarSaldosTiendasCompletoAction: "listarSaldosTiendasCompleto",
+};
+
+/** Pantallas que piden la descarga registrada bajo `clave` (ficha 470). */
+function pedidasPorRegistro(clave: string, ...arboles: string[]): string[] {
+  const patron = new RegExp(`\\bdescargarDatos\\(\\s*["']${clave}["']`);
+  return fuentesDe(...arboles)
+    .filter((f) => patron.test(f.codigo))
+    .map((f) => f.ruta);
+}
+
 describe("R32 — las relecturas sin consumidor no vuelven a la capa de pantallas", () => {
   it("las tres relecturas que llegaron a cero consumidores siguen en cero", () => {
     for (const { nombre } of RELECTURAS_SIN_CONSUMIDOR) {
@@ -261,7 +281,7 @@ describe("R32 — las relecturas sin consumidor no vuelven a la capa de pantalla
     for (const { nombre, dedicadas } of RELECTURAS_SIN_CONSUMIDOR) {
       for (const dedicada of dedicadas) {
         expect(
-          llamantes(dedicada, "app"),
+          [...llamantes(dedicada, "app"), ...pedidasPorRegistro(CLAVE_DE_REGISTRO_470[dedicada], "app")],
           `${dedicada}() no la llama ninguna pantalla: entonces «${nombre} está en cero» no ` +
             "dice que se sustituyó, dice que se perdió",
         ).not.toEqual([]);

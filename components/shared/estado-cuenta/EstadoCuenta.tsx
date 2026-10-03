@@ -29,8 +29,6 @@ import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import { money } from "@/lib/config/moneda";
 import {
-  estadoCuentaKardexAction,
-  estadoCuentaKardexConDetalleAction,
   verEstadoCuentaAction,
   type CuentaKardexActionResult,
   type CuentaKardexConDetalleActionResult,
@@ -74,6 +72,7 @@ import {
   pagoDeFila,
   type RotulosEstadoCuenta,
 } from "./estado-cuenta-lineas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // FICHA 458-D (T D.1/T D.5/T D.6/T D.7, design §3.2/§5; R17–R25, R30, R32, R34, R71, R72) — el ESTADO
 // DE CUENTA de una tienda, un mensajero o una bodega satélite, como pantalla (no la fila desplegable de
@@ -144,13 +143,13 @@ export function lectorDeLaCuenta(cuenta: Pick<EstadoCuentaDTO["cuenta"], "tipo" 
   const { tipo, id } = cuenta;
   return {
     leer: (f) => verEstadoCuentaAction({ cuenta: { tipo, id }, ...f }),
-    leerKardex: (f) => estadoCuentaKardexAction({ cuenta: { tipo, id }, ...f }),
+    leerKardex: (f) => descargarDatos("estadoCuentaKardex", { cuenta: { tipo, id }, ...f }),
     // FICHA 468 (R24/R25) — el detalle por guía existe en la tienda y en el mensajero, no en la bodega.
     ...(tipo === "bodega"
       ? {}
       : {
           leerKardexConDetalle: (f: FiltrosDeLectura) =>
-            estadoCuentaKardexConDetalleAction({ cuenta: { tipo, id }, ...f }),
+            descargarDatos("estadoCuentaKardexConDetalle", { cuenta: { tipo, id }, ...f }),
         }),
   };
 }

@@ -19,8 +19,6 @@ import {
   rechazarCierre,
   forzarSolicitudVencido,
   listarHistoricoCierresAdminPaginado,
-  listarGestionesCierresAdminCompleto,
-  listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
@@ -117,6 +115,7 @@ import {
 import { RegistrarPagoMensajeroDialog } from "./RegistrarPagoMensajeroDialog";
 import { CorregirPagosDialog } from "./CorregirPagosDialog";
 import { CorregirResultadoDialog } from "./CorregirResultadoDialog";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -261,7 +260,7 @@ function descargaColaCierres(filtros: FiltrosCierres): DescargaResumenCierres {
     ambitoColumnas: AMBITO_DESCARGA_CIERRES_PENDIENTES,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarPendientesCierresAdminCompleto({ filtros }),
+        descargarDatos("listarPendientesCierresAdminCompleto", { filtros }),
         filaDescargaCierrePendiente,
       ),
   };
@@ -1117,7 +1116,7 @@ export function CierresAdminModule({
                 : descargaHistoricoCierres(filtros)
             }
             catalogo={catalogoFiltros}
-            accion={listarGestionesCierresAdminCompleto}
+            accion={(f) => descargarDatos("listarGestionesCierresAdminCompleto", f)}
             disabled={pendientesCargando || historicoCargando}
           />
         </div>

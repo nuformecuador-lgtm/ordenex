@@ -3,13 +3,13 @@
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
-import { listarCoberturaDistritos } from "@/lib/actions/cobertura";
 
 import {
   AMBITO_DESCARGA_COBERTURA,
   COLUMNAS_DESCARGA_COBERTURA,
   filaCobertura,
 } from "./cobertura-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Ficha 465 (design §3.6, T8) — control «Descargar cobertura» de la página Tarifas.
@@ -38,7 +38,7 @@ export const MENSAJE_SESION_COBERTURA =
 
 /** Lee al pulsar (R4) y traduce el resultado a filas o a un mensaje accionable (R3, R18). */
 async function obtenerFilasCobertura(): Promise<DescargaFilasResult> {
-  const resultado = await listarCoberturaDistritos();
+  const resultado = await descargarDatos("listarCoberturaDistritos", undefined);
   if (resultado.status === "unauthenticated") {
     return { status: "error", mensaje: MENSAJE_SESION_COBERTURA };
   }

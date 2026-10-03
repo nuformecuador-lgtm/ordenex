@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { apiKeysConfig } from "@/lib/config/api-keys";
-import { listarApiKeys, listarApiKeysCompleto } from "@/lib/actions/api-keys";
+import { listarApiKeys } from "@/lib/actions/api-keys";
 import { registrarWebhook } from "@/lib/actions/webhooks";
 import type { ApiKeyListItemDTO } from "@/lib/types/api-key";
 
@@ -25,6 +25,7 @@ import {
   type GenerarApiKeyFormHandle,
 } from "./GenerarApiKeyForm";
 import { RevelarSecretosModal } from "./RevelarSecretosModal";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // R18/R19: opciones acotadas por MAX_PAGE_SIZE del backend.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -217,7 +218,7 @@ export function ApiKeysModule({ initialData }: ApiKeysModuleProps) {
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_API_KEYS,
           obtenerFilas: () =>
-            filasDesdeResultado(listarApiKeysCompleto({}), filaDescargaApiKey),
+            filasDesdeResultado(descargarDatos("listarApiKeysCompleto", {}), filaDescargaApiKey),
         }}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las API keys" : null}
