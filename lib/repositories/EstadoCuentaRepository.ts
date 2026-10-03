@@ -14,8 +14,14 @@ import type {
   VentanaDeLibro,
 } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
+import type {
+  IMovimientosMensajeroEnLoteRepository,
+  MovimientoDeMensajeroEnLoteRow,
+} from "@/lib/interfaces/repositories/IMovimientosMensajeroEnLoteRepository";
 import { estadoCuentaConfig } from "@/lib/config/estado-cuenta";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
+import { escaparComodinesLike } from "@/lib/utils/escapar-like";
 
 type Cliente = Pick<
   PrismaClient,
@@ -89,6 +95,45 @@ function filtroDeChip(pares: ParDeChip[] | null, conPremio: boolean): Prisma.Sql
   return Prisma.sql` AND (${Prisma.join(pares.map(unaCondicion), " OR ")})`;
 }
 
+/**
+ * FICHA 463 (design §3.2, R24/R26/R27/R28) — el termino del buscador, en el `WHERE` EXTERIOR (despues de
+ * la ventana, como el chip). `ILIKE` sin distinguir mayusculas; `%` y `_` escapados son texto (R28).
+ * El nombre de quien registro (`NOMBRE_SQL`, del `LEFT JOIN usuario u`) solo entra en la oficina: en
+ * `/mi-wallet` buscar a una persona de Ordenex no reduce ni amplia el resultado (R27). Mutacion «sin la
+ * rama del nombre» → roja en `estado-cuenta-busqueda-orden-463` (R26).
+ */
+function terminoSql(v: Pick<VentanaDeLibro, "termino" | "conNombreRegistrador">): Prisma.Sql {
+  if (v.termino === undefined) return Prisma.empty;
+  const patron = `%${escaparComodinesLike(v.termino)}%`;
+  return v.conNombreRegistrador
+    ? Prisma.sql` AND (l.descripcion ILIKE ${patron} OR ${NOMBRE_SQL} ILIKE ${patron})`
+    : Prisma.sql` AND l.descripcion ILIKE ${patron}`;
+}
+
+/**
+ * FICHA 469 (design §3.2, R8–R10, R16/R17) — la busqueda del libro: por GUIA si el servicio resolvio
+ * pares, de TEXTO (la de la 463) si no. EXCLUYENTES: con `porGuia` el termino no se escribe (R10). En el
+ * `WHERE` EXTERIOR, despues de la ventana (como el chip): el corrido no cambia (R17). Lista vacia ⇒
+ * ` AND FALSE` (R22). No decide nada: es el molde de `filtroDeChip`.
+ */
+function busquedaSql(v: Pick<VentanaDeLibro, "termino" | "conNombreRegistrador" | "porGuia">): Prisma.Sql {
+  if (v.porGuia === undefined) return terminoSql(v);
+  if (v.porGuia.length === 0) return Prisma.sql` AND FALSE`;
+  const una = (p: ParDeGuia) =>
+    p.origenTipo === "cierre_dia"
+      ? Prisma.sql`(l.origen_tipo = ${p.origenTipo} AND l.origen_id = ${p.origenId} AND l.categoria = ${p.categoria})`
+      : Prisma.sql`(l.origen_tipo = ${p.origenTipo} AND l.origen_id = ${p.origenId})`;
+  return Prisma.sql` AND (${Prisma.join(v.porGuia.map(una), " OR ")})`;
+}
+
+/**
+ * FICHA 463 (R33/R36/R37) — el sentido del `ORDER BY` FINAL, el mismo en las tres columnas (orden total
+ * en los dos sentidos). La ventana del corrido NO lo usa: sigue cronologica, asi que el corrido de una
+ * fila es el mismo en «Mas recientes» y en «Mas antiguas». Mutacion «invertir tambien el `OVER (ORDER
+ * BY …)`» → roja en `estado-cuenta-busqueda-orden-463` (R37).
+ */
+const sentidoSql = (sortDir: VentanaDeLibro["sortDir"]) => (sortDir === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`);
+
 const desdeSql = (desde?: Date) => (desde === undefined ? Prisma.empty : Prisma.sql` AND l.fecha_movimiento >= ${desde}`);
 
 /**
@@ -140,7 +185,7 @@ const cierreDeMensajeroSql = (mensajeroId: string, cierreId?: string) =>
  * Mutacion 1 de design §8.2 (el signo del corrido al reves) y 2 (sin `created_at` en el ORDER BY de
  * la ventana) → rojas en `wallet-caracterizacion-458` y `estado-cuenta-saldo-corrido`.
  */
-export class EstadoCuentaRepository implements IEstadoCuentaRepository {
+export class EstadoCuentaRepository implements IEstadoCuentaRepository, IMovimientosMensajeroEnLoteRepository {
   constructor(private readonly prisma: Cliente) {}
 
   /**
@@ -233,7 +278,10 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
                  OVER (ORDER BY mv.fecha_movimiento, mv.orden, mv.id) AS saldo_corrido
         FROM mov mv${hasta}
       )`;
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, false)}`;
+    // FICHA 469 (R36): la bodega busca SOLO texto (`terminoSql`, no `busquedaSql`): aunque una ventana
+    // trajera `porGuia`, aqui no se aplicaria.
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, false)}${terminoSql(v)}`;
+    const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
@@ -241,11 +289,13 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
              l.saldo_corrido::text AS saldo_corrido, l.premio_dia
       FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por
       ${where}
-      ORDER BY l.fecha_movimiento, l.orden, l.id
+      ORDER BY l.fecha_movimiento ${dir}, l.orden ${dir}, l.id ${dir}
       LIMIT ${v.take} OFFSET ${v.skip}`;
+    // El conteo con el MISMO `FROM` (el termino puede mirar el nombre de `u`); el `LEFT JOIN` por la
+    // clave primaria es 0..1 y no multiplica filas.
     const [{ total }] = await this.prisma.$queryRaw<{ total: number }[]>`
       ${libro}
-      SELECT count(*)::int AS total FROM libro l ${where}`;
+      SELECT count(*)::int AS total FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por ${where}`;
     return { filas: filas.map(aFila), total };
   }
 
@@ -255,7 +305,8 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
     conPremio: boolean,
     filtroDeCierre: Prisma.Sql,
   ): Promise<PaginaDeLibro> {
-    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}`;
+    const where = Prisma.sql`WHERE TRUE${desdeSql(v.desdeUtc)}${filtroDeChip(v.pares, conPremio)}${filtroDeCierre}${busquedaSql(v)}`;
+    const dir = sentidoSql(v.sortDir);
     const filas = await this.prisma.$queryRaw<FilaCruda[]>`
       ${libro}
       SELECT l.id, l.tipo, l.categoria, l.origen_tipo, l.origen_id, l.descripcion, l.registrado_por,
@@ -263,11 +314,12 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
              l.saldo_corrido::text AS saldo_corrido, l.premio_dia
       FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por
       ${where}
-      ORDER BY l.fecha_movimiento, l.created_at, l.id
+      ORDER BY l.fecha_movimiento ${dir}, l.created_at ${dir}, l.id ${dir}
       LIMIT ${v.take} OFFSET ${v.skip}`;
+    // Mismo `FROM` que la pagina (el termino puede mirar el nombre de `u`); 0..1, no multiplica filas.
     const [{ total }] = await this.prisma.$queryRaw<{ total: number }[]>`
       ${libro}
-      SELECT count(*)::int AS total FROM libro l ${where}`;
+      SELECT count(*)::int AS total FROM libro l LEFT JOIN usuario u ON u.id = l.registrado_por ${where}`;
     return { filas: filas.map(aFila), total };
   }
 
@@ -459,6 +511,19 @@ export class EstadoCuentaRepository implements IEstadoCuentaRepository {
       select: { monto: true, categoria: true, origenTipo: true, origenId: true },
     });
     return fila === null ? null : { ...fila, monto: fila.monto.toFixed(2) };
+  }
+
+  /**
+   * Ficha 468 (design §4.1, R55) — varias filas del libro de UN mensajero por id, con el mensajero en el
+   * `WHERE` (una de otro mensajero no vuelve). Misma proyeccion que `movimientoDeMensajero`.
+   */
+  async listarPorIdsDeMensajero(ids: readonly string[], mensajeroId: string): Promise<MovimientoDeMensajeroEnLoteRow[]> {
+    if (ids.length === 0) return [];
+    const filas = await this.prisma.pagoMensajeroMovimiento.findMany({
+      where: { id: { in: [...ids] }, mensajeroId }, // `mensajeroId` AL FINAL: nada lo puede pisar
+      select: { id: true, monto: true, categoria: true, origenTipo: true, origenId: true },
+    });
+    return filas.map((f) => ({ ...f, monto: f.monto.toFixed(2) }));
   }
 
   async reversosDePremio(mensajeroId: string, dias: readonly Date[]): Promise<AnulacionLeida[]> {

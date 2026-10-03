@@ -383,6 +383,8 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
       "obtenerPorOrigen",
       // Ficha 459 (R15/R71): LECTURA del dia del primer movimiento. No es una mutacion.
       "primerDiaDeLaCaja",
+      // Ficha 468 (R12): LECTURA del saldo corrido de la caja para el kardex. No es una mutacion.
+      "saldosTrasMovimientos",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
   });

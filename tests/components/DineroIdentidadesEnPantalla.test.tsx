@@ -676,7 +676,7 @@ describe("ficha 359 · B3 — reparto al mensajero: el máximo que se anuncia es
 // archivo mata.
 //
 //   R6  recaudado − flete − comisión            = para la tienda
-//   R7  cobrado + flete por rechazo             = lo que Ordenex facturó
+//   R7  cobrado + flete por devolución a origen             = lo que Ordenex facturó
 //   R8  facturado − mensajeros − gana la bodega = neto de Ordenex
 //   R9  recaudado − mensajeros − gana la bodega = para la central
 // ---------------------------------------------------------------------------
@@ -891,7 +891,7 @@ describe("ficha 393 · B5 — el DETALLE del cierre de bodega: las cuatro identi
       cierres: [],
       totalesIngreso: TOTALES_INGRESO,
       ganancia: "13635.03",
-      // 126089.17 − 23000.33 − 4134.50 (el flete por rechazo NO se resta: no salió
+      // 126089.17 − 23000.33 − 4134.50 (el flete por devolución a origen NO se resta: no salió
       // de lo recaudado, y por eso existe la línea puente).
       pagoTienda: "98954.34",
       cobradoSobreRecaudado: "27134.83",
@@ -943,7 +943,7 @@ describe("ficha 393 · B5 — el DETALLE del cierre de bodega: las cuatro identi
     );
   });
 
-  it("R7 — cobrado sobre lo recaudado + flete por rechazo = lo que Ordenex facturó", async () => {
+  it("R7 — cobrado sobre lo recaudado + flete por devolución a origen = lo que Ordenex facturó", async () => {
     const { dueno } = await abrir();
     laCuentaCierra(
       [
@@ -955,7 +955,7 @@ describe("ficha 393 · B5 — el DETALLE del cierre de bodega: las cuatro identi
     );
 
     // LA RAZÓN DE SER DE LA LÍNEA PUENTE, medida: sin ella, la resta que quedaría a
-    // la vista NO da. El hueco es exactamente el flete por rechazo.
+    // la vista NO da. El hueco es exactamente el flete por devolución a origen.
     const recaudado = centimosPintados(importeTrasEn(dueno, TOTAL_GENERAL_LABEL));
     const facturado = centimosPintados(importeTrasEn(dueno, FACTURADO_ORDENEX_LABEL));
     const tienda = centimosPintados(importeTrasEn(dueno, PARA_LA_TIENDA_LABEL));
@@ -1202,7 +1202,7 @@ const CENSO: readonly { ruta: string; identidad: string }[] = [
   {
     ruta: "app/(app)/cierres-admin/_components/CascadasCierreMensajero.tsx",
     identidad:
-      "recaudado − facturado = gana la tienda; puente + flete por rechazo = facturado; recaudado − puente = pago a tienda",
+      "recaudado − facturado = gana la tienda; puente + flete por devolución a origen = facturado; recaudado − puente = pago a tienda",
   },
   // FICHA 396 — el desglose por tienda. Entra en el censo porque es una superficie de dinero MÁS,
   // no un refactor: la monta el detalle del cierre de mensajero Y los DOS niveles del de bodega

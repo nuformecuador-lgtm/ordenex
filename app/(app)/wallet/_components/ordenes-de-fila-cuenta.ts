@@ -15,17 +15,31 @@ import { DETALLE_MOVIMIENTO_ERROR, DETALLE_MOVIMIENTO_SIN_REPARTO } from "./deta
 // página y el movimiento de la fila), no lo que se ve.
 //
 // La cuenta y el movimiento viajan como ids y no se pintan (H6); el servidor lee el movimiento CON la
-// cuenta en el `WHERE` (uno de otra cuenta = inexistente) y, en la tienda, solo SUS órdenes. En el
-// mensajero responde siempre `sin_reparto: snapshot_del_cierre` (su pago es un total del cierre): el
-// panel lo dice en palabras, y el enlace a SU cierre es el del origen de la fila.
+// cuenta en el `WHERE` (uno de otra cuenta = inexistente) y, en la tienda, solo SUS órdenes. FICHA 468
+// (R27/R28): en el mensajero, el pago devengado lista sus órdenes (con su tienda); el pago tomado del
+// efectivo de un cierre no se reparte por guía y el panel lo dice en palabras, con el enlace a SU cierre
+// en el origen de la fila.
 
 export type CuentaConOrdenes = { tipo: "tienda" | "mensajero"; id: string };
 
 /** Prefijo de la clave SWR: otra lectura, otra caché (el libro de la caja usa la suya). */
 export const CLAVE_ORDENES_DE_FILA = "estado-cuenta:ordenes-de-fila";
 
-async function leerPagina(cuenta: CuentaConOrdenes, movimientoId: string, page: number, pageSize?: number) {
-  return verOrdenesDeFilaAction({ cuenta, movimientoId, page, ...(pageSize === undefined ? {} : { pageSize }) });
+async function leerPagina(
+  cuenta: CuentaConOrdenes,
+  movimientoId: string,
+  page: number,
+  pageSize?: number,
+  resaltar?: string,
+) {
+  return verOrdenesDeFilaAction({
+    cuenta,
+    movimientoId,
+    page,
+    ...(pageSize === undefined ? {} : { pageSize }),
+    // FICHA 469 (R25–R28) — solo con búsqueda por guía; el archivo nunca lo manda (no resalta).
+    ...(resaltar === undefined ? {} : { resaltar }),
+  });
 }
 
 /**
@@ -63,8 +77,8 @@ async function descargar(cuenta: CuentaConOrdenes, movimientoId: string): Promis
 export function fuenteOrdenesDeFila(cuenta: CuentaConOrdenes): FuenteDetalleMovimiento {
   return {
     clave: `${CLAVE_ORDENES_DE_FILA}:${cuenta.tipo}`,
-    leer: async (movimientoId, page): Promise<VistaDetalle> => {
-      const r = await leerPagina(cuenta, movimientoId, page);
+    leer: async (movimientoId, page, resaltar): Promise<VistaDetalle> => {
+      const r = await leerPagina(cuenta, movimientoId, page, undefined, resaltar);
       if (r.status === "sin_reparto") return { modo: "sin_reparto", motivo: r.motivo };
       if (r.status !== "ok") throw new Error(r.status);
       return { modo: "ok", data: r.data };

@@ -17,6 +17,7 @@ import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import type { ResumenSatelitesDTO, SaldoSateliteDTO } from "@/lib/types/conciliacion-satelites";
 
 import {
+  AMBITO_DESCARGA_SALDOS_SATELITES,
   COLUMNAS_DESCARGA_SALDOS_SATELITES,
   filaDescargaSaldoSatelite,
 } from "./saldos-satelites-descarga-columnas";
@@ -329,6 +330,8 @@ export function SaldosSatelitesTable({ initialData, resumen }: Readonly<SaldosSa
           descarga={{
             titulo: TITULO_DESCARGA,
             columnas: COLUMNAS_DESCARGA_SALDOS_SATELITES,
+            // FICHA 464 (R1/R2): el selector de columnas, con su ámbito propio.
+            ambitoColumnas: AMBITO_DESCARGA_SALDOS_SATELITES,
             obtenerFilas: () =>
               filasDesdeResultado(
                 listarSaldosSatelitesCompletoAction({}),

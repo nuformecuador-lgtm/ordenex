@@ -21,6 +21,10 @@ export function rotuloConCuenta(rotulo: string, movimientos: number): string {
  * movimientos EN EL ORDEN DEL SERVIDOR (el del catalogo) y, si el elegido ya no esta, el elegido
  * con 0 al final (R15), para que el filtro no mienta sobre lo que esta aplicado.
  *
+ * FICHA 467 (design §3.1) — `todos` es OPCIONAL. Sin el, la lista NO lleva la opcion de «todos»: es
+ * el modo del `single` de `FilterComponent`, donde la ausencia de valor ya es «todos» y lo dice el
+ * placeholder. Con el, la lista es la de siempre.
+ *
  * Un concepto que el diccionario de la superficie no nombra no se ofrece: el diccionario es un
  * `Record` total sobre su catalogo, asi que no pasa, y si pasara no se pintaria un valor tecnico.
  */
@@ -28,9 +32,9 @@ export function opcionesDeConceptos(
   conceptos: readonly ConceptoConMovimientosDTO[] | undefined,
   rotulos: Readonly<Record<string, string>>,
   elegido: string,
-  todos: SelectOption,
+  todos?: SelectOption,
 ): SelectOption[] {
-  const opciones: SelectOption[] = [todos];
+  const opciones: SelectOption[] = todos === undefined ? [] : [todos];
   for (const c of conceptos ?? []) {
     const rotulo = rotulos[c.categoria];
     if (rotulo !== undefined) opciones.push({ value: c.categoria, label: rotuloConCuenta(rotulo, c.movimientos) });

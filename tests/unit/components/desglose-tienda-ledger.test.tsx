@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { ToastProvider } from "@/providers/ToastProvider";
 import type { FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { estado, fila } from "@/tests/fixtures/estado-cuenta";
+import { elegirEnBarra } from "@/tests/fixtures/barra-libro-wallet";
 
 // ⭑ FICHA 381 (T I.2, R32/R35) — LA TIENDA VE EL COBRO EN SU PROPIA WALLET.
 //
@@ -140,7 +141,8 @@ describe("/mi-wallet — la tienda puede filtrar por el cobro (381/R35 → chip 
     verMiEstadoCuentaMock.mockResolvedValue({ status: "ok", estado: estado({ filas: [COBRO] }) });
     montar([COBRO, FLETE]);
 
-    await user.click(screen.getByRole("button", { name: "Cobros" }));
+    // FICHA 467: el chip es una opción de la casilla «Tipo de movimiento».
+    await elegirEnBarra(user, document.body, "Tipo de movimiento", "Cobros");
     await waitFor(() => expect(verMiEstadoCuentaMock).toHaveBeenCalledWith({ chip: "cobros", page: 1, pageSize: 20 }));
     await waitFor(() => expect(screen.queryByText("Ordenex te cobró el flete")).toBeNull());
     expect(screen.getByText("Ordenex te cobró")).toBeInTheDocument();

@@ -66,7 +66,7 @@ function fila(over: Partial<OrdenAporteRow> = {}): OrdenAporteRow {
         tarifaEspecialDevuelta: null,
       },
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00", pagoMensajero: null, indemnizacion: null }],
     ...over,
   };
 }
@@ -94,6 +94,7 @@ function montar(opciones: {
     { obtenerPorIdDeTienda },
     { listarOrdenesQueAportan, contarOrdenesDelCierre, obtenerCabeceraDeCierre },
     { movimientoDeMensajero: vi.fn(async () => null) }, // 458-D: este archivo no abre filas del mensajero
+    { identificar: vi.fn(async () => []) }, // 469: este archivo no destaca guias
   );
   return {
     service,
@@ -204,8 +205,8 @@ describe("ficha 344 — el detalle de un movimiento de la tienda (R15/R40/R41/R4
       filas: [
         fila({
           gestiones: [
-            { resultado: "entregado", montoRecibido: "10000.00" },
-            { resultado: "novedad", montoRecibido: null },
+            { resultado: "entregado", montoRecibido: "10000.00", pagoMensajero: null, indemnizacion: null },
+            { resultado: "novedad", montoRecibido: null, pagoMensajero: null, indemnizacion: null },
           ],
         }),
       ],

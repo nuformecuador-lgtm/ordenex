@@ -1098,13 +1098,16 @@ function fraseAntiguedad(dias: number): string {
   return `La más antigua lleva ${dias} días en bodega.`;
 }
 
-/** La mitad del texto que dice QUE PASA SI NO SE GESTIONA — o que no lo dice (R40). */
+/**
+ * La mitad del texto que dice QUE PASA SI NO SE GESTIONA — o que no lo dice (R40). FICHA 466 (E12/E13,
+ * R10): el desenlace se nombra con el nombre VIGENTE del estado, no con el verbo «rechaza».
+ */
 function frasePlazo(plazo: PlazoNovedades): string {
   if (plazo === "cinco_dias") {
-    return `A los ${devolucionSlaConfig.DIAS_RECHAZO_AUTOMATICO} días se rechaza automáticamente.`;
+    return `A los ${devolucionSlaConfig.DIAS_RECHAZO_AUTOMATICO} días pasa a ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} automáticamente.`;
   }
   if (plazo === "veinticuatro_horas") {
-    return `A las ${devolucionSlaConfig.HORAS_REINTENTO} horas de entrar, el sistema la reintenta o la rechaza sin esperar tu decisión.`;
+    return `A las ${devolucionSlaConfig.HORAS_REINTENTO} horas de entrar, el sistema la reintenta o la pasa a ${NOMBRE_ESTADO.devolucion_a_origen_por_rechazo} sin esperar tu decisión.`;
   }
   // R40: causas con ventanas distintas, o alguna ya en el tope de intentos. NI UNA CIFRA DE PLAZO.
   return "Los plazos vencen en momentos distintos según la causa: revisalas una por una.";

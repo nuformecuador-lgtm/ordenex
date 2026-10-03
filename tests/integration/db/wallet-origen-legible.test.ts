@@ -101,7 +101,7 @@ describeSiHayBase("458-A R5–R8 — el origen legible sale de la base, por la a
     await prisma.$disconnect();
   });
 
-  it("maestro: cierre con día CR y mensajero + enlace; flete por rechazo con su guía + enlace", async () => {
+  it("maestro: cierre con día CR y mensajero + enlace; flete por devolución a origen con su guía + enlace", async () => {
     const r = await enTransaccionRevertida(prisma, async (tx) => {
       const e = await sembrar(tx);
       const res = await listarMovimientosDeTiendaAction(
@@ -123,7 +123,7 @@ describeSiHayBase("458-A R5–R8 — el origen legible sale de la base, por la a
     // Escrito a mano (revision m6): compararlo contra `etiquetaDeCuenta(...)` estaria siempre verde.
     expect(cierre?.texto).toBe("Cierre del día · 2026-09-12 · Juan Pérez Mora");
     expect(cierre?.enlace?.href).toBe(`/cierres-admin?cierre=${r.e.cierre.id}`);
-    expect(rechazo?.texto).toBe(`Gestión de orden · cobro por rechazo · guía ${r.e.numGuia}`);
+    expect(rechazo?.texto).toBe(`Gestión de orden · cobro por devolución a origen · guía ${r.e.numGuia}`);
     expect(rechazo?.enlace).toEqual({
       etiqueta: `Ver en órdenes la guía ${r.e.numGuia}`,
       href: `/ordenes?q=${r.e.numGuia}`,

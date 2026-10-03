@@ -12,11 +12,10 @@ vi.mock("@/lib/actions/wallet-comprobante", () => ({ verComprobanteAction: vi.fn
 import { OrigenMovimiento } from "@/components/shared/wallet/OrigenMovimiento";
 import { textoDeOrigen } from "@/components/shared/wallet/origen-movimiento";
 import { ORIGEN_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
-import { filaDescargaMovimientoCaja } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
 import { ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
-import { filaDescargaEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
-import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
+// Ficha 468: la fila de la descarga es la de la hoja «Movimientos» (kardex); el origen va al frente de «Detalle».
+import { filaDeLibroCaja, filaDeLibroCuenta } from "@/tests/fixtures/libro-kardex";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import type { OrigenLegibleDTO } from "@/lib/types/wallet-origen";
 
@@ -51,12 +50,12 @@ describe("OrigenMovimiento — la celda", () => {
         fila={{
           origenTipo: "gestion_orden",
           descripcion: "Rechazo del 12",
-          origen: { texto: "Gestión de orden · cobro por rechazo · guía 4321", enlace: null },
+          origen: { texto: "Gestión de orden · cobro por devolución a origen · guía 4321", enlace: null },
         }}
         rotulos={ORIGEN_LABEL}
       />,
     );
-    expect(screen.getByText("Gestión de orden · cobro por rechazo · guía 4321 · Rechazo del 12")).toBeInTheDocument();
+    expect(screen.getByText("Gestión de orden · cobro por devolución a origen · guía 4321 · Rechazo del 12")).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
   });
 
@@ -78,7 +77,7 @@ describe("R3 — las descargas de los libros llevan el MISMO texto de origen, si
     [
       "caja",
       () =>
-        filaDescargaMovimientoCaja({
+        filaDeLibroCaja({
           ...base,
           id: CIERRE,
           tipo: "egreso",
@@ -94,21 +93,19 @@ describe("R3 — las descargas de los libros llevan el MISMO texto de origen, si
       // FICHA 458-D (T D.5): la descarga de `/mi-wallet` es la del estado de cuenta de la tienda.
       "mi-wallet",
       () =>
-        filaDescargaEstadoCuenta(
-          lineaDeFila(
-            filaEstado({
-              ref: { libro: "tienda", movimientoId: CIERRE },
-              categoria: "cod_recaudado",
-              origenTipo: "ranking_snapshot_fila",
-              origen,
-            }),
-            ROTULOS_MI_WALLET,
-          ),
+        filaDeLibroCuenta(
+          filaEstado({
+            ref: { libro: "tienda", movimientoId: CIERRE },
+            categoria: "cod_recaudado",
+            origenTipo: "ranking_snapshot_fila",
+            origen,
+          }),
+          ROTULOS_MI_WALLET,
         ),
     ],
   ])("%s", (_n, fila) => {
     const f = fila();
-    expect(f.origen).toBe("Premio del ranking · podio del 2026-09-10");
+    expect(f.detalle).toBe("Premio del ranking · podio del 2026-09-10");
     expect(Object.values(f).join(" | ")).not.toMatch(UUID);
   });
 });

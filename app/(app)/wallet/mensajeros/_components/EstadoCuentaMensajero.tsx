@@ -3,6 +3,7 @@
 import { EstadoCuenta, type PanelDeLaSuperficie } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import { SelectorCierreDeCuenta } from "@/components/shared/estado-cuenta/SelectorCierreDeCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
@@ -12,6 +13,7 @@ import { DETALLE_MOVIMIENTO_NOMBRE } from "../../_components/detalle-movimiento-
 import { fuenteOrdenesDeFila } from "../../_components/ordenes-de-fila-cuenta";
 
 import { PagoMensajeroAcciones } from "./PagoMensajeroAcciones";
+import { DETALLE_DESCARGA_WALLET_MENSAJERO } from "./estado-cuenta-mensajero-descarga-columnas";
 import { ESTADO_CUENTA_MENSAJERO_PAGINA } from "./estado-cuenta-mensajero-labels";
 import { CATEGORIA_PAGO_LABEL, ORIGEN_PAGO_LABEL } from "./wallet-mensajeros-labels";
 
@@ -52,22 +54,30 @@ export function EstadoCuentaMensajero({ inicial, puedeRegistrar }: Readonly<Esta
       inicial={inicial}
       rotulos={ROTULOS_MENSAJERO}
       panel={PANEL_MENSAJERO}
+      // FICHA 468 (R24/R31) — el mensajero gana la hoja «Detalle por guía» (la 464 no la tenía): el pago
+      // devengado se reparte por guía; el tomado del efectivo va en «Movimientos sin guía» (R43).
+      descargaDeLaSuperficie={{
+        ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_MENSAJERO,
+        detalle: DETALLE_DESCARGA_WALLET_MENSAJERO,
+      }}
       // R10–R12 — el filtro por cierre de ESTE mensajero (la 458-A); el cierre viaja, no se pinta.
       selectorCierre={(valor, onCambiar) => (
         <SelectorCierreDeCuenta cuenta={{ cuenta: "mensajero", mensajeroId }} valor={valor} onCambiar={onCambiar} />
       )}
-      // R19 — su fila de cierre se abre igual: el pago del mensajero es un total que el cierre dejó
-      // anotado (`sin_reparto: snapshot_del_cierre`), y el panel lo dice en palabras; el enlace a SU
-      // cierre es el del origen de la fila.
+      // R19 — su fila de cierre se abre igual. FICHA 468 (R28): el pago devengado lista sus órdenes, con su
+      // tienda; el pago tomado del efectivo de ese cierre no se reparte por guía y el panel lo dice en
+      // palabras. El enlace a SU cierre es el del origen de la fila.
       detalleDeFila={{
         nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-        render: (f, { concepto, fecha }) =>
+        // FICHA 469 (R25–R28): `resaltar` solo llega con la lectura pintada en modo guía.
+        render: (f, { concepto, fecha, resaltar }) =>
           f.ref !== null && "movimientoId" in f.ref ? (
             <DetalleMovimientoCierre
               movimientoId={f.ref.movimientoId}
               concepto={concepto}
               fecha={fecha}
               fuente={fuenteOrdenesDeFila({ tipo: "mensajero", id: mensajeroId })}
+              resaltar={resaltar}
             />
           ) : null,
       }}

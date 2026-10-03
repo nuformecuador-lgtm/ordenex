@@ -74,17 +74,9 @@ export const DETALLE_MOVIMIENTO_SIN_REPARTO: Record<MotivoSinReparto, string> = 
   no_nace_de_un_cierre:
     "Este movimiento no nace del cierre del día, así que no hay órdenes que lo compongan. " +
     "Su origen está en la columna «Origen» de la fila.",
+  // FICHA 468 (design §2.4): solo lo usa el pago tomado del efectivo del mensajero.
   snapshot_del_cierre:
-    "Este importe es el total que el cierre del día dejó anotado para pagarle al mensajero. " +
-    "No se acumula orden por orden, así que no se puede repartir entre ellas: para verlo en " +
-    "detalle, abrí el cierre en la pantalla de cierres.",
-  suma_del_libro_por_tienda:
-    "Este importe es la suma de lo que ese mismo cierre le acreditó a cada tienda por el " +
-    "efectivo recaudado. Se arma tienda por tienda y no orden por orden: cada tienda lo ve " +
-    "desglosado en su propio libro.",
-  otro_productor:
-    "Este importe sale de la indemnización anotada en cada gestión del cierre, que la escribe " +
-    "un productor distinto del que reparte el resto de conceptos. Todavía no se desglosa acá.",
+    "Es lo que se le pagó al mensajero con el efectivo que entregó en ese cierre; no se reparte por guía.",
 };
 
 /**

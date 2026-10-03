@@ -1,3 +1,24 @@
+# ESTADO 2026-10-02 (mañana) — fichas 467 y 468 con spec escrito, esperando aprobación
+
+- **467** (barra del libro como la de órdenes, 37 R) y **468** (Excel kardex + detalle por guía, 61 R): specs en `dev` (`10dcff61`, `506596b5`). T1 de la 468 medido: 100 % cuadra (`progress/medicion_468.md`).
+- **467** (#841), **468** (#842) y **469** (#843) HECHAS en dev, sin desplegar. 468 deja T16 (medir en prod los 6 conceptos del feed) para tras la release. in_progress = 0.
+- WhatsApp (consultado 2026-10-02): 124 fallos 131042 «pagos pendientes en Meta» del 16 al 30-sep, parado desde el 30; 54 conversaciones sin mensaje. 131026 de fondo (<0,5 %).
+
+# ESTADO 2026-10-02 (madrugada) — 463, 464, 465 y 466 HECHAS en `dev`, SIN DESPLEGAR
+
+- **En `dev`:** 465 (#837), 466 (#838), 463 (#839), 464 (#840). Gates post-merge verdes hasta la 463; y el de la 464 también: 32.800 tests (`progress/gate_dev_tras_840.log`).
+- **Pendiente del humano:** WhatsApp interno (ejemplos por rol/hora, «sin moverse» desde cuándo, quién corrige 7 teléfonos); ¿investigar «Corregir» de la recepción de dinero de satélites? (sospecha: choca con `conciliadoAt: null` en `CierresBodegaAdminRepository.ts:528`); ¿el modal SINPE que tapa Tarifas/Wallet es esperado?; ¿registrar fichas menores?: periodo de la caja corta el texto (`w-56`), tests `OrdenesDescarga*` que fallan 00:00–01:00 (hora local vs CR), m1/m2 de la 464.
+- **Corrección de caja** para ganancia 0: la registra Carlos; medir la cifra justo antes.
+- **Flakes de la base local compartida** vistos hoy: FK en siembras, deadlock 40P01, totales de caja medidos con otro proceso escribiendo. Todos verdes aislados; correr gates sin otro proceso usando la base.
+
+# ESTADO 2026-10-01 — fichas 463-466 (pedidas por Carlos hoy)
+
+- **466** (rechazo → devolución a origen) y **465** (Excel de cobertura en tarifas): spec aprobado, `in_progress` en `feature/466-rechazo-nombre-nuevo` y `feature/465-tarifas-excel-cobertura` (worktrees aislados, backend_dev → frontend_dev).
+- **463** (filtros y orden de las wallets): spec aprobado, espera cupo fullstack y que la 466 libere los rótulos de wallet.
+- **464** (Excel de wallets con detalle por orden): spec en escritura; depende de la 463.
+- **WhatsApp interno** (plantillas por rol y hora): sin registrar; Carlos dará ejemplos al terminar lo demás. Prerrequisito: 7 de 19 teléfonos del personal no sirven.
+- Caja de prod (consulta 2026-10-01): ganancia −2.694.283,20; Carlos registrará una «Corrección de caja (suma)» para dejarla en 0.
+
 # ESTADO 2026-09-27 — RELEASE LISTA EN `dev`, SIN DESPLEGAR
 
 Todo lo pedido está hecho y en `dev`: SF-001 (429–436), 454, 455, 456, 457, 458 (A–E y los arreglos finales, #828–#834), 459, 460, 461 y 462. El gate limpio está en `progress/gate_dev_release.log`. Para desplegar solo falta la orden de Carlos y sus tres decisiones: el modal del SINPE, enviar la guía de la API y la hora. Los pasos están en `docs/release.md` › «Pendiente para la PRÓXIMA release», y las pruebas en `progress/plan_pruebas_release.md`.

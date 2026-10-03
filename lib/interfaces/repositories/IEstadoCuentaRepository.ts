@@ -1,7 +1,9 @@
 import type { MetodoPagoValue } from "@prisma/client";
 
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
 import type { DesgloseTiendaAgregadoRow } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 
 /**
  * FICHA 458-B (design §3.2, R16–R25) — las LECTURAS del estado de cuenta de una tienda, un mensajero
@@ -36,6 +38,30 @@ export interface VentanaDeLibro {
    * `liquidacion_pago.cierre_id` es este cierre, del mismo mensajero). Sin efecto en la bodega.
    */
   cierreId?: string;
+  /**
+   * FICHA 463 (design §3.2, R24/R26/R27/R28) — el termino del buscador, ya recortado. Como el chip,
+   * se aplica en el `WHERE` exterior, DESPUES de la ventana: el corrido de cada fila no cambia. Casa
+   * con la descripcion y, solo si `conNombreRegistrador`, con el nombre de quien registro.
+   */
+  termino?: string;
+  /**
+   * FICHA 469 (design §3.2, R8–R10, R16/R17) — la busqueda por GUIA: la lista CERRADA de pares que
+   * calculo `BusquedaPorGuiaService`. EXCLUYENTE con `termino` (si viene, el texto no cuenta). Va en el
+   * `WHERE` EXTERIOR, despues de la ventana, como el chip: el corrido de cada fila no cambia (R17). `[]` =
+   * ninguna fila (R22). La bodega no la recibe (R36): el servicio no la resuelve para ella.
+   */
+  porGuia?: readonly ParDeGuia[];
+  /**
+   * FICHA 463 (R33/R36/R37) — el sentido del `ORDER BY` FINAL. La ventana del saldo corrido sigue
+   * siempre cronologica (ascendente): el corrido de una fila es el mismo en los dos sentidos.
+   */
+  sortDir: DireccionOrden;
+  /**
+   * FICHA 463 (R27) — ¿el termino casa tambien con el nombre de quien registro? `false` en
+   * `/mi-wallet`: la tienda no ve los nombres de la gente de Ordenex, y buscarlos no debe ni reducir
+   * ni ampliar su resultado.
+   */
+  conNombreRegistrador: boolean;
   skip: number;
   take: number;
 }

@@ -3,7 +3,7 @@ titulo: Wallet · Tiendas
 modulo: wallet
 pantalla: /wallet/tiendas, /wallet/tiendas/[tiendaId]
 roles: [maestro, admin]
-actualizado: 2026-09-26
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/tiendas/_components/SaldosTiendasTable.tsx
   - app/(app)/wallet/tiendas/[tiendaId]/page.tsx
@@ -13,6 +13,7 @@ fuentes:
   - app/(app)/wallet/tiendas/_components/PagosTiendaEstadoCuenta.tsx
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
   - components/shared/estado-cuenta/SelectorCierreDeCuenta.tsx
   - components/shared/wallet/cierres-selector.ts
@@ -57,6 +58,9 @@ Una fila por tienda, con su saldo y su signo:
 Cada fila lleva **Ver estado de cuenta**, que abre la cuenta de esa tienda en su propia página. Al
 volver, la fila ya dice el saldo nuevo si registraste o anulaste algo allá.
 
+Encima de la tabla hay un **buscador por el nombre de la tienda**. La descarga trae las tiendas que
+encuentra esa búsqueda.
+
 ## El estado de cuenta de una tienda
 
 Es el extracto de la tienda con Ordenex, como el de un banco.
@@ -68,9 +72,11 @@ cifras del periodo: **Saldo inicial**, **Abonos del periodo** (lo que suma a fav
 más abonos menos cargos es el saldo final. Los movimientos anulados y su anulación **no cuentan** en
 abonos ni cargos: se cancelan entre ellos.
 
-La tabla es el **extracto**, del más antiguo al más reciente:
+La tabla es el **extracto**. Se entra en **Más recientes**: el último movimiento arriba.
 
-- La primera fila es el **saldo inicial** del periodo: lo que la tienda tenía al terminar el día anterior.
+- La línea del **saldo inicial** del periodo —lo que la tienda tenía al terminar el día anterior— va
+  donde cae en el tiempo: con **Más recientes**, es la **última línea de la última página**; con **Más
+  antiguas**, la primera línea de la primera página.
 - Cada movimiento dice su fecha, su concepto (desde Ordenex), el motivo, de dónde viene, si tiene
   comprobante y **quién lo registró** («Registró: Ana Admin», o «Automático · Aprobación del cierre por
   Ana Admin»), el **cargo** o el **abono**, y el **saldo** de la tienda justo después de ese movimiento.
@@ -79,7 +85,8 @@ La tabla es el **extracto**, del más antiguo al más reciente:
   **Ver** que te lleva a ella (por ejemplo, al cierre).
 - Si el movimiento es un pago, dice **Cómo se pagó**: el método y la referencia («SINPE · referencia
   12345»).
-- El saldo de la última fila es el de la tarjeta y el de la fila de la tabla de saldos.
+- El saldo del movimiento más reciente es el de la tarjeta y el de la fila de la tabla de saldos.
+  Cambiar el orden no cambia el saldo de ninguna fila.
 
 ### Las órdenes de un cierre
 
@@ -89,15 +96,33 @@ cada una—, con el día del cierre, el mensajero y cuántas de sus órdenes apo
 
 ### Filtrar el estado de cuenta
 
-- Los **chips** de arriba: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
-  uno solo. El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres: por eso no
-  baja de a poco como si los otros movimientos no existieran.
-- **Desde** y **Hasta**: días completos de Costa Rica. Con un periodo, la primera fila es el saldo
-  con el que la tienda empezó ese periodo.
+Los filtros están en **una sola barra, encima de la tabla**, en la misma fila que **Descargar**:
+
+- **Más recientes / Más antiguas**: los dos botones con flechas del principio; el orden del extracto,
+  por fecha.
+- **El buscador**: busca en la descripción y en quién registró el movimiento, sin distinguir
+  mayúsculas. Escribí **al menos 3 caracteres**.
+- **Filtros**: abre una lista de casillas —**Periodo**, **Tipo de movimiento** y **Cierre**—. Marcar una
+  casilla pone su control en la barra (marcarla sola no filtra nada); desmarcarla quita ese filtro.
+
+Lo que hace cada casilla:
+
+- **Periodo**: se eligen el primer y el último día en el calendario (días de Costa Rica) y se aplica
+  solo, sin botón. Es el único que cambia también las cuatro cifras de arriba, y la línea del saldo
+  inicial dice el saldo con el que la tienda empezó ese periodo.
+- **Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones** (sin elegir ninguno, dice
+  **Todo**). Cada movimiento cae en uno solo. El saldo de cada fila **sigue siendo el de la cuenta
+  entera**, aunque filtres: por eso no baja de a poco como si los otros movimientos no existieran.
 - **Cierre**: un selector con búsqueda. Solo ofrece los cierres que tienen movimientos en **esta**
   tienda, cada uno con su día y el mensajero («Cierre del 2026-09-12 · Juan Pérez Mora · 3
   movimientos»); se busca por un día (2026-09-12) o por el nombre del mensajero. **Todos los cierres**
-  quita el filtro. Como con los chips, el saldo de cada fila sigue siendo el de la cuenta entera.
+  quita el filtro. Como con el tipo de movimiento, el saldo de cada fila sigue siendo el de la cuenta
+  entera.
+
+El tipo de movimiento, el cierre, el buscador y el orden no cambian ninguna cifra de arriba; cualquier
+cambio vuelve a la primera página. **Limpiar todo** quita el texto buscado, el periodo, el tipo de
+movimiento, el cierre y todas las casillas; no toca el orden. Si una lectura falla, la pantalla te lo
+dice y **se queda con lo que mostraba**: las cifras, el extracto y los filtros que ya estaban puestos.
 
 ### Anulados
 
@@ -115,12 +140,13 @@ movimiento lo admite (lo que produce la aprobación de un cierre no se anula des
 
 ### Descargar
 
-La descarga trae **el periodo entero** que estás mirando (no solo la página), con el saldo inicial
-arriba y el **saldo** de cada fila, en las mismas columnas que la tabla. No lleva ningún identificador.
-Respeta el periodo, el chip y el cierre elegidos. Si hay más movimientos de los que entran en una
+La descarga trae **el periodo entero** que estás mirando (no solo la página), en el orden elegido y
+con la línea del saldo inicial donde cae en el tiempo (al final con **Más recientes**, al principio con
+**Más antiguas**), y el **saldo** de cada fila, en las mismas columnas que la tabla. No lleva ningún
+identificador. Respeta el periodo, el texto buscado, el tipo de movimiento y el cierre elegidos. Si hay más movimientos de los que entran en una
 descarga, **no se descarga nada** y te lo dice: «El estado de cuenta tiene … movimientos con estos
-filtros y la descarga admite hasta …». Elegí un periodo más corto, un chip o un cierre y volvé a
-descargar.
+filtros y la descarga admite hasta …». Elegí un periodo más corto, un tipo de movimiento o un cierre y
+volvé a descargar.
 
 ## Registrar desde el estado de cuenta
 
@@ -167,8 +193,8 @@ pero **acá se siguen viendo como «Ordenex le cobra a la tienda»**: el saldo d
 **«No hay tiendas con saldo registrado».** Ninguna tiene movimientos todavía. En una operación nueva
 es lo esperable hasta que se apruebe el primer cierre.
 
-**«No se pudo cargar el estado de cuenta».** Fallo al leer esa página del extracto; las tarjetas siguen
-en pie. Recargá.
+**«No se pudo cargar el estado de cuenta».** Falló una lectura; la pantalla se queda con lo último que
+cargó —cifras, extracto y filtros— y lo dice encima del extracto. Probá de nuevo.
 
 **«Ya estaba anulado; no se registró nada más».** Alguien lo anuló antes que vos. No se hizo nada dos veces.
 

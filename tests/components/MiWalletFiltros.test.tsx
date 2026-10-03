@@ -9,6 +9,7 @@ import { ToastProvider } from "@/providers/ToastProvider";
 
 import type { CierresDeLaTienda } from "@/app/(app)/mi-wallet/_components/mi-wallet-cierres";
 import { estado } from "@/tests/fixtures/estado-cuenta";
+import { ponerCasillas } from "@/tests/fixtures/barra-libro-wallet";
 
 /**
  * FICHA 335 (C3, R20/R22/R25/R26/R27) — el filtro de cierre de `/mi-wallet` deja de pedir un UUID.
@@ -61,8 +62,14 @@ function conSWR(ui: ReactNode) {
   );
 }
 
-function montar(cierres: CierresDeLaTienda = CIERRES) {
-  return conSWR(<MiEstadoCuenta inicial={estado()} cierres={cierres} />);
+/**
+ * FICHA 467 — el cierre es la casilla «Cierre» de la barra única: se monta la pantalla y se marca la
+ * casilla (marcarla no lee nada, R8), que es la precondición que antes daba el render.
+ */
+async function montar(cierres: CierresDeLaTienda = CIERRES) {
+  const r = conSWR(<MiEstadoCuenta inicial={estado()} cierres={cierres} />);
+  await ponerCasillas(userEvent.setup(), document.body, "Cierre");
+  return r;
 }
 
 /** Abre el selector de cierre y elige la opción cuyo rótulo se pide. */
@@ -88,34 +95,45 @@ afterEach(() => {
 });
 
 describe("/mi-wallet — el cierre se ELIGE, no se escribe (R22) [335 → 458-D]", () => {
-  it("R22: el filtro de cierre es un `combobox` y ningún campo de la pantalla pide un identificador", () => {
-    montar();
+  it("R22: el filtro de cierre es un `combobox` y ningún campo de la pantalla pide un identificador", async () => {
+    await montar();
 
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("ID del cierre")).not.toBeInTheDocument();
 
-    // Ningún campo de texto libre: los dos `input` que quedan son las fechas del periodo. Se
-    // descartan los `aria-hidden` (Base UI planta un input oculto por cada `Select`).
+    // FICHA 463 — el único campo de texto libre es el BUSCADOR del libro (R23), que busca por la
+    // descripción y no pide ningún identificador; el periodo ya no son dos `input[type=date]` sino el
+    // calendario de la zona de la wallet. Se descartan los `aria-hidden` (Base UI planta un input
+    // oculto por cada `Select`).
     const visibles = Array.from(document.querySelectorAll("input")).filter(
       (i) => i.getAttribute("aria-hidden") !== "true",
     );
-    expect(visibles.filter((i) => i.type === "text" || i.type === "search")).toEqual([]);
-    expect(visibles.map((i) => i.type)).toEqual(["date", "date"]);
+    expect(visibles.filter((i) => i.type === "text")).toEqual([]);
+    const busqueda = visibles.filter((i) => i.type === "search");
+    expect(busqueda).toHaveLength(1);
+    expect(busqueda[0]).toHaveAccessibleName("Buscar en el libro");
+    // FICHA 469 (R24): y la guía o la remisión; sigue sin nombrar a quién registró (463 R27).
+    expect(busqueda[0].placeholder).toBe("Buscar por guía, remisión o descripción");
+    expect(busqueda[0].placeholder).not.toMatch(/\bID\b|identificador/i);
   });
 
-  it("R22: el rótulo del selector cuelga de un `id` REAL, no de la nada", () => {
-    montar();
-    const rotulo = document.querySelector<HTMLLabelElement>('label[for="mi-wallet-filtro-cierre"]');
-    expect(rotulo).not.toBeNull();
-    expect(document.getElementById("mi-wallet-filtro-cierre")).not.toBeNull();
-    expect(rotulo!.textContent).toBe("Cierre");
+  // FICHA 467 (design §4.3; R23) — CAMBIO A PROPÓSITO: el rótulo ya no va ENCIMA del control (rompía la
+  // fila de la barra) sino DENTRO de su disparador, como el resto de controles de la barra.
+  it("R22 (467 R23): el rótulo «Cierre» va dentro del disparador, que tiene un `id` REAL", async () => {
+    await montar();
+    expect(document.querySelector('label[for="mi-wallet-filtro-cierre"]')).toBeNull();
+    const disparador = document.getElementById("mi-wallet-filtro-cierre");
+    expect(disparador).not.toBeNull();
+    expect(disparador).toBe(screen.getByRole("combobox", { name: "Filtrar por cierre" }));
+    expect(disparador!.textContent).toBe("Cierre: Todos los cierres");
+    expect(disparador!.className.split(/\s+/)).toContain("h-8");
   });
 });
 
 describe("/mi-wallet — «todos los cierres» es el estado de partida (R25) [335 → 458-D]", () => {
   it("R25: la primera opción es «Todos los cierres»; las demás, día y número de movimientos (sin mensajero, R10)", async () => {
     const user = userEvent.setup();
-    montar();
+    await montar();
 
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
     expect(selector).toHaveTextContent("Todos los cierres");
@@ -129,8 +147,8 @@ describe("/mi-wallet — «todos los cierres» es el estado de partida (R25) [33
     ]);
   });
 
-  it("R25: sin tocar el selector no se lee nada más: la primera página ya vino del servidor", () => {
-    montar();
+  it("R25: sin tocar el selector no se lee nada más: la primera página ya vino del servidor", async () => {
+    await montar();
     expect(verMiEstadoCuentaMock).not.toHaveBeenCalled();
   });
 });
@@ -138,7 +156,7 @@ describe("/mi-wallet — «todos los cierres» es el estado de partida (R25) [33
 describe("/mi-wallet — elegir un cierre lo aplica (R26) y «Todos los cierres» lo deshace (R27) [335 → 458-D]", () => {
   it("R26: al elegir un cierre se lee el estado de cuenta con SU `cierreId`, sin ninguna clave de cuenta (R36)", async () => {
     const user = userEvent.setup();
-    montar();
+    await montar();
 
     await elegirCierre(user, "Cierre del 2026-07-12 · 4 movimientos");
     await waitFor(() => expect(ultimaLectura()).toEqual({ cierreId: C2, page: 1, pageSize: 20 }));
@@ -150,14 +168,14 @@ describe("/mi-wallet — elegir un cierre lo aplica (R26) y «Todos los cierres�
 
   it("R26: cada opción emite SU identificador, no siempre el primero", async () => {
     const user = userEvent.setup();
-    montar();
+    await montar();
     await elegirCierre(user, "Cierre del 2026-08-01 · 7 movimientos");
     await waitFor(() => expect(ultimaLectura().cierreId).toBe(C1));
   });
 
   it("R27: «Todos los cierres» devuelve el selector al estado de partida y la lectura deja de filtrar", async () => {
     const user = userEvent.setup();
-    montar();
+    await montar();
 
     await elegirCierre(user, "Cierre del 2026-07-12 · 4 movimientos");
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
@@ -174,27 +192,27 @@ describe("/mi-wallet — elegir un cierre lo aplica (R26) y «Todos los cierres�
 });
 
 describe("/mi-wallet — el selector degrada sin mentir (R28/R29/R30) [335]", () => {
-  it("R28: sin cierres queda deshabilitado y dice que todavía no hay", () => {
-    montar({ opciones: [], hayMas: false, disponible: true });
+  it("R28: sin cierres queda deshabilitado y dice que todavía no hay", async () => {
+    await montar({ opciones: [], hayMas: false, disponible: true });
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("Todavía no hay cierres en tu wallet.")).toBeInTheDocument();
   });
 
-  it("R29: si la lectura no respondió, queda deshabilitado y dice qué hacer", () => {
-    montar({ opciones: [], hayMas: false, disponible: false });
+  it("R29: si la lectura no respondió, queda deshabilitado y dice qué hacer", async () => {
+    await montar({ opciones: [], hayMas: false, disponible: false });
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("No pudimos cargar tus cierres. Probá recargando la página.")).toBeInTheDocument();
   });
 
-  it("R30: con más cierres de los que caben, avisa de que solo ofrece los recientes", () => {
-    montar({ ...CIERRES, hayMas: true });
+  it("R30: con más cierres de los que caben, avisa de que solo ofrece los recientes", async () => {
+    await montar({ ...CIERRES, hayMas: true });
     const aviso = screen.getByText("Mostramos los cierres más recientes.");
     expect(aviso.getAttribute("role")).toBeNull();
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).not.toBeDisabled();
   });
 
-  it("CONTRAPRUEBA: con cierres y sin tope, no hay ningún texto de aviso", () => {
-    montar();
+  it("CONTRAPRUEBA: con cierres y sin tope, no hay ningún texto de aviso", async () => {
+    await montar();
     for (const texto of [
       "Todavía no hay cierres en tu wallet.",
       "No pudimos cargar tus cierres. Probá recargando la página.",
@@ -206,7 +224,7 @@ describe("/mi-wallet — el selector degrada sin mentir (R28/R29/R30) [335]", ()
 });
 
 describe("/mi-wallet — voseo y lenguaje claro (R20) [335]", () => {
-  it("R20: los textos de la pantalla están en voseo y sin jerga", () => {
+  it("R20: los textos de la pantalla están en voseo y sin jerga", async () => {
     const textos: string[] = [];
     for (const cierres of [
       CIERRES,
@@ -214,7 +232,7 @@ describe("/mi-wallet — voseo y lenguaje claro (R20) [335]", () => {
       { opciones: [], hayMas: false, disponible: true },
       { opciones: [], hayMas: false, disponible: false },
     ] satisfies CierresDeLaTienda[]) {
-      const { container } = montar(cierres);
+      const { container } = await montar(cierres);
       textos.push(container.textContent ?? "");
       cleanup();
     }
@@ -228,8 +246,8 @@ describe("/mi-wallet — voseo y lenguaje claro (R20) [335]", () => {
     }
   });
 
-  it("R20: el tuteo peninsular no se cuela en los textos nuevos", () => {
-    montar({ opciones: [], hayMas: false, disponible: false });
+  it("R20: el tuteo peninsular no se cuela en los textos nuevos", async () => {
+    await montar({ opciones: [], hayMas: false, disponible: false });
     const texto = document.body.textContent ?? "";
     expect(texto).toContain("Probá recargando la página.");
     expect(texto).not.toContain("Prueba recargando");

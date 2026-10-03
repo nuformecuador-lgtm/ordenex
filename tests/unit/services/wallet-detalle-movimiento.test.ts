@@ -4,6 +4,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenAporteRow } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
+import { CRITERIO_COD_RECAUDADO, CRITERIO_INDEMNIZACION, CRITERIO_PAGO_MENSAJERO } from "@/lib/utils/aporte-por-orden";
 
 /**
  * Ficha 344 (T4.2) — el detalle de una fila de la CAJA PRINCIPAL. Cubre **R32, R34, R38, R39,
@@ -63,7 +64,7 @@ function fila(over: Partial<OrdenAporteRow> = {}): OrdenAporteRow {
         tarifaEspecialDevuelta: null,
       },
     },
-    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00" }],
+    gestiones: [{ resultado: "entregado", montoRecibido: "14900.00", pagoMensajero: null, indemnizacion: null }],
     ...over,
   };
 }
@@ -92,6 +93,7 @@ function montar(opciones: {
     { obtenerPorIdDeTienda },
     { listarOrdenesQueAportan, contarOrdenesDelCierre, obtenerCabeceraDeCierre },
     { movimientoDeMensajero: vi.fn(async () => null) }, // 458-D: este archivo no abre filas del mensajero
+    { identificar: vi.fn(async () => []) }, // 469: este archivo no destaca guias
   );
   return {
     service,
@@ -147,8 +149,10 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
         tiendaNombre: "Tienda A",
         resultados: ["entregado"],
         aporte: "1000.00", // el flete congelado, re-derivado
+        resaltada: false, // FICHA 469 (R28): sin busqueda por guia nada sale resaltado
       },
     ]);
+    expect(r.data.destacadas).toEqual([]); // FICHA 469 (R28): sin bloque destacado
     // El `total` NO es el largo de la pagina: aqui hay 1 fila y 14 aportantes.
     expect(r.data.total).not.toBe(r.data.ordenes.length);
     // Y la caja no se acota por tienda: la clave no viaja al repositorio.
@@ -179,8 +183,8 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
       filas: [
         fila({
           gestiones: [
-            { resultado: "entregado", montoRecibido: "3000.00" },
-            { resultado: "entregado", montoRecibido: "4000.00" },
+            { resultado: "entregado", montoRecibido: "3000.00", pagoMensajero: null, indemnizacion: null },
+            { resultado: "entregado", montoRecibido: "4000.00", pagoMensajero: null, indemnizacion: null },
           ],
         }),
       ],
@@ -192,19 +196,28 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
     expect(r.data.ordenes[0].aporte).toBe("2000.00"); // 1000.00 x 2
   });
 
-  it("R48: un concepto que no se reparte abre su detalle y dice de donde sale, sin tocar ordenes", async () => {
-    for (const [categoria, motivo] of [
-      ["egreso_pago_mensajero", "snapshot_del_cierre"],
-      ["ingreso_cod_recaudado", "suma_del_libro_por_tienda"],
-      ["egreso_indemnizacion", "otro_productor"],
+  // FICHA 468 (R27/R28) — SUSTITUYE a «R48: un concepto que no se reparte…» con los tres conceptos de la
+  // caja: ahora los tres listan ordenes, cada uno con SU criterio (el de su columna de `gestion_orden`).
+  it("468 R27/R28: el pago al mensajero, el contra-entrega y la indemnizacion de un cierre listan ordenes con su criterio", async () => {
+    for (const [categoria, criterio] of [
+      ["egreso_pago_mensajero", CRITERIO_PAGO_MENSAJERO],
+      ["ingreso_cod_recaudado", CRITERIO_COD_RECAUDADO],
+      ["egreso_indemnizacion", CRITERIO_INDEMNIZACION],
     ] as const) {
       const m = montar({ mov: movimiento({ categoria, tipo: "egreso" }) });
       const r = await m.service.verDetalleDeMovimiento(PAGINA, MAESTRO);
-      expect(r, categoria).toEqual({ status: "sin_reparto", motivo });
-      // Ni cabecera ni ordenes: el hueco de alcance no cuesta una consulta.
-      expect(m.obtenerCabeceraDeCierre, categoria).not.toHaveBeenCalled();
-      expect(m.listarOrdenesQueAportan, categoria).not.toHaveBeenCalled();
+      expect(r.status, categoria).toBe("ok");
+      expect(m.listarOrdenesQueAportan, categoria).toHaveBeenCalledWith(expect.objectContaining({ criterio }));
     }
+  });
+
+  it("468 R43 (antes 344 R48): la indemnizacion que nace de un incidente sigue sin reparto, sin tocar ordenes", async () => {
+    const m = montar({ mov: movimiento({ categoria: "egreso_indemnizacion", tipo: "egreso", origenTipo: "orden_incidente" }) });
+    const r = await m.service.verDetalleDeMovimiento(PAGINA, MAESTRO);
+    expect(r).toEqual({ status: "sin_reparto", motivo: "no_nace_de_un_cierre" });
+    // Ni cabecera ni ordenes: el hueco de alcance no cuesta una consulta.
+    expect(m.obtenerCabeceraDeCierre).not.toHaveBeenCalled();
+    expect(m.listarOrdenesQueAportan).not.toHaveBeenCalled();
   });
 
   it("R6/R48: un movimiento que no nace de un cierre tampoco lista ordenes", async () => {
@@ -260,17 +273,19 @@ describe("ficha 344 — el detalle de un movimiento de la caja (R32/R34/R38/R39/
     expect("items" in r, "el limite_excedido viajo con filas").toBe(false);
   });
 
-  it("el modo completo hereda el guard y las dos ramas propias del detalle", async () => {
+  // FICHA 468 (R27): el pago al mensajero ya se reparte; la rama sin reparto se mide con la indemnizacion
+  // que nace de un incidente.
+  it("468 R27 (antes 344): el modo completo hereda el guard y las dos ramas propias del detalle", async () => {
     const forbidden = montar({});
     expect(
       await forbidden.service.verDetalleDeMovimientoCompleto({ movimientoId: MOVIMIENTO }, MENSAJERO),
     ).toEqual({ status: "forbidden" });
     expect(forbidden.obtenerPorId).not.toHaveBeenCalled();
 
-    const sinReparto = montar({ mov: movimiento({ categoria: "egreso_pago_mensajero" }) });
+    const sinReparto = montar({ mov: movimiento({ categoria: "egreso_indemnizacion", origenTipo: "orden_incidente" }) });
     expect(
       await sinReparto.service.verDetalleDeMovimientoCompleto({ movimientoId: MOVIMIENTO }, MAESTRO),
-    ).toEqual({ status: "sin_reparto", motivo: "snapshot_del_cierre" });
+    ).toEqual({ status: "sin_reparto", motivo: "no_nace_de_un_cierre" });
 
     const noExiste = montar({ mov: null });
     expect(

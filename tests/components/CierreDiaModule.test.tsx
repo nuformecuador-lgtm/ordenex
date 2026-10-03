@@ -341,7 +341,7 @@ describe("CierreDiaModule", () => {
     expect(within(region).getByText("₡4.200")).toBeInTheDocument();
   });
 
-  it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
+  it("feature 56/R12: el ingreso de bodega por devoluciones a origen NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
     const grupos = emptyGrupos();
     grupos.devolucion_a_origen_por_rechazo = [
       makeGestion({
@@ -359,11 +359,11 @@ describe("CierreDiaModule", () => {
     expect(within(region).queryByText("₡3.500")).not.toBeInTheDocument();
   });
 
-  it("feature 56/R10: el ingreso de bodega por rechazos NO se le muestra al mensajero (el total vive en las vistas de bodega/admin)", () => {
+  it("feature 56/R10: el ingreso de bodega por devoluciones a origen NO se le muestra al mensajero (el total vive en las vistas de bodega/admin)", () => {
     renderModule();
 
     expect(
-      screen.queryByRole("region", { name: "Ingreso de bodega por rechazos" }),
+      screen.queryByRole("region", { name: "Ingreso de bodega por devoluciones a origen" }),
     ).not.toBeInTheDocument();
   });
 
@@ -453,7 +453,7 @@ describe("CierreDiaModule", () => {
     // Un solo ₡300 a la vista: el de la cabecera. El desglose por método está plegado.
     // El importe va sin céntimos desde la feature 230 de `dev`.
     expect(within(region).getAllByText("₡300")).toHaveLength(1);
-    // El histórico del mensajero nunca enseñó el ingreso de bodega por rechazos: es plata de
+    // El histórico del mensajero nunca enseñó el ingreso de bodega por devoluciones a origen: es plata de
     // la empresa (design §7.2), y no la ve NI plegada ni desplegada — lo comprueba el caso de
     // abajo, que es la mitad que la tabla no podía tener.
     expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
@@ -491,9 +491,9 @@ describe("CierreDiaModule", () => {
     // Su pago está, y con SU rótulo: en su pantalla ese monto se llama «Ganancia».
     expect(within(region).getByText("Ganancia")).toBeInTheDocument();
     expect(within(region).getByText("₡45")).toBeInTheDocument();
-    // Y el ingreso de bodega por rechazos sigue sin aparecer, ni el rótulo ni el monto.
+    // Y el ingreso de bodega por devoluciones a origen sigue sin aparecer, ni el rótulo ni el monto.
     expect(
-      within(region).queryByText("Ingreso de bodega por rechazos"),
+      within(region).queryByText("Ingreso de bodega por devoluciones a origen"),
     ).not.toBeInTheDocument();
     expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
   });

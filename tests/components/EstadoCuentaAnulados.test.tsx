@@ -30,7 +30,7 @@ function montar(inicial: EstadoCuentaDTO) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <ToastProvider>
-        <EstadoCuenta inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />
+        <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={inicial} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />
       </ToastProvider>
     </SWRConfig>,
   );
@@ -38,7 +38,8 @@ function montar(inicial: EstadoCuentaDTO) {
 
 function filas() {
   const tabla = screen.getByRole("table", { name: "Estado de cuenta de Tania Tienda" });
-  return within(tabla).getAllByRole("row").slice(2); // sin cabecera ni saldo inicial
+  // FICHA 463 (R39): de entrada el orden es «Más recientes» y el saldo inicial es la ÚLTIMA fila.
+  return within(tabla).getAllByRole("row").slice(1, -1); // sin cabecera ni saldo inicial
 }
 
 const PAGO_ANULADO = fila({

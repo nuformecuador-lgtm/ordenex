@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
@@ -28,7 +28,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import { WalletFiltros } from "@/app/(app)/wallet/_components/WalletFiltros";
+// FICHA 463: la barra de una sola banda se retiró; la categoría vive en la zona del libro.
+import { LibroCajaBarraControlada } from "@/tests/fixtures/libro-caja-barra";
 
 const EGRESO_INDEMNIZACION: WalletMovimientoDTO = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -119,9 +120,9 @@ function renderFiltros(ui: React.ReactElement) {
 describe("R31 — el concepto es una opción del filtro por categoría", () => {
   it("al abrir el filtro de categoría, la indemnización está entre las opciones", async () => {
     const user = userEvent.setup();
-    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
 
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(screen.getByRole("combobox", { name: "Concepto" }));
 
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(
@@ -131,17 +132,17 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
 
   it("458-A (R13/R14): las opciones son los conceptos CON movimientos, con su número; ninguno sin movimientos", async () => {
     const user = userEvent.setup();
-    renderFiltros(<WalletFiltros onAplicar={() => {}} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada activosIniciales={["categoria"]} />);
 
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(screen.getByRole("combobox", { name: "Concepto" }));
     const lista = await screen.findByRole("listbox");
 
-    // Reescrito en la 458-A (antes: «una opción por entrada del SEED»): «todas» + los dos que el
-    // servidor dice que tienen movimientos, cada uno con su número. «Otro gasto de Ordenex»
-    // (`egreso_gasto`, sin productor) NO aparece (R14).
+    // Reescrito en la 458-A (antes: «una opción por entrada del SEED»): los dos que el servidor dice
+    // que tienen movimientos, cada uno con su número. «Otro gasto de Ordenex» (`egreso_gasto`, sin
+    // productor) NO aparece (R14). FICHA 467: ya sin la opción «Todas las categorías» al frente —en la
+    // casilla «Concepto» la ausencia de elección ES «todos» y lo dice el disparador («Concepto: Todos»).
     await within(lista).findByRole("option", { name: "Sueldo (1)" });
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
-      "Todas las categorías",
       "Sueldo (1)",
       "Indemnización que Ordenex paga por un incidente (2)",
     ]);
@@ -150,19 +151,17 @@ describe("R31 — el concepto es una opción del filtro por categoría", () => {
     expect(CATEGORIA_LABEL.egreso_indemnizacion).toBe("Indemnización que Ordenex paga por un incidente");
   });
 
-  it("elegir la indemnización y aplicar emite ese filtro tal cual", async () => {
+  it("elegir la indemnización emite ese filtro tal cual (FICHA 463/467: se aplica al elegirla, tras la espera estándar)", async () => {
     const user = userEvent.setup();
     const onAplicar = vi.fn();
-    renderFiltros(<WalletFiltros onAplicar={onAplicar} onLimpiar={() => {}} />);
+    renderFiltros(<LibroCajaBarraControlada activosIniciales={["categoria"]} onCambiar={onAplicar} />);
 
-    await user.click(screen.getByRole("combobox", { name: "Filtrar por categoría" }));
+    await user.click(screen.getByRole("combobox", { name: "Concepto" }));
     await user.click(
       await screen.findByRole("option", { name: "Indemnización que Ordenex paga por un incidente (2)" }),
     );
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-
-    expect(onAplicar).toHaveBeenCalledWith(
-      expect.objectContaining({ categoria: "egreso_indemnizacion" }),
+    await waitFor(() =>
+      expect(onAplicar).toHaveBeenCalledWith(expect.objectContaining({ categoria: "egreso_indemnizacion" })),
     );
   });
 });

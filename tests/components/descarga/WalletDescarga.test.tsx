@@ -13,6 +13,7 @@
 // que los componentes de presentación siguen sin importar una sola Server Action.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, within } from "@testing-library/react";
+import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import { readFileSync } from "node:fs";
@@ -31,7 +32,8 @@ const listarMovimientosCompletoMock = vi.fn();
 const verResumenCajaMock = vi.fn();
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => listarMovimientosMock(...a),
-  listarMovimientosCompletoAction: (...a: unknown[]) => listarMovimientosCompletoMock(...a),
+  // Ficha 468: la descarga del libro de la caja lee el KARDEX (una sola petición por opción).
+  libroCajaKardexAction: (...a: unknown[]) => listarMovimientosCompletoMock(...a),
   // Feature 173 (T G.3): la cabecera del libro de caja la sirve el borde de las DOS cifras.
   verResumenCajaAction: (...a: unknown[]) => verResumenCajaMock(...a),
   // FICHA 343 (B5): la tarjeta de la ganancia monta filas desplegables y el panel de cada una
@@ -72,11 +74,23 @@ const verMiEstadoCuentaMock = vi.fn();
 const verMiEstadoCuentaCompletoMock = vi.fn();
 vi.mock("@/lib/actions/estado-cuenta", () => ({
   verEstadoCuentaAction: vi.fn(),
-  verEstadoCuentaCompletoAction: vi.fn(),
+  estadoCuentaKardexAction: vi.fn(),
   verMiEstadoCuentaAction: (...a: unknown[]) => verMiEstadoCuentaMock(...a),
-  verMiEstadoCuentaCompletoAction: (...a: unknown[]) => verMiEstadoCuentaCompletoMock(...a),
+  // Ficha 468: la descarga de `/mi-wallet` lee el KARDEX de la tienda de la sesión.
+  miEstadoCuentaKardexAction: (...a: unknown[]) => verMiEstadoCuentaCompletoMock(...a),
   verOrdenesDeFilaAction: vi.fn(),
 }));
+
+/** Ficha 468 — el kardex del servidor para unos montos (todos en «Entra»; el cliente solo los coloca). */
+function kardexDe(montos: readonly string[]) {
+  return {
+    saldoInicial: "0.00",
+    saldoFinal: "0.00",
+    totales: { entra: "0.00", sale: "0.00", cobradoATiendas: null },
+    conOtrosFiltros: false,
+    filas: montos.map((monto) => ({ monto: { columna: "entra" as const, monto }, saldo: "0.00", ordenes: null })),
+  };
+}
 vi.mock("@/lib/actions/wallet-tienda", () => ({
   verDetalleDeMiMovimientoAction: vi.fn(),
   verDetalleDeMiMovimientoCompletoAction: vi.fn(),
@@ -144,11 +158,10 @@ import {
   CATEGORIA_TODAS_OPTION,
   DUENO_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
-import {
-  COLUMNAS_DESCARGA_WALLET_CAJA,
-  filaDescargaMovimientoCaja,
-} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { COLUMNAS_DESCARGA_WALLET_CAJA } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { filaDeLibroCaja as filaDescargaMovimientoCaja } from "@/tests/fixtures/libro-kardex";
 import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -325,22 +338,30 @@ const LEDGERS = [
     todos: CAJA_TODOS,
     pagina: CAJA_PAGINA,
     // Filas de la tabla y del archivo que no son movimientos, y el importe de su primer movimiento.
-    filasFijas: 0,
-    importeArchivo: (filas: Record<string, unknown>[]) => filas[0].monto,
+    // Ficha 468: el archivo es un kardex — «Saldo al inicio del periodo» arriba y «Total del periodo»
+    // abajo — y el importe va en la columna que decidió el servidor (aquí, «Entra»).
+    filasFijas: 2,
+    filasFijasTabla: 0,
+    importeArchivo: (filas: Record<string, unknown>[]) => filas[1].entra,
     importeEsperado: CAJA_TODOS[0].monto,
   },
   {
-    // FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda: la
-    // tabla y el archivo llevan arriba la línea del saldo inicial (R20/R32) y el importe va en su
-    // columna de abono.
+    // FICHA 458-D (T D.5): el libro de `/mi-wallet` es ahora el ESTADO DE CUENTA de la tienda: el
+    // archivo lleva la línea del saldo inicial (R20/R32) y el importe va en su columna de abono.
+    //
+    // FICHA 463 (R39/R43): de entrada el orden es «Más recientes», así que la línea del saldo inicial
+    // es la ÚLTIMA del archivo y solo aparece en la ÚLTIMA página de la tabla. La página pintada aquí es
+    // la 1 de 3 (60 movimientos de 20 en 20): la tabla NO la lleva.
     titulo: "Estado de cuenta de Tania Tienda",
     tabla: "Estado de cuenta de Tania Tienda",
     montar: renderMiWallet,
     completo: verMiEstadoCuentaCompletoMock,
     todos: TIENDA_TODOS,
     pagina: TIENDA_PAGINA,
-    filasFijas: 1,
-    importeArchivo: (filas: Record<string, unknown>[]) => filas[1].abono,
+    // Ficha 468: saldo inicial arriba y total abajo (el archivo va siempre ascendente, R7).
+    filasFijas: 2,
+    filasFijasTabla: 0,
+    importeArchivo: (filas: Record<string, unknown>[]) => filas[1].entra,
     importeEsperado: TIENDA_TODOS[0].abono,
   },
 ] as const;
@@ -365,10 +386,12 @@ function cebarDobles() {
     status: "ok",
     items: CAJA_TODOS,
     total: CAJA_TODOS.length,
+    kardex: kardexDe(CAJA_TODOS.map((m) => m.monto)),
   });
   verMiEstadoCuentaCompletoMock.mockResolvedValue({
     status: "ok",
     estado: estadoCuenta({ filas: TIENDA_TODOS, total: TIENDA_TODOS.length, page: 1, pageSize: TIENDA_TODOS.length }),
+    kardex: kardexDe(TIENDA_TODOS.map((f) => f.abono ?? f.cargo ?? "0.00")),
   });
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
 }
@@ -413,10 +436,12 @@ describe("Ledgers de dinero · descarga", () => {
       // pinta en carga un `<tr>` con `role="status"` y filas skeleton `aria-hidden` que no
       // cuentan como `row`, así que el número puede cuadrar a media carga.
       await waitFor(() => {
-        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + ledger.filasFijas + 1);
+        expect(within(tabla).getAllByRole("row")).toHaveLength(ledger.pagina.length + ledger.filasFijasTabla + 1);
         expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
       });
 
+      // Ficha 464 (R8/R9): las dos superficies arrancan con el detalle; aquí se mide la descarga de SIEMPRE.
+      await elegirSoloLosMovimientos(user);
       await user.click(boton);
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
@@ -443,17 +468,21 @@ describe("Ledgers de dinero · descarga", () => {
     const user = userEvent.setup();
     renderCaja();
 
-    await user.type(screen.getByLabelText("Desde"), "2026-07-01");
-    await user.type(screen.getByLabelText("Hasta"), "2026-07-31");
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    // FICHA 467: el periodo es la casilla «Periodo» de la barra única del libro, y se aplica solo.
+    await aplicarPeriodo(user, screen.getByRole("region", { name: "Libro de movimientos" }), 1, 28);
     await waitFor(() => expect(listarMovimientosMock).toHaveBeenCalledTimes(1));
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
 
     await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
+    // Ficha 468 (R7): y el orden cronológico ascendente, siempre.
     expect(listarMovimientosCompletoMock.mock.calls[0][0]).toEqual({
-      desde: "2026-07-01",
-      hasta: "2026-07-31",
+      desde: diaDelMesActual(1),
+      hasta: diaDelMesActual(28),
+      sortBy: "fecha",
+      sortDir: "asc",
     });
   });
 
@@ -586,15 +615,17 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     // La descarga usa `CATEGORIA_LABEL` para esa columna, así que tampoco hubo que tocarla.
     // Se comprueban las dos mitades: que la etiqueta sale, y que la fila sigue teniendo
     // exactamente las cinco columnas declaradas — ni una de más por ser una categoría nueva.
+    // Ficha 468: la fila es la de la hoja «Movimientos» (kardex); el concepto va en «Concepto» y el
+    // importe, en la columna que decidió el servidor (aquí, el doble lo pone en «Entra»).
     for (const categoria of CATEGORIAS_173) {
       const fila = filaDescargaMovimientoCaja(movimientoNuevo(categoria, 1));
-      expect(fila.categoria).toBe(CATEGORIA_LABEL[categoria]);
-      expect(fila.categoria).not.toBe(categoria);
+      expect(fila.concepto).toBe(CATEGORIA_LABEL[categoria]);
+      expect(fila.concepto).not.toBe(categoria);
       expect(Object.keys(fila).sort()).toEqual(
         COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort(),
       );
       // Money-safe: el monto sale como el STRING del servidor, con sus céntimos.
-      expect(fila.monto).toBe("7001.10");
+      expect(fila.entra).toBe("7001.10");
     }
   });
 
@@ -687,9 +718,12 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
       status: "ok",
       items: CAJA_CON_NUEVOS,
       total: CAJA_CON_NUEVOS.length,
+      kardex: kardexDe(CAJA_CON_NUEVOS.map((m) => m.monto)),
     });
     renderCaja(CAJA_CON_NUEVOS);
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
@@ -699,8 +733,9 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
     expect(columnas.map((c) => c.key)).toEqual(
       COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave),
     );
-    expect(filas).toHaveLength(CAJA_CON_NUEVOS.length);
-    expect(filas.map((f) => f.categoria)).toEqual([
+    // Ficha 468: + «Saldo al inicio del periodo» y «Total del periodo»; el concepto, en «Concepto».
+    expect(filas).toHaveLength(CAJA_CON_NUEVOS.length + 2);
+    expect(filas.slice(1, -1).map((f) => f.concepto)).toEqual([
       CATEGORIA_LABEL.ingreso_flete,
       CATEGORIA_LABEL.ingreso_cod_recaudado,
       CATEGORIA_LABEL.ingreso_reverso_pago_tienda,
@@ -759,6 +794,7 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
       status: "ok",
       items: [propio, terceros],
       total: 2,
+      kardex: kardexDe([propio.monto, terceros.monto]),
     });
     renderCaja([propio, terceros]);
 
@@ -793,12 +829,16 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
     expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
 
     // Y el archivo dice exactamente eso, celda a celda, con la autoría leída para el libro ENTERO.
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas] = buildXlsxRowsMock.mock.calls[0];
     expect(columnas.map((c) => c.key)).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave));
+    // Ficha 468 (R21): «Dueño» se llama «Es dinero de» en el archivo; las filas de movimiento van entre
+    // «Saldo al inicio del periodo» y «Total del periodo».
     expect(
-      filas.map((f) => ({ dueno: f.dueno, aQuien: f.aQuien, registro: f.registro })),
+      filas.slice(1, -1).map((f) => ({ dueno: f.esDineroDe, aQuien: f.aQuien, registro: f.registro })),
     ).toEqual(enPantalla);
     // R3: ningún id en ninguna celda del archivo — ni entero ni DENTRO de un texto (revisión m5).
     const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -820,6 +860,8 @@ describe("458-E · el libro de la caja con las columnas de la maqueta", () => {
     await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(1));
     autoriaMock.mockResolvedValueOnce({ status: "forbidden" } as never);
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
     await waitFor(() => expect(listarMovimientosCompletoMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(autoriaMock).toHaveBeenCalledTimes(2));

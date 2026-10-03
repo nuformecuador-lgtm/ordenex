@@ -3,9 +3,11 @@ import { describe, it, expect, vi } from "vitest";
 // FICHA 458-D: los estados de cuenta se importan con sus rótulos; sus actions no se usan aquí.
 vi.mock("@/lib/actions/estado-cuenta", () => ({
   verEstadoCuentaAction: vi.fn(),
-  verEstadoCuentaCompletoAction: vi.fn(),
+  estadoCuentaKardexAction: vi.fn(),
+  estadoCuentaKardexConDetalleAction: vi.fn(),
   verMiEstadoCuentaAction: vi.fn(),
-  verMiEstadoCuentaCompletoAction: vi.fn(),
+  miEstadoCuentaKardexAction: vi.fn(),
+  miEstadoCuentaKardexConDetalleAction: vi.fn(),
   verOrdenesDeFilaAction: vi.fn(),
 }));
 vi.mock("@/lib/actions/como-quedo", () => ({ comoQuedoAction: vi.fn() }));
@@ -16,11 +18,9 @@ vi.mock("@/lib/actions/wallet-tienda", () => ({
   verDetalleDeMiMovimientoAction: vi.fn(),
   verDetalleDeMiMovimientoCompletoAction: vi.fn(),
 }));
-import {
-  COLUMNAS_DESCARGA_MI_ESTADO_CUENTA,
-  filaDescargaEstadoCuenta,
-} from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
+import { COLUMNAS_DESCARGA_MI_ESTADO_CUENTA } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { filaDeLibroCuenta } from "@/tests/fixtures/libro-kardex";
 import { ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 import type { FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { fila as filaEstado } from "@/tests/fixtures/estado-cuenta";
@@ -47,44 +47,41 @@ const MOV = filaTienda({
   saldoCorrido: "98765432109.87",
 });
 
+/** Ficha 468: la fila de la hoja «Movimientos» (kardex) que coloca la descarga real. */
 function descarga(f: FilaEstadoCuentaDTO) {
-  return filaDescargaEstadoCuenta(lineaDeFila(f, ROTULOS_MI_WALLET));
+  return filaDeLibroCuenta(f, ROTULOS_MI_WALLET);
 }
 
 describe("columnas de descarga del estado de cuenta de la tienda", () => {
-  it("declara sus columnas ENUMERADAS, en el orden de la pantalla (R5)", () => {
+  it("declara sus columnas ENUMERADAS (468 R3: el kardex de /mi-wallet, sin «Registró»)", () => {
     expect(COLUMNAS_DESCARGA_MI_ESTADO_CUENTA.map((c) => c.clave)).toEqual([
       "fecha",
-      "movimiento",
-      "motivo",
-      "origen",
-      "pago",
-      "cargo",
-      "abono",
+      "concepto",
+      "detalle",
+      "entra",
+      "sale",
       "saldo",
-      "estado",
     ]);
   });
 
-  it("emite el monto TAL CUAL, sin recalcularlo ni adornarlo (R7)", () => {
+  it("emite el monto TAL CUAL, sin recalcularlo ni adornarlo (R7; 468: en su columna)", () => {
     const fila = descarga(MOV);
-    expect(fila.abono).toBe("98765432109.87");
-    expect(typeof fila.abono).toBe("string");
-    expect(String(fila.abono)).not.toContain("₡");
-    expect(descarga({ ...MOV, abono: "1000.10" }).abono).toBe("1000.10");
+    expect(fila.entra).toBe("98765432109.87");
+    expect(typeof fila.entra).toBe("string");
+    expect(String(fila.entra)).not.toContain("₡");
+    expect(descarga({ ...MOV, abono: "1000.10" }).entra).toBe("1000.10");
     expect(String(Number("1000.10"))).toBe("1000.1"); // lo que habría pasado al parsear
   });
 
-  it("emite el concepto como ETIQUETA LEGIBLE desde la tienda, no como valor interno (R8, 461 R44)", () => {
+  it("emite el concepto como ETIQUETA LEGIBLE desde la tienda, no como valor interno (R8, 461 R44; 468 R17)", () => {
     const fila = descarga(MOV);
-    expect(fila.movimiento).toBe("Cobrado a tus clientes en contra-entrega");
-    expect(fila.movimiento).not.toBe("cod_recaudado");
+    expect(fila.concepto).toBe("Cobrado a tus clientes en contra-entrega");
+    expect(fila.concepto).not.toBe("cod_recaudado");
   });
 
-  it("el origen con su entidad y el motivo, cada uno en su columna, como en la tabla (R8/R24)", () => {
-    expect(descarga(MOV).origen).toBe("Cierre del día · 2026-07-12");
-    expect(descarga(MOV).motivo).toBe("Cierre del 12 de julio");
-    expect(descarga({ ...MOV, descripcion: null }).motivo).toBeNull();
+  it("el origen con su entidad y el motivo, juntos en «Detalle» como en la tabla (R8/R24; 468 R18)", () => {
+    expect(descarga(MOV).detalle).toBe("Cierre del día · 2026-07-12 · Cierre del 12 de julio");
+    expect(descarga({ ...MOV, descripcion: null }).detalle).toBe("Cierre del día · 2026-07-12");
   });
 
   it("emite la fecha como día calendario, igual que la tabla (R11/R24)", () => {
@@ -130,19 +127,18 @@ describe("⭑ FICHA 381/461 (R39/R44) — el cobro sale en el archivo con el nom
     cargo: "15000.00",
   });
 
-  it("la columna «Movimiento» dice «Ordenex te cobró», no el valor del enum; el importe es un cargo", () => {
+  it("la columna «Concepto» dice «Ordenex te cobró», no el valor del enum; el importe sale (468 R9)", () => {
     const fila = descarga(COBRO);
-    expect(fila.movimiento).toBe("Ordenex te cobró");
-    expect(fila.movimiento).not.toBe("cobro_manual");
-    expect(fila.cargo).toBe("15000.00");
-    expect(fila.abono).toBeNull();
+    expect(fila.concepto).toBe("Ordenex te cobró");
+    expect(fila.concepto).not.toBe("cobro_manual");
+    expect(fila.sale).toBe("15000.00");
+    expect(fila.entra).toBeNull();
   });
 
   it("emite el importe TAL CUAL y arrastra el motivo tecleado", () => {
     const fila = descarga(COBRO);
-    expect(typeof fila.cargo).toBe("string");
-    expect(fila.origen).toBe("Registrado a mano");
-    expect(fila.motivo).toBe("Material de despacho entregado en bodega");
+    expect(typeof fila.sale).toBe("string");
+    expect(fila.detalle).toBe("Registrado a mano · Material de despacho entregado en bodega");
     expect(fila.fecha).toBe("2026-09-08");
   });
 
@@ -160,7 +156,7 @@ describe("⭑ FICHA 381/461 (R39/R44) — el cobro sale en el archivo con el nom
 
   it("un cobro y una corrección NO se confunden en el archivo (R33/D2)", () => {
     const ajuste = { ...COBRO, categoria: "ajuste_debito" };
-    expect(descarga(ajuste).movimiento).toBe("Corrección en tu contra");
-    expect(descarga(COBRO).movimiento).not.toBe(descarga(ajuste).movimiento);
+    expect(descarga(ajuste).concepto).toBe("Corrección en tu contra");
+    expect(descarga(COBRO).concepto).not.toBe(descarga(ajuste).concepto);
   });
 });

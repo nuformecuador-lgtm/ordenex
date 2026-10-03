@@ -5524,6 +5524,90 @@
       "depends_on": null,
       "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-09-25. Causa medida en prod (24/09): la regla 276 retiene la reprogramada hasta aprobar el cierre de su gestion; la guia 46397476 espero ~20 h (fecha cambiada a hoy a las 11:45, cierre aprobado al dia siguiente 07:32). NO se cambia la regla (riesgo de intento de mas y cobro por tope). El aviso reutiliza el conteo esperandoCierre de LiberacionReprogramadaService (~:246-252) y el sistema de avisos existente. Entra en la release completa. || CONFIRMADO POR EL HUMANO el 2026-09-25: el aviso sale a las 07:00 CR y la notificacion al celular NO va al maestro (admin y adminSatelite). || HECHA 2026-09-25, en dev por PR #825. NO desplegada: entra en la release completa. Revision APROBADA; campana optimizada a 7 consultas. Pendiente de release: medir con scripts/medir-462-retenidas.sql (T5.1) y comprobar el push con VAPID en la primera corrida de las 07:00 (H6).",
       "branch": "feature/462-aviso-reprogramadas"
+    },
+    {
+      "id": 463,
+      "title": "wallets: buscador y filtros canonicos en dos niveles, con selector de orden",
+      "description": "Todas las wallets usan el buscador y los filtros compartidos: arriba los que mueven toda la wallet, junto al libro los que solo filtran el libro, y un selector de orden (lo mas nuevo primero por defecto).",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (puntos 1 y 4). Decision por defecto del leader, revisable en el spec: arriba fechas (+ A quien en la caja); junto al libro Entra/Sale, categoria, buscador y orden. Requiere modo Aplicar en FilterComponent. Absorbe la parte wallet de 145/326 y cierra la 328 (hueco 1 ya cubierto por la 453). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Espera cupo fullstack (466 y 465 en curso) y comparte rotulos de wallet con la 466. || HECHA 2026-10-01, en dev por PR #839 (91be5d75). NO desplegada. Tres revisiones: la 1a y la 2a rechazaron por R49 (fallo de lectura descuadraba controles, cifras y libro en estados de cuenta y luego en la caja); arreglado con cambio de periodo atomico. 3a APROBADA. Gate completo verde 32685 (progress/gate_463_merge.log). Menores m9-m12 de la 3a revision (texto tecleado se pierde al fallar; tests de la guarda soltarTurno y de pedidoLibro; mapa R49) pasan a la 464. || Gate completo post-merge de dev VERDE: 32685 tests (progress/gate_dev_tras_839.log).",
+      "branch": "feature/463-wallets-filtros-y-orden"
+    },
+    {
+      "id": 464,
+      "title": "el excel de las wallets: columnas a elegir y el detalle de cada orden",
+      "description": "La descarga de las wallets usa el selector de columnas y trae cada orden con sus dineros, no solo la fila del cierre.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "alta",
+      "depends_on": 463,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 2). Decision por defecto del leader: segunda hoja 'Detalle por orden' enlazada al movimiento. Falta lectura en lote (hoy verDetalleDeMovimiento/verOrdenesDeFila son de una fila). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con las decisiones por defecto (detalle largo en 2a hoja, arranca con detalle, montos como texto en ficha aparte). Arranca con la 463 done. || HECHA 2026-10-02, en dev por PR #840 (656be403). NO desplegada. Revision APROBADA (progress/review_464.md en review/464), 7 menores: m1 falta asercion literal de que Resultado sale de las etiquetas (R28); m2 enmendar el texto de R4 en requirements. Gate completo verde 32800 (progress/gate_464_merge.log; el 1er intento cayo por deadlock 40P01 ajeno, aislado 3/3). Ver la app: caja 10/10 movimientos con detalle cuadran; tienda 13/14 (el que no es un cierre QA viejo y la celda lo dice). Incluye m9-m12 de la 463. || Gate completo post-merge de dev VERDE: 32800 tests (progress/gate_dev_tras_840.log).",
+      "branch": "feature/464-wallets-excel-por-orden"
+    },
+    {
+      "id": 465,
+      "title": "tarifas: excel de cobertura",
+      "description": "Descargar desde tarifas un Excel por distrito que diga si hay cobertura, con que zona y donde no llegamos.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 3). Sin zona = sin cobertura (decision de la 378). Alcance por defecto: por distrito, sin columnas por tienda. Ojo: toca los mismos archivos que la 275 (pending). || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. || HECHA 2026-10-01, en dev por PR #837 (bfe1d458). NO desplegada. Revision: B1 (GAM vs tarifa general sin test que los distinga) cerrado y mutado. Gate completo verde 32458 (progress/gate_465_merge.log). T10: 494 filas = count distrito; 297 con cobertura; 197 sin (194 sin zona + 3 varias). || Gate completo post-merge de dev (465+466) VERDE: 32504 tests (progress/gate_dev_tras_838.log). El rojo previo (ajuste-caja-anulacion-461) fue por base local compartida con la 463: aislado 3/3.",
+      "branch": "feature/465-tarifas-excel-cobertura"
+    },
+    {
+      "id": 466,
+      "title": "'rechazo' al nombre nuevo en conceptos, KPIs y ayuda",
+      "description": "Los conceptos de la wallet, cierres, analitica, ayuda y Excel dejan de decir 'rechazo' y usan el nombre del estado vigente.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA Y APROBADA POR EL HUMANO el 2026-10-01 (punto 6). Nombres por defecto: 'Flete por devolucion a origen', 'IVA del flete por devolucion a origen', 'Tasa de devolucion a origen'. Incluye 3 restos de 'rechazada' como estado (R41 de la 455). En prod 0 descripciones persistidas con 'rechaz': todo es derivado. || SPEC APROBADO POR EL HUMANO el 2026-10-01 con todas las decisiones por defecto del spec. Confirmado: revierte la eleccion de la 338 (Flete por devolucion a origen). || HECHA 2026-10-01, en dev por PR #838 (a42d7bc3). NO desplegada. Dos revisiones (la 1a rechazo por la guia de integradores y faltar ver la app; la 2a APROBADA). Gate completo verde 32407 (progress/gate_466_fix.log). Ver la app: /wallet, estado de cuenta, cierres, tarifas y analitica sin rechazo olvidado. Pendiente aceptado: mirar /mi-wallet y 4 pantallas mas con sesion de tienda la proxima vez. || Gate completo post-merge de dev (465+466) VERDE: 32504 tests (progress/gate_dev_tras_838.log). El rojo previo (ajuste-caja-anulacion-461) fue por base local compartida con la 463: aislado 3/3.",
+      "branch": "feature/466-rechazo-nombre-nuevo"
+    },
+    {
+      "id": 467,
+      "title": "barra del libro de la wallet igual a la de ordenes",
+      "description": "Una sola barra sobre el libro (orden en iconos, buscador, Filtros con casillas, Descargar, Columnas) con los componentes de ordenes, en caja y estados de cuenta.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 463 en la app. Decidido: una sola barra; Periodo, A quien, Entra/Sale y Concepto dentro de Filtros; desaparece la tarjeta de filtros con Aplicar. Periodo y A quien siguen moviendo las tarjetas. Solo componentes existentes (BuscadorFiltros, FilterComponent, SegmentedToggle soloIcono). || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults: sin Entra/Sale en estados de cuenta; periodo sin Aplicar. Implementa frontend_dev en worktree. || HECHA 2026-10-02, en dev por PR #841 (c0ee9a5c). NO desplegada. Revision APROBADA sin bloqueantes; gate completo verde 32860. Capturas en progress/recorrido_467/.",
+      "branch": "feature/467-wallet-barra-como-ordenes"
+    },
+    {
+      "id": 468,
+      "title": "Excel del libro de la wallet: kardex y detalle por guia que cuadran",
+      "description": "Hoja 1 en kardex (Entra, Sale, Saldo corrido, saldo inicial y final, montos numericos); hoja 2 agrupada por guia con todos los conceptos y total igual al de la hoja 1.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al ver la 464. Decidido: detalle agrupado por guia con subtotal; los movimientos sin guia en seccion final; total hoja 2 = total hoja 1, siempre. Medido en prod: COD (206/206), pago mensajero (207/207) e indemnizacion (1/1) cuadran con gestion_orden.monto_recibido/pago_mensajero/indemnizacion. Si algo no cuadra, fila visible de diferencia. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults: columna 'Cobrado a tiendas' solo en caja; kardex siempre ascendente; Detalle dice '1 guia'; el detalle en pantalla de los 4 conceptos pasa a listar ordenes; pago tomado del efectivo en 'Movimientos sin guia'. T1 medido 100% (progress/medicion_468.md). Arranca tras mergear la 467. || 2026-10-02: implementacion arrancada tras mergear la 467 (backend_dev -> frontend_dev en worktree). || HECHA 2026-10-02, en dev por PR #842. NO desplegada. Revision APROBADA; gate completo verde 32950. PENDIENTE TRAS DESPLEGAR: T16 medir diferencias de los 6 conceptos del feed en prod.",
+      "branch": "feature/468-wallet-excel-kardex-por-guia"
+    },
+    {
+      "id": 469,
+      "title": "buscar una guia en el libro de la wallet",
+      "description": "El buscador del libro (caja y estados de cuenta) encuentra por numero de guia o remision los movimientos en los que esa orden aporta dinero.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": 468,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 al probar el preview ('no puedo buscar numero de guia en el input de busqueda'). Decidido: solo los movimientos a los que la orden aporta (no todo el cierre); guia resaltada al abrir la fila. Usa el reparto por guia de la 468; va despues de ella, en la misma release. || SPEC APROBADO POR EL HUMANO el 2026-10-02 con los defaults (36 R): movimientos de una orden fuera de cierre salen sin resaltado; satelite fuera (solo texto); remision=guia toma ambas. Arranca con la 468 mergeada. || 2026-10-02: implementacion arrancada tras mergear la 468. || HECHA 2026-10-02, en dev por PR #843. NO desplegada. Revision: B1 contraste oscuro corregido y medido. Gate completo verde 32999.",
+      "branch": "feature/469-wallet-buscar-guia"
     }
   ]
 }

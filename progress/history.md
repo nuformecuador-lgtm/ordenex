@@ -5670,3 +5670,48 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
   (`progress/review_458-final.md`). Gate `progress/gate_458E_merge.log`: `INIT_EXIT=0`, 32329 verdes.
 - Recorrido completo por rol en `dev`: 93 OK, 3 FALLO (F1–F3), 13 N/A; R7/R8 = 0,00 en las 46 medidas.
   Los tres fallos y las observaciones baratas se arreglan en `fix/458-final`.
+
+## 2026-10-01 — 465: Excel de cobertura por distrito en Tarifas
+- Botón «Descargar cobertura» (solo maestro) en `/configuracion/tarifas`: un Excel con cada distrito,
+  si llegamos a él (misma regla que `resolveGeo`, probada en 24 combinaciones), su zona, GAM, zona
+  especial y si la zona tiene tarifa general; selector de columnas recordado y solo lectura.
+- Requisitos cubiertos: R1–R21; mapa R→test en `progress/impl_465.md`.
+- Revisión RECHAZADA (`progress/review_465.md`) y cerrada: B1 las columnas GAM y tarifa general no se
+  distinguían (cruzarlas pasaba en verde); casos con los datos distintos en ambos sentidos y las dos
+  mutaciones en rojo. M4 R2 prueba también el rol admin. T10 por el reviewer: 494 filas = distritos,
+  297 «Sí», 197 «No» (194 sin zona + 3 varias zonas), tarifa general «Sí» = 0 = SQL.
+- Deuda: M5/M6 de la revisión (fecha CR probada en la función común; ambigüedad por tildes no modelada,
+  0 casos medidos).
+
+## 2026-10-02 — 467: barra del libro de la wallet igual a la de órdenes
+- Caja y cuatro estados de cuenta con una sola barra: orden en íconos, buscador ancho, «Filtros» con
+  casillas (Periodo, A quién, Entra/Sale, Concepto, Tipo de movimiento, Cierre), Descargar y Columnas.
+  Fuera la tarjeta con «Aplicar», los textos de zona, el `Select` de categorías y `ChipsEstadoCuenta`.
+- Solo componentes compartidos; se retira el modo «Aplicar» de `FilterComponent`. Sin servidor.
+- R1–R37; mapa R→test en `progress/impl_467.md`. Revisión APROBADA (`progress/review_467.md`), PR #841.
+- Deuda menor de la revisión: m3 la guardia no mira el `Select` del cierre de `/mi-wallet`; m5 un
+  instante con los conteos anteriores al recontar conceptos; m7 un caso débil de desmarcar Periodo.
+
+## 2026-10-02 — 468: Excel del libro de la wallet en kardex con detalle por guía que cuadra
+- Hoja 1 kardex (Entra, Sale, Saldo corrido, saldo inicial y final, montos numéricos; «Cobrado a tiendas»
+  solo en la caja, saldo = tarjeta). Hoja 2 por guía con «Total de la guía», «Movimientos sin guía», fila
+  «Diferencia sin repartir» y TOTAL GENERAL = hoja 1 afirmado en el servidor.
+- Contra-entrega, pago al mensajero e indemnización se reparten por guía con los snapshots de
+  `gestion_orden` (prod: 100 % cuadra, `progress/medicion_468.md`); el detalle de fila los lista.
+- R1–R61; mapa en `progress/impl_468.md`. Revisión APROBADA (`progress/review_468.md`), PR #842.
+  Las 33 diferencias del recorrido local son 3 cierres sembrados incoherentes de agosto.
+- Deuda: T16 medir en prod los seis conceptos del feed tras desplegar; m3 la hoja 1 conserva el título de
+  cada pantalla; m4 tres acciones `@sin-superficie` por retirar; m5 cabecera con dos cierres el mismo día;
+  m7 «Efectivo · Efectivo» en liquidaciones del mensajero.
+
+## 2026-10-02 — 469: buscar una guía en el libro de la wallet
+- El buscador del libro (caja, estados de cuenta de tienda y mensajero, `/mi-wallet`) reconoce una guía o
+  remisión y muestra solo los movimientos a los que esa orden aporta, con el criterio de aporte existente.
+  Saldo corrido y tarjetas intactos; descarga filtrada cuadra. Detalle con bloque «Guía buscada» y fila
+  resaltada. Satélite fuera (solo texto), por decisión del humano.
+- T1 medido en prod: 0 diferencias guía/remisión (5.695 filas), 9,6 ms, sin índice.
+- R1–R36; mapa en `progress/impl_469.md`. Revisión RECHAZADA por B1 (contraste en oscuro), corregido con
+  test y medida en navegador (≥ 6,1:1). PR #843. Tres agentes de servidor cayeron por red; el WIP se
+  rescató y se completó con tests.
+- Deuda menor: m3 `incidentesDeOrdenes` sin filtro de tienda (sin efecto hoy); m4 la integración no caza
+  `identificar` sin tienda (lo caza el unitario); m5 la página del detalle no vuelve a 1 al cambiar término.

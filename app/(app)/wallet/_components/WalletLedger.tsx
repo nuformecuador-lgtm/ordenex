@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,12 @@ import {
   textoAQuien,
 } from "./libro-caja-labels";
 import { VerMovimientoCaja, type AutoriaDeLaFilaEnElLibro } from "./VerMovimientoCaja";
-import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
+import {
+  AMBITO_DESCARGA_WALLET_CAJA,
+  COLUMNAS_DESCARGA_WALLET_CAJA,
+  DETALLE_DESCARGA_WALLET_CAJA,
+  FIJAS_DESCARGA_WALLET_CAJA,
+} from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
   DUENO_LABEL,
@@ -280,9 +285,26 @@ export interface WalletLedgerProps {
    * componente sin fetchear nada.
    *
    * Ausente ⇒ la tabla no monta el control y se comporta igual que antes (R39).
+   *
+   * FICHA 464 (T8) — recibe `{ conDetalle }`: con `true` devuelve también la hoja «Detalle por orden».
    */
-  obtenerFilasDescarga?: () => Promise<DescargaFilasResult>;
+  obtenerFilasDescarga?: (opciones?: { conDetalle: boolean }) => Promise<DescargaFilasResult>;
+  /**
+   * FICHA 463 (design §5.2) — la ZONA DEL LIBRO, en la cabecera de la tabla y en la misma línea que la
+   * descarga (`filtros` de `DataTable`, como `/ordenes`). Nodo OPACO: la tabla la coloca, no la mira.
+   */
+  filtros?: ReactNode;
+  /**
+   * FICHA 469 (R25–R28) — el término del libro PINTADO, solo si el servidor lo resolvió como búsqueda
+   * por guía. Baja al detalle de cada fila de cierre para destacar la guía buscada; ausente en modo texto.
+   */
+  resaltar?: string;
+  /** FICHA 469 (R22) — el texto del libro vacío; sin él, el de siempre. */
+  emptyMessage?: string;
 }
+
+/** El libro vacío de siempre (sin búsqueda por guía). */
+const LIBRO_VACIO = "No hay movimientos que coincidan con los filtros.";
 
 export function WalletLedger({
   movimientos,
@@ -290,6 +312,9 @@ export function WalletLedger({
   onCambio,
   autoria: autoriaProp,
   obtenerFilasDescarga,
+  filtros,
+  resaltar,
+  emptyMessage = LIBRO_VACIO,
 }: WalletLedgerProps) {
   const autoria = autoriaProp ?? AUTORIA_CARGANDO;
   // Feature 200 (tanda 3): cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé,
@@ -365,7 +390,8 @@ export function WalletLedger({
         rowKey="id"
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
-        emptyMessage="No hay movimientos que coincidan con los filtros."
+        emptyMessage={emptyMessage}
+        filtros={filtros}
         // R71/R72 (458-C): anulado = tachado y apagado, decidido por el servidor.
         rowClassName={claseDeFila}
         // Ficha 344 (T6.4, R1–R6): cada fila de CIERRE despliega las órdenes que componen su
@@ -385,6 +411,7 @@ export function WalletLedger({
               movimientoId={m.id}
               concepto={CATEGORIA_LABEL[m.categoria]}
               fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
+              resaltar={resaltar}
             />
           ) : null
         }
@@ -407,6 +434,11 @@ export function WalletLedger({
                 titulo: TITULO_DESCARGA,
                 columnas: COLUMNAS_DESCARGA_WALLET_CAJA,
                 obtenerFilas: obtenerFilasDescarga,
+                // FICHA 464 (R1/R2/R6) — selector de columnas con su ámbito y la hoja de detalle.
+                ambitoColumnas: AMBITO_DESCARGA_WALLET_CAJA,
+                // FICHA 468 (R51) — Concepto, montos y Saldo no se pueden desmarcar.
+                columnasFijas: FIJAS_DESCARGA_WALLET_CAJA,
+                detalle: DETALLE_DESCARGA_WALLET_CAJA,
               }
             : undefined
         }

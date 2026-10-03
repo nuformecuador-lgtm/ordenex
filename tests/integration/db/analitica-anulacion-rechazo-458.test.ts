@@ -20,7 +20,7 @@ import {
 } from "./_fixtures/caja-459";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
-// FICHA 458-B — revision B2 (decision del leader, 2026-09-26): la ANULACION del cobro por rechazo
+// FICHA 458-B — revision B2 (decision del leader, 2026-09-26): la ANULACION del cobro por devolución a origen
 // DESCUENTA en /analitica. Contra Postgres, con el servicio REAL de la analitica financiera sobre
 // los repositorios REALES y el cobro del escenario 459 (tienda A: flete 1 000,00 + IVA 130,00),
 // anulado por el servicio real (`RechazoTiendaCobroService.anular`).
@@ -67,7 +67,7 @@ function cifra(importe: ImporteAnalitico, contexto: string): Cifra {
   return { bruto: importe.bruto, neto: importe.neto };
 }
 
-describeSiHayBase("⭑ 458-B/B2 — la anulacion del cobro por rechazo descuenta en /analitica (Postgres real)", () => {
+describeSiHayBase("⭑ 458-B/B2 — la anulacion del cobro por devolución a origen descuenta en /analitica (Postgres real)", () => {
   let prisma: PrismaClient;
   let medida: Medida | undefined;
   let fallo: unknown;

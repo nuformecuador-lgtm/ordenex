@@ -1,0 +1,136 @@
+[
+  {
+    "tema": "claro",
+    "claseHtml": "poppins_c0362d48-module__nEpFzq__variable jetbrains_mono_dc177b0e-module__78ed6G__variable h-full antialiased | body: min-h-full flex flex-col",
+    "ctl": {
+      "gris": 4.54,
+      "bn": 21,
+      "labRojo": [
+        255,
+        0,
+        0
+      ],
+      "oklchBlanco": [
+        255,
+        255,
+        255
+      ],
+      "alpha": [
+        127,
+        127,
+        127
+      ]
+    },
+    "estable": true,
+    "html": "<section aria-label=\"Guía buscada en Contra-entrega cobrado a los clientes de la tienda del 2026-09-24\" class=\"flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15\"><h4 class=\"font-medium text-info-strong\">Guía buscada</h4><ul class=\"flex flex-col gap-1\"><li class=\"flex flex-wrap items-baseline gap-x-4 gap-y-0.5 wrap-anywhere\"><a aria-label=\"Ver en órdenes la guía 38589325\" title=\"Ver en órdenes la guía 38589325\" class=\"font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50\" href=\"/ord",
+    "bloqueClase": "flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15",
+    "filaClase": "border-b bg-info-soft dark:bg-info/15",
+    "bloque_titulo": {
+      "fondoCrudo": "rgb(239, 246, 255)",
+      "textoCrudo": "rgb(29, 78, 216)",
+      "fondo": "#eff6ff",
+      "texto": "#1d4ed8",
+      "contraste": 6.16
+    },
+    "bloque_texto": {
+      "fondoCrudo": "rgb(239, 246, 255)",
+      "textoCrudo": "rgb(18, 35, 63)",
+      "fondo": "#eff6ff",
+      "texto": "#12233f",
+      "contraste": 14.42
+    },
+    "bloque_secundario": {
+      "fondoCrudo": "rgb(239, 246, 255)",
+      "textoCrudo": "rgb(74, 83, 104)",
+      "fondo": "#eff6ff",
+      "texto": "#4a5368",
+      "contraste": 7.07
+    },
+    "fila_texto": {
+      "fondoCrudo": "rgb(239, 246, 255)",
+      "textoCrudo": "rgb(18, 35, 63)",
+      "fondo": "#eff6ff",
+      "texto": "#12233f",
+      "contraste": 14.42
+    },
+    "fila_insignia": {
+      "fondoCrudo": "rgb(239, 246, 255)",
+      "textoCrudo": "rgb(29, 78, 216)",
+      "fondo": "#eff6ff",
+      "texto": "#1d4ed8",
+      "contraste": 6.16
+    },
+    "otra_fila": {
+      "falta": "texto"
+    },
+    "celdaTexto": "38589325\nGuía buscada",
+    "bloqueTexto": "Guía buscada\n38589325\nCliente Quepos 2\nTania\nEntregado\n₡6.000"
+  },
+  {
+    "tema": "oscuro",
+    "claseHtml": "poppins_c0362d48-module__nEpFzq__variable jetbrains_mono_dc177b0e-module__78ed6G__variable h-full antialiased | body: min-h-full flex flex-col",
+    "ctl": {
+      "gris": 4.54,
+      "bn": 21,
+      "labRojo": [
+        255,
+        0,
+        0
+      ],
+      "oklchBlanco": [
+        255,
+        255,
+        255
+      ],
+      "alpha": [
+        127,
+        127,
+        127
+      ]
+    },
+    "estable": true,
+    "html": "<section aria-label=\"Guía buscada en Contra-entrega cobrado a los clientes de la tienda del 2026-09-24\" class=\"flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15\"><h4 class=\"font-medium text-info-strong\">Guía buscada</h4><ul class=\"flex flex-col gap-1\"><li class=\"flex flex-wrap items-baseline gap-x-4 gap-y-0.5 wrap-anywhere\"><a aria-label=\"Ver en órdenes la guía 38589325\" title=\"Ver en órdenes la guía 38589325\" class=\"font-medium underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50\" href=\"/ord",
+    "bloqueClase": "flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15",
+    "filaClase": "border-b bg-info-soft dark:bg-info/15",
+    "bloque_titulo": {
+      "fondoCrudo": "lab(39.9074 22.8692 -74.5324 / 0.15)",
+      "textoCrudo": "rgb(147, 180, 247)",
+      "fondo": "#142b5a",
+      "texto": "#93b4f7",
+      "contraste": 6.64
+    },
+    "bloque_texto": {
+      "fondoCrudo": "lab(39.9074 22.8692 -74.5324 / 0.15)",
+      "textoCrudo": "rgb(230, 236, 248)",
+      "fondo": "#142b5a",
+      "texto": "#e6ecf8",
+      "contraste": 11.63
+    },
+    "bloque_secundario": {
+      "fondoCrudo": "lab(39.9074 22.8692 -74.5324 / 0.15)",
+      "textoCrudo": "rgb(159, 173, 201)",
+      "fondo": "#142b5a",
+      "texto": "#9fadc9",
+      "contraste": 6.1
+    },
+    "fila_texto": {
+      "fondoCrudo": "lab(39.9074 22.8692 -74.5324 / 0.15)",
+      "textoCrudo": "rgb(230, 236, 248)",
+      "fondo": "#142b5a",
+      "texto": "#e6ecf8",
+      "contraste": 11.63
+    },
+    "fila_insignia": {
+      "fondoCrudo": "lab(39.9074 22.8692 -74.5324 / 0.15)",
+      "textoCrudo": "rgb(147, 180, 247)",
+      "fondo": "#142b5a",
+      "texto": "#93b4f7",
+      "contraste": 6.64
+    },
+    "otra_fila": {
+      "falta": "texto"
+    },
+    "celdaTexto": "38589325\nGuía buscada",
+    "bloqueTexto": "Guía buscada\n38589325\nCliente Quepos 2\nTania\nEntregado\n₡6.000"
+  }
+]

@@ -31,7 +31,8 @@ const SEED_DE_CATEGORIAS = /\b[A-Z_]*CATEGORIA_SEED\b/g;
  * barrido del SEED de abajo sigue cubriendo la carpeta entera, estado de cuenta incluido.
  */
 const FILTROS: Record<string, string> = {
-  "app/(app)/wallet/_components/WalletFiltros.tsx": 'libro: "caja"',
+  // FICHA 463: la categoría de la caja pasó a la zona del libro (`LibroCajaBarra`).
+  "app/(app)/wallet/_components/LibroCajaBarra.tsx": 'libro: "caja"',
   // FICHA 458-D (T D.5): el de `/mi-wallet` (`MiWalletFiltros`, `libro: "mi_tienda"`) se retiró con su
   // libro: `/mi-wallet` es el estado de cuenta de la tienda y filtra por CHIPS, como la oficina.
 };

@@ -19,7 +19,8 @@ import type {
   VerResumenCajaServiceResult,
 } from "@/lib/interfaces/services/IWalletService";
 import type {
-  ListarMovimientosCompletoInput,
+  ListarLibroCajaCompletoServicioInput,
+  ListarLibroCajaServicioInput,
   ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
   RegistrarMovimientoManualInput,
@@ -29,6 +30,7 @@ import type {
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import {
   categoriasDeFilaComposicion,
   derivarCaja,
@@ -41,6 +43,8 @@ import type {
 } from "@/lib/interfaces/services/IWalletService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
+import type { IBusquedaPorGuiaService } from "@/lib/interfaces/services/IBusquedaPorGuiaService";
+import type { ModoBusquedaLibro, ParDeGuia } from "@/lib/types/busqueda-por-guia";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
 // Cualquier otro rol -> forbidden SIN exponer movimientos ni cifras.
@@ -136,6 +140,22 @@ function idDeDocumento(m: WalletMovimientoDTO, tipo: DocumentoCajaDTO["tipo"]): 
 }
 
 /**
+ * Ficha 463 (design §4, R24/R33/R42) — lo que SOLO el libro (pagina y descarga) lleva al repositorio:
+ * el termino y el sentido del orden. Fuera de `construirFiltros` a proposito: ese metodo lo comparten
+ * el resumen, el desglose y el detalle de una fila, y las cifras de la wallet no se filtran por texto
+ * ni dependen del orden (R12). Lo ausente no viaja.
+ */
+function terminoYOrden(input: { q?: string; sortDir?: DireccionOrden }): {
+  termino?: string;
+  sortDir?: DireccionOrden;
+} {
+  return {
+    ...(input.q !== undefined ? { termino: input.q } : {}),
+    ...(input.sortDir !== undefined ? { sortDir: input.sortDir } : {}),
+  };
+}
+
+/**
  * Feature 42 — logica de negocio de la wallet (libro + balance + manual). No conoce HTTP
  * ni Prisma directamente: recibe el repo por inyeccion. Guardia de rol maestro (R19).
  * INMUTABILIDAD (R3): NO expone update/delete; una correccion es un movimiento manual de
@@ -162,7 +182,35 @@ export class WalletService implements IWalletService {
     private readonly documentos: LectoresDocumentosCaja,
     /** FICHA 458-B (R74) — el comprobante de la correccion. Sin el, registrar CON comprobante lanza. */
     private readonly comprobantes?: IWalletComprobanteService,
+    /**
+     * FICHA 469 (design §3.3) — resuelve el termino del libro: busqueda por GUIA o de TEXTO.
+     *
+     * DESVIACION del design («dependencia NO opcional»), declarada en `progress/impl_469.md`: va DETRAS
+     * del parametro opcional `comprobantes` y 58 construcciones de test no la pasan. Sin ella el termino
+     * se busca como texto (la 463 tal cual). Lo que impide el fallo mudo «el root no la inyecta» es
+     * `tests/unit/actions/busqueda-por-guia-469-roots.test.ts`, que construye el servicio por SU root
+     * y exige un `BusquedaPorGuiaService` real.
+     */
+    private readonly busqueda?: Pick<IBusquedaPorGuiaService, "resolver">,
   ) {}
+
+  /**
+   * FICHA 469 (design §3.1/§3.3, R2/R6/R10/R33) — el termino del libro, resuelto en el SERVIDOR: si
+   * identifica una orden viaja `porGuia` (y el texto NO cuenta); si no, `termino` como en la 463. El
+   * sentido del orden viaja igual en los dos modos (R20). `modo` ausente = la lectura no llevaba termino.
+   */
+  private async busquedaYOrden(input: { q?: string; sortDir?: DireccionOrden }): Promise<{
+    filtros: { termino?: string; porGuia?: readonly ParDeGuia[]; sortDir?: DireccionOrden };
+    modo?: ModoBusquedaLibro;
+  }> {
+    if (input.q === undefined || this.busqueda === undefined) {
+      return { filtros: terminoYOrden(input), ...(input.q !== undefined ? { modo: "texto" as const } : {}) };
+    }
+    const r = await this.busqueda.resolver({ termino: input.q, superficie: { tipo: "caja" } });
+    const sortDir = input.sortDir !== undefined ? { sortDir: input.sortDir } : {};
+    if (r.modo === "texto") return { filtros: { termino: input.q, ...sortDir }, modo: "texto" };
+    return { filtros: { porGuia: r.pares, ...sortDir }, modo: "guia" };
+  }
 
   /**
    * Ficha 459 (design §7.3) — el documento de cada fila ORIGINAL de la pagina, EN LOTE: una
@@ -275,15 +323,18 @@ export class WalletService implements IWalletService {
   }
 
   async listarMovimientos(
-    input: ListarMovimientosInput,
+    input: ListarLibroCajaServicioInput,
     actor: Actor,
   ): Promise<ListarMovimientosServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R19
 
+    // FICHA 469 (R33): guia o texto lo decide el servidor, DESPUES del guard (nada se lee antes).
+    const busqueda = await this.busquedaYOrden(input);
     const { movimientos, total } = await this.repo.listar({
       page: input.page,
       pageSize: input.pageSize,
       ...this.construirFiltros(input),
+      ...busqueda.filtros,
     });
     return {
       status: "ok",
@@ -292,6 +343,8 @@ export class WalletService implements IWalletService {
         total,
         page: input.page,
         pageSize: input.pageSize,
+        // FICHA 469 (R21/R23): como se resolvio el termino; ausente sin termino.
+        ...(busqueda.modo !== undefined ? { modoBusqueda: busqueda.modo } : {}),
       },
     };
   }
@@ -308,7 +361,7 @@ export class WalletService implements IWalletService {
    * que usa la pantalla. Si manana el libro gana un filtro, lo ganan los dos a la vez.
    */
   async listarMovimientosCompleto(
-    input: ListarMovimientosCompletoInput,
+    input: ListarLibroCajaCompletoServicioInput,
     actor: Actor,
   ): Promise<ListarMovimientosCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R17
@@ -321,6 +374,9 @@ export class WalletService implements IWalletService {
     // sale de un `count` independiente del `take`.
     const { movimientos, total } = await this.repo.listar({
       ...this.construirFiltros(input),
+      // Ficha 463 (R42): el archivo trae el conjunto del libro en pantalla —termino y orden incluidos—.
+      // FICHA 469 (R30): resuelto IGUAL que la pantalla (guia o texto), asi que trae sus mismas filas.
+      ...(await this.busquedaYOrden(input)).filtros,
       page: 1,
       pageSize: limite + 1,
     });

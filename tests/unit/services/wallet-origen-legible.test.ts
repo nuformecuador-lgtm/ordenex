@@ -55,7 +55,7 @@ const CASOS_CAJA: Record<WalletOrigenTipo, { fila: FilaConOrigenTecnico; texto: 
   cierre_dia: { fila: fila("cierre_dia"), texto: "Cierre del día · 2026-09-12 · Juan Pérez Mora" },
   gestion_orden: {
     fila: fila("gestion_orden", { categoria: "ingreso_flete_devolucion" }),
-    texto: "Gestión de orden · cobro por rechazo · guía 4321",
+    texto: "Gestión de orden · cobro por devolución a origen · guía 4321",
   },
   manual: { fila: fila("manual", { origenId: null }), texto: "Registrado a mano" },
   pago_tienda: { fila: fila("pago_tienda"), texto: "Pago de Ordenex a una tienda · Tania Tienda · 2026-09-12 · SINPE" },
@@ -148,10 +148,10 @@ describe("458-A R5/R6 — el origen de cada movimiento dice su entidad concreta"
     expect(o.texto).toBe("Cobro de Ordenex a una tienda");
   });
 
-  it("`gestion_orden` en el libro de la TIENDA: el flete por rechazo dice la guía (459/461 §7.3)", async () => {
+  it("`gestion_orden` en el libro de la TIENDA: el flete por devolución a origen dice la guía (459/461 §7.3)", async () => {
     const svc = new OrigenLegibleService(repoFalso());
     const [o] = await svc.resolver("tienda", [fila("gestion_orden", { categoria: "flete_devolucion" })], TIENDA);
-    expect(o.texto).toBe("Gestión de orden · cobro por rechazo · guía 4321");
+    expect(o.texto).toBe("Gestión de orden · cobro por devolución a origen · guía 4321");
   });
 
   it("el libro del mensajero rotula con su diccionario, que ya no dice «Liquidación» ni «Manual»", async () => {

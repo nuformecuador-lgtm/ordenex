@@ -36,10 +36,10 @@ import {
 const LECTURA_DESDE_LA_TIENDA: Record<WalletTiendaMovimientoCategoria, string> = {
   cod_recaudado: "Cobrado a tus clientes en contra-entrega",
   flete: "Ordenex te cobró el flete",
-  flete_devolucion: "Ordenex te cobró el flete por rechazo",
+  flete_devolucion: "Ordenex te cobró el flete por devolución a origen",
   comision_cod: "Ordenex te cobró la comisión de contra-entrega",
   iva_flete: "Ordenex te cobró el IVA del flete",
-  iva_flete_devolucion: "Ordenex te cobró el IVA del flete por rechazo",
+  iva_flete_devolucion: "Ordenex te cobró el IVA del flete por devolución a origen",
   iva_comision_cod: "Ordenex te cobró el IVA de la comisión",
   cobro_manual: "Ordenex te cobró",
   cobro_tienda_anulado: "Ordenex anuló un cobro y te lo devolvió",
@@ -49,9 +49,9 @@ const LECTURA_DESDE_LA_TIENDA: Record<WalletTiendaMovimientoCategoria, string> =
   // Ficha 457 (design §2, D10, R47): la lectura desde la tienda del pago que ELLA le hizo a Ordenex.
   abono_tienda: "Le pagaste a Ordenex",
   abono_tienda_anulado: "Ordenex anuló el pago que le hiciste",
-  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por rechazo, desde la tienda.
-  flete_devolucion_anulado: "Ordenex anuló el flete por rechazo y te lo devolvió",
-  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por rechazo y te lo devolvió",
+  // Ficha 458-B (design 458 §2.3): la anulacion de un cobro por devolución a origen, desde la tienda.
+  flete_devolucion_anulado: "Ordenex anuló el flete por devolución a origen y te lo devolvió",
+  iva_flete_devolucion_anulado: "Ordenex anuló el IVA del flete por devolución a origen y te lo devolvió",
   ajuste_credito: "Corrección a tu favor",
   ajuste_debito: "Corrección en tu contra",
 };
@@ -214,7 +214,7 @@ describe("461 — la cabecera de /mi-wallet habla desde la tienda (R45, design �
  * Los orígenes que ESCRIBEN en el libro de la tienda (`wallet_tienda_movimiento`), medidos en el
  * código: el cierre (`WalletTiendaFeedService`), el pago a tienda y su anulación
  * (`LiquidacionService`), el cobro de Ordenex a la tienda (`CobroTiendaService`, origen `manual`),
- * el cobro por rechazo (`RechazoTiendaCobroService`, `gestion_orden`), el pago de un gasto de la
+ * el cobro por devolución a origen (`RechazoTiendaCobroService`, `gestion_orden`), el pago de un gasto de la
  * tienda y su anulación (`PagoPorCuentaTiendaService`) y, desde la 461, el crédito de la anulación de
  * un cobro (`CobroTiendaService.anular`, origen `cobro_tienda`). Las dos listas juntas cubren el
  * SEED: un origen nuevo obliga a decidir en cuál cae.

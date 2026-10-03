@@ -80,7 +80,7 @@ describeSiHayBase("458-B/TB.9 — R67: dos anulaciones a la vez dejan UN solo ju
     });
   }, 120_000);
 
-  it("R67: un cobro por rechazo anulado dos veces a la vez → UNA constancia, DOS reversos y DOS creditos (no cuatro)", async () => {
+  it("R67: un cobro por devolución a origen anulado dos veces a la vez → UNA constancia, DOS reversos y DOS creditos (no cuatro)", async () => {
     await conPersonas(async (p) => {
       let ordenId: string | null = null;
       let gestionId: string | null = null;

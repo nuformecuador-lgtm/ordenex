@@ -3,7 +3,7 @@ titulo: Mi wallet
 modulo: mi-wallet
 pantalla: /mi-wallet
 roles: [adminTienda]
-actualizado: 2026-09-26
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/mi-wallet/page.tsx
   - app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx
@@ -12,6 +12,7 @@ fuentes:
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/TarjetasEstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - components/shared/estado-cuenta/estado-cuenta-descarga-columnas.ts
   - lib/actions/estado-cuenta.ts
   - lib/services/EstadoCuentaService.ts
@@ -73,12 +74,15 @@ cumple: saldo inicial más abonos menos cargos es el saldo final. Un movimiento 
 
 ## Tu estado de cuenta
 
-La tabla es el **extracto**, del movimiento más antiguo al más reciente:
+La tabla es el **extracto**. Se abre en **Más recientes**: tu último movimiento arriba.
 
-- La primera fila es el **saldo inicial**: lo que tenías al terminar el día anterior al periodo.
+- La línea del **saldo inicial** —lo que tenías al terminar el día anterior al periodo— va donde cae en
+  el tiempo: con **Más recientes**, es la última línea de la última página; con **Más antiguas**, la
+  primera de la primera página.
 - Cada movimiento dice su fecha, qué fue, el motivo, de dónde viene, cómo se pagó (si es un pago), el
   **cargo** o el **abono**, y tu **saldo** justo después de ese movimiento.
-- El saldo de la última fila es el mismo de la cifra grande de arriba.
+- El saldo de tu movimiento más reciente es el mismo de la cifra grande de arriba. Cambiar el orden
+  no cambia el saldo de ninguna fila.
 
 Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 
@@ -91,7 +95,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Le pagaste a Ordenex** — lo que le pagaste a Ordenex cuando tu saldo estaba en contra.
 
 **Lo que resta**
-- **Ordenex te cobró el flete**, **Ordenex te cobró el flete por rechazo**, **Ordenex te cobró la
+- **Ordenex te cobró el flete**, **Ordenex te cobró el flete por devolución a origen**, **Ordenex te cobró la
   comisión de contra-entrega** y su **IVA** — el servicio de Ordenex.
 - **Ordenex te cobró** — un cobro que la oficina te hace a mano, por ejemplo material de despacho. Se
   descuenta de tu saldo a favor.
@@ -101,7 +105,7 @@ Cada movimiento se lee desde tu lado: dice qué hizo Ordenex contigo.
 - **Ordenex anuló el pago que le hiciste** — la anulación de un pago tuyo registrado por error: tu saldo vuelve a bajar.
 
 Cada línea dice **de dónde viene**: el cierre, el pago, la guía… El **origen** lo dice con nombre, por
-ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321». Las órdenes
+ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por devolución a origen · guía 4321». Las órdenes
 de un cierre se ven desplegando su fila; los pagos, cobros y correcciones no vienen de una orden.
 
 Un movimiento anulado **no desaparece**: sigue en su lugar, tachado, con la leyenda **Anulado por
@@ -113,7 +117,7 @@ fila, con la marca **Anulación**.
 A veces la oficina te cobra algo a mano —material de despacho entregado en la bodega, por ejemplo—.
 Lo ves como **Ordenex te cobró**, con el motivo que escribió la oficina.
 
-- **Baja tu saldo** en el monto: es un **cargo** de tu estado de cuenta, en el chip **Cobros**.
+- **Baja tu saldo** en el monto: es un **cargo** de tu estado de cuenta, en el tipo de movimiento **Cobros**.
 - Si no tenías saldo a favor, **tu saldo queda en contra**: le debés ese dinero a Ordenex, y se cobra
   cuando tus entregas vuelvan a generarte plata a favor.
 - Si la oficina lo anula, aparece una línea **Ordenex anuló un cobro y te lo devolvió** que te devuelve
@@ -126,7 +130,7 @@ A veces Ordenex paga algo **por vos**: tu proveedor, tu publicidad, alguien de t
 **Ordenex pagó un gasto por ti**, y la descripción dice **a quién se le pagó, el motivo, el método** y,
 si la hay, **la referencia** (por ejemplo, «A Facebook · Pauta de publicidad · SINPE · 12345»).
 
-- **Baja tu saldo** en el monto: es dinero que Ordenex ya puso por vos, en el chip **Pagos**.
+- **Baja tu saldo** en el monto: es dinero que Ordenex ya puso por vos, en el tipo de movimiento **Pagos**.
 - Si no tenías saldo suficiente, **tu saldo queda en contra**: le debés ese dinero a Ordenex.
 - Si la oficina lo anula, aparece una línea **Ordenex anuló un pago hecho por ti** que te devuelve el
   monto. El pago original no se borra.
@@ -144,18 +148,35 @@ comprobante, te lo dice: «Este registro no tiene comprobante.». Solo ves los d
 
 ## Filtrar tu estado de cuenta
 
-- Los **chips** de arriba: **Todo · Cierres · Pagos · Cobros · Correcciones**. Cada movimiento cae en
-  uno solo. El saldo de cada fila **sigue siendo el de tu cuenta entera**, aunque filtres.
+Los filtros están en **una sola barra, encima de la tabla**, en la misma fila que **Descargar**:
+
+- **Más recientes / Más antiguas**: los dos botones con flechas del principio; el orden del extracto,
+  por fecha.
+- **El buscador**: busca en la descripción de tus movimientos. Escribí **al menos 3 caracteres**.
+- **Filtros**: abre una lista de casillas —**Periodo**, **Tipo de movimiento** y **Cierre**—. Marcar una
+  casilla pone su control en la barra (marcarla sola no filtra nada); desmarcarla quita ese filtro.
+
+Lo que hace cada casilla:
+
+- **Periodo**: elegís el primer y el último día en el calendario (días de Costa Rica) y se aplica solo,
+  sin botón. Es el único que cambia también las cifras del periodo, y la línea del saldo inicial dice el
+  saldo con el que empezaste ese periodo.
+- **Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones** (sin elegir ninguno, dice
+  **Todo**). Cada movimiento cae en uno solo. El saldo de cada fila **sigue siendo el de tu cuenta
+  entera**, aunque filtres.
 - **Cierre** — todos los movimientos que entraron con un cierre determinado. Cada cierre se nombra por
   su día y cuántos movimientos trajo, por ejemplo «Cierre del 2026-09-12 · 7 movimientos». **Todos los
   cierres** quita el filtro.
-- **Desde** y **Hasta** — días completos de Costa Rica. Con un periodo, la primera fila es el saldo con
-  el que empezaste ese periodo.
+
+**Limpiar todo** quita el texto buscado, el periodo, el tipo de movimiento, el cierre y todas las
+casillas; no toca el orden. Si una lectura falla, la pantalla te lo dice y se queda con lo que mostraba,
+filtros incluidos.
 
 Y podés **descargar tu estado de cuenta**: trae **el periodo entero** que estás mirando (no solo la
-página), con el saldo inicial arriba y el saldo de cada fila, con los mismos nombres que la tabla. Si
+página), en el orden elegido y con el saldo inicial donde cae en el tiempo, y el saldo de cada fila,
+con los mismos nombres que la tabla. Respeta el texto buscado, el tipo de movimiento y el cierre. Si
 el periodo tiene más movimientos de los que entran en una descarga, no se descarga nada y te lo dice:
-elegí un periodo más corto, un chip o un cierre.
+elegí un periodo más corto, un tipo de movimiento o un cierre.
 
 ## El detalle de un cierre
 

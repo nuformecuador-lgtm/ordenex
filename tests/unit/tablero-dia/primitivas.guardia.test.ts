@@ -378,8 +378,15 @@ describe("Feature 258 · (h) R20 — `components/ui/` y `components/shared/` no 
     expect(PRIMITIVAS.length).toBeGreaterThan(20);
   });
 
+  /**
+   * FICHA 468 — excepción NOMINAL: el adaptador del libro de la wallet en Excel coloca en la hoja
+   * «Detalle por guía» el `mensajeroNombre` CONGELADO en el cierre (`BloqueDeGuiaDTO`, del servidor). Es
+   * el dato de la wallet, no del tablero del día; el detector lo confunde por el nombre del campo.
+   */
+  const EXENTAS: readonly string[] = ["components/shared/wallet/libro-kardex-descarga.ts"];
+
   it("ninguna primitiva conoce el dominio del tablero del día", () => {
-    const contaminadas = PRIMITIVAS.filter((ruta) => DOMINIO.test(codigoDe(ruta)));
+    const contaminadas = PRIMITIVAS.filter((ruta) => !EXENTAS.includes(ruta) && DOMINIO.test(codigoDe(ruta)));
     expect(
       contaminadas,
       "una primitiva compartida sabe de esta pantalla: eso es una primitiva a medida, que es " +

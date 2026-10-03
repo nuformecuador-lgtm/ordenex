@@ -14,11 +14,14 @@ import type {
   SaldoTiendaAgregado,
   SaldoTiendaAgregadoRow,
   SaldoTiendaFiltros,
+  SaldosTiendasFiltro,
   WalletTiendaHistorialTxClient,
   WalletTiendaTxClient,
 } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { WalletTiendaMovimientoDTO } from "@/lib/types/wallet-tienda";
+import type { IMovimientosTiendaEnLoteRepository } from "@/lib/interfaces/repositories/IMovimientosTiendaEnLoteRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import { coincideBusquedaMensajero, normalizarBusquedaMensajero } from "@/lib/utils/cuentas-por-pagar-listado";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron WalletMovimientoRepository).
 type WalletTiendaPrismaClient = Pick<PrismaClient, "walletTiendaMovimiento" | "usuario">;
@@ -65,7 +68,9 @@ function buildFiltrosWhere(f: SaldoTiendaFiltros): Prisma.WalletTiendaMovimiento
  * paginado por fecha desc acotado a `tienda_id` en el WHERE (R19/R22) y agrega el saldo por
  * tienda (R16). Money-safe: montos entran/salen como STRING.
  */
-export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimientoRepository {
+export class WalletTiendaMovimientoRepository
+  implements IWalletTiendaMovimientoRepository, IMovimientosTiendaEnLoteRepository
+{
   constructor(private readonly prisma: WalletTiendaPrismaClient) {}
 
   /** R6/R13: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
@@ -308,8 +313,15 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
    */
   async listarSaldosTiendasPaginado(
     rango: RangoPagina,
+    filtro: SaldosTiendasFiltro = {},
   ): Promise<PaginaRepositorio<SaldoTiendaAgregadoRow>> {
-    const filas = await this.listarSaldosTodasTiendas();
+    // FICHA 463 (R45) — la busqueda por NOMBRE, ANTES del recorte (al reves buscaria dentro de la
+    // pagina) y con el MISMO criterio que «Cuentas por pagar» (`/wallet/mensajeros`): recorte,
+    // minusculas, sin acentos, subcadena, `%`/`_` como texto. No corta en la base por el motivo de
+    // arriba: cada fila es la agregacion del ledger entero de la tienda y el nombre vive en `usuario`.
+    // El total es el del conjunto FILTRADO (R41), asi que la pagina y el total no pueden discrepar.
+    const q = normalizarBusquedaMensajero(filtro.busqueda);
+    const filas = (await this.listarSaldosTodasTiendas()).filter((f) => coincideBusquedaMensajero(f.tiendaNombre, q));
     const ordenadas = [...filas].sort(
       (a, b) =>
         a.tiendaNombre.localeCompare(b.tiendaNombre) || a.tiendaId.localeCompare(b.tiendaId),
@@ -337,6 +349,18 @@ export class WalletTiendaMovimientoRepository implements IWalletTiendaMovimiento
       where: { id, tiendaId }, // `tiendaId` AL FINAL: nada lo puede pisar
     });
     return fila === null ? null : toDTO(fila);
+  }
+
+  /** Ficha 464 (R34/R37) — las filas de esos ids EN EL LIBRO DE ESA TIENDA, en una consulta. */
+  async listarPorIdsDeTienda(
+    ids: readonly string[],
+    tiendaId: string,
+  ): Promise<WalletTiendaMovimientoDTO[]> {
+    if (ids.length === 0) return [];
+    const filas = await this.prisma.walletTiendaMovimiento.findMany({
+      where: { id: { in: [...ids] }, tiendaId }, // `tiendaId` AL FINAL: nada lo puede pisar
+    });
+    return filas.map(toDTO);
   }
 
   /**

@@ -1,10 +1,14 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { EstadoCuenta, type LectorEstadoCuenta } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
-import { verMiEstadoCuentaAction, verMiEstadoCuentaCompletoAction } from "@/lib/actions/estado-cuenta";
+import { AMBITO_DESCARGA_MI_ESTADO_CUENTA } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
+import {
+  miEstadoCuentaKardexAction,
+  miEstadoCuentaKardexConDetalleAction,
+  verMiEstadoCuentaAction,
+} from "@/lib/actions/estado-cuenta";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
 import type { WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
@@ -13,6 +17,7 @@ import { DetalleMiMovimientoCierre } from "./DetalleMiMovimientoCierre";
 import { ResumenMiWallet } from "./ResumenMiWallet";
 import { CATEGORIAS_CON_COMPROBANTE, VerComprobanteMiMovimiento } from "./VerComprobanteMiMovimiento";
 import { DETALLE_MI_MOVIMIENTO_NOMBRE } from "./detalle-mi-movimiento-labels";
+import { DETALLE_DESCARGA_MI_WALLET } from "./mi-estado-cuenta-descarga-columnas";
 import { MI_ESTADO_CUENTA_TEXTO, textoAnuladoMiWallet } from "./mi-estado-cuenta-labels";
 import { opcionesDeCierre, type CierresDeLaTienda } from "./mi-wallet-cierres";
 // Ficha 461 (R44, P4): la tienda lee su libro DESDE LA TIENDA («Ordenex te cobró»), no con el nombre
@@ -37,7 +42,10 @@ import { CATEGORIA_MI_WALLET_LABEL, ORIGEN_TIENDA_LABEL } from "./mi-wallet-labe
 /** La lectura de la tienda de la sesión: ningún id de tienda sale del navegador (R36). */
 export const LECTOR_MI_TIENDA: LectorEstadoCuenta = {
   leer: (f) => verMiEstadoCuentaAction(f),
-  leerCompleto: (f) => verMiEstadoCuentaCompletoAction(f),
+  // FICHA 468 (R3/R26/R32) — el kardex y, con detalle, la hoja «Detalle por guía», en UNA petición cada
+  // uno; tampoco aquí viaja la tienda.
+  leerKardex: (f) => miEstadoCuentaKardexAction(f),
+  leerKardexConDetalle: (f) => miEstadoCuentaKardexConDetalleAction(f),
 };
 
 function categoria(f: FilaEstadoCuentaDTO): WalletTiendaMovimientoCategoria {
@@ -51,7 +59,13 @@ export const ROTULOS_MI_WALLET: RotulosEstadoCuenta = {
   anulado: textoAnuladoMiWallet,
 };
 
-/** R10 (335) — el selector de cierre de la tienda, con las opciones que ya leyó el servidor. */
+/**
+ * R10 (335) — el selector de cierre de la tienda, con las opciones que ya leyó el servidor.
+ *
+ * FICHA 467 (design §4.3; R22, R23) — vive en la barra única (casilla «Cierre»): sin rótulo ENCIMA (rompía
+ * la fila), con el nombre dentro del disparador (`labelPrefix`, el mismo `Select` que el `single` del
+ * orquestador) y a la altura del buscador. Sus avisos se mantienen, como texto corto tras el control.
+ */
 function SelectorMiCierre({
   cierres,
   valor,
@@ -71,17 +85,17 @@ function SelectorMiCierre({
         ? MI_ESTADO_CUENTA_TEXTO.cierresRecientes
         : null;
   return (
-    <div className="flex w-full flex-col gap-1 sm:w-auto">
-      <Label htmlFor="mi-wallet-filtro-cierre">{MI_ESTADO_CUENTA_TEXTO.cierre}</Label>
+    <div className="flex items-center gap-2">
       <Select
         id="mi-wallet-filtro-cierre"
         aria-label={MI_ESTADO_CUENTA_TEXTO.filtrarPorCierre}
+        labelPrefix={MI_ESTADO_CUENTA_TEXTO.cierre}
         value={valor ?? ""}
         onValueChange={(v) => onCambiar(v === "" ? null : v)}
         options={opcionesDeCierre(cierres.opciones)}
         placeholder={MI_ESTADO_CUENTA_TEXTO.todosLosCierres}
         disabled={sinCierres}
-        className="h-9 w-full sm:w-72"
+        className="h-8 w-auto min-w-56"
       />
       {aviso ? <span className="text-xs text-muted-foreground">{aviso}</span> : null}
     </div>
@@ -112,12 +126,23 @@ export function MiEstadoCuenta({ inicial, cierres }: Readonly<MiEstadoCuentaProp
         rotulos={ROTULOS_MI_WALLET}
         lector={LECTOR_MI_TIENDA}
         vista="tienda"
+        // FICHA 464/468 (R24/R32/R49) — su selector de columnas y su hoja «Detalle por guía», sin mensajero.
+        descargaDeLaSuperficie={{
+          ambitoColumnas: AMBITO_DESCARGA_MI_ESTADO_CUENTA,
+          detalle: DETALLE_DESCARGA_MI_WALLET,
+        }}
         selectorCierre={(valor, onCambiar) => <SelectorMiCierre cierres={cierres} valor={valor} onCambiar={onCambiar} />}
         detalleDeFila={{
           nombre: ({ concepto, fecha }) => DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-          render: (f, { concepto, fecha }) =>
+          // FICHA 469 (R25–R29): `resaltar` solo llega con la lectura pintada en modo guía.
+          render: (f, { concepto, fecha, resaltar }) =>
             f.ref !== null && "movimientoId" in f.ref ? (
-              <DetalleMiMovimientoCierre movimientoId={f.ref.movimientoId} concepto={concepto} fecha={fecha} />
+              <DetalleMiMovimientoCierre
+                movimientoId={f.ref.movimientoId}
+                concepto={concepto}
+                fecha={fecha}
+                resaltar={resaltar}
+              />
             ) : null,
         }}
         accionDeFila={{

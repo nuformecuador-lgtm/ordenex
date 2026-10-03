@@ -1,0 +1,48 @@
+== Hoja «Estado de cuenta de Marco Mens…» (12 filas de datos)
+Fecha | Concepto | Detalle | Entra | Sale | Saldo | Registró
+**  | Saldo al inicio del periodo |  |  |  | 0 (num) | 
+   2026-08-12 | Pago devengado | Cierre del día · 2026-08-12 · Marco Mensajero · 7 guías | 10200 (num) |  | 10200 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-12 | Pago del efectivo | Cierre del día · 2026-08-12 · Marco Mensajero |  | 10200 (num) | 0 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante. |  | 1400 (num) | -1400 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 1400 (num) |  | 0 (num) | Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. |  | 3400 (num) | -3400 (num) | Ana Admin
+   2026-08-13 | Liquidación | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Efectivo · Efectivo · Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. |  | 600 (num) | -4000 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 600 (num) |  | -3400 (num) | Ana Admin
+   2026-08-13 | Ajuste (devengo) | Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 · Anulación de pago · Efectivo · Anulación | 3400 (num) |  | 0 (num) | Ana Admin
+   2026-08-13 | Pago devengado | Cierre del día · 2026-08-13 · Marco Mensajero · 2 guías | 3400 (num) |  | 3400 (num) | Automático · Aprobación del cierre por Ana Admin
+   2026-08-13 | Pago devengado | Cierre del día · 2026-08-13 · Marco Mensajero · 0 guías | 1700 (num) |  | 5100 (num) | Automático · Aprobación del cierre por Ana Admin
+**  | Total del periodo |  | 20700 (num) | 15600 (num) | 5100 (num) | 
+
+== Hoja «Detalle por guía» (38 filas de datos)
+Guía | Remisión | Destinatario | Tienda | Cierre | Resultado | Concepto | Detalle | Entra | Sale
+** 990001 | QA-R-0001 | Karla Vargas | Tania | 2026-08-12 | Reprogramado · Reprogramado |  |  |  | 
+   990001 |  |  |  | 2026-08-12 | Reprogramado · Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990001 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990003 | QA-R-0003 | Sofia Rojas | Tania | 2026-08-12 | Reprogramado |  |  |  | 
+   990003 |  |  |  | 2026-08-12 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990003 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990005 | QA-R-0005 | Mariana Solis | Tania | 2026-08-12 | Reprogramado |  |  |  | 
+   990005 |  |  |  | 2026-08-12 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990005 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990006 | QA-R-0006 | Luis Jimenez | Tania | 2026-08-12 | Reprogramado |  |  |  | 
+   990006 |  |  |  | 2026-08-12 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990006 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990007 | QA-R-0007 | Paula Herrera | Tania | 2026-08-12 | Reprogramado |  |  |  | 
+   990007 |  |  |  | 2026-08-12 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990007 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990008 | QA-R-0008 | Fernando Castro | Tania | 2026-08-12 | Incidente |  |  |  | 
+   990008 |  |  |  | 2026-08-12 | Incidente | Pago devengado |  | 1700 (num) | 
+** 990008 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990009 | QA-R-0009 | Gabriela Nunez | Tania | 2026-08-12 | Reprogramado |  |  |  | 
+   990009 |  |  |  | 2026-08-12 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990009 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990014 | QA-R-0014 | Esteban Ramirez | Tania | 2026-08-13 | Reprogramado |  |  |  | 
+   990014 |  |  |  | 2026-08-13 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990014 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+** 990015 | QA-R-0015 | Carolina Vega | Tania | 2026-08-13 | Reprogramado |  |  |  | 
+   990015 |  |  |  | 2026-08-13 | Reprogramado | Pago devengado |  | 1700 (num) | 
+** 990015 |  |  |  |  |  | Total de la guía |  | 1700 (num) | 0 (num)
+**  |  |  |  |  |  | Movimientos sin guía |  |  | 
+    |  |  |  |  |  | Diferencia sin repartir | Cierre del 2026-08-12 · Pago devengado: el movimiento es ₡10.200 y sus guías suman ₡11.900 | -1700 (num) | 
+    |  |  |  |  |  | Pago del efectivo | 2026-08-12 · Cierre del día · 2026-08-12 · Marco Mensajero · Se tomó del efectivo que el mensajero entregó en el cierre de ese día. |  | 10200 (num)
+… (8 filas más)

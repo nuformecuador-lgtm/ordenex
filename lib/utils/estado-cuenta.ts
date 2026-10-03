@@ -159,6 +159,15 @@ export function saldoAlFinal(
   return (sentido === "a_favor_del_titular" ? i.add(a).sub(c) : i.add(c).sub(a)).toFixed(2);
 }
 
+/**
+ * Ficha 468 — el SENTIDO del saldo de cada tipo de cuenta, escrito UNA vez: lo usan el saldo final del
+ * estado de cuenta (`saldoAlFinal`, R22) y la columna de cada fila del kardex (R9). A favor del titular
+ * en la tienda y el mensajero; por entregar en la bodega.
+ */
+export function sentidoDelSaldo(tipo: "tienda" | "mensajero" | "bodega"): "a_favor_del_titular" | "por_entregar" {
+  return tipo === "bodega" ? "por_entregar" : "a_favor_del_titular";
+}
+
 /** El origen tipado de una fila (la base lo guarda como enum; el DTO lo lleva como texto). */
 export function comoOrigen(origen: string): WalletOrigenTipo {
   return origen as WalletOrigenTipo;

@@ -101,7 +101,7 @@ export const PANELES_OPERATIVOS: readonly PanelTablero[] = [
     metricas: [
       { metricaId: "entregas", etiqueta: "Entregas", unidad: "conteo" },
       { metricaId: "devoluciones", etiqueta: "Devoluciones", unidad: "conteo" },
-      { metricaId: "rechazos", etiqueta: "Rechazos", unidad: "conteo" },
+      { metricaId: "rechazos", etiqueta: "Devoluciones a origen", unidad: "conteo" },
       // R21/D6 — SERVIDA por la 126 (y antes dada por «sin productor»). No se filtra.
       { metricaId: "incidentes", etiqueta: "Incidentes", unidad: "conteo" },
     ],

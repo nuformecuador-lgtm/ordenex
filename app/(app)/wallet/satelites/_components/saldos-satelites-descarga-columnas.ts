@@ -2,6 +2,9 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { SaldoSateliteDTO } from "@/lib/types/conciliacion-satelites";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 
+/** FICHA 464 (R1/R2) — ámbito del selector de columnas de la descarga del listado de bodegas. */
+export const AMBITO_DESCARGA_SALDOS_SATELITES = "wallet-satelites-saldos";
+
 /**
  * ⭑ FICHA 431 (T23, R29) — columnas de EXPORT de los saldos de bodegas satélite.
  *

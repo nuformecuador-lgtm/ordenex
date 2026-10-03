@@ -1,11 +1,13 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ModoBusquedaLibro } from "@/lib/types/busqueda-por-guia";
 import type {
   CajaResumenDTO,
   ComposicionGananciaDTO,
   WalletMovimientoDTO,
-  ListarMovimientosCompletoInput,
   ListarMovimientosDeFilaInput,
   ListarMovimientosInput,
+  ListarLibroCajaCompletoServicioInput,
+  ListarLibroCajaServicioInput,
   RegistrarMovimientoManualInput,
 } from "@/lib/types/wallet";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
@@ -21,6 +23,12 @@ export interface ListarMovimientosPayload {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * FICHA 469 (design §2.4, R21/R23) — como resolvio el servidor el termino del libro: `guia` (solo los
+   * movimientos a los que esa orden aporta) o `texto` (la busqueda de la 463). AUSENTE si la lectura no
+   * llevaba termino, y en las lecturas que no son el libro (el detalle de una fila de la composicion).
+   */
+  modoBusqueda?: ModoBusquedaLibro;
 }
 
 export type ListarMovimientosServiceResult =
@@ -149,15 +157,18 @@ export interface LectoresDocumentosCaja {
 }
 
 export interface IWalletService {
-  /** R19/R20: solo maestro; lista el libro paginado con filtros. Forbidden sin exponer datos. */
-  listarMovimientos(input: ListarMovimientosInput, actor: Actor): Promise<ListarMovimientosServiceResult>;
+  /**
+   * R19/R20: solo maestro; lista el libro paginado con filtros. Forbidden sin exponer datos.
+   * Ficha 463 (R24/R33): + el termino del buscador y el sentido del orden (ausente ⇒ `desc`).
+   */
+  listarMovimientos(input: ListarLibroCajaServicioInput, actor: Actor): Promise<ListarMovimientosServiceResult>;
   /**
    * Feature 170/R9: el MISMO libro sin recorte por pagina, para la descarga. Mismo guard de
    * rol (`esAccesoTotal`) y los MISMOS filtros que `listarMovimientos` —construidos por el
    * mismo metodo privado—, con `take: tope + 1` y el guard del tope (R27/R29).
    */
   listarMovimientosCompleto(
-    input: ListarMovimientosCompletoInput,
+    input: ListarLibroCajaCompletoServicioInput,
     actor: Actor,
   ): Promise<ListarMovimientosCompletoServiceResult>;
   /**

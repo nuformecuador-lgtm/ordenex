@@ -115,7 +115,8 @@ describe("listarMovimientosCompletoAction (borde)", () => {
     expect(r).toEqual({ status: "ok", items: [conOrigenFalso(ITEM)], total: 1 });
     const [data, actor] = listarMovimientosCompleto.mock.calls[0];
     expect(actor).toEqual(MAESTRO);
-    expect(data).toEqual({ tipo: "ingreso", categoria: "ingreso_flete" });
+    // Ficha 463 (R34/R42): el borde de la descarga del libro pone el orden por defecto («Mas recientes»).
+    expect(data).toEqual({ tipo: "ingreso", categoria: "ingreso_flete", sortBy: "fecha", sortDir: "desc" });
     expect(data).not.toHaveProperty("page");
     expect(data).not.toHaveProperty("pageSize");
   });

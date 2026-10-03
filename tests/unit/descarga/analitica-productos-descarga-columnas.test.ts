@@ -40,7 +40,7 @@ import type { FilaProductoDTO } from "@/lib/types/conteo-productos";
 const EN_CURSO = "en_reparto";
 
 /**
- * La fila MEDIDA en producción: `Spray Protector`, 16 órdenes y 37,5 % de rechazo. El uuid de la
+ * La fila MEDIDA en producción: `Spray Protector`, 16 órdenes y 37,5 % de devolución a origen. El uuid de la
  * tienda va a propósito con forma de uuid real: es lo que R49 prohíbe que llegue al archivo, y
  * un `"t1"` no lo probaría.
  */
@@ -99,7 +99,7 @@ describe("FICHA 345 · columnas del archivo de productos (R48)", () => {
       "Sin desenlace todavía",
       // La unidad va en el encabezado porque la celda lleva PUNTOS, no la fracción.
       "Efectividad de entrega (%)",
-      "Rechazo (%)",
+      "Devolución a origen (%)",
     ]);
   });
 
@@ -310,7 +310,7 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       "Otros resultados (detalle)",
       "Sin desenlace todavía",
       "Efectividad de entrega (%)",
-      "Rechazo (%)",
+      "Devolución a origen (%)",
       // R49 — LA MARCA VA EN EL ENCABEZADO porque el párrafo de la pantalla NO viaja con el
       // `.xlsx`: quien abre el archivo tres semanas después no tiene delante ninguna
       // advertencia, y una hoja de cálculo invita a arrastrar la columna hasta el pie.
@@ -322,7 +322,7 @@ describe("FICHA 347 · columnas del archivo con dinero concedido (R66/R68)", () 
       "Para la tienda (no sumar: importe de la orden completa)",
       "Pendiente de cierre (no sumar: importe de la orden completa)",
       "Órdenes pendientes de cierre",
-      "Flete por rechazo (no sumar: importe de la orden completa)",
+      "Flete por devolución a origen (no sumar: importe de la orden completa)",
       // FICHA 449 — el MISMO rótulo que en el detalle del cierre y en las cinco descargas de
       // gestiones (`FULFILLMENT_COL`). Un segundo nombre para la misma cifra se lee como una
       // segunda cifra, y de eso va precisamente esta ficha.

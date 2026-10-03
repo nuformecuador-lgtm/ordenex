@@ -30,12 +30,19 @@ export interface DetalleMovimientoConfig {
   DEFAULT_PAGE_SIZE: number;
   /** Cota maxima del tamano de pagina que el borde admite: por encima, `validation_error` (R29). */
   MAX_PAGE_SIZE: number;
+  /**
+   * Ficha 464 (design §3, R37) — cuantos cierres entran en UNA consulta del detalle en lote (el `OR`
+   * de `buildWhere` tiene una rama por cierre). Acota el tamano de la consulta; el numero de
+   * consultas es conceptos distintos x tramos, y no crece con el numero de movimientos.
+   */
+  TRAMO_CIERRES_LOTE: number;
 }
 
 export function loadDetalleMovimientoConfig(): DetalleMovimientoConfig {
   return {
     DEFAULT_PAGE_SIZE: readPositiveInt("DETALLE_MOVIMIENTO_DEFAULT_PAGE_SIZE", 25),
     MAX_PAGE_SIZE: readPositiveInt("DETALLE_MOVIMIENTO_MAX_PAGE_SIZE", 100),
+    TRAMO_CIERRES_LOTE: readPositiveInt("DETALLE_MOVIMIENTO_TRAMO_CIERRES_LOTE", 100),
   };
 }
 

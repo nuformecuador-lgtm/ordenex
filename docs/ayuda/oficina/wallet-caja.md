@@ -3,14 +3,17 @@ titulo: Wallet · Caja
 modulo: wallet
 pantalla: /wallet
 roles: [maestro, admin]
-actualizado: 2026-09-26
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/_components/WalletModule.tsx
   - app/(app)/wallet/_components/CajaResumenCard.tsx
   - app/(app)/wallet/_components/BarraComposicionCaja.tsx
   - app/(app)/wallet/_components/ComposicionGananciaCard.tsx
   - app/(app)/wallet/_components/WalletLedger.tsx
-  - app/(app)/wallet/_components/WalletFiltros.tsx
+  - app/(app)/wallet/_components/wallet-filtros-input.ts
+  - app/(app)/wallet/_components/LibroCajaBarra.tsx
+  - app/(app)/wallet/_components/libro-caja-filtros.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - app/(app)/wallet/_components/a-quien-selector.ts
   - app/(app)/wallet/_components/libro-caja-labels.ts
   - lib/actions/wallet-filtros.ts
@@ -92,7 +95,7 @@ Cada concepto del libro se lee desde Ordenex y dice quién le paga a quién. Los
 | **Corrección de caja (suma)** / **Corrección de caja (resta)** | Una corrección hecha a mano para cuadrar la caja |
 | **Aporte de dinero a la caja** / **Aporte de dinero a la caja anulado** | El saldo inicial o un aporte de Ordenex, y su anulación |
 | **Una tienda le paga a Ordenex** / **Pago de una tienda a Ordenex anulado** | Lo que una tienda con saldo en contra le paga a Ordenex, y su anulación. Es dinero de la tienda: sube lo que Ordenex les debe a las tiendas |
-| **Flete por rechazo cobrado a la tienda** / **Flete por rechazo cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
+| **Flete por devolución a origen cobrado a la tienda** / **Flete por devolución a origen cobrado a la tienda anulado** | El flete que Ordenex le cobra a una tienda cuando su cliente rechaza el pedido, y su anulación. El IVA va en su propia línea, con su propia anulación |
 | **Indemnización que Ordenex paga por un incidente** | Lo que Ordenex paga cuando un envío sufre un incidente. Si se anula, aparece una **Corrección de caja (suma)** por el mismo monto |
 
 Debajo del concepto, en **Movimiento y motivo**, se dice de dónde nace cada línea con el mismo criterio: **Cierre del día**,
@@ -108,7 +111,7 @@ nombre** según lo que la app sabe:
 | --- | --- | --- |
 | **Flujo de dinero registrado** | No hay un saldo inicial registrado | Lo que entró menos lo que salió **desde el primer movimiento de la caja**. La tarjeta dice desde qué día cuenta |
 | **Dinero en caja** | Alguien registró un saldo inicial | El saldo inicial más lo que entró menos lo que salió desde entonces |
-| **Movimiento neto del periodo** | Tenés filtros puestos | Lo que entró menos lo que salió **en el periodo que elegiste**. No es el dinero que hay hoy |
+| **Movimiento neto del periodo** | Elegiste un **periodo** o un **A quién** en la barra del libro | Lo que entró menos lo que salió **en lo que elegiste**. No es el dinero que hay hoy. Entra/Sale, Concepto, el buscador y el orden no la cambian |
 
 > **«Flujo de dinero registrado» no es el saldo del banco.** La app no sabe con cuánto dinero empezó
 > Ordenex: solo cuenta lo que se registró desde que se empezó a usar. Por eso, mientras no haya un
@@ -204,7 +207,7 @@ el maestro ve en cada fila **Aprobar** y **Rechazar**; el **admin ve la misma li
 y no puede aprobar ni rechazar ningún cobro de gasto fijo. Si sos admin y hay uno esperando, avisale
 al maestro. Mientras nadie decida, ese dinero **no sale** de la caja.
 
-**Cobros de rechazos de tienda** tienen también su panel de pendientes.
+**Cobros por devolución a origen de tienda** tienen también su panel de pendientes.
 
 ## Ordenex le cobra a una tienda: se descuenta de su saldo y es ganancia
 
@@ -332,14 +335,14 @@ como «Aprobación del cierre»— y **cuándo**: el día y la hora de Costa Ric
 motivo y cómo se anuló) y **Cómo quedó**: la cifra grande, la ganancia, lo que Ordenex les debe a las tiendas y el
 saldo inicial y aportes **justo después** de ese movimiento, y el saldo de la cuenta que tocó.
 
-Un **cobro por rechazo** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
+Un **cobro por devolución a origen** dice además en palabras que es un cargo a la tienda: la ganancia sube y el saldo
 de la tienda baja, sin dinero nuevo en la caja.
 
 ## Anular: con motivo, y sin borrar nada
 
 Un **sueldo**, un **gasto de Ordenex**, un **gasto fijo cobrado**, un **pago de un gasto de una tienda**,
 un **aporte de dinero a la caja**, un **cobro de Ordenex a una tienda**, un **pago de una tienda a
-Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por rechazo a una tienda** ni una
+Ordenex** o una **corrección de caja** no se editan. Tampoco un **cobro por devolución a origen a una tienda** ni una
 **indemnización por un incidente**. Ni un **pago de Ordenex a una tienda** o un **premio del ranking**. Si hubo un error, se anulan desde el detalle de su fila: **Ver** y
 luego **Anular…**. Es la misma forma para todos:
 
@@ -358,11 +361,11 @@ luego **Anular…**. Es la misma forma para todos:
   cambia. En la caja aparece **Pago de una tienda a Ordenex anulado**; en el libro de la tienda, «Pago
   de la tienda a Ordenex anulado».
 - Al anular una corrección de caja, aparece la corrección contraria por el mismo monto.
-- Un **cobro por rechazo** tiene dos líneas en la caja, el flete y su IVA: se anula desde **cualquiera de
+- Un **cobro por devolución a origen** tiene dos líneas en la caja, el flete y su IVA: se anula desde **cualquiera de
   las dos** y se anulan **las dos juntas**. La **ganancia baja** en el flete más el IVA, **lo que Ordenex
   les debe a las tiendas** y el saldo de la tienda **vuelven a subir** en lo mismo (si al cobrarlo se le
   descontó a la tienda), y **Entró**, **Salió** y la cifra grande no cambian. En la caja aparecen
-  **Flete por rechazo cobrado a la tienda anulado** y **IVA del flete por rechazo cobrado a la tienda
+  **Flete por devolución a origen cobrado a la tienda anulado** y **IVA del flete por devolución a origen cobrado a la tienda
   anulado**. En **Analítica**, «Ingreso por flete» e «Ingreso por IVA» descuentan la anulación: el
   **neto** vuelve a ser el de antes del cobro.
 - Al anular una **indemnización**, aparece una **Corrección de caja (suma)** por el mismo monto: la
@@ -397,8 +400,8 @@ Todas las fechas de esta pantalla son días de Costa Rica: el «desde» de la ci
 un pago, de un cobro o de un aporte (**no puede ser posterior a hoy** en Costa Rica) y la de una
 anulación, que se fecha **el día en que se anula**. Los movimientos a mano tienen además un límite hacia
 atrás: si te pasás, la app te dice el primer día admitido. El aporte y el pago de una tienda a
-Ordenex no tienen ese límite: llevan la fecha real. Al filtrar por fechas, **Desde** y **Hasta**
-son días completos de Costa Rica.
+Ordenex no tienen ese límite: llevan la fecha real. Al filtrar por **Periodo**, el primer y el último
+día son días completos de Costa Rica.
 
 ## Los cobros que eran pagos de un gasto
 
@@ -409,29 +412,51 @@ salidas no se anulan desde acá, y la tienda los sigue viendo igual que antes en
 
 ## Buscar en el libro: los filtros
 
-Arriba del libro hay una barra de filtros:
+Los filtros están en **una sola barra, encima del libro**, en la misma fila que **Descargar**: el orden,
+el buscador y el botón **Filtros**.
 
-- **Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.
+- **Más recientes / Más antiguas**: los dos botones con flechas del principio de la barra; el nombre de
+  cada uno aparece al pasar el ratón. Se entra en **Más recientes**: lo último, arriba.
+- **El buscador**: busca en la descripción, en el nombre o la referencia anotados y en quién registró
+  el movimiento, sin distinguir mayúsculas. Escribí **al menos 3 caracteres**; con menos, el campo te
+  dice cuántos faltan y no busca.
+- **Filtros**: abre una lista de casillas —**Periodo**, **A quién**, **Entra/Sale** y **Concepto**—.
+  Marcar una casilla pone su control en la barra, delante del buscador (marcarla sola no filtra nada);
+  desmarcarla quita ese filtro.
+
+Lo que hace cada casilla:
+
+- **Periodo**: se eligen el primer y el último día en el calendario (días de Costa Rica) y se aplica
+  solo, sin botón. Un solo día también vale.
 - **A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**
   (el de un sueldo, un gasto o una corrección) que tienen movimientos en el periodo, cada uno con qué es
   y cuántos movimientos tiene: «Tania Tienda · Tienda · 2 movimientos». Podés **buscar por el nombre de
   la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes. Se aplica **al elegirlo**;
   **Todos** lo quita. Si la lista es muy larga, te pide que escribas parte del nombre.
-- **Concepto**: solo los conceptos con movimientos en lo que estás mirando, cada uno con su número.
-- **Desde** y **Hasta**: el periodo, en días de Costa Rica. Se aplican con **Aplicar**.
+- **Entra/Sale**: lo que entró a la caja o lo que salió. Sin elegir ninguno, dice **Todo**.
+- **Concepto**: solo los conceptos con movimientos en el periodo y el «A quién» elegidos (y en Entra o
+  Sale, si elegiste uno), cada uno con su número. Sin elegir ninguno, dice **Todos**.
 
-**Limpiar** quita todos los filtros. **Las tarjetas de arriba, la composición de la ganancia y el
-desglose de egresos cuentan solo lo filtrado**: si elegís una tienda en **A quién**, lo que entró y lo
-que salió son los movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse
-**Movimiento neto del periodo**. Ojo: el contra-entrega que cobró el mensajero a los clientes de esa
-tienda nace del cierre y su **A quién** es el **mensajero**, no la tienda; para verlo, elegí al mensajero.
+**Periodo** y **A quién** mueven **toda la pantalla**: **las tarjetas de arriba, la composición de la
+ganancia, el desglose de egresos, el detalle de cada fila de la composición y el libro cuentan solo el
+periodo y el «A quién» elegidos**. Si elegís una tienda en **A quién**, lo que entró y lo que salió son
+los movimientos cuyo **A quién** es esa tienda y la cifra grande pasa a llamarse **Movimiento neto del
+periodo**. Ojo: el contra-entrega que cobró el mensajero a los clientes de esa tienda nace del cierre y
+su **A quién** es el **mensajero**, no la tienda; para verlo, elegí al mensajero.
+
+**Entra/Sale**, **Concepto**, el buscador y el orden **no cambian ninguna cifra**: solo qué filas del
+libro se ven y en qué orden. Cualquier cambio vuelve a la primera página. **Limpiar todo** quita el texto
+buscado, todos los filtros y todas las casillas (también el periodo y «A quién»); no toca el orden.
+
+Si una lectura falla, la pantalla te lo dice y **se queda con lo que mostraba**: las cifras, el libro y
+los filtros que ya estaban puestos, con sus casillas.
 
 Si elegís un **nombre anotado** y alguno de sus sueldos, gastos o correcciones se **anuló**, aparecen las
 dos filas —el anulado y su anulación, que también dice ese nombre en **A quién**— y se compensan: un
 sueldo anulado no cuenta como dinero que salió.
 
-Y se puede **descargar** el libro, con los mismos filtros y las mismas columnas que la tabla (**A
-quién** y **Registró** incluidas), para cuadrar fuera.
+Y se puede **descargar** el libro, con todos los filtros puestos, el texto buscado y el orden que estás
+mirando, y las mismas columnas que la tabla (**A quién** y **Registró** incluidas), para cuadrar fuera.
 
 ## Lo que esta pantalla NO hace
 
@@ -439,7 +464,7 @@ quién** y **Registró** incluidas), para cuadrar fuera.
 - **No muestra lo que le debés a cada mensajero.** Eso es **Wallet · Mensajeros**.
 - **No es el saldo del banco**, salvo que alguien haya registrado el saldo inicial real.
 - **No se editan movimientos.** Un sueldo, un gasto, un pago de un gasto, un aporte, un cobro a una
-  tienda, un pago de una tienda a Ordenex, una corrección, un cobro por rechazo o una indemnización se
+  tienda, un pago de una tienda a Ordenex, una corrección, un cobro por devolución a origen o una indemnización se
   anulan con motivo; los demás son inmutables.
 - **No se corrigen cifras de entregas.** Un movimiento que nació de un cierre se arregla en el cierre,
   no acá.

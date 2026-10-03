@@ -19,7 +19,7 @@ const DIR_AYUDA = path.resolve(__dirname, "../../..", "docs", "ayuda");
  * el asistente tiene que poder explicar.
  *
  * Bloque B (458-B, revision m3): la hija deja VISIBLE en `/wallet` «Anular…» en la indemnizacion por
- * un incidente y en las dos lineas del cobro por rechazo a una tienda, y la analitica descuenta esa
+ * un incidente y en las dos lineas del cobro por devolución a origen a una tienda, y la analitica descuenta esa
  * anulacion (B2). Esas frases no llegan a la tienda, al mensajero ni a la bodega.
  */
 
@@ -70,7 +70,7 @@ describe("458-A (bloque A) — la tienda entiende sus filtros y sus orígenes en
   it("adminTienda: el origen con nombre; el filtro por concepto ya no se promete", () => {
     const wallet = cuerpoEnContexto("adminTienda", "tienda/mi-wallet");
     expect(wallet).toContain(
-      "El **origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por rechazo · guía 4321».",
+      "El **origen** lo dice con nombre, por ejemplo «Cierre del día · 2026-09-12» o «Gestión de orden · cobro por devolución a origen · guía 4321».",
     );
     expect(wallet).not.toContain("Solo aparecen los conceptos que **tienen movimientos**");
     expect(wallet).not.toContain("sigue elegido con **(0)**");
@@ -81,15 +81,15 @@ describe("458-A (bloque A) — la tienda entiende sus filtros y sus orígenes en
   });
 });
 
-// ── Bloque B — 458-B «Cimientos»: anulación del cobro por rechazo y de la indemnización ──
+// ── Bloque B — 458-B «Cimientos»: anulación del cobro por devolución a origen y de la indemnización ──
 
-describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del cobro por rechazo y de la indemnizacion", () => {
+describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del cobro por devolución a origen y de la indemnizacion", () => {
   it.each(OFICINA)("%s: la caja dice que se anulan, como, y que la analitica lo descuenta", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
-    expect(caja).toContain("Tampoco un **cobro por rechazo a una tienda** ni una **indemnización por un incidente**.");
+    expect(caja).toContain("Tampoco un **cobro por devolución a origen a una tienda** ni una **indemnización por un incidente**.");
     expect(caja).toContain("se anula desde **cualquiera de las dos** y se anulan **las dos juntas**");
-    expect(caja).toContain("**Flete por rechazo cobrado a la tienda anulado**");
-    expect(caja).toContain("**IVA del flete por rechazo cobrado a la tienda anulado**");
+    expect(caja).toContain("**Flete por devolución a origen cobrado a la tienda anulado**");
+    expect(caja).toContain("**IVA del flete por devolución a origen cobrado a la tienda anulado**");
     expect(caja).toContain(
       "En **Analítica**, «Ingreso por flete» e «Ingreso por IVA» descuentan la anulación: el **neto** vuelve a ser el de antes del cobro.",
     );
@@ -102,9 +102,11 @@ describe("458-B (bloque B) — la oficina puede preguntar por la anulacion del c
     }
   });
 
-  it("oficina/wallet-caja: actualizado el 2026-09-26 y con las fuentes de la anulacion", () => {
+  // FICHA 463 (revisión m5): la ayuda de las wallets se actualizó después; como en la 457/461, se exige
+  // «el 2026-09-26 o después», no la fecha exacta, para que actualizar la ayuda no rompa esta red.
+  it("oficina/wallet-caja: actualizado el 2026-09-26 o después y con las fuentes de la anulacion", () => {
     const doc = docs.find((d) => d.slug === "oficina/wallet-caja");
-    expect(doc?.actualizado).toBe("2026-09-26");
+    expect((doc?.actualizado ?? "") >= "2026-09-26").toBe(true);
     const crudo = readFileSync(path.join(DIR_AYUDA, "oficina/wallet-caja.md"), "utf8");
     const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
     for (const fuente of [
@@ -195,8 +197,12 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     expect(tiendas).toContain("## El estado de cuenta de una tienda");
     expect(tiendas).toContain("una frase que dice **quién le debe a quién**");
     expect(tiendas).toContain("Siempre se cumple: saldo inicial más abonos menos cargos es el saldo final.");
-    expect(tiendas).toContain("La primera fila es el **saldo inicial** del periodo");
-    expect(tiendas).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    // FICHA 463 (R38/R39): la línea del saldo inicial va donde cae en el tiempo.
+    expect(tiendas).toContain("La línea del **saldo inicial** del periodo");
+    expect(tiendas).toContain("con **Más recientes**, es la **última línea de la última página**");
+    expect(tiendas).not.toContain("La primera fila es el **saldo inicial**");
+    // FICHA 467: los chips son ahora la casilla «Tipo de movimiento» de la barra única (sin «Todo»).
+    expect(tiendas).toContain("**Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones**");
     expect(tiendas).toContain("El saldo de cada fila **sigue siendo el de la cuenta entera**, aunque filtres");
     expect(tiendas).toContain("Si se anuló antes de que la wallet guardara el motivo, dice **«motivo no registrado»**.");
     expect(tiendas).toContain("La descarga trae **el periodo entero** que estás mirando");
@@ -216,7 +222,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
   it.each(OFICINA)("%s: el estado de cuenta del mensajero, su pago y la anulación desde la wallet (R70)", (rol) => {
     const mensajeros = cuerpoEnContexto(rol, "oficina/wallet-mensajeros");
     expect(mensajeros).toContain("## El estado de cuenta de un mensajero");
-    expect(mensajeros).toContain("**Todo · Cierres · Pagos · Premios · Correcciones**");
+    // FICHA 467: los chips son la casilla «Tipo de movimiento» (sin «Todo»).
+    expect(mensajeros).toContain("**Tipo de movimiento** ofrece **Cierres · Pagos · Premios · Correcciones**");
     expect(mensajeros).toContain("**Ordenex le paga al mensajero**, en las acciones de su estado de cuenta");
     expect(mensajeros).toContain("## Anular un pago");
     expect(mensajeros).toContain("Es **la misma anulación que la de Cierres**");
@@ -226,7 +233,8 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
   it.each(OFICINA)("%s: el estado de cuenta de una bodega y la conciliación debajo (R31)", (rol) => {
     const satelites = cuerpoEnContexto(rol, "oficina/wallet-satelites");
     expect(satelites).toContain("## El estado de cuenta de una bodega");
-    expect(satelites).toContain("**Todo · Declarado · Recibido**");
+    // FICHA 467: los chips son la casilla «Tipo de movimiento» (sin «Todo»).
+    expect(satelites).toContain("**Tipo de movimiento** (**Declarado · Recibido**;");
     expect(satelites).toContain("Debajo del estado de cuenta de la bodega están sus consolidaciones");
   });
 
@@ -265,7 +273,7 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     expect(todo).not.toContain("## Anular un pago");
   });
 
-  it("los cuatro documentos, actualizados el 2026-09-26 y con las fuentes de la 458-D", () => {
+  it("los cuatro documentos, actualizados el 2026-09-26 o después y con las fuentes de la 458-D", () => {
     const esperado: Record<string, string[]> = {
       "oficina/wallet-tiendas": [
         "app/(app)/wallet/tiendas/[tiendaId]/page.tsx",
@@ -292,7 +300,7 @@ describe("458-D (bloque D) — la oficina puede preguntar por los estados de cue
     };
     for (const [slug, fuentes] of Object.entries(esperado)) {
       const doc = docs.find((d) => d.slug === slug);
-      expect(doc?.actualizado, slug).toBe("2026-09-26");
+      expect((doc?.actualizado ?? "") >= "2026-09-26", slug).toBe(true);
       const crudo = readFileSync(path.join(DIR_AYUDA, `${slug}.md`), "utf8");
       const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
       for (const f of fuentes) expect(declaradas, `${slug} sin ${f}`).toContain(f);
@@ -330,10 +338,14 @@ describe("458-D (bloque D) — la tienda puede preguntar cómo ve el comprobante
     expect(wallet).toContain("**Ordenex te debe ₡…**");
     expect(wallet).toContain("**Le debés ₡… a Ordenex**");
     expect(wallet).toContain("## Tu estado de cuenta");
-    expect(wallet).toContain("La primera fila es el **saldo inicial**");
-    expect(wallet).toContain("El saldo de la última fila es el mismo de la cifra grande de arriba.");
+    // FICHA 463 (R34/R38/R39): se entra en «Más recientes» y el saldo inicial va donde cae en el tiempo.
+    expect(wallet).toContain("La línea del **saldo inicial**");
+    expect(wallet).toContain("con **Más recientes**, es la última línea de la última página");
+    expect(wallet).toContain("El saldo de tu movimiento más reciente es el mismo de la cifra grande de arriba.");
+    expect(wallet).not.toContain("La primera fila es el **saldo inicial**");
     expect(wallet).toContain("## Filtrar tu estado de cuenta");
-    expect(wallet).toContain("**Todo · Cierres · Pagos · Cobros · Correcciones**");
+    // FICHA 467: los chips son ahora la casilla «Tipo de movimiento» de la barra única (sin «Todo»).
+    expect(wallet).toContain("**Tipo de movimiento**: **Cierres · Pagos · Cobros · Correcciones**");
     expect(wallet).toContain("«Cierre del 2026-09-12 · 7 movimientos»");
     expect(wallet).toContain("Y podés **descargar tu estado de cuenta**");
     // Cierre de la 458-D (172 R55/N1): VUELVE el resumen de tres cifras, cuadrando con la tarjeta.
@@ -380,14 +392,17 @@ describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caj
   it.each(OFICINA)("%s: los filtros, con «A quién» por tienda, mensajero o nombre anotado", (rol) => {
     const caja = cuerpoEnContexto(rol, "oficina/wallet-caja");
     expect(caja).toContain("## Buscar en el libro: los filtros");
-    expect(caja).toContain("**Todo / Entra / Sale**: lo que entró a la caja, lo que salió, o todo. Se aplica **al pulsarlo**.");
+    // FICHA 467: Entra/Sale es una casilla de la barra única; sin elección dice «Todo».
+    expect(caja).toContain("**Entra/Sale**: lo que entró a la caja o lo que salió. Sin elegir ninguno, dice **Todo**.");
+    expect(caja).toContain("**Filtros**: abre una lista de casillas —**Periodo**, **A quién**, **Entra/Sale** y **Concepto**—.");
     expect(caja).toContain(
       "**A quién**: se elige de una lista de **las tiendas, los mensajeros y los nombres anotados a mano**",
     );
     expect(caja).toContain("Podés **buscar por el nombre de la tienda, del mensajero o de la persona**, sin mayúsculas ni tildes.");
-    expect(caja).toContain(
-      "**Las tarjetas de arriba, la composición de la ganancia y el desglose de egresos cuentan solo lo filtrado**",
-    );
+    // FICHA 463 (R8/R9/R12): las cifras solo las mueven el periodo y «A quién»; los del libro, no.
+    expect(caja).toContain("desglose de egresos, el detalle de cada fila de la composición y el libro cuentan solo el periodo y el");
+    expect(caja).toContain("**no cambian ninguna cifra**: solo qué filas del libro se ven y en qué orden.");
+    expect(caja).not.toContain("cuentan solo lo filtrado");
     // La ayuda vieja («Filtros por concepto y tipo») no vuelve.
     expect(caja).not.toContain("Filtros por **concepto** y **tipo**");
   });
@@ -416,7 +431,7 @@ describe("458-E (bloque E) — la oficina puede preguntar por el libro de la caj
     const declaradas = partirFrontmatter(crudo).datos.fuentes ?? [];
     for (const fuente of [
       "app/(app)/wallet/_components/WalletLedger.tsx",
-      "app/(app)/wallet/_components/WalletFiltros.tsx",
+      "app/(app)/wallet/_components/wallet-filtros-input.ts",
       "app/(app)/wallet/_components/a-quien-selector.ts",
       "lib/actions/wallet-filtros.ts",
       "lib/actions/libro-caja-autoria.ts",

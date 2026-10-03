@@ -35,10 +35,18 @@ export function useConceptosConMovimientos(
   input: ConceptosFiltroInput,
 ): ConceptosConMovimientos {
   const limpio = sinVacios(input);
-  const { data, error, isLoading } = useSWR([CLAVE_CONCEPTOS, JSON.stringify(limpio)], async () => {
-    const r = await conceptosConMovimientosAction(limpio);
-    if (r.status !== "ok") throw new Error(r.status);
-    return r.conceptos;
-  });
+  const { data, error, isLoading } = useSWR(
+    [CLAVE_CONCEPTOS, JSON.stringify(limpio)],
+    async () => {
+      const r = await conceptosConMovimientosAction(limpio);
+      if (r.status !== "ok") throw new Error(r.status);
+      return r.conceptos;
+    },
+    // FICHA 467 — mientras se cuentan los conceptos de los filtros nuevos, la lista sigue siendo la de
+    // antes en vez de vaciarse: el `Select` de la casilla «Concepto» SUELTA su valor si su opción
+    // desaparece de la lista, y un concepto recién elegido (aún en la espera de 500 ms del orquestador)
+    // se perdía sin aviso si la lista se vaciaba en ese momento. Medido con una sonda el 2026-10-02.
+    { keepPreviousData: true },
+  );
   return { conceptos: data, cargando: isLoading, error: Boolean(error) };
 }

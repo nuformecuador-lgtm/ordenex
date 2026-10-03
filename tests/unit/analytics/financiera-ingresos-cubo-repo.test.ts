@@ -167,7 +167,7 @@ describe("las categorias de la consulta por cubo salen del catalogo, no de un ar
 
     const { valores } = sqlEmitido(fake);
     expect(valores.at(-1)).toEqual([...(consulta.metrica.definicion.categorias ?? [])]);
-    // FICHA 458-B (revision B2): + el reverso de la anulacion del cobro por rechazo.
+    // FICHA 458-B (revision B2): + el reverso de la anulacion del cobro por devolución a origen.
     expect(valores.at(-1)).toEqual([
       "ingreso_flete",
       "ingreso_flete_devolucion",

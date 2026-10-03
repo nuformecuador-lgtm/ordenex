@@ -14,12 +14,13 @@
  */
 import type {
   DescargaArchivo,
+  DescargaColumna,
   DescargaConfig,
   DescargaTipo,
 } from "@/lib/types/descarga";
 import { buildCsvRows } from "@/lib/utils/csv-template";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
-import { buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
+import { buildXlsxLibro, buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
 
 /** MIME del CSV con codificacion explicita, para el `Blob` de descarga (R7). */
 export const CSV_MIME = "text/csv;charset=utf-8";
@@ -107,6 +108,33 @@ export function nombreHoja(titulo: string): string {
 }
 
 /**
+ * Ficha 464 (design §2.1, R42) — nombres de hoja DISTINTOS entre si, para un libro de varias hojas.
+ *
+ * Excel compara los nombres de hoja SIN distinguir mayusculas (y `exceljs` lanza con un duplicado),
+ * asi que «Detalle» y «detalle» chocan. El primero que llega conserva su nombre; cada repeticion
+ * gana « (2)», « (3)»… y, si con el sufijo se pasaria de 31 caracteres, la base se recorta con «…»
+ * ANTES del sufijo (el sufijo es justo lo que distingue a las dos pestañas, no se puede perder).
+ *
+ * Recibe nombres YA saneados por `nombreHoja`. Con un solo nombre es la identidad: el archivo de
+ * una hoja no cambia (R41).
+ */
+export function nombresDeHojaUnicos(nombres: readonly string[]): string[] {
+  const usados = new Set<string>();
+  return nombres.map((nombre) => {
+    let candidato = nombre;
+    for (let n = 2; usados.has(candidato.toLowerCase()); n += 1) {
+      const sufijo = ` (${n})`;
+      candidato =
+        nombre.length + sufijo.length <= MAX_NOMBRE_HOJA
+          ? `${nombre}${sufijo}`
+          : `${nombre.slice(0, MAX_NOMBRE_HOJA - sufijo.length - 1).trimEnd()}…${sufijo}`;
+    }
+    usados.add(candidato.toLowerCase());
+    return candidato;
+  });
+}
+
+/**
  * Nombre del archivo (R7, R8): `<slug del titulo>-YYYY-MM-DD.<extension>`. La fecha
  * llega por parametro para ser determinista en test, mismo patron que
  * `nombreArchivoErrores` (feature 143) y `manifiestoFileName` (feature 148).
@@ -130,19 +158,22 @@ export function nombreArchivoDescarga(
  * - `tipo` ausente -> `xlsx` (R2).
  * - `xlsx` -> libro de UNA hoja nombrada con el titulo (saneado por `nombreHoja`, que
  *   respeta las reglas de Excel), cabecera + una fila por elemento en el orden
- *   recibido (R3, R8).
+ *   recibido (R3, R8). Ficha 464: con `hojasAdicionales`, esas hojas siguen a la
+ *   principal, en su orden y con nombres distintos (`nombresDeHojaUnicos`).
  * - `csv` -> texto con una linea de cabecera y una por elemento, todo escapado (R4).
  * - Se emiten EXACTAMENTE las columnas declaradas, en su orden (R5); una fila que no
  *   aporta la clave deja la celda vacia (R6).
  *
  * @throws si `columnas` esta vacio: no se produce archivo alguno (R9), mismo contrato
- * defensivo que `buildXlsxTemplate`/`buildXlsxRows`/`buildCsvRows`.
+ * defensivo que `buildXlsxTemplate`/`buildXlsxRows`/`buildCsvRows`. Ficha 464: tambien
+ * con `csv` + hojas adicionales (R12) y con una hoja adicional sin columnas.
  */
 export async function construirDescarga(
   config: DescargaConfig,
   fecha: Date = new Date(),
 ): Promise<DescargaArchivo> {
   const { titulo, columnas, filas } = config;
+  const hojasAdicionales = config.hojasAdicionales ?? [];
 
   if (columnas.length === 0) {
     throw new Error(
@@ -151,13 +182,24 @@ export async function construirDescarga(
   }
 
   const tipo = config.tipo ?? TIPO_POR_DEFECTO;
+  // Ficha 464 (R12): un csv no tiene hojas. Pedir hojas adicionales en csv es un error del
+  // consumidor y NO produce archivo: antes que un csv al que le falta la mitad del contenido.
+  if (tipo === "csv" && hojasAdicionales.length > 0) {
+    throw new Error(
+      "construirDescarga: las hojas adicionales solo existen en xlsx; un csv no puede llevarlas",
+    );
+  }
   const nombreArchivo = nombreArchivoDescarga(titulo, tipo, fecha);
   // Traduccion del vocabulario del contrato (clave/encabezado) al de los generadores
   // reusados (key/header). Es lo UNICO que este despachador aporta sobre ellos.
-  const columnasGenerador = columnas.map((columna) => ({
+  // Ficha 468 (R22): `formato` viaja SOLO si la columna lo declara; sin el, la columna del generador es
+  // exactamente la de siempre (R59). El csv no lo mira (R58).
+  const aColumnaGenerador = (columna: DescargaColumna) => ({
     key: columna.clave,
     header: columna.encabezado,
-  }));
+    ...(columna.formato !== undefined ? { formato: columna.formato } : {}),
+  });
+  const columnasGenerador = columnas.map(aColumnaGenerador);
 
   if (tipo === "csv") {
     return {
@@ -167,10 +209,45 @@ export async function construirDescarga(
     };
   }
 
+  if (hojasAdicionales.length === 0) {
+    return {
+      // El nombre de la HOJA se sanea (ver `nombreHoja`); el del ARCHIVO conserva el slug
+      // del titulo entero, que es donde el usuario reconoce lo que descargo.
+      // Ficha 464 (R41): sin hojas adicionales, EXACTAMENTE el camino de siempre.
+      contenido: await buildXlsxRows(columnasGenerador, filas, nombreHoja(titulo), config.filasDestacadas),
+      mime: XLSX_MIME,
+      nombreArchivo,
+    };
+  }
+
+  // Ficha 464 (R10/R42): la principal primero y las adicionales despues, con nombres validos y
+  // distintos. Una hoja adicional sin columnas no produce archivo (mismo contrato que la principal).
+  for (const hoja of hojasAdicionales) {
+    if (hoja.columnas.length === 0) {
+      throw new Error(
+        "construirDescarga: cada hoja adicional necesita al menos una columna",
+      );
+    }
+  }
+  const nombres = nombresDeHojaUnicos([
+    nombreHoja(titulo),
+    ...hojasAdicionales.map((hoja) => nombreHoja(hoja.titulo)),
+  ]);
   return {
-    // El nombre de la HOJA se sanea (ver `nombreHoja`); el del ARCHIVO conserva el slug
-    // del titulo entero, que es donde el usuario reconoce lo que descargo.
-    contenido: await buildXlsxRows(columnasGenerador, filas, nombreHoja(titulo)),
+    contenido: await buildXlsxLibro([
+      {
+        nombre: nombres[0],
+        columns: columnasGenerador,
+        rows: filas,
+        ...(config.filasDestacadas !== undefined ? { destacadas: config.filasDestacadas } : {}),
+      },
+      ...hojasAdicionales.map((hoja, i) => ({
+        nombre: nombres[i + 1],
+        columns: hoja.columnas.map(aColumnaGenerador),
+        rows: hoja.filas,
+        ...(hoja.filasDestacadas !== undefined ? { destacadas: hoja.filasDestacadas } : {}),
+      })),
+    ]),
     mime: XLSX_MIME,
     nombreArchivo,
   };

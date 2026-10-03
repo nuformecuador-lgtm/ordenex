@@ -3,6 +3,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CabeceraDeCierre,
   ICierreAporteRepository,
+  OrdenAporteRow,
 } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { IEstadoCuentaRepository } from "@/lib/interfaces/repositories/IEstadoCuentaRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
@@ -12,9 +13,11 @@ import type {
   VerDetalleMovimientoCompletoServiceResult,
   VerDetalleMovimientoServiceResult,
 } from "@/lib/interfaces/services/IDetalleMovimientoService";
+import type { IBusquedaPorGuiaService } from "@/lib/interfaces/services/IBusquedaPorGuiaService";
 import type {
   MotivoSinReparto,
   OrdenAporteDTO,
+  OrdenDeDetalleDTO,
   VerDetalleDeMovimientoCompletoInput,
   VerDetalleDeMovimientoInput,
 } from "@/lib/types/detalle-movimiento";
@@ -26,7 +29,7 @@ import {
   FUENTE_MENSAJERO,
   FUENTE_TIENDA,
   aporteDeOrden,
-  criterioDeFuente,
+  fuenteDeMovimiento,
   type FuenteDeAporte,
 } from "@/lib/utils/aporte-por-orden";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
@@ -52,6 +55,10 @@ type ConjuntoResuelto =
       ordenes: OrdenAporteDTO[];
       total: number;
       ordenesDelCierre: number;
+      /** FICHA 469 (R25/R27) — las identificadas que aportan, TODAS, con el mismo mapeo que `ordenes`. */
+      destacadas: OrdenAporteDTO[];
+      /** FICHA 469 (R26) — los ids identificados por `resaltar` (vacio sin busqueda por guia, R28). */
+      identificadas: ReadonlySet<string>;
     }
   | { estado: "sin_reparto"; motivo: MotivoSinReparto }
   | { estado: "not_found" };
@@ -90,9 +97,18 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       IWalletTiendaMovimientoRepository,
       "obtenerPorIdDeTienda"
     >,
-    private readonly aportes: ICierreAporteRepository,
+    private readonly aportes: Pick<
+      ICierreAporteRepository,
+      "listarOrdenesQueAportan" | "contarOrdenesDelCierre" | "obtenerCabeceraDeCierre"
+    >,
     // FICHA 458-D (servidor, R19) — la fila del libro del MENSAJERO, con su cuenta en el WHERE.
     private readonly movimientosDeMensajero: Pick<IEstadoCuentaRepository, "movimientoDeMensajero">,
+    /**
+     * FICHA 469 (design §4.2, R25–R29) — que ordenes identifica el termino `resaltar`, con el MISMO
+     * `tiendaId` que acota este detalle. SIN valor por defecto: un composition root que no lo pasara no
+     * compila (memoria «el composition root que no inyecta»).
+     */
+    private readonly busqueda: Pick<IBusquedaPorGuiaService, "identificar">,
   ) {}
 
   /**
@@ -116,6 +132,7 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
         FUENTE_TIENDA[movimiento.categoria],
         tiendaId, // las ordenes de ESTA tienda en ese cierre, no las de todo el cierre
         rangoDePagina(pagina),
+        input.resaltar, // FICHA 469 (R29): identificado con el MISMO `tiendaId`
       );
       return this.comoPagina(resuelto, pagina, true);
     }
@@ -127,6 +144,7 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       FUENTE_MENSAJERO[movimiento.categoria],
       undefined,
       rangoDePagina(pagina),
+      input.resaltar,
     );
     return this.comoPagina(resuelto, pagina, true);
   }
@@ -145,6 +163,7 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       FUENTE_CAJA[movimiento.categoria],
       undefined, // la caja no se acota por tienda: la ven los roles de acceso total
       rangoDePagina(input),
+      input.resaltar,
     );
     return this.comoPagina(resuelto, input, true);
   }
@@ -188,6 +207,7 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       // varias tiendas: sin esta linea, la tienda A veria las ordenes de la B.
       actor.usuarioId,
       rangoDePagina(input),
+      input.resaltar, // FICHA 469 (R29): identificado con la tienda del ACTOR
     );
     // R15: sin nombre de mensajero. A la tienda no se le revela quien movio su dinero (335).
     return this.comoPagina(resuelto, input, false);
@@ -227,30 +247,62 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
     fuente: FuenteDeAporte,
     tiendaId: string | undefined,
     rango: { skip: number; take: number },
+    // FICHA 469 (design §4.2) — el termino del libro para destacar la guia buscada. Solo la PAGINA lo pasa.
+    resaltar?: string,
   ): Promise<ConjuntoResuelto> {
-    const criterio = criterioDeFuente(fuente);
-    // R48: el concepto no se reparte por orden. La fila se abre igual y dice por que.
-    if (criterio === null || fuente.tipo === "sin_reparto") {
-      return {
-        estado: "sin_reparto",
-        motivo: fuente.tipo === "sin_reparto" ? fuente.motivo : "no_nace_de_un_cierre",
-      };
-    }
-    // R6/R48: un ajuste manual o un gasto no cuelga de ningun cierre, aunque su categoria si
-    // admita reparto. Aqui todavia no se ha consultado ni una orden.
-    if (movimiento.origenTipo !== "cierre_dia" || movimiento.origenId === null) {
-      return { estado: "sin_reparto", motivo: "no_nace_de_un_cierre" };
-    }
-    const cierreId = movimiento.origenId;
+    // R48 / R6: el concepto no se reparte por orden, o el movimiento no cuelga de un cierre. La
+    // fila se abre igual y dice por que; aqui todavia no se ha consultado ni una orden.
+    // Ficha 464 (T3): la decision vive en `fuenteDeMovimiento`, la MISMA que usa el detalle en lote.
+    const decision = fuenteDeMovimiento(movimiento, fuente);
+    if (decision.tipo === "sin_reparto") return { estado: "sin_reparto", motivo: decision.motivo };
+    const { criterio, cierreId } = decision;
 
     const cabecera = await this.aportes.obtenerCabeceraDeCierre(cierreId);
     // El origen apunta a un cierre que no esta: no se inventa cabecera ni se sirven ordenes.
     if (cabecera === null) return { estado: "not_found" };
 
-    const [pagina, ordenesDelCierre] = await Promise.all([
+    // FICHA 469 (R25/R29) — paso 1 de la busqueda por guia, con el MISMO `tiendaId` que acota este
+    // detalle: una guia de otra tienda no identifica nada aqui. Sin `resaltar`, ni una consulta (R28).
+    const identificadas =
+      resaltar === undefined
+        ? []
+        : await this.busqueda.identificar({ termino: resaltar, ...(tiendaId !== undefined ? { tiendaId } : {}) });
+
+    const [pagina, ordenesDelCierre, destacadas] = await Promise.all([
       this.aportes.listarOrdenesQueAportan({ cierreId, criterio, tiendaId, rango }),
       this.aportes.contarOrdenesDelCierre({ cierreId, tiendaId }),
+      // R25/R27 — el MISMO metodo y el MISMO `where` (`buildWhere`) acotado a las identificadas en un
+      // `AND` aparte: solo salen las que de verdad aportan a ESTE concepto, esten en la pagina que esten.
+      // Una orden aparece una vez por cierre (`@@unique([cierreId, ordenId])`): `take` = cuantas hay.
+      identificadas.length === 0
+        ? null
+        : this.aportes.listarOrdenesQueAportan({
+            cierreId,
+            criterio,
+            tiendaId,
+            rango: { skip: 0, take: identificadas.length },
+            ordenIds: identificadas,
+          }),
     ]);
+
+    // El MISMO mapeo para la lista y para las destacadas: el aporte destacado ES el de su fila (R27).
+    const aDTO = (fila: OrdenAporteRow): OrdenAporteDTO => ({
+      ordenId: fila.ordenId,
+      // El numero VISIBLE congelado: la guia si la orden llego a tenerla, si no la remision.
+      guia: fila.numGuia === null ? fila.numRemision : String(fila.numGuia),
+      destinatario: fila.destinatario,
+      tiendaNombre: fila.tiendaNombre,
+      // Los resultados de TODAS sus gestiones en ese cierre, sin agrupar: una orden con dos
+      // gestiones lo dice ensenando dos resultados (R10/R20).
+      resultados: fila.gestiones.map((g) => g.resultado),
+      // R46: el aporte NO se calcula aqui. Se re-deriva con la funcion que produjo el importe.
+      // El `?? 0` es inalcanzable mientras `aporte-por-orden-equivalencia.test.ts` este verde
+      // (el `where` selecciono justamente las ordenes cuya derivacion define el concepto);
+      // se escribe para no tener que afirmar un `!` sobre un camino de dinero.
+      aporte: (
+        aporteDeOrden(fuente, fila.orden, fila.gestiones) ?? new Prisma.Decimal(0)
+      ).toFixed(2),
+    });
 
     return {
       estado: "ok",
@@ -258,23 +310,9 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
       cabecera,
       total: pagina.total, // R28: lo conto la base con el MISMO where, jamas `items.length`
       ordenesDelCierre,
-      ordenes: pagina.items.map((fila) => ({
-        ordenId: fila.ordenId,
-        // El numero VISIBLE congelado: la guia si la orden llego a tenerla, si no la remision.
-        guia: fila.numGuia === null ? fila.numRemision : String(fila.numGuia),
-        destinatario: fila.destinatario,
-        tiendaNombre: fila.tiendaNombre,
-        // Los resultados de TODAS sus gestiones en ese cierre, sin agrupar: una orden con dos
-        // gestiones lo dice ensenando dos resultados (R10/R20).
-        resultados: fila.gestiones.map((g) => g.resultado),
-        // R46: el aporte NO se calcula aqui. Se re-deriva con la funcion que produjo el importe.
-        // El `?? 0` es inalcanzable mientras `aporte-por-orden-equivalencia.test.ts` este verde
-        // (el `where` selecciono justamente las ordenes cuya derivacion define el concepto);
-        // se escribe para no tener que afirmar un `!` sobre un camino de dinero.
-        aporte: (
-          aporteDeOrden(fuente, fila.orden, fila.gestiones) ?? new Prisma.Decimal(0)
-        ).toFixed(2),
-      })),
+      ordenes: pagina.items.map(aDTO),
+      destacadas: destacadas === null ? [] : destacadas.items.map(aDTO),
+      identificadas: new Set(identificadas),
     };
   }
 
@@ -301,7 +339,11 @@ export class DetalleMovimientoService implements IDetalleMovimientoService {
         total: resuelto.total,
         page: input.page,
         pageSize: input.pageSize,
-        ordenes: resuelto.ordenes,
+        // FICHA 469 (R26/R28): sin busqueda por guia `identificadas` esta vacio y todo sale `false`.
+        ordenes: resuelto.ordenes.map(
+          (o): OrdenDeDetalleDTO => ({ ...o, resaltada: resuelto.identificadas.has(o.ordenId) }),
+        ),
+        destacadas: resuelto.destacadas,
       },
     };
   }

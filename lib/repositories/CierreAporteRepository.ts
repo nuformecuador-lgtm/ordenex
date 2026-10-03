@@ -2,12 +2,15 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AlcanceDeCierre,
   CabeceraDeCierre,
+  FiltroAportesEnLote,
+  FiltroCierresDondeAporta,
   FiltroOrdenesQueAportan,
   ICierreAporteRepository,
+  OrdenAporteEnLoteRow,
   OrdenAporteRow,
 } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { CriterioDeAporte } from "@/lib/utils/aporte-por-orden";
-import { DETALLE_SELECT, tarifaDe } from "@/lib/utils/cierre-detalle";
+import { DETALLE_SELECT, tarifaDe, type CierreDetalleRow } from "@/lib/utils/cierre-detalle";
 import { NOMBRE_USUARIO_SELECT, nombreCompletoUsuario } from "@/lib/utils/nombre-usuario";
 import type { PaginaRepositorio } from "@/lib/utils/rango-pagina";
 
@@ -57,6 +60,10 @@ function buildWhere(
           cierreId,
           resultado: { in: [...criterio.resultados] },
           ...(criterio.exigeMontoRecibido ? { montoRecibido: { gt: 0 } } : {}),
+          // FICHA 468 (design §2.2): la supresion de ceros de los dos snapshots por gestion, DENTRO del
+          // mismo `some` correlacionado con el cierre (la gestion que aporta es la de ESTE cierre).
+          ...(criterio.exigePagoMensajero ? { pagoMensajero: { gt: 0 } } : {}),
+          ...(criterio.exigeIndemnizacion ? { indemnizacion: { gt: 0 } } : {}),
         },
       },
     },
@@ -80,6 +87,75 @@ const ORDEN_TOTAL = [
 ] as const satisfies readonly Prisma.CierreDetailOrderByWithRelationInput[];
 
 /**
+ * Ficha 464 — el orden de las gestiones de una orden en un cierre: el de la 344 (`createdAt`) con
+ * `id` como desempate. Lo comparten el detalle de una fila y el lote, para que «Resultado» de una
+ * orden con dos gestiones salga igual en la pantalla y en el archivo.
+ */
+const ORDEN_GESTIONES = [
+  { createdAt: "asc" },
+  { id: "asc" },
+] as const satisfies readonly Prisma.GestionOrdenOrderByWithRelationInput[];
+
+/** La proyeccion de una orden del detalle (sin las gestiones), compartida por fila y lote. */
+const SELECT_DE_APORTE = {
+  ...DETALLE_SELECT,
+  id: true,
+  numGuia: true,
+  numRemision: true,
+  destinatario: true,
+  tiendaNombre: true,
+} as const;
+
+/**
+ * Ficha 464 (design §3) — el `WHERE` del lote: el `OR` de `buildWhere`, una rama por cierre. No se
+ * escribe el criterio otra vez; cada rama es la traduccion de siempre, con su `tiendaId` al final.
+ */
+function whereDelLote(f: FiltroAportesEnLote): Prisma.CierreDetailWhereInput {
+  return { OR: f.cierreIds.map((cierreId) => buildWhere(cierreId, f.criterio, f.tiendaId)) };
+}
+
+/** Fila del repositorio -> `OrdenAporteRow`, money-safe. La MISMA para la fila y para el lote. */
+function aFilaDeAporte(
+  d: CierreDetalleRow & {
+    numGuia: number | null;
+    numRemision: string;
+    destinatario: string;
+    tiendaNombre: string;
+  },
+  gestiones: ReadonlyArray<{
+    resultado: OrdenAporteRow["gestiones"][number]["resultado"];
+    montoRecibido: Prisma.Decimal | null;
+    pagoMensajero: Prisma.Decimal | null;
+    indemnizacion: Prisma.Decimal | null;
+  }>,
+): OrdenAporteRow {
+  return {
+    ordenId: d.ordenId,
+    numGuia: d.numGuia,
+    numRemision: d.numRemision,
+    destinatario: d.destinatario,
+    tiendaNombre: d.tiendaNombre,
+    orden: {
+      esCentral: d.esCentral,
+      esZonaEspecial: d.esZonaEspecial,
+      // Money-safe: Decimal -> STRING escala 2, nunca number (igual que los dos feeds).
+      montoCobrar: d.montoCobrar === null ? null : d.montoCobrar.toFixed(2),
+      cobraComision: d.cobraComision,
+      // La MISMA reconstruccion que usan los feeds; `null` = sin tarifa vigente al
+      // solicitar (gap R9 preservado: esa orden no deriva ningun concepto).
+      tarifa: tarifaDe(d),
+    },
+    gestiones: gestiones.map((g) => ({
+      resultado: g.resultado,
+      montoRecibido: g.montoRecibido === null ? null : g.montoRecibido.toFixed(2),
+      // FICHA 468: los dos snapshots que reparten el pago al mensajero y la indemnizacion.
+      pagoMensajero: g.pagoMensajero === null ? null : g.pagoMensajero.toFixed(2),
+      indemnizacion: g.indemnizacion === null ? null : g.indemnizacion.toFixed(2),
+    })),
+  };
+}
+
+/**
  * Ficha 344 (design §3.4) — repositorio de las ordenes que componen el importe de un movimiento
  * de cierre. SOLO queries Prisma: ni permisos, ni formula, ni recorte en memoria.
  *
@@ -93,19 +169,18 @@ export class CierreAporteRepository implements ICierreAporteRepository {
   async listarOrdenesQueAportan(
     f: FiltroOrdenesQueAportan,
   ): Promise<PaginaRepositorio<OrdenAporteRow>> {
-    const where = buildWhere(f.cierreId, f.criterio, f.tiendaId);
+    // FICHA 469 (design §4.2): `ordenIds` acota en un `AND` APARTE, sin tocar `buildWhere` (el criterio
+    // sigue escrito una sola vez). Sin `ordenIds`, el `where` es exactamente el de siempre.
+    const base = buildWhere(f.cierreId, f.criterio, f.tiendaId);
+    const where: Prisma.CierreDetailWhereInput =
+      f.ordenIds === undefined ? base : { AND: [base, { ordenId: { in: [...f.ordenIds] } }] };
 
     // R28: la pagina y el TOTAL salen del MISMO `where`, en la misma llamada.
     const [filas, total] = await Promise.all([
       this.prisma.cierreDetail.findMany({
         where,
         select: {
-          ...DETALLE_SELECT,
-          id: true,
-          numGuia: true,
-          numRemision: true,
-          destinatario: true,
-          tiendaNombre: true,
+          ...SELECT_DE_APORTE,
           // TODAS las gestiones de esa orden en ESE cierre, no solo las que casan con el
           // criterio: el importe se produjo acumulandolas todas (las que no aportan devuelven
           // un concepto AUSENTE y no suman nada).
@@ -116,8 +191,10 @@ export class CierreAporteRepository implements ICierreAporteRepository {
                 // Orden estable: sin el, Postgres devuelve las gestiones de una orden en el
                 // orden que le conviene y la columna «Resultado» de una orden con dos
                 // gestiones cambiaria de sitio entre dos lecturas iguales.
-                orderBy: { createdAt: "asc" },
-                select: { resultado: true, montoRecibido: true },
+                // Ficha 464: + `id` como desempate (dos gestiones de la misma transaccion comparten
+                // `created_at`); el detalle en lote usa EXACTAMENTE este orden.
+                orderBy: [...ORDEN_GESTIONES],
+                select: { resultado: true, montoRecibido: true, pagoMensajero: true, indemnizacion: true },
               },
             },
           },
@@ -130,29 +207,93 @@ export class CierreAporteRepository implements ICierreAporteRepository {
     ]);
 
     return {
-      items: filas.map((d) => ({
-        ordenId: d.ordenId,
-        numGuia: d.numGuia,
-        numRemision: d.numRemision,
-        destinatario: d.destinatario,
-        tiendaNombre: d.tiendaNombre,
-        orden: {
-          esCentral: d.esCentral,
-          esZonaEspecial: d.esZonaEspecial,
-          // Money-safe: Decimal -> STRING escala 2, nunca number (igual que los dos feeds).
-          montoCobrar: d.montoCobrar === null ? null : d.montoCobrar.toFixed(2),
-          cobraComision: d.cobraComision,
-          // La MISMA reconstruccion que usan los feeds; `null` = sin tarifa vigente al
-          // solicitar (gap R9 preservado: esa orden no deriva ningun concepto).
-          tarifa: tarifaDe(d),
-        },
-        gestiones: d.orden.gestiones.map((g) => ({
-          resultado: g.resultado,
-          montoRecibido: g.montoRecibido === null ? null : g.montoRecibido.toFixed(2),
-        })),
-      })),
+      items: filas.map((d) => aFilaDeAporte(d, d.orden.gestiones)),
       total,
     };
+  }
+
+  /**
+   * Ficha 464 (R37/R40) — el conteo por cierre de un tramo, con el `OR` de `buildWhere` (una rama
+   * por cierre). Cada rama exige `cierreId = X`, asi que una fila del cierre X solo puede casar con
+   * la rama X: el grupo X cuenta EXACTAMENTE lo que contaria `listarOrdenesQueAportan` para X.
+   */
+  async contarAportesPorCierre(f: FiltroAportesEnLote): Promise<Map<string, number>> {
+    const conteos = new Map<string, number>();
+    if (f.cierreIds.length === 0) return conteos;
+    const grupos = await this.prisma.cierreDetail.groupBy({
+      by: ["cierreId"],
+      where: whereDelLote(f),
+      _count: { _all: true },
+    });
+    for (const g of grupos) conteos.set(g.cierreId, g._count._all);
+    return conteos;
+  }
+
+  /**
+   * Ficha 464 (R18/R20/R21) — las filas del tramo en UNA consulta. La proyeccion es la del detalle de
+   * una fila + `cierreId`. Las gestiones se piden de TODOS los cierres del tramo (Prisma no puede
+   * correlacionar el `where` de una relacion con la fila padre) y aqui se quedan las de SU cierre:
+   * es una seleccion de columnas, no un criterio (el criterio ya lo aplico el `WHERE` de la base).
+   */
+  async listarAportesDeCierres(f: FiltroAportesEnLote): Promise<OrdenAporteEnLoteRow[]> {
+    if (f.cierreIds.length === 0) return [];
+    const filas = await this.prisma.cierreDetail.findMany({
+      where: whereDelLote(f),
+      select: {
+        ...SELECT_DE_APORTE,
+        cierreId: true,
+        orden: {
+          select: {
+            gestiones: {
+              where: { cierreId: { in: [...f.cierreIds] } },
+              orderBy: [...ORDEN_GESTIONES],
+              select: { cierreId: true, resultado: true, montoRecibido: true, pagoMensajero: true, indemnizacion: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ cierreId: "asc" }, ...ORDEN_TOTAL],
+    });
+    return filas.map((d) => ({
+      ...aFilaDeAporte(
+        d,
+        d.orden.gestiones.filter((g) => g.cierreId === d.cierreId),
+      ),
+      cierreId: d.cierreId,
+    }));
+  }
+
+  /**
+   * FICHA 469 (design §2.2) — el `whereDelLote` con la ORDEN fijada en cada rama: `OR` de
+   * `(buildWhere(cierre, criterio, tiendaId) AND orden_id = orden)`. La orden va en un `AND` aparte para
+   * no tocar `buildWhere` (es un acotamiento, como `tiendaId`, no una condicion del criterio).
+   */
+  async cierresDondeAporta(f: FiltroCierresDondeAporta): Promise<Array<{ cierreId: string; ordenId: string }>> {
+    if (f.pares.length === 0) return [];
+    return this.prisma.cierreDetail.findMany({
+      where: {
+        OR: f.pares.map((p) => ({ AND: [buildWhere(p.cierreId, f.criterio, f.tiendaId), { ordenId: p.ordenId }] })),
+      },
+      select: { cierreId: true, ordenId: true },
+      orderBy: [{ cierreId: "asc" }, { ordenId: "asc" }],
+    });
+  }
+
+  /** Ficha 464 — las cabeceras de un tramo de cierres, en una consulta. */
+  async cabecerasDeCierres(cierreIds: readonly string[]): Promise<Map<string, CabeceraDeCierre>> {
+    const cabeceras = new Map<string, CabeceraDeCierre>();
+    if (cierreIds.length === 0) return cabeceras;
+    const cierres = await this.prisma.cierreDia.findMany({
+      where: { id: { in: [...cierreIds] } },
+      select: { id: true, solicitadoAt: true, mensajero: { select: NOMBRE_USUARIO_SELECT } },
+    });
+    for (const c of cierres) {
+      cabeceras.set(c.id, {
+        fecha: c.solicitadoAt.toISOString(),
+        mensajeroNombre: nombreCompletoUsuario(c.mensajero),
+      });
+    }
+    return cabeceras;
   }
 
   /** R12: el «de 23». Mismo acotamiento por tienda que la pagina, escrito AL FINAL. */

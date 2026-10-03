@@ -19,7 +19,7 @@ import type { VehiculoDTO } from "@/lib/types/vehiculos";
 /**
  * Feature 303 — la pantalla de «Costos por zona» tiene que DECIR lo que cobra y lo que paga.
  *
- * EL INCIDENTE QUE ESTOS TESTS CONGELAN. El cobro por rechazo de la zona GAM estaba en ₡0,00
+ * EL INCIDENTE QUE ESTOS TESTS CONGELAN. El cobro por devolución a origen de la zona GAM estaba en ₡0,00
  * en producción y la pantalla no distinguía «esta zona no paga por rechazo» de «a nadie se le
  * ocurrió ponerlo»: 44 rechazos sin pagar a la bodega y media hora de diagnóstico. Dos cosas
  * lo evitan y las dos se prueban aquí:
@@ -144,17 +144,17 @@ describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () =>
     };
 
     expect(ayudaDe("Entregado")).toHaveTextContent("Se le paga al mensajero.");
-    expect(ayudaDe("Rechazado por el cliente")).toHaveTextContent(
+    expect(ayudaDe("Devolución a origen por rechazo")).toHaveTextContent(
       "Es ingreso de la bodega, no del mensajero.",
     );
   });
 
-  it("nombra el resultado que REALMENTE paga: «Rechazado por el cliente»", () => {
+  it("nombra el resultado que REALMENTE paga: «Devolución a origen por rechazo»", () => {
     render(<CobroVehiculoTarifas vehiculos={VEHICULOS} />);
 
     // El nombre accesible viene del `<label for>`: antes el `Label` estaba suelto y este
     // `getByLabelText` no habría encontrado nada.
-    expect(screen.getByLabelText("Rechazado por el cliente")).toBeInTheDocument();
+    expect(screen.getByLabelText("Devolución a origen por rechazo")).toBeInTheDocument();
     expect(screen.getByLabelText("Entregado")).toBeInTheDocument();
     // «No entregado» abarcaba `devuelta` y `reprogramada`, que no pagan nada.
     expect(screen.queryByText("No entregado")).not.toBeInTheDocument();
@@ -174,7 +174,7 @@ describe("Pago al mensajero por zona — rótulos (CobroVehiculoTarifas)", () =>
     expect(screen.queryByText("Monto por vehículo")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Pago al mensajero/)).not.toBeInTheDocument();
     // Un par de montos por vehículo, cada uno con su rótulo ya asociado.
-    expect(screen.getAllByLabelText("Rechazado por el cliente")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Devolución a origen por rechazo")).toHaveLength(2);
   });
 });
 
@@ -199,7 +199,7 @@ describe("Aviso del cero — pago al mensajero (el caso GAM)", () => {
       />,
     );
 
-    const rechazado = screen.getByLabelText("Rechazado por el cliente");
+    const rechazado = screen.getByLabelText("Devolución a origen por rechazo");
     const describedBy = rechazado.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
     const aviso = document.getElementById(describedBy!.split(" ")[0]);
@@ -234,7 +234,7 @@ describe("Aviso del cero — pago al mensajero (el caso GAM)", () => {
         initial={cobroInicial(1700, 0)}
       />,
     );
-    const rechazado = screen.getByLabelText("Rechazado por el cliente");
+    const rechazado = screen.getByLabelText("Devolución a origen por rechazo");
 
     await user.clear(rechazado);
     await user.type(rechazado, "1000");
@@ -322,7 +322,7 @@ describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
       screen.getByText(/la entrega se le paga al mensajero/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/el rechazo del cliente es ingreso de la bodega/i),
+      screen.getByText(/una Devolución a origen por rechazo es ingreso de la bodega responsable del mensajero/i),
     ).toBeInTheDocument();
     // «no entrega» abarcaba `devuelta` y `reprogramada`, que no pagan nada.
     expect(screen.queryByText(/por no entrega/i)).not.toBeInTheDocument();
@@ -330,15 +330,15 @@ describe("La sección que envuelve el bloque (CrearZonaForm)", () => {
 });
 
 describe("Tarifas de zona/tienda — rótulos (TarifaCampos)", () => {
-  it("el flete se llama «por rechazo», que es el único resultado que lo cobra", () => {
+  it("el flete se llama «Flete por devolución a origen» (466), el único resultado que lo cobra", () => {
     renderGrid();
 
     // ⏳ FICHA 338 (2026-08-31): el nombre DEFINITIVO, para toda la app. «Flete de retorno (solo
     // rechazos)» fue el primer intento (ficha 303): decía la verdad, pero con una aclaración
     // entre paréntesis que el nombre nuevo ya no necesita, y no coincidía con lo que la misma
     // cifra se llamaba en el detalle del cierre y en la wallet.
-    expect(campo("Flete por rechazo")).toBeInTheDocument();
-    expect(campo("Flete por rechazo GAM")).toBeInTheDocument();
+    expect(campo("Flete por devolución a origen")).toBeInTheDocument();
+    expect(campo("Flete por devolución a origen GAM")).toBeInTheDocument();
     // «Devuelto» nombraba justo el resultado que NO cobra desde la ficha 301.
     expect(sinCampo("Valor flete devuelto")).toBeNull();
     expect(sinCampo("Valor flete devuelto GAM")).toBeNull();

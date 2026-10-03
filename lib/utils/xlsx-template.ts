@@ -12,6 +12,7 @@
  * import dinámico de este módulo desde `BulkUpload`, exceljs queda fuera del bundle
  * inicial del componente.
  */
+import { celdaMonto, FORMATO_EXCEL_MONTO } from "@/lib/utils/xlsx-monto";
 
 /**
  * MIME de un libro XLSX (OpenXML), para el `Blob` de descarga en el navegador.
@@ -143,6 +144,11 @@ export interface XlsxColumn {
   header: string;
   /** Ancho fijo opcional; si se omite se calcula por contenido. */
   width?: number;
+  /**
+   * Ficha 468 (R22) — `"monto"`: la celda (un importe STRING escala 2 del servidor) se escribe como
+   * numero de Excel con `#,##0.00`, via `celdaMonto`. Ausente => la celda va tal cual, como siempre.
+   */
+  formato?: "monto";
 }
 
 /**
@@ -204,33 +210,80 @@ export async function buildXlsxRows(
   columns: XlsxColumn[],
   rows: Array<Record<string, XlsxCellValue>>,
   sheetName = "Datos",
+  destacadas?: readonly number[],
 ): Promise<ArrayBuffer> {
   if (columns.length === 0) {
     throw new Error(
       "buildXlsxRows: se requiere al menos una columna para generar la hoja",
     );
   }
+  // Ficha 464: UNA hoja es el caso particular del libro de varias. Misma firma, mismo resultado.
+  return buildXlsxLibro([{ nombre: sheetName, columns, rows, ...(destacadas !== undefined ? { destacadas } : {}) }]);
+}
+
+/** Ficha 464 (design §2.1) — una hoja del libro: nombre ya valido, columnas y filas. */
+export interface XlsxHoja {
+  nombre: string;
+  columns: XlsxColumn[];
+  rows: Array<Record<string, XlsxCellValue>>;
+  /** Ficha 468 (R23/R47) — indices de `rows` (0 = la primera fila de datos) que van en negrita. */
+  destacadas?: readonly number[];
+}
+
+/**
+ * Ficha 464 (design §2.1, R10/R41/R42) — el binario XLSX de un libro de VARIAS hojas, en el orden
+ * recibido. Cada hoja se escribe exactamente como `buildXlsxRows` escribia la unica: cabecera en
+ * negrita, una fila por elemento, solo las columnas declaradas, `null` = celda vacia, anchos por
+ * contenido.
+ *
+ * Los nombres llegan YA validos y distintos (los sanea quien conoce el titulo:
+ * `nombreHoja` + `nombresDeHojaUnicos` en `descarga-dataset.ts`). Aqui se afirma lo minimo: un
+ * libro sin hojas o una hoja sin columnas no producen archivo.
+ *
+ * @throws si `hojas` esta vacio o alguna hoja no tiene columnas.
+ */
+export async function buildXlsxLibro(hojas: readonly XlsxHoja[]): Promise<ArrayBuffer> {
+  if (hojas.length === 0) {
+    throw new Error("buildXlsxLibro: se requiere al menos una hoja para generar el libro");
+  }
+  for (const hoja of hojas) {
+    if (hoja.columns.length === 0) {
+      throw new Error(
+        `buildXlsxLibro: la hoja «${hoja.nombre}» necesita al menos una columna`,
+      );
+    }
+  }
 
   // Import dinámico: exceljs queda fuera del bundle inicial del consumidor.
   const ExcelJS = (await import("exceljs")).default;
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(sheetName);
+  for (const { nombre, columns, rows, destacadas } of hojas) {
+    const worksheet = workbook.addWorksheet(nombre);
 
-  worksheet.columns = columns.map((column) => ({
-    header: column.header,
-    key: column.key,
-    width: column.width ?? computeDataWidth(column, rows),
-  }));
+    worksheet.columns = columns.map((column) => ({
+      header: column.header,
+      key: column.key,
+      width: column.width ?? computeDataWidth(column, rows),
+    }));
 
-  worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).font = { bold: true };
 
-  for (const row of rows) {
-    const celdas: Record<string, XlsxCellValue> = {};
-    for (const column of columns) {
-      celdas[column.key] = row[column.key] ?? null;
+    // Ficha 468 (R22): las columnas de monto, por su numero de columna (1 = la primera).
+    const columnasMonto = columns.flatMap((column, i) => (column.formato === "monto" ? [i + 1] : []));
+    const enNegrita = new Set(destacadas ?? []);
+
+    for (const [indice, row] of rows.entries()) {
+      const celdas: Record<string, XlsxCellValue> = {};
+      for (const column of columns) {
+        const valor = row[column.key] ?? null;
+        // Solo un TEXTO se convierte (un importe del servidor); un numero o una celda vacia van tal cual.
+        celdas[column.key] = column.formato === "monto" && typeof valor === "string" ? celdaMonto(valor) : valor;
+      }
+      const fila = worksheet.addRow(celdas);
+      for (const c of columnasMonto) fila.getCell(c).numFmt = FORMATO_EXCEL_MONTO;
+      if (enNegrita.has(indice)) fila.font = { bold: true };
     }
-    worksheet.addRow(celdas);
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

@@ -396,7 +396,7 @@ describe("celda «Método» de la sección ENTREGADAS del cierre del día (mensa
 
 /** El texto autosuficiente completo, escrito a mano (R11). */
 const MOTIVO_LARGO_DIRECCION =
-  "Dirección errada · lo rechazó el sistema al vencerse el plazo de la devolución";
+  "Dirección errada · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 
 /** Gestión mínima del cierre del día con el resultado y el motivo que cada caso necesita. */
 function gestionDiaConMotivo(
@@ -430,7 +430,7 @@ describe("FICHA 408 — el motivo del cron en el archivo del cierre del día", (
     );
 
     expect(fila.motivo).toBe(
-      "Cliente no localizado · lo rechazó el sistema al vencerse el plazo de la devolución",
+      "Cliente no localizado · el sistema la pasó a devolución a origen al vencerse el plazo de la novedad",
     );
     expect(String(fila.motivo)).not.toContain("SLA");
     expect(String(fila.motivo)).not.toContain("not_found");

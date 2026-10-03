@@ -274,7 +274,7 @@ const RESULTADO_BOTONES: {
  * `tests/components/GestionarOrdenPanelTope.test.tsx` falla si aparece una cifra en esta frase.
  */
 const TOPE_INTENTOS_NOTA =
-  "A esta orden le queda el último intento de entrega: ya no se puede reprogramar ni devolver. Registra cómo terminó ahora — entregada o rechazada. Si el paquete se dañó, se perdió o te lo robaron, repórtalo como incidente.";
+  `A esta orden le queda el último intento de entrega: ya no se puede reprogramar ni devolver. Registra cómo terminó ahora — ${estatusLabel("entregado")} o ${estatusLabel("devolucion_a_origen_por_rechazo")}. Si el paquete se dañó, se perdió o te lo robaron, repórtalo como incidente.`;
 
 /**
  * Los desenlaces que se ofrecen, ya partidos en los dos bloques del paso 2 (la grilla de los

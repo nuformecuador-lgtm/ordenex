@@ -12,6 +12,7 @@ import type {
   ListarMovimientosPage,
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import type { ISaldoCorridoCajaRepository } from "@/lib/interfaces/repositories/ISaldoCorridoCajaRepository";
 import type {
   AgregadoCajaRow,
   WalletMovimientoCategoria,
@@ -21,8 +22,10 @@ import type {
 import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
-import { whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
+import { whereLibroCajaConTerminoSql, whereLibroCajaSql } from "@/lib/repositories/libro-caja-a-quien-sql";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
+import { ordenTotal, type DireccionOrden } from "@/lib/types/ordenamiento-listado";
+import { derivarBalance } from "@/lib/utils/wallet-balance";
 
 /** Ficha 459 — las categorias de capital, DERIVADAS de la clasificacion (nunca una lista a mano). */
 const CATEGORIAS_DE_CAPITAL: readonly WalletMovimientoCategoria[] =
@@ -154,7 +157,7 @@ async function categoriasConAQuien(
  * INMUTABLE (R3/R47): no expone `update` ni `delete`, y con la 173 sigue sin exponerlos —
  * una correccion es un movimiento compensatorio, no una edicion.
  */
-export class WalletMovimientoRepository implements IWalletMovimientoRepository {
+export class WalletMovimientoRepository implements IWalletMovimientoRepository, ISaldoCorridoCajaRepository {
   constructor(private readonly prisma: WalletPrismaClient) {}
 
   /** R6/R13: inserta en la tx `tx` con skipDuplicates (no TOCTOU); devuelve filas insertadas. */
@@ -249,7 +252,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
   }
 
   /**
-   * R20/R24: pagina el libro, mas reciente primero, filtros en el WHERE.
+   * R20/R24: pagina el libro, mas reciente primero salvo `sortDir: "asc"` (ficha 463), filtros en el WHERE.
    *
    * Ficha 334 (R26, design §4) — el orden es TOTAL, no solo por fecha. Ordenar por UNA columna
    * y paginar con `skip`/`take` deja las filas que empatan en orden indefinido, y eso significa
@@ -264,10 +267,25 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
    */
   async listar(filtros: ListarMovimientosFiltros): Promise<ListarMovimientosPage> {
     const skip = (filtros.page - 1) * filtros.pageSize;
-    const f = conAQuien(filtros);
-    if (f !== null) {
-      // Ficha 458-E (R59): el MISMO orden total de abajo, en SQL, sobre el WHERE con «A quién».
-      const where = whereLibroCajaSql(f);
+    // FICHA 463 (R33/R36): el sentido lo elige quien lee; ausente, lo mas nuevo primero (el de siempre).
+    // Las TRES columnas van en el MISMO sentido: el desempate invertido respecto de la fecha seguiria
+    // siendo total, pero el «Mas antiguas» de dos filas del mismo instante no seria el reverso exacto
+    // del «Mas recientes».
+    const sentido: DireccionOrden = filtros.sortDir ?? "desc";
+    if (filtros.aQuien !== undefined || filtros.termino !== undefined || filtros.porGuia !== undefined) {
+      // Ficha 458-E (R59) y 463 (R24/R25): el MISMO orden total de abajo, en SQL, sobre el WHERE con
+      // «A quién» y/o el termino. El conteo usa el MISMO WHERE: la pagina y el total no discrepan.
+      // FICHA 469 (R16/R19/R20): la busqueda por guia va por este mismo camino (mismo WHERE en la pagina
+      // y en el conteo, mismo orden total).
+      const where = whereLibroCajaConTerminoSql(filtros);
+      const dir = sentido === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+      const orden = Prisma.join(
+        ordenTotal(
+          [Prisma.sql`w."fecha_movimiento" ${dir}`, Prisma.sql`w."created_at" ${dir}`],
+          Prisma.sql`w."id" ${dir}`,
+        ),
+        ", ",
+      );
       const [rows, cuenta] = await Promise.all([
         this.prisma.$queryRaw<MovimientoRow[]>(Prisma.sql`
           SELECT w."id", w."tipo"::text AS "tipo", w."categoria"::text AS "categoria", w."monto",
@@ -276,7 +294,7 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
                  w."created_at" AS "createdAt", w."clave_idempotencia" AS "claveIdempotencia"
           FROM "wallet_movimiento" w
           WHERE ${where}
-          ORDER BY w."fecha_movimiento" DESC, w."created_at" DESC, w."id" DESC
+          ORDER BY ${orden}
           OFFSET ${skip} LIMIT ${filtros.pageSize}`),
         this.prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
           SELECT COUNT(*)::int AS "total" FROM "wallet_movimiento" w WHERE ${where}`),
@@ -287,7 +305,10 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
     const [rows, total] = await Promise.all([
       this.prisma.walletMovimiento.findMany({
         where,
-        orderBy: [{ fechaMovimiento: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        orderBy: ordenTotal<Prisma.WalletMovimientoOrderByWithRelationInput>(
+          [{ fechaMovimiento: sentido }, { createdAt: sentido }],
+          { id: sentido },
+        ),
         skip,
         take: filtros.pageSize,
       }),
@@ -325,6 +346,47 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository {
       tipo: g.tipo,
       total: (g._sum.monto ?? new Prisma.Decimal(0)).toFixed(2),
     }));
+  }
+
+  /**
+   * Ficha 468 (design §3.4, R12/R15) — el saldo de la caja ENTERA tras cada movimiento de la descarga.
+   *
+   * Molde de `EstadoCuentaRepository.paginaDeTienda`: la ventana corre sobre TODO el libro (hasta el
+   * corte), con el MISMO orden total que `listar` en ascendente (fecha, `created_at`, `id`), y la consulta
+   * exterior se queda con los ids pedidos (≤ tope de descarga). La suma la hace el motor: aqui no se suma
+   * ningun importe en JavaScript.
+   *
+   * El signo lo da el TIPO y la cubeta la lista `efectivo` que manda el servicio (derivada de
+   * `LIQUIDEZ_POR_CATEGORIA`, igual que `acumular` de `derivarCaja`): un cargo a tienda no mueve el saldo.
+   * El servicio AFIRMA que el saldo de la ultima fila es el `enCaja` de la tarjeta.
+   */
+  async saldosTrasMovimientos(
+    ids: readonly string[],
+    efectivo: readonly WalletMovimientoCategoria[],
+    hasta?: Date,
+  ): Promise<Map<string, string>> {
+    const saldos = new Map<string, string>();
+    if (ids.length === 0) return saldos;
+    const corte = hasta === undefined ? Prisma.sql`TRUE` : Prisma.sql`w."fecha_movimiento" < ${hasta}`;
+    // Las dos sumas son de `w."monto"` (guardia `caja-173-alcance`): lo que entro de verdad menos lo que
+    // salio de verdad, cada una con su FILTER. Mismo orden total en las dos ventanas.
+    const ventana = Prisma.sql`OVER (
+                 ORDER BY w."fecha_movimiento" ASC, w."created_at" ASC, w."id" ASC
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+               )`;
+    const filas = await this.prisma.$queryRaw<{ id: string; entro: Prisma.Decimal | null; salio: Prisma.Decimal | null }[]>(Prisma.sql`
+      SELECT t."id", t."entro", t."salio"
+      FROM (
+        SELECT w."id",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'ingreso') ${ventana} AS "entro",
+               SUM(w."monto") FILTER (WHERE w."categoria"::text = ANY(${[...efectivo]}::text[]) AND w."tipo" = 'egreso') ${ventana} AS "salio"
+        FROM "wallet_movimiento" w
+        WHERE ${corte}
+      ) t
+      WHERE t."id" = ANY(${[...ids]}::text[])`);
+    // La resta la hace `derivarBalance` (la misma de la tarjeta), no este repositorio.
+    for (const f of filas) saldos.set(f.id, derivarBalance(f.entro ?? new Prisma.Decimal(0), f.salio ?? new Prisma.Decimal(0)).balance);
+    return saldos;
   }
 
   /** Feature 45 (R13): lee un movimiento por id (para la reversa). null si no existe. */

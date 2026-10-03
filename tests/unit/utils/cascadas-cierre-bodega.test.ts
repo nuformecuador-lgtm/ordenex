@@ -129,7 +129,7 @@ describe("feature 393 — cascada A: de quien es el dinero", () => {
     ).toBe(t.total);
   });
 
-  it("7 · el flete por rechazo se factura pero NO sale de lo recaudado: la linea puente explica la diferencia exacta (R6/R10)", () => {
+  it("7 · el flete por devolución a origen se factura pero NO sale de lo recaudado: la linea puente explica la diferencia exacta (R6/R10)", () => {
     // La premisa, leida de la derivacion de PRODUCCION y no supuesta aqui: una `rechazada`
     // emite flete de devolucion y NO emite flete de entrega ni comision.
     const rechazada = derivarIngresoOrden(
@@ -161,7 +161,7 @@ describe("feature 393 — cascada A: de quien es el dinero", () => {
     expect(pagoTiendaOrdenex(general, cobradoSobreRecaudado(t.fleteConIva, t.comisionConIva), "0.00")).toBe(
       paraLaTienda,
     );
-    // (c) Y el hueco entre las dos lecturas es, al centimo, el flete por rechazo + IVA.
+    // (c) Y el hueco entre las dos lecturas es, al centimo, el flete por devolución a origen + IVA.
     expect(pagoTiendaOrdenex(paraLaTienda, restandoElBruto, "0.00")).toBe(t.fleteDevolucionConIva);
   });
 });

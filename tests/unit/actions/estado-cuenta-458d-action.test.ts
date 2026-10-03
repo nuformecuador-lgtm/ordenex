@@ -61,7 +61,8 @@ describe("458-D servidor — el borde de /mi-wallet (R36)", () => {
     const service = servicioEspia();
     await verMiEstadoCuentaAction({ chip: "cobros", cierreId: UUID }, { service, getActor: async () => TIENDA });
     expect(service.leerMiTienda).toHaveBeenCalledWith(
-      { chip: "cobros", cierreId: UUID, page: 1, pageSize: expect.any(Number) },
+      // Ficha 463 (R34): sin orden en la entrada, el borde manda «Mas recientes».
+      { chip: "cobros", cierreId: UUID, page: 1, pageSize: expect.any(Number), sortBy: "fecha", sortDir: "desc" },
       TIENDA,
     );
   });

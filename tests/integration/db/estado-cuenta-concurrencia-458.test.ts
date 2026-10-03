@@ -11,6 +11,8 @@ import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest } from "./_postgres-real";
 import { acreditar459, conCandado459, limpiar459, sembrarPersonas459, type Personas459 } from "./_fixtures/escrituras-459";
+import { CRONOLOGICO } from "./_fixtures/wallet-458";
+import { busquedaPorGuiaDe } from "./_fixtures/busqueda-469";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // FICHA 458-B — revision M2: el estado de cuenta lee la pagina, los totales y el periodo en UNA
@@ -114,8 +116,9 @@ describeSiHayBase("458-B/M2 — un cierre aprobado en medio de la lectura del es
           repoConCierreEnMedio(p, disparos),
           new RechazoTiendaCobroAnulacionRepository(prisma),
           new OrigenLegibleService(new OrigenLegibleRepository(prisma)),
+          busquedaPorGuiaDe(prisma),
         );
-        const input = { cuenta: { tipo: "tienda" as const, id: p.tiendaId }, page: 1, pageSize: 20 };
+        const input = { cuenta: { tipo: "tienda" as const, id: p.tiendaId }, page: 1, pageSize: 20, ...CRONOLOGICO };
 
         const r = await servicio.leer(input, p.maestro);
         // No-vacuidad: la escritura concurrente se hizo DE VERDAD, en medio de la lectura.

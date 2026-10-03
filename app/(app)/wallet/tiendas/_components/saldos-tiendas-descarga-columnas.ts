@@ -17,6 +17,9 @@ import type { SaldoTiendaResumenDTO } from "@/lib/types/wallet-tienda";
 
 import { SALDO_SIGNO_LABEL } from "./saldo-tienda-signo-label";
 
+/** FICHA 464 (R1/R2) — ámbito del selector de columnas de la descarga del listado de tiendas. */
+export const AMBITO_DESCARGA_SALDOS_TIENDAS = "wallet-tiendas-saldos";
+
 /** Columnas del archivo, en el orden de la pantalla: las tres que la tabla pinta. */
 export const COLUMNAS_DESCARGA_SALDOS_TIENDAS: DescargaColumna[] = [
   { clave: "tienda", encabezado: "Tienda" },

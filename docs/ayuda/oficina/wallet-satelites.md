@@ -3,7 +3,7 @@ titulo: Wallet · Satélites
 modulo: wallet
 pantalla: /wallet/satelites, /wallet/satelites/[zonaId]
 roles: [maestro, admin]
-actualizado: 2026-09-26
+actualizado: 2026-10-02
 fuentes:
   - app/(app)/wallet/satelites/page.tsx
   - app/(app)/wallet/satelites/_components/SaldosSatelitesTable.tsx
@@ -12,6 +12,7 @@ fuentes:
   - app/(app)/wallet/satelites/_components/ConciliacionSatelite.tsx
   - components/shared/estado-cuenta/EstadoCuenta.tsx
   - components/shared/estado-cuenta/estado-cuenta-labels.ts
+  - components/shared/wallet/zonas-filtros-labels.ts
   - lib/services/EstadoCuentaService.ts
   - components/shared/conciliacion/ConciliacionAcciones.tsx
   - components/shared/conciliacion/MarcarRecibidoDialog.tsx
@@ -66,8 +67,14 @@ periodo**.
 
 El extracto, del más antiguo al más reciente, tiene dos clases de filas: **Consolidación declarada**
 (lo que la bodega consolidó, en efectivo) y **Recibido en la central** (lo que marcaste que llegó), y
-después de cada una **lo que la bodega tiene por entregar** en ese momento. Se filtra con los chips
-**Todo · Declarado · Recibido** y con **Desde** / **Hasta**, y se puede **descargar** el periodo entero.
+después de cada una **lo que la bodega tiene por entregar** en ese momento. Se filtra con **una sola
+barra encima de la tabla**, en la misma fila que **Descargar**: el orden **Más recientes / Más antiguas**
+(dos botones con flechas), un buscador (descripción y quién registró, al menos 3 caracteres) y el botón **Filtros**,
+con dos casillas: **Periodo** (se elige en el calendario y se aplica solo; es el único que cambia
+también las cifras de arriba) y **Tipo de movimiento** (**Declarado · Recibido**; sin elegir ninguno,
+dice **Todo**). Marcar una casilla pone su control en la barra; desmarcarla quita ese filtro, y
+**Limpiar todo** los quita todos sin tocar el orden. Se puede **descargar** el periodo entero, con los
+filtros puestos.
 
 ## Marcar que llegó
 

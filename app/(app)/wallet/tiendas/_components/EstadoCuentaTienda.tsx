@@ -3,6 +3,7 @@
 import { EstadoCuenta, type PanelDeLaSuperficie } from "@/components/shared/estado-cuenta/EstadoCuenta";
 import { SelectorCierreDeCuenta } from "@/components/shared/estado-cuenta/SelectorCierreDeCuenta";
 import type { RotulosEstadoCuenta } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
+import { AMBITO_DESCARGA_ESTADO_CUENTA_TIENDA } from "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas";
 import { COBRO_RECHAZO_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
@@ -15,6 +16,7 @@ import { fuenteOrdenesDeFila } from "../../_components/ordenes-de-fila-cuenta";
 import { EstadoCuentaAcciones } from "./EstadoCuentaAcciones";
 import { PagosTiendaEstadoCuenta } from "./PagosTiendaEstadoCuenta";
 import { CATEGORIA_TIENDA_LABEL, ORIGEN_TIENDA_LABEL } from "./desglose-tienda-labels";
+import { DETALLE_DESCARGA_WALLET_TIENDA } from "./estado-cuenta-tienda-descarga-columnas";
 
 // FICHA 458-D (T D.2, design §5; R17–R28, R30) — el estado de cuenta de UNA tienda, visto DESDE ORDENEX.
 // Aquí vive lo propio de la superficie: los diccionarios de la 461 (concepto desde Ordenex y origen) y
@@ -59,6 +61,11 @@ export function EstadoCuentaTienda({ inicial, puedeRegistrar }: Readonly<EstadoC
       inicial={inicial}
       rotulos={ROTULOS_TIENDA}
       panel={PANEL_TIENDA}
+      // FICHA 464 (R1/R2/R6) — su selector de columnas y la hoja «Detalle por orden» de esta tienda.
+      descargaDeLaSuperficie={{
+        ambitoColumnas: AMBITO_DESCARGA_ESTADO_CUENTA_TIENDA,
+        detalle: DETALLE_DESCARGA_WALLET_TIENDA,
+      }}
       // R10–R12 — el filtro por cierre de ESTA tienda (la 458-A); el cierre viaja, no se pinta.
       selectorCierre={(valor, onCambiar) => (
         <SelectorCierreDeCuenta cuenta={{ cuenta: "tienda", tiendaId }} valor={valor} onCambiar={onCambiar} />
@@ -66,13 +73,15 @@ export function EstadoCuentaTienda({ inicial, puedeRegistrar }: Readonly<EstadoC
       // R19 (344/345) — las órdenes de ESTA tienda que componen el importe de una fila de cierre.
       detalleDeFila={{
         nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-        render: (f, { concepto, fecha }) =>
+        // FICHA 469 (R25–R28): `resaltar` solo llega con la lectura pintada en modo guía.
+        render: (f, { concepto, fecha, resaltar }) =>
           f.ref !== null && "movimientoId" in f.ref ? (
             <DetalleMovimientoCierre
               movimientoId={f.ref.movimientoId}
               concepto={concepto}
               fecha={fecha}
               fuente={fuenteOrdenesDeFila({ tipo: "tienda", id: tiendaId })}
+              resaltar={resaltar}
             />
           ) : null,
       }}

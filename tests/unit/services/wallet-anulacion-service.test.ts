@@ -215,7 +215,7 @@ describe("458-B — WalletAnulacionService.enrutar: cada destino a SU camino (de
     }
   });
 
-  it("caja: las DOS lineas del cobro por rechazo van al MISMO cobro, buscado por su gestion", async () => {
+  it("caja: las DOS lineas del cobro por devolución a origen van al MISMO cobro, buscado por su gestion", async () => {
     for (const categoria of ["ingreso_flete_devolucion", "ingreso_iva_flete_devolucion"]) {
       const r = router({ caja: fila({ tipo: "ingreso", categoria, origenTipo: "gestion_orden", origenId: "ges-1" }), cobroDeGestion: "cob-1" });
       expect(await r.servicio.enrutar(CAJA(), ADMIN)).toEqual({ status: "ruta", camino: "rechazo_tienda_cobro", id: "cob-1" });

@@ -72,7 +72,7 @@ describe("R51 · las tres metricas de ingreso de Ordenex no ven el dinero de ter
   it("y siguen declarando exactamente las categorias con las que la 127 las publico", () => {
     // La otra mitad: "no gano ninguna de terceros" es compatible con "perdio una propia".
     // FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` ganan, AL FINAL, el reverso que
-    // emite la anulacion de un cobro por rechazo (propio, no terceros: el caso de arriba sigue).
+    // emite la anulacion de un cobro por devolución a origen (propio, no terceros: el caso de arriba sigue).
     expect(getMetrica("ingreso_flete")?.definicion.categorias).toEqual([
       "ingreso_flete",
       "ingreso_flete_devolucion",
@@ -468,7 +468,7 @@ describe("las listas de las dos metricas nuevas se comprueban contra el Record",
     const declaradas = [...(getMetrica("ganancia_ordenex")?.definicion.categorias ?? [])].sort();
 
     expect(declaradas).toEqual(propiasDelRecord);
-    expect(declaradas).toHaveLength(18); // ficha 461 (R29): 14 + el cobro a una tienda y su reverso; ficha 458-B: + los dos reversos del cobro por rechazo
+    expect(declaradas).toHaveLength(18); // ficha 461 (R29): 14 + el cobro a una tienda y su reverso; ficha 458-B: + los dos reversos del cobro por devolución a origen
     expect(declaradas).toContain("egreso_reverso_flete_devolucion"); // ficha 458-B
     expect(declaradas).toContain("egreso_reverso_iva_flete_devolucion"); // ficha 458-B
     expect(declaradas).toContain("ingreso_cobro_tienda");

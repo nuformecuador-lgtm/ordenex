@@ -10,6 +10,8 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { ROLES_MI_WALLET } from "@/lib/auth/menu-visibility";
 import type { EstadoCuentaDTO, FilaEstadoCuentaDTO } from "@/lib/types/estado-cuenta";
 import { FORMA_UUID, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import userEvent from "@testing-library/user-event";
+import { casillasOfrecidas, opcionesDelControl, ponerCasillas } from "@/tests/fixtures/barra-libro-wallet";
 import { lineaDeFila } from "@/components/shared/estado-cuenta/estado-cuenta-lineas";
 import { ROTULOS_MI_WALLET } from "@/app/(app)/mi-wallet/_components/MiEstadoCuenta";
 
@@ -234,25 +236,33 @@ describe("MiWalletPage — pre-fetch del adminTienda (R18/R21, 458-D R34/R36)", 
   });
 });
 
-describe("458-D R34 — el estado de cuenta de la tienda: saldo inicial arriba y saldo corrido", () => {
-  it("la primera fila es el saldo inicial y el corrido de la ÚLTIMA fila es el saldo de la tarjeta", async () => {
-    sembrar(estadoTienda([COD, FLETE, PAGO]));
+// FICHA 463 (R34/R39) — REESCRITO: `/mi-wallet` llega en «Más recientes» (el servidor devuelve la fila
+// más nueva primero) y el saldo inicial cierra la última página, donde cae en el tiempo.
+describe("458-D R34 + 463 R39 — el estado de cuenta de la tienda: saldo inicial al final y saldo corrido", () => {
+  it("la ÚLTIMA fila es el saldo inicial y el corrido de la PRIMERA (la más reciente) es el saldo de la tarjeta", async () => {
+    // El saldo de la tarjeta es el corrido de la fila MÁS RECIENTE, que en «Más recientes» es la primera.
+    sembrar(estadoTienda([PAGO, FLETE, COD], { saldoActual: PAGO.saldoCorrido, saldoFinal: PAGO.saldoCorrido, signo: "positivo", sentido: "ordenex_debe" }));
     await verMiWallet();
 
     const filas = within(tabla()).getAllByRole("row").slice(1);
-    expect(filas[0]).toHaveTextContent("Saldo inicial");
-    const ultima = filas[filas.length - 1];
-    expect(ultima).toHaveTextContent("₡28.800");
+    expect(filas[filas.length - 1]).toHaveTextContent("Saldo inicial");
+    expect(filas[0]).toHaveTextContent("₡28.800");
     expect(within(tarjetas()).getAllByText("₡28.800").length).toBeGreaterThan(0);
   });
 
   it("los chips de la tienda y el periodo; ningún nombre de la gente de Ordenex («Registró»)", async () => {
     sembrar(estadoTienda([COD, FLETE, PAGO]));
     await verMiWallet();
-    for (const chip of ["Todo", "Cierres", "Pagos", "Cobros", "Correcciones"]) {
-      expect(within(screen.getByRole("group", { name: "Filtrar el estado de cuenta de Tania Tienda" })).getByRole("button", { name: chip })).toBeInTheDocument();
-    }
-    expect(screen.getByLabelText("Desde")).toHaveAttribute("type", "date");
+    // FICHA 467: los chips son las opciones de la casilla «Tipo de movimiento» (sin «Todo»: sin elección
+    // ya son todos), y el periodo y el cierre son casillas de la misma barra.
+    const user = userEvent.setup();
+    expect((await casillasOfrecidas(user, document.body)).etiquetas).toEqual(["Periodo", "Tipo de movimiento", "Cierre"]);
+    expect(await opcionesDelControl(user, document.body, "Tipo de movimiento")).toEqual([
+      "Cierres",
+      "Pagos",
+      "Cobros",
+      "Correcciones",
+    ]);
     expect(tabla().textContent ?? "").not.toContain("Registró");
   });
 
@@ -416,6 +426,8 @@ describe("MiWalletPage — la presentación (335 R12–R15 → 458-D)", () => {
 
   it("R14: el selector de cierre va por encima de la tabla", async () => {
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     const selector = screen.getByRole("combobox", { name: "Filtrar por cierre" });
     expect(selector.compareDocumentPosition(tabla()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -436,6 +448,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "forbidden" });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     laPantallaSigueEntera();
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("No pudimos cargar tus cierres. Probá recargando la página.")).toBeInTheDocument();
@@ -445,6 +459,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "unauthenticated" });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     laPantallaSigueEntera();
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
   });
@@ -453,6 +469,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ status: "ok", cierres: [], hayMas: false });
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).toBeDisabled();
     expect(screen.getByText("Todavía no hay cierres en tu wallet.")).toBeInTheDocument();
     expect(screen.queryByText("No pudimos cargar tus cierres. Probá recargando la página.")).not.toBeInTheDocument();
@@ -461,6 +479,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
   it("R28/R30: con cierres y sin tope alcanzado, no hay aviso ninguno (contraprueba)", async () => {
     sembrar(estadoTienda([COD, FLETE]));
     await verMiWallet();
+    // FICHA 467: el selector de cierre es la casilla «Cierre» de la barra única.
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     expect(screen.getByRole("combobox", { name: "Filtrar por cierre" })).not.toBeDisabled();
     expect(screen.queryByText("Todavía no hay cierres en tu wallet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Mostramos los cierres más recientes.")).not.toBeInTheDocument();
@@ -470,6 +490,8 @@ describe("MiWalletPage — el selector de cierre degrada sin esconder el dinero 
     sembrar(estadoTienda([COD, FLETE]));
     cierresMock.mockResolvedValue({ ...CIERRES_OK, hayMas: true });
     await verMiWallet();
+    // FICHA 467: el aviso acompaña al selector, que vive en la casilla «Cierre».
+    await ponerCasillas(userEvent.setup(), document.body, "Cierre");
     const aviso = screen.getByText("Mostramos los cierres más recientes.");
     expect(aviso.getAttribute("role")).toBeNull();
   });
@@ -580,12 +602,13 @@ describe("⭑ FICHA 459 — el pago por cuenta en /mi-wallet (R44)", () => {
 
 describe("⭑ FICHA 459 — la descarga de la tienda (R44/R100)", () => {
   it("/mi-wallet: concepto y origen legibles desde la tienda, sin ids", async () => {
-    const { lineaDeFila } = await import("@/components/shared/estado-cuenta/estado-cuenta-lineas");
     const { ROTULOS_MI_WALLET } = await import("@/app/(app)/mi-wallet/_components/MiEstadoCuenta");
-    const { COLUMNAS_DESCARGA_MI_ESTADO_CUENTA, filaDescargaEstadoCuenta } = await import(
+    const { COLUMNAS_DESCARGA_MI_ESTADO_CUENTA } = await import(
       "@/components/shared/estado-cuenta/estado-cuenta-descarga-columnas"
     );
-    const f = filaDescargaEstadoCuenta(lineaDeFila(PAGO_POR_CUENTA, ROTULOS_MI_WALLET));
+    // Ficha 468: la fila de la hoja «Movimientos» (kardex) que coloca la descarga real.
+    const { filaDeLibroCuenta } = await import("@/tests/fixtures/libro-kardex");
+    const f = filaDeLibroCuenta(PAGO_POR_CUENTA, ROTULOS_MI_WALLET);
     const valores = Object.values(f).join(" | ");
     expect(valores).toContain("Ordenex pagó un gasto por ti");
     expect(valores).toContain("Pago de un gasto de una tienda · A Facebook");

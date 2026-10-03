@@ -170,7 +170,7 @@ const CABECERA: CierreFacturaCabecera = {
 };
 
 const BOTON_CORREGIR = "Corregir el resultado de la orden REM-001 · Ana Pérez";
-const BOTON_CONFIRMAR = "Marcar como rechazada";
+const BOTON_CONFIRMAR = "Marcar como Devolución a origen por rechazo";
 
 /** Despliega el renglón de la orden en el comprobante, que es donde vive el acceso. */
 async function abrirRenglon(
@@ -547,6 +547,29 @@ describe("el diálogo de la corrección", () => {
     // El borde es `.strict()`: colar el destino sería un `validation_error`, no una corrección.
     expect(Object.keys(enviado).sort()).toEqual(["gestionId", "motivo"]);
     await waitFor(() => expect(onCorregido).toHaveBeenCalledTimes(1));
+  });
+
+  // FICHA 466 (E1-E3, R9): el resultado se nombra con su nombre vigente, nunca «rechazo» a secas.
+  // Literales a mano: es el texto que el humano lee (D3).
+  it("466: el aviso, el botón y la confirmación nombran «Devolución a origen por rechazo»", async () => {
+    const user = userEvent.setup();
+    renderDialogo(gestion());
+
+    expect(
+      screen.getByText(
+        /La entrega pasa a ser Devolución a origen por rechazo\. Queda registrado quién la corrigió, cuándo y con qué motivo\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar como Devolución a origen por rechazo" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Motivo de la corrección"), MOTIVO_REAL);
+    await user.click(screen.getByRole("button", { name: BOTON_CONFIRMAR }));
+
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith(
+        "Resultado corregido: la entrega pasó a Devolución a origen por rechazo.",
+      ),
+    );
   });
 
   it("💰 pinta los CUATRO totales que devolvió el servidor, tal cual llegaron", async () => {

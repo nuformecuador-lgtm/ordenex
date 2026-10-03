@@ -128,6 +128,11 @@ export interface FilterComponentProps {
   className?: string;
 }
 
+// FICHA 467 (design §4.4) — el modo «Aplicar» de la 463 (su prop, su borrador, su botón, el aviso de
+// rango invertido y la comparación de selecciones) se RETIRÓ: sus dos consumidores (la tarjeta de filtros de
+// la caja y la sección de periodo del estado de cuenta) pasaron a la barra única, sin «Aplicar». Si
+// vuelve a hacer falta, está en el historial (commit de la 463).
+
 const KINDS_SOPORTADOS = new Set<string>([
   "multi",
   "single",
@@ -523,7 +528,8 @@ export function FilterComponent({
   const [senalSembrada, setSenalSembrada] = useState(siembra?.senal ?? 0);
   if (siembra !== undefined && siembra.senal !== senalSembrada) {
     setSenalSembrada(siembra.senal);
-    setSeleccion(podarSeleccion(montados, siembra.seleccion));
+    const sembrada = podarSeleccion(montados, siembra.seleccion);
+    setSeleccion(sembrada);
     setSiembraCerrada(true);
   }
 
@@ -914,6 +920,7 @@ export function FilterComponent({
           Limpiar todo
         </Button>
       ) : null}
+
     </div>
   );
 }

@@ -578,7 +578,7 @@ describe("393 — el VALOR de los rótulos y las notas, escrito a mano (R19/R23/
     [
       "PARA_LA_CENTRAL_NOTA",
       PARA_LA_CENTRAL_NOTA,
-      "Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por los rechazos.",
+      "Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por las devoluciones a origen.",
     ],
     [
       "PARA_LA_CENTRAL_NEGATIVO_NOTA",
@@ -593,12 +593,12 @@ describe("393 — el VALOR de los rótulos y las notas, escrito a mano (R19/R23/
     [
       "GANA_BODEGA_SATELITE_NOTA",
       GANA_BODEGA_SATELITE_NOTA,
-      "Lo que se le reconoce a la bodega satélite por los rechazos. No es un movimiento de caja registrado.",
+      "Lo que se le reconoce a la bodega satélite por las devoluciones a origen. No es un movimiento de caja registrado.",
     ],
     [
       "FLETE_RECHAZO_NO_DEDUCIBLE_NOTA",
       FLETE_RECHAZO_NO_DEDUCIBLE_NOTA,
-      "Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.",
+      "Se le factura a la tienda, pero no sale de lo recaudado: una devolución a origen no cobra contra entrega.",
     ],
   ])("%s dice exactamente lo aprobado", (_nombre, constante, literal) => {
     // Las notas son la mitad del requisito, no adorno: R26 pide que se diga de qué resta sale
@@ -613,7 +613,7 @@ describe("393 — el VALOR de los rótulos y las notas, escrito a mano (R19/R23/
     // caso de arriba fija el texto de hoy; éste fija la REGLA, así que el siguiente rótulo que
     // se proponga tiene que cumplirla también.
     const prohibidos = [
-      "Ingreso de bodega por rechazos", // el rótulo del cierre de MENSAJERO, que sigue vivo allí
+      "Ingreso de bodega por devoluciones a origen", // el rótulo del cierre de MENSAJERO, que sigue vivo allí
       "Ingreso bodega rechazos",
       "total_ingreso_bodega_rechazos",
       "ingreso_bodega_rechazos",

@@ -264,7 +264,7 @@ export const PRODUCTOS_COLUMNAS = {
   /** Las cifras que bajan al detalle de la fila. */
   unidades: "Unidades",
   otrosResultados: "Otros resultados",
-  rechazo: "% de rechazo",
+  rechazo: "% de devolución a origen",
   /** Solo en la vista de teléfono: la celda que apila las cifras de arriba. */
   cifras: "Resultado",
 } as const;

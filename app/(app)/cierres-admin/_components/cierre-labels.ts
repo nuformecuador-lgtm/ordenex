@@ -170,7 +170,7 @@ export const FULFILLMENT_COL = "Fulfillment";
 // Conceptos AGRUPADOS (cada uno con su IVA incluido): así se leen en tablas y paneles.
 export const FLETE_CON_IVA_LABEL = "Flete + IVA";
 export const COMISION_CON_IVA_LABEL = "Comisión + IVA";
-export const FLETE_DEV_CON_IVA_LABEL = "Flete por rechazo + IVA";
+export const FLETE_DEV_CON_IVA_LABEL = "Flete por devolución a origen + IVA";
 export const INGRESO_TOTAL_COL = "Total Ordenex";
 // --- Feature 158 (R34/R9/R19): columnas propias del grupo `incidente` (texto i18n-ready) ---
 export const CAUSA_INCIDENTE_COL = "Causa";
@@ -245,7 +245,7 @@ export const GANA_BODEGA_SATELITE_LABEL = "Gana la bodega satélite";
 
 /** R26 — de qué resta sale «Para la central», en el idioma de quien la hace. */
 export const PARA_LA_CENTRAL_NOTA =
-  "Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por los rechazos.";
+  "Lo recaudado menos el pago a los mensajeros y menos lo que gana la bodega satélite por las devoluciones a origen.";
 
 /**
  * R36 — qué significa que salga NEGATIVO. Sin esta nota, un «−₡3.400» en una pantalla de dinero
@@ -269,11 +269,11 @@ export const EFECTIVO_NO_CUBRE_NOTA =
  * muestra.
  */
 export const GANA_BODEGA_SATELITE_NOTA =
-  "Lo que se le reconoce a la bodega satélite por los rechazos. No es un movimiento de caja registrado.";
+  "Lo que se le reconoce a la bodega satélite por las devoluciones a origen. No es un movimiento de caja registrado.";
 
 /** R10 — por qué esa línea SUMA a lo facturado pero no se resta de lo recaudado. */
 export const FLETE_RECHAZO_NO_DEDUCIBLE_NOTA =
-  "Se le factura a la tienda, pero no sale de lo recaudado: un rechazo no cobra contra entrega.";
+  "Se le factura a la tienda, pero no sale de lo recaudado: una devolución a origen no cobra contra entrega.";
 
 // ---------------------------------------------------------------------------
 // FICHA 395 (2026-09-08) — LAS TRES CASCADAS DEL CIERRE DE **MENSAJERO**.
@@ -312,11 +312,11 @@ export const GANA_LA_TIENDA_LABEL = "Gana la tienda";
  * se leen juntas: una dice «no es lo que se le paga hoy», la otra «no es lo que gana en total».
  */
 export const GANA_LA_TIENDA_NOTA =
-  "Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por rechazo. No es lo que se le paga hoy.";
+  "Lo recaudado menos todo lo que Ordenex le factura, incluido el flete por devolución a origen. No es lo que se le paga hoy.";
 
 /** FICHA 395 — la otra mitad del par: por qué el pago de hoy no es lo que la tienda gana. */
 export const PAGO_TIENDA_HOY_NOTA =
-  "Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por rechazo se le cobra aparte.";
+  "Es lo que se le paga de este dinero hoy. No es lo que gana en total: el flete por devolución a origen se le cobra aparte.";
 
 /**
  * FICHA 395 — qué significa que la tienda gane un NEGATIVO. Mismo criterio que
@@ -332,7 +332,7 @@ export const COBRADO_SOBRE_RECAUDADO_NOTA =
 
 /** FICHA 395 — de qué resta sale el neto de Ordenex, en el idioma de quien la hace. */
 export const NETO_ORDENEX_NOTA =
-  "Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por rechazos.";
+  "Lo que Ordenex facturó menos el pago al mensajero y menos el ingreso de bodega por devoluciones a origen.";
 
 /** FICHA 395 — qué significa un neto NEGATIVO: no es un fallo, es una pérdida del cierre. */
 export const NETO_ORDENEX_NEGATIVO_NOTA =
@@ -450,7 +450,7 @@ export const TIENDA_GANA_TOTAL_LABEL = "Gana en total";
  * leerlas, y con dos tiendas ya serían cuatro párrafos casi iguales.
  */
 export const DESGLOSE_POR_TIENDA_NOTA =
-  "«Se le paga hoy» y «Gana en total» no son la misma cifra: la diferencia es el flete por rechazo, que a la tienda se le cobra aparte, contra su saldo.";
+  "«Se le paga hoy» y «Gana en total» no son la misma cifra: la diferencia es el flete por devolución a origen, que a la tienda se le cobra aparte, contra su saldo.";
 
 /**
  * FICHA 396 (R17) — lo que el desglose NO reparte, dicho mientras se enseña el desglose.
@@ -462,7 +462,7 @@ export const DESGLOSE_POR_TIENDA_NOTA =
  * partidas por tienda y otras no supondría que el reparto está en alguna parte.
  */
 export const DESGLOSE_NO_REPARTIDO_NOTA =
-  "El pago al mensajero y el ingreso de bodega por rechazos son del cierre completo: no están repartidos entre las tiendas.";
+  "El pago al mensajero y el ingreso de bodega por devoluciones a origen son del cierre completo: no están repartidos entre las tiendas.";
 
 /**
  * FICHA 396 (D2) — EL NOMBRE ACCESIBLE de la cascada de UNA tienda, y tiene que ser ÚNICO.
@@ -519,7 +519,7 @@ export function nombreAccesibleDeTienda(
  * sería un eco literal. Y no depende de ningún `title` para entenderse, que en táctil no existe.
  */
 export const MOTIVO_RECHAZO_AUTOMATICO_COLA =
-  "lo rechazó el sistema al vencerse el plazo de la devolución";
+  "el sistema la pasó a devolución a origen al vencerse el plazo de la novedad";
 
 /**
  * Las TRES cadenas que el cron puede haber guardado, con su etiqueta en castellano.

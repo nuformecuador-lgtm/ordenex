@@ -80,6 +80,9 @@ export const CRITERIO_RECAUDO_ENTREGA: CriterioDeAporte = {
   exigeTarifa: false,
   exigeMontoCobrar: false,
   exigeMontoRecibido: true,
+  // FICHA 468: los dos hechos nuevos del criterio no gobiernan el recaudo de una entrega.
+  exigePagoMensajero: false,
+  exigeIndemnizacion: false,
 };
 
 /**
@@ -219,6 +222,8 @@ export function repartoDeOrden(gestiones: readonly GestionDeDinero[]): RepartoDe
       hayTarifa: g.congelada?.tarifa != null,
       hayMontoCobrar: new Prisma.Decimal(g.congelada?.montoCobrar ?? "0").gt(0),
       hayMontoRecibido: recaudo.gt(0),
+      hayPagoMensajero: false, // FICHA 468: el criterio de arriba no los exige
+      hayIndemnizacion: false,
     });
     if (aportaRecaudo) {
       recaudado = recaudado.plus(recaudo);

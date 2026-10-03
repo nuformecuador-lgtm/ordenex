@@ -19,12 +19,17 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiendaMovimientoRepository";
 import { AjusteCajaService } from "@/lib/services/AjusteCajaService";
 import { DetalleMovimientoService } from "@/lib/services/DetalleMovimientoService";
+import { DetalleEnLoteService } from "@/lib/services/DetalleEnLoteService";
+import { CajaKardexService } from "@/lib/services/LibroKardexService";
+import type { ICajaKardexService } from "@/lib/interfaces/services/ICajaKardexService";
+import type { LibroCajaKardexConDetalleServiceResult, LibroCajaKardexServiceResult } from "@/lib/types/libro-kardex";
 import { WalletService } from "@/lib/services/WalletService";
 import { OrigenLegibleRepository } from "@/lib/repositories/OrigenLegibleRepository";
 import { OrigenLegibleService } from "@/lib/services/OrigenLegibleService";
 import {
   origenEnItems,
   origenEnPagina,
+  type ConOrigenEnItems,
   type ConOrigenEnPagina,
 } from "@/lib/services/origen-en-resultado";
 import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
@@ -45,7 +50,8 @@ import type {
 import type { IAjusteCajaService } from "@/lib/interfaces/services/IAjusteCajaService";
 import {
   anularAjusteCajaSchema,
-  listarMovimientosCompletoSchema,
+  listarLibroCajaCompletoSchema,
+  listarLibroCajaSchema,
   listarMovimientosDeFilaSchema,
   listarMovimientosSchema,
   type AnularAjusteCajaResult,
@@ -57,6 +63,7 @@ import {
 } from "@/lib/types/detalle-movimiento";
 import { registrarMovimientoManualConLateralesSchema, separarComprobante } from "@/lib/types/wallet-laterales";
 import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
+import { buildBusquedaPorGuia } from "@/lib/actions/_shared/busqueda-por-guia";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -140,7 +147,10 @@ function buildService(): IWalletService {
     // Ficha 458-C (revision B3, R71): el pago de Ordenex a una tienda y el premio del ranking.
     pagosATienda: new PagoTiendaCajaDocumentosRepository(prisma),
     premios: new PremioCajaDocumentosRepository(prisma),
-  }, buildComprobantes(prisma)); // Ficha 458-B (R74): el comprobante de la correccion
+  },
+  buildComprobantes(prisma), // Ficha 458-B (R74): el comprobante de la correccion
+  buildBusquedaPorGuia(prisma), // FICHA 469 (design §3.3): guia o texto en el libro y en su descarga
+  );
 }
 
 /**
@@ -171,8 +181,51 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
     new EstadoCuentaRepository(prisma), // 458-D (servidor, R19): la fila del mensajero; este borde no la usa
+    buildBusquedaPorGuia(prisma), // FICHA 469 (R25–R29): la guia buscada, destacada
   );
 }
+
+/**
+ * Ficha 468 — el lote del detalle por guia sobre sus TRES repositorios reales (aportes, libro de la
+ * tienda y libro del mensajero). Lo usa el composition root del kardex (el de la 464 se retiro en el
+ * bloque B, al cablear la descarga a las acciones del kardex).
+ */
+function buildDetalleEnLote(prisma: ReturnType<typeof getPrismaClient>): DetalleEnLoteService {
+  return new DetalleEnLoteService(
+    new CierreAporteRepository(prisma),
+    new WalletTiendaMovimientoRepository(prisma),
+    new EstadoCuentaRepository(prisma),
+  );
+}
+
+/**
+ * Ficha 468 (design §3.4/§4.3) — el composition root del libro de la caja como KARDEX: el servicio del
+ * libro de SIEMPRE (`buildService`, la misma hoja y el mismo guard que la descarga de antes), el
+ * repositorio REAL de la caja para el saldo corrido y las cifras de la tarjeta, y el lote real (conteos y
+ * detalle). Ninguna dependencia es opcional (`tests/unit/actions/libro-kardex-468.action.test.ts`).
+ */
+function buildCajaKardexService(): ICajaKardexService {
+  const prisma = getPrismaClient();
+  return new CajaKardexService(buildService(), new WalletMovimientoRepository(prisma), buildDetalleEnLote(prisma));
+}
+
+/** Ficha 468 — dependencias de la descarga del kardex de la caja, inyectables en test. */
+export interface CajaKardexDeps {
+  service?: ICajaKardexService;
+  getActor?: () => Promise<Actor | null>;
+  origenes?: IOrigenLegibleService;
+}
+
+/** Ficha 468 — el resultado en el BORDE: las filas con su origen legible + `kardex` (y `porGuia`). */
+export type LibroCajaKardexActionResult =
+  | ConOrigenEnItems<LibroCajaKardexServiceResult>
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+export type LibroCajaKardexConDetalleActionResult =
+  | ConOrigenEnItems<LibroCajaKardexConDetalleServiceResult>
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 export interface WalletDeps {
   service?: IWalletService;
@@ -222,7 +275,8 @@ export async function listarMovimientosAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R19: antes de tocar el service
-    const data = listarMovimientosSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // Ficha 463 (R24/R33/R40): el borde DEL LIBRO — el de las cifras + termino y orden.
+    const data = listarLibroCajaSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     const r = await service.listarMovimientos(data, actor);
     return origenEnPagina(deps.origenes ?? buildOrigenes(), "caja", r, actor);
@@ -235,6 +289,8 @@ export async function listarMovimientosAction(
  * Calcado de `listarMovimientosAction`: mismo borde, mismo actor, mismo schema (menos
  * `page`/`pageSize`, y `.strict()`) y el MISMO servicio, que es quien autoriza y aplica el
  * tope. Ninguna rama devuelve filas junto a un error (R16/R17/R18).
+ *
+ * @sin-superficie FICHA 468 (bloque B): la descarga del libro de `/wallet` paso a `libroCajaKardexAction` (kardex); esta accion queda sin pantalla y su retirada (con sus tests) la decide el leader.
  */
 export async function listarMovimientosCompletoAction(
   input: unknown,
@@ -243,9 +299,65 @@ export async function listarMovimientosCompletoAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R16: antes de tocar el service
-    const data = listarMovimientosCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
+    // Ficha 463 (R42): el borde de la descarga del libro, con termino y orden.
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // R18: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     const r = await service.listarMovimientosCompleto(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/*
+ * Ficha 464 — `listarMovimientosCompletoConDetalleAction` («Movimientos y detalle por orden») se RETIRO
+ * en la 468 (bloque B), junto con su orquestador `CajaConDetalleService`: la sustituye
+ * `libroCajaKardexConDetalleAction` (kardex + detalle por guia, de UNA peticion).
+ */
+
+/**
+ * Ficha 468 (design §3–§4, R5–R16, R53, R57, R61) — la descarga «Solo los movimientos · una hoja» del libro
+ * de la caja como KARDEX: la MISMA entrada que `listarMovimientosCompletoAction` (filtros, termino;
+ * `.strict()`), con el orden FORZADO a cronologico ascendente en el servidor (R7) y, junto a las filas, el
+ * `kardex` (saldo inicial y final de la tarjeta, la columna y el saldo de cada fila, totales y el «N
+ * guía(s)» de los conteos, sin leer ninguna orden).
+ *
+ * Superficie (ficha 468, bloque B): la descarga «Solo los movimientos» del libro de `/wallet`
+ * (`WalletModule.tsx`, `descargaLibroCaja`). Su `@sin-superficie` se borro al cablearla.
+ */
+export async function libroCajaKardexAction(
+  input: unknown,
+  deps: CajaKardexDeps = {},
+): Promise<LibroCajaKardexActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildCajaKardexService();
+    const r = await service.kardex(data, actor);
+    return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
+  });
+  return isAppErrorShape(r) ? toWalletActionError(r) : r;
+}
+
+/**
+ * Ficha 468 (R26, R33–R46, R53) — la descarga «Movimientos y detalle por guía · dos hojas» de la caja, en
+ * UNA peticion: el kardex de `libroCajaKardexAction` y el detalle AGRUPADO por guia (`porGuia`), cuyo
+ * TOTAL GENERAL el servidor afirma igual al «Total del periodo». Topes: el de la hoja de movimientos y el
+ * del detalle (`limite_excedido` con `hoja`).
+ *
+ * Superficie (ficha 468, bloque B): la descarga «Movimientos y detalle por guía» del libro de `/wallet`
+ * (`WalletModule.tsx`, `descargaLibroCaja`). Su `@sin-superficie` se borro al cablearla.
+ */
+export async function libroCajaKardexConDetalleAction(
+  input: unknown,
+  deps: CajaKardexDeps = {},
+): Promise<LibroCajaKardexConDetalleActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = listarLibroCajaCompletoSchema.parse(input ?? {});
+    const service = deps.service ?? buildCajaKardexService();
+    const r = await service.kardexConDetalle(data, actor);
     return origenEnItems(deps.origenes ?? buildOrigenes(), "caja", r, actor);
   });
   return isAppErrorShape(r) ? toWalletActionError(r) : r;
@@ -303,7 +415,7 @@ export async function verResumenCajaAction(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError();
-    const data = listarMovimientosSchema.parse(input); // mismos filtros que el listado
+    const data = listarMovimientosSchema.parse(input); // los filtros de la WALLET; `.strict()`: termino u orden => validation_error (463/R14)
     const service = deps.service ?? buildService();
     return service.verResumenCaja(data, actor);
   });

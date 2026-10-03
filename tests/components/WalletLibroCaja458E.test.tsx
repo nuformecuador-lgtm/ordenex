@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
+import { aplicarPeriodo, diaDelMesActual } from "@/tests/fixtures/periodo-calendario";
+import { alternarCasillas, elegirEnBarra, textoDelControl } from "@/tests/fixtures/barra-libro-wallet";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
@@ -32,7 +34,8 @@ const completoMock = vi.fn();
 const resumenMock = vi.fn();
 vi.mock("@/lib/actions/wallet", () => ({
   listarMovimientosAction: (...a: unknown[]) => listarMock(...a),
-  listarMovimientosCompletoAction: (...a: unknown[]) => completoMock(...a),
+  // Ficha 468: la descarga del libro lee el KARDEX.
+  libroCajaKardexAction: (...a: unknown[]) => completoMock(...a),
   verResumenCajaAction: (...a: unknown[]) => resumenMock(...a),
   listarMovimientosDeFilaAction: vi.fn(),
   registrarMovimientoManualAction: vi.fn(),
@@ -84,6 +87,7 @@ import { WalletLedger, type AutoriaDelLibro } from "@/app/(app)/wallet/_componen
 import { WalletModule } from "@/app/(app)/wallet/_components/WalletModule";
 import { CAJA_RESUMEN_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import { COBRO_RECHAZO_TEXTO } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
+import { elegirSoloLosMovimientos } from "@/tests/fixtures/descarga-detalle-por-orden";
 
 // ── Datos ──
 
@@ -456,48 +460,59 @@ describe("458-E T E.2 — filtros Todo / Entra / Sale, concepto y periodo; tarje
     expect(ganancia.textContent).toContain(money("20000.00"));
   });
 
-  it("R54: «Entra» se aplica al pulsarlo y viaja como `tipo` a libro, tarjetas y desglose; las tarjetas cambian", async () => {
+  // FICHA 463 (R9/R12) — REESCRITO: hasta la 463, Entra/Sale viajaba también a las tarjetas y al
+  // desglose. Desde la 463 es un filtro de la ZONA DEL LIBRO: relee solo el libro y las cifras de la
+  // wallet ni se piden ni cambian (pregunta abierta 1, decidida por defecto al aprobar el spec).
+  // FICHA 467 — Entra/Sale es la casilla «Entra/Sale» de la barra única: se entra sin ella (todo) y
+  // quitarla vuelve a los dos sentidos.
+  it("R54 + 463 R9: «Entra» se aplica al elegirlo y viaja como `tipo` SOLO al libro; las tarjetas no cambian", async () => {
     const user = pintarModulo();
     resumenMock.mockResolvedValue({ status: "ok", resumen: RESUMEN_ENTRA, composicion: COMPOSICION });
+    const libro = screen.getByRole("region", { name: "Libro de movimientos" });
 
-    const grupo = screen.getByRole("group", { name: "Filtrar por dirección del dinero" });
-    expect(within(grupo).getByRole("button", { name: "Todo" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(grupo).getByRole("button", { name: "Entra" }));
+    expect(textoDelControl(libro, "Entra/Sale")).toBeNull();
+    await elegirEnBarra(user, libro, "Entra/Sale", "Entra");
 
     const esperado = { tipo: "ingreso", page: 1, pageSize: 20 };
     await waitFor(() => expect(listarMock).toHaveBeenCalledWith(esperado));
-    expect(resumenMock).toHaveBeenCalledWith(esperado);
-    expect(desgloseMock).toHaveBeenCalledWith(esperado);
-    expect(within(grupo).getByRole("button", { name: "Entra" })).toHaveAttribute("aria-pressed", "true");
-    // La tarjeta de la ganancia refleja el conjunto filtrado (el resumen NUEVO del servidor).
-    await waitFor(() =>
-      expect(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }).textContent).toContain(money("5000.00")),
-    );
+    expect(resumenMock).not.toHaveBeenCalled();
+    expect(desgloseMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(textoDelControl(libro, "Entra/Sale")).toBe("Entra/Sale: Entra"));
+    // La tarjeta de la ganancia sigue con el resumen de la wallet (el de la entrada), no el «de Entra».
+    expect(screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.ganancia }).textContent).toContain(money("20000.00"));
     // R13 con la dirección: los conceptos del filtro se piden para lo que ENTRA.
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", tipo: "ingreso" }));
 
-    await user.click(within(grupo).getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, libro, "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ tipo: "egreso", page: 1, pageSize: 20 }));
 
-    await user.click(within(grupo).getByRole("button", { name: "Todo" }));
+    await alternarCasillas(user, libro, "Entra/Sale");
     await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 }));
   });
 
-  it("R54: el periodo se suma a la dirección elegida y la descarga lleva los mismos filtros", async () => {
+  // FICHA 463 (R8/R12/R42) — REESCRITO: el periodo mueve toda la wallet (467: casilla «Periodo» de la
+  // barra única, sin «Aplicar»). Se suma a la dirección en el LIBRO y en la descarga; las cifras lo
+  // reciben sin el tipo.
+  it("R54 + 463 R8/R12/R42: el periodo se suma a la dirección en el libro y la descarga; las cifras, sin tipo", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    const zona = screen.getByRole("region", { name: "Libro de movimientos" });
+    await elegirEnBarra(user, zona, "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(textoDelControl(zona, "Entra/Sale")).toBe("Entra/Sale: Sale"));
 
-    await user.type(screen.getByLabelText("Desde"), "2026-09-01");
-    await user.type(screen.getByLabelText("Hasta"), "2026-09-30");
-    await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    const esperado = { tipo: "egreso", desde: "2026-09-01", hasta: "2026-09-30" };
-    await waitFor(() => expect(listarMock).toHaveBeenLastCalledWith({ ...esperado, page: 1, pageSize: 20 }));
-    expect(resumenMock).toHaveBeenLastCalledWith({ ...esperado, page: 1, pageSize: 20 });
+    await aplicarPeriodo(user, zona, 1, 28);
+    const periodo = { desde: diaDelMesActual(1), hasta: diaDelMesActual(28) };
+    const esperado = { tipo: "egreso", ...periodo };
+    await waitFor(() => expect(listarMock).toHaveBeenCalledWith({ ...esperado, page: 1, pageSize: 20 }));
+    expect(resumenMock).toHaveBeenLastCalledWith({ ...periodo, page: 1, pageSize: 20 });
+    expect(desgloseMock).toHaveBeenLastCalledWith({ ...periodo, page: 1, pageSize: 20 });
     await waitFor(() => expect(conceptosMock).toHaveBeenCalledWith({ libro: "caja", ...esperado }));
 
+    // Ficha 464 (R8/R9): el selector arranca con el detalle; esta prueba mide la descarga de SIEMPRE.
+    await elegirSoloLosMovimientos(user);
     await user.click(screen.getByRole("button", { name: "Descargar Libro de movimientos" }));
-    await waitFor(() => expect(completoMock).toHaveBeenCalledWith(esperado));
+    // Ficha 468 (R7): el archivo va siempre en orden cronológico ascendente.
+    await waitFor(() => expect(completoMock).toHaveBeenCalledWith({ ...esperado, sortBy: "fecha", sortDir: "asc" }));
   });
 
   it("ya no hay `Select` de tipo: la dirección es el filtro segmentado", () => {
@@ -523,7 +538,7 @@ describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", (
 
   it("R60: anular desde el panel relee libro, tarjetas + composición y desglose con los filtros VIGENTES", async () => {
     const user = pintarModulo();
-    await user.click(screen.getByRole("button", { name: "Sale" }));
+    await elegirEnBarra(user, screen.getByRole("region", { name: "Libro de movimientos" }), "Entra/Sale", "Sale");
     await waitFor(() => expect(listarMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(within(tabla()).queryByRole("status")).not.toBeInTheDocument());
     vi.clearAllMocks();
@@ -546,15 +561,16 @@ describe("458-E T E.3 — «Ver», anular y el refresco del libro (R58, R60)", (
       destino: { libro: "caja", movimientoId: SUELDO.id },
       motivo: "Registrado dos veces",
     }));
+    // FICHA 463/467: el libro con TODOS los filtros vigentes; las cifras, solo con los de la wallet.
     const vigentes = { tipo: "egreso", page: 1, pageSize: 20 };
     await waitFor(() => expect(listarMock).toHaveBeenCalledWith(vigentes));
-    expect(resumenMock).toHaveBeenCalledWith(vigentes); // tarjetas + composición (misma respuesta)
-    expect(desgloseMock).toHaveBeenCalledWith(vigentes);
+    expect(resumenMock).toHaveBeenCalledWith({ page: 1, pageSize: 20 }); // tarjetas + composición (misma respuesta)
+    expect(desgloseMock).toHaveBeenCalledWith({ page: 1, pageSize: 20 });
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
-describe("458-E T E.4 — el cobro por rechazo anulado (R61, R73)", () => {
+describe("458-E T E.4 — el cobro por devolución a origen anulado (R61, R73)", () => {
   const GESTION_ANULADA = uuid();
   const FLETE_ANULADO = fila({
     tipo: "ingreso",
@@ -584,7 +600,7 @@ describe("458-E T E.4 — el cobro por rechazo anulado (R61, R73)", () => {
     const user = pintarModulo(filas, { items: [PENDIENTE], total: 1 });
 
     // La cola (sin cambios de comportamiento): una fila, la del pendiente, con sus dos decisiones.
-    const cola = screen.getByRole("region", { name: /cobros por rechazo/i });
+    const cola = screen.getByRole("region", { name: /cobros por devolución a origen/i });
     const filasCola = within(cola).getAllByRole("row").slice(1);
     expect(filasCola).toHaveLength(1);
     expect(filasCola[0].textContent).toContain("Tienda Luna");

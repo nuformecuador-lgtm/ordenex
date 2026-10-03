@@ -18,6 +18,8 @@
  * - Lo que Ordenex COBRA a la tienda por repartir (`tarifas`) → los campos de `TarifaCampos`.
  */
 
+import { nombreDeResultado } from "@/lib/types/gestion-resultado";
+
 /**
  * Rótulos de los campos de `tarifas` — lo que se le COBRA a la tienda. Las claves son las de
  * la tabla; el rótulo es lo único que cambia aquí.
@@ -37,11 +39,14 @@ export const TARIFA_CAMPO_LABEL = {
    * «Flete por rechazo». «Flete de retorno (solo rechazos)» fue el primer intento (ficha 303):
    * decía la verdad, pero con una aclaración entre paréntesis que el nombre nuevo ya no
    * necesita, y no coincidía con lo que la misma cifra se llamaba en el cierre y en la wallet.
+   *
+   * FICHA 466 (2026-10-01): el pedido posterior del humano la sustituye por «Flete por devolución
+   * a origen», alineada con el nombre vigente del estado (sigue siendo la MISMA cifra en toda la app).
    */
-  valorFleteDevuelto: "Flete por rechazo",
+  valorFleteDevuelto: "Flete por devolución a origen",
   valorFleteGam: "Valor flete GAM",
   /** El equivalente GAM del anterior; conserva la marca de zona porque es OTRA columna. */
-  valorFleteDevueltoGam: "Flete por rechazo GAM",
+  valorFleteDevueltoGam: "Flete por devolución a origen GAM",
   /** NO se toca: «Fulfillment» es como lo conocen ellos (decisión del negocio). */
   fulfillment: "Fulfillment",
   /** Antes «Comisión COD (%)». La sigla no la lee nadie fuera del equipo técnico. */
@@ -83,11 +88,11 @@ export const PAGO_ZONA_TEXTO = {
   /** La explicación de la sección: los dos dineros y su destinatario, en una línea. */
   seccionAyuda:
     "Lo que Ordenex paga por cada gestión en esta zona: la entrega se le paga al mensajero; " +
-    "el rechazo del cliente es ingreso de la bodega responsable de él.",
+    "una Devolución a origen por rechazo es ingreso de la bodega responsable del mensajero.",
   entregado: "Entregado",
   /** Quién cobra ESTE monto (feature 39). */
   entregadoDestino: "Se le paga al mensajero.",
-  rechazado: "Rechazado por el cliente",
+  rechazado: nombreDeResultado("devolucion_a_origen_por_rechazo"),
   /** Quién cobra ESTE otro (feature 56). Lo dice en negativo a propósito: es el que se confundía. */
   rechazadoDestino: "Es ingreso de la bodega, no del mensajero.",
 } as const;

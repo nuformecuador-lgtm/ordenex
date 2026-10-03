@@ -168,13 +168,13 @@ describe("R37/R39/R40 — el texto dice los dias, y el plazo SOLO cuando puede",
 
   it("(a) lote homogeneo de cinco dias — literal escrito a mano", async () => {
     expect(await detalle(3, "cinco_dias")).toBe(
-      "La más antigua lleva 3 días en bodega. A los 5 días se rechaza automáticamente.",
+      "La más antigua lleva 3 días en bodega. A los 5 días pasa a Devolución a origen por rechazo automáticamente.",
     );
   });
 
   it("(b) lote homogeneo de 24 horas — literal escrito a mano", async () => {
     expect(await detalle(2, "veinticuatro_horas")).toBe(
-      "La más antigua lleva 2 días en bodega. A las 24 horas de entrar, el sistema la reintenta o la rechaza sin esperar tu decisión.",
+      "La más antigua lleva 2 días en bodega. A las 24 horas de entrar, el sistema la reintenta o la pasa a Devolución a origen por rechazo sin esperar tu decisión.",
     );
   });
 

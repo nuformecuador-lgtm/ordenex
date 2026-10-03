@@ -46,7 +46,7 @@ function resumenRow(overrides: Partial<CierreAdminResumenRow> = {}): CierreAdmin
     destinoZonaNombre: "Central",
     totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
     totalPagoMensajero: "5.00", // feature 39/R17: snapshot del pago al mensajero
-    totalIngresoBodegaRechazos: "0.00", // feature 56/R16: snapshot del ingreso de bodega por rechazos
+    totalIngresoBodegaRechazos: "0.00", // feature 56/R16: snapshot del ingreso de bodega por devoluciones a origen
     solicitadoAt: "2026-07-12T10:00:00.000Z",
     resueltoAt: null,
     motivoRechazo: null,
@@ -568,7 +568,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
 
-    // Lo FACTURADO incluye el flete por rechazo; lo DEDUCIBLE de lo recaudado, no.
+    // Lo FACTURADO incluye el flete por devolución a origen; lo DEDUCIBLE de lo recaudado, no.
     expect(r.totalesIngreso.total).toBe("4973.15"); // 3616.64 + 1356.51
     expect(r.cobradoSobreRecaudado).toBe("3616.64"); // 2825.62 + 791.02
     expect(r.cobradoSobreRecaudado).not.toBe(r.totalesIngreso.total);
@@ -612,7 +612,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
     expect(typeof r.netoOrdenex).toBe("string"); // money-safe
   });
 
-  it("SIN rechazos: la linea puente se emite IGUAL, no desaparece cuando el flete por rechazo es 0.00", async () => {
+  it("SIN rechazos: la linea puente se emite IGUAL, no desaparece cuando el flete por devolución a origen es 0.00", async () => {
     const { service } = newService({
       repo: repoCon(
         {
@@ -676,7 +676,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
   // los operarios». Lo que intentaba calcular a mano cada vez era este numero, que no existia
   // en ninguna pantalla.
 
-  it("CON un rechazo: lo que la tienda GANA no es lo que se le PAGA, y difieren en el flete por rechazo", async () => {
+  it("CON un rechazo: lo que la tienda GANA no es lo que se le PAGA, y difieren en el flete por devolución a origen", async () => {
     const { service } = newService({
       repo: repoCon(
         {
@@ -701,7 +701,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
 
     expect(r.ganaLaTienda).toBe("15027.40"); // 20000.55 − 4973.15
     // Los dos numeros conviven en la misma pantalla y NO son el mismo: se le pagan 16383.91
-    // hoy, pero gana 15027.40, porque el flete por rechazo se le cobra aparte.
+    // hoy, pero gana 15027.40, porque el flete por devolución a origen se le cobra aparte.
     expect(r.pagoTienda).toBe("16383.91");
     expect(r.ganaLaTienda).not.toBe(r.pagoTienda);
     expect(
@@ -738,7 +738,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
     const r = await service.verCierreDetalle("c1", MAESTRO);
     if (r.status !== "ok") throw new Error("esperaba ok");
 
-    // Sin flete por rechazo no hay nada que cobrar aparte, asi que las dos preguntas tienen la
+    // Sin flete por devolución a origen no hay nada que cobrar aparte, asi que las dos preguntas tienen la
     // misma respuesta. Si divergieran AQUI, una de las dos estaria restando de mas.
     expect(r.ganaLaTienda).toBe("16383.91"); // 20000.55 − 3616.64
     expect(r.ganaLaTienda).toBe(r.pagoTienda);
@@ -770,7 +770,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
   // cierre que aun no se aprueba, «se le cargo a su wallet» es FALSO. El cierre que el humano
   // miro estaba VENCIDO.
 
-  it("aprobado y CON flete por rechazo: el cargo YA ocurrio", async () => {
+  it("aprobado y CON flete por devolución a origen: el cargo YA ocurrio", async () => {
     const { service } = newService({
       repo: repoCon({ estado: "aprobado" }, [
         { gestionId: "b", resultado: "devolucion_a_origen_por_rechazo", ingresoOrdenex: RECHAZADA },
@@ -782,7 +782,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
   });
 
   it.each(["solicitado", "vencido", "rechazado"] as const)(
-    "%s y CON flete por rechazo: el cargo NO ha ocurrido todavia",
+    "%s y CON flete por devolución a origen: el cargo NO ha ocurrido todavia",
     async (estado) => {
       const { service } = newService({
         repo: repoCon({ estado }, [
@@ -805,7 +805,7 @@ describe("395 — el detalle del cierre de MENSAJERO emite la linea puente y el 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.totalesIngreso.fleteDevolucionConIva).toBe("0.00");
     // `estado === "aprobado"` a secas daria `true` y la pantalla escribiria «se le cargo el
-    // flete por rechazo» sobre un cierre donde no hubo ninguno.
+    // flete por devolución a origen» sobre un cierre donde no hubo ninguno.
     expect(r.fleteRechazoYaCobradoATienda).toBe(false);
   });
 });
@@ -962,7 +962,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
   });
 });
 
-// --- feature 102: desglose SLA/manual del ingreso de bodega por rechazos (R5/R6/R7/R8/R10/R16) ---
+// --- feature 102: desglose SLA/manual del ingreso de bodega por devoluciones a origen (R5/R6/R7/R8/R10/R16) ---
 
 describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 102)", () => {
   // Cierre con un rechazo SLA (cron 99) y un rechazo manual (mensajero), con el snapshot del
@@ -2217,7 +2217,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
 
   /**
    * UN cierre de UN mensajero con órdenes de DOS tiendas, y a propósito **una con rechazo y la
-   * otra sin él**: si las dos tuvieran flete por rechazo cero, la identidad que ata `pagoTienda`
+   * otra sin él**: si las dos tuvieran flete por devolución a origen cero, la identidad que ata `pagoTienda`
    * con `ganaLaTienda` por tienda daría `0.00 === 0.00` en las dos y no comprobaría nada.
    *
    * Los totales del `resumen` son los del snapshot del cierre y **cuadran con las gestiones**,
@@ -2351,7 +2351,7 @@ describe("396 — `verCierreDetalle` emite el desglose por tienda", () => {
     expect(r.cierre.totales.general).toBe("140000.00"); // R12
   });
 
-  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por rechazo", async () => {
+  it("la CUARTA identidad, por tienda: lo que se le paga − lo que gana = SU flete por devolución a origen", async () => {
     // Es la que hace imposible derivar una de las dos con el subconjunto equivocado sin que se
     // note. Norte tuvo un rechazo (1.695,00) y Sur no (0,00): si las dos dieran cero, este test
     // pasaría sin comprobar nada.

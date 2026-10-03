@@ -298,7 +298,7 @@ export const DOCUMENTO_CAJA_NOMBRE: Record<
   // Ficha 458-B (design §3.6): los egresos sin documento, la indemnización y el cobro por rechazo.
   egreso_caja: "el gasto de la caja",
   indemnizacion: "la indemnización por un incidente",
-  rechazo_tienda_cobro: "el cobro por rechazo a una tienda",
+  rechazo_tienda_cobro: "el cobro por devolución a origen a una tienda",
   // Ficha 458-C (revision B3): el pago de Ordenex a una tienda (172) y el premio del ranking (293).
   pago_tienda: "el pago de Ordenex a una tienda",
   premio_del_ranking: "el premio del ranking",
@@ -358,13 +358,21 @@ export const VER_COMPROBANTE_RESPUESTA = {
   fallo: "No se pudo abrir el comprobante ahora. Probá de nuevo.",
 } as const;
 
+/**
+ * FICHA 463 (R49, tercera vuelta B3) — una lectura de la caja que NO responde (red caída, error del
+ * servidor, tiempo agotado). Los fallos que sí responden conservan su aviso propio (permiso, sesión,
+ * filtros). En los dos casos la pantalla se queda con la última lectura buena.
+ */
+export const LECTURA_CAJA_FALLO =
+  "No se pudo cargar la caja. Se sigue mostrando lo último que se cargó, con sus filtros.";
+
 // FICHA 458-E (TE.2): el `Select` de tipo (`TIPO_OPTIONS`) sale; lo sustituye el filtro Todo / Entra / Sale
 // (`FILTRO_DIRECCION` en `libro-caja-labels.ts`).
 
 /**
  * La opción «todas» del `Select` de categoría del libro. El resto de opciones ya NO sale del
  * catálogo completo (458-A, R13/R14): son los conceptos con movimientos del periodo, que lee
- * `WalletFiltros` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
+ * `LibroCajaBarra` del servidor y rotula con `CATEGORIA_LABEL` (`opcionesDeConceptos`).
  */
 export const CATEGORIA_TODAS_OPTION = { value: "", label: "Todas las categorías" } as const;
 

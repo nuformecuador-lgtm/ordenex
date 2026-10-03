@@ -19,6 +19,8 @@ import type {
   VerEstadoCuentaServiceResult,
 } from "@/lib/interfaces/services/IEstadoCuentaService";
 import type { IOrigenLegibleService } from "@/lib/interfaces/services/IOrigenLegibleService";
+import type { IBusquedaPorGuiaService } from "@/lib/interfaces/services/IBusquedaPorGuiaService";
+import type { ModoBusquedaLibro, ParDeGuia, SuperficieConGuia } from "@/lib/types/busqueda-por-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   AnulacionDeFilaDTO,
@@ -32,6 +34,7 @@ import type {
   TipoDeCuenta,
 } from "@/lib/types/estado-cuenta";
 import type { WalletOrigenTipo } from "@/lib/types/wallet";
+import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
 import type { LibroWallet } from "@/lib/types/wallet-origen";
 import type { PagoMensajeroMovimientoCategoria } from "@/lib/types/wallet-mensajero";
 import type { DesgloseTiendaDTO, WalletTiendaMovimientoCategoria } from "@/lib/types/wallet-tienda";
@@ -44,6 +47,7 @@ import {
   paresDeChipMensajero,
   paresDeChipTienda,
   saldoAlFinal,
+  sentidoDelSaldo,
   totalesNetos,
 } from "@/lib/utils/estado-cuenta";
 import {
@@ -124,7 +128,29 @@ export class EstadoCuentaService implements IEstadoCuentaService {
     private readonly rechazos: Pick<IRechazoTiendaCobroAnulacionRepository, "estadoPorGestion">,
     // FICHA 458-D (servidor, R6–R8) — el origen con entidad y enlace de cada fila, EN LOTE (458-A).
     private readonly origenes: Pick<IOrigenLegibleService, "resolver">,
+    /**
+     * FICHA 469 (design §3.3) — guia o texto. SIN valor por defecto: un root que no la pasara no compila
+     * (memoria «el composition root que no inyecta»).
+     */
+    private readonly busqueda: Pick<IBusquedaPorGuiaService, "resolver">,
   ) {}
+
+  /**
+   * FICHA 469 (design §3.2/§3.3, R2/R5/R6/R36) — el termino de la cuenta, resuelto en el servidor. El
+   * alcance sale de la CUENTA ya validada (oficina) o del ACTOR (`/mi-wallet`, que llega aqui con su
+   * propia cuenta): nunca de un campo libre. La bodega satelite busca solo texto (R36): ni se resuelve.
+   */
+  private async resolverBusqueda(
+    tipo: TipoDeCuenta,
+    id: string,
+    q: string | undefined,
+  ): Promise<{ ventana: { termino?: string; porGuia?: readonly ParDeGuia[] }; modo?: ModoBusquedaLibro }> {
+    if (q === undefined) return { ventana: {} };
+    if (tipo === "bodega") return { ventana: { termino: q }, modo: "texto" };
+    const superficie: SuperficieConGuia = tipo === "tienda" ? { tipo: "tienda", tiendaId: id } : { tipo: "mensajero" };
+    const r = await this.busqueda.resolver({ termino: q, superficie });
+    return r.modo === "texto" ? { ventana: { termino: q }, modo: "texto" } : { ventana: { porGuia: r.pares }, modo: "guia" };
+  }
 
   async leer(input: EstadoCuentaInput, actor: Actor): Promise<VerEstadoCuentaServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R81: antes de leer
@@ -192,11 +218,20 @@ export class EstadoCuentaService implements IEstadoCuentaService {
 
     const desdeUtc = input.desde === undefined ? undefined : inicioDelDiaCREnUtc(input.desde); // R16
     const hastaUtc = input.hasta === undefined ? undefined : inicioDelDiaSiguienteCREnUtc(input.hasta);
+    // FICHA 469 (R33): guia o texto, en el servidor y FUERA de la lectura consistente (design §3.3): el
+    // saldo corrido no depende del filtro, asi que un cierre aprobado entre medias no descuadra nada.
+    const busqueda = await this.resolverBusqueda(tipo, id, input.q);
     const ventana = {
       desdeUtc,
       hastaUtc,
       pares,
       cierreId: input.cierreId,
+      // FICHA 463 (design §4, R11/R24/R27/R37): el termino y el orden solo tocan las FILAS del libro.
+      // Las tarjetas (inicial, abonos, cargos, final) y R22 no los miran: salen del periodo entero.
+      // FICHA 469 (R16–R19): la busqueda por guia tampoco; es `termino` O `porGuia`, nunca los dos.
+      ...busqueda.ventana,
+      sortDir: input.sortDir,
+      conNombreRegistrador: vista === "oficina",
       skip: (input.page - 1) * input.pageSize,
       take: input.pageSize,
       // 172 R55 (cierre de la 458-D) — el resumen de tres cifras solo lo lee la propia tienda.
@@ -221,7 +256,7 @@ export class EstadoCuentaService implements IEstadoCuentaService {
       lectura.saldoInicial,
       lectura.abonos,
       lectura.cargos,
-      tipo === "bodega" ? "por_entregar" : "a_favor_del_titular",
+      sentidoDelSaldo(tipo), // ficha 468: el mismo sentido que la columna de cada fila del kardex
     );
     if (hastaUtc === undefined && saldoFinal !== lectura.saldoActual) {
       throw new Error(
@@ -273,6 +308,8 @@ export class EstadoCuentaService implements IEstadoCuentaService {
         total: lectura.total,
         page: input.page,
         pageSize: input.pageSize,
+        // FICHA 469 (R21/R23): como se resolvio el termino; ausente sin termino.
+        ...(busqueda.modo !== undefined ? { modoBusqueda: busqueda.modo } : {}),
       },
     };
   }
@@ -527,6 +564,14 @@ type Ventana = {
    * `VentanaDeLibro.cierreId`. Declarado aqui para que el compilador proteja la propagacion.
    */
   cierreId?: string;
+  /** FICHA 463 (R24) — el termino del buscador; llega tal cual a `VentanaDeLibro.termino`. */
+  termino?: string;
+  /** FICHA 469 (R8–R10) — la lista cerrada de la busqueda por guia; excluyente con `termino`. */
+  porGuia?: readonly ParDeGuia[];
+  /** FICHA 463 (R33/R37) — el sentido del `ORDER BY` final (la ventana del corrido no cambia). */
+  sortDir: DireccionOrden;
+  /** FICHA 463 (R26/R27) — el termino casa con quien registro solo en la oficina. */
+  conNombreRegistrador: boolean;
   skip: number;
   take: number;
   /** 172 R55 — leer el resumen de tres cifras (solo la vista de la propia tienda). */

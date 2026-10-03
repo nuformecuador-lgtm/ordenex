@@ -7,6 +7,7 @@ import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { FORMA_UUID, UUID_MENSAJERO, UUID_MOV, UUID_TIENDA, estado, fila } from "@/tests/fixtures/estado-cuenta";
+import { ponerCasillas } from "@/tests/fixtures/barra-libro-wallet";
 
 // =================================================================================================
 // FICHA 458-D (cierre de PANTALLA de los pendientes de servidor) — lo que el estado de cuenta de la
@@ -93,6 +94,9 @@ describe("R10–R12 — el estado de cuenta de la oficina se filtra por CIERRE",
     envolver(<EstadoCuentaTienda inicial={estado()} puedeRegistrar={false} />);
     expect(cierresMock).not.toHaveBeenCalled();
 
+    // FICHA 467: el cierre es la casilla «Cierre» de la barra única; marcarla no lee nada.
+    await ponerCasillas(user, document.body, "Cierre");
+    expect(cierresMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
     await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "tienda", tiendaId: UUID_TIENDA }));
     await user.click(await screen.findByRole("option", { name: "Cierre del 2026-09-12 · Juan Pérez Mora · 3 movimientos" }));
@@ -117,6 +121,7 @@ describe("R10–R12 — el estado de cuenta de la oficina se filtra por CIERRE",
         puedeRegistrar={false}
       />,
     );
+    await ponerCasillas(user, document.body, "Cierre");
     await user.click(screen.getByRole("button", { name: "Cierre: Todos los cierres" }));
     await waitFor(() => expect(cierresMock).toHaveBeenCalledWith({ cuenta: "mensajero", mensajeroId: UUID_MENSAJERO }));
     await user.click(await screen.findByRole("option", { name: /Cierre del 2026-09-12/ }));
@@ -131,7 +136,7 @@ describe("R10–R12 — el estado de cuenta de la oficina se filtra por CIERRE",
 describe("R6–R8 — el origen con su ENTIDAD, y el enlace solo si el servidor lo manda", () => {
   it("R6/R7: se lee la entidad; el enlace lleva el id SOLO en `href` y su nombre accesible no lo dice", () => {
     envolver(
-      <EstadoCuenta
+      <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }}
         inicial={estado({
           filas: [
             fila({
@@ -155,7 +160,7 @@ describe("R6–R8 — el origen con su ENTIDAD, y el enlace solo si el servidor 
 
   it("R8: sin enlace del servidor, el nombre del origen sin enlace", () => {
     envolver(
-      <EstadoCuenta
+      <EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }}
         inicial={estado({ filas: [fila({ origen: { texto: "Cierre del día · 2026-09-12", enlace: null } })] })}
         rotulos={ROTULOS_TIENDA}
         panel={PANEL_TIENDA}
@@ -182,13 +187,13 @@ describe("Método y referencia del pago (458-D servidor → pantalla)", () => {
   });
 
   it("la fila dice cómo se pagó; una fila que no es un pago, no", () => {
-    envolver(<EstadoCuenta inicial={estado({ filas: [fila({}), PAGO], total: 2 })} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
+    envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ filas: [fila({}), PAGO], total: 2 })} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
     expect(within(tabla()).getAllByText(/^Cómo se pagó:/)).toHaveLength(1);
     expect(within(tabla()).getByText("Cómo se pagó: SINPE · referencia REF-77")).toBeInTheDocument();
   });
 
   it("el panel «Ver» de ese pago tiene la línea «Cómo»", async () => {
-    envolver(<EstadoCuenta inicial={estado({ filas: [PAGO] })} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
+    envolver(<EstadoCuenta descargaDeLaSuperficie={{ ambitoColumnas: "prueba-estado-cuenta" }} inicial={estado({ filas: [PAGO] })} rotulos={ROTULOS_TIENDA} panel={PANEL_TIENDA} />);
     fireEvent.click(within(tabla()).getByRole("button", { name: /^Ver Ordenex le paga a la tienda/ }));
     const panel = await screen.findByRole("dialog");
     expect(within(panel).getByText("Cómo")).toBeInTheDocument();

@@ -586,7 +586,7 @@ const LIBRO_R15: Partial<DatosFinancieros> = {
  */
 const TOTALES_ESPERADOS: Readonly<Record<string, ImporteAnalitico>> = {
   // FICHA 458-B (revision B2): `ingreso_flete` e `ingreso_iva` publican neto (ganan el reverso de la
-  // anulacion del cobro por rechazo). El doble no filtra por categoria, asi que su neto es el
+  // anulacion del cobro por devolución a origen). El doble no filtra por categoria, asi que su neto es el
   // mismo Σ ingreso − Σ egreso de `egresos` sobre el libro entero: 2930.00.
   ingreso_flete: { forma: "bruto_y_neto", bruto: "9730.00", neto: "2930.00", moneda: MONEDA },
   ingreso_comision_cod: { forma: "solo_bruto", bruto: "9730.00", moneda: MONEDA },

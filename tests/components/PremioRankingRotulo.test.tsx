@@ -26,6 +26,8 @@ import { SWRConfig } from "swr";
 
 import { ToastProvider } from "@/providers/ToastProvider";
 import { estado, fila } from "@/tests/fixtures/estado-cuenta";
+import userEvent from "@testing-library/user-event";
+import { opcionesDelControl } from "@/tests/fixtures/barra-libro-wallet";
 
 /** El rótulo, escrito a mano. Si alguien lo cambia, este archivo se pone rojo y lo dice. */
 const ROTULO_PREMIO = "Premio del ranking";
@@ -103,14 +105,15 @@ describe("R34 — el estado de cuenta del MAESTRO rotula el premio", () => {
     expect(fila.textContent).toContain("Registró: Automático · Premio del ranking");
   });
 
-  it("no se confunde con un ajuste: los dos rótulos conviven y son distintos; el premio tiene su chip", () => {
+  it("no se confunde con un ajuste: los dos rótulos conviven y son distintos; el premio tiene su chip", async () => {
     montar();
     const tabla = screen.getByRole("table", { name: "Estado de cuenta de Kevin Rojas" });
     expect(within(tabla).getByText(ROTULO_PREMIO)).toBeInTheDocument();
     expect(within(tabla).getByText(ROTULO_AJUSTE_DEVENGO)).toBeInTheDocument();
     expect(ROTULO_PREMIO).not.toBe(ROTULO_AJUSTE_DEVENGO);
-    // «Qué parte de esta cuenta es premio» se pregunta con el chip «Premios» (D10).
-    expect(screen.getByRole("button", { name: "Premios" })).toBeInTheDocument();
+    // «Qué parte de esta cuenta es premio» se pregunta con el chip «Premios» (D10); FICHA 467: es una
+    // opción de la casilla «Tipo de movimiento».
+    expect(await opcionesDelControl(userEvent.setup(), document.body, "Tipo de movimiento")).toContain("Premios");
   });
 });
 

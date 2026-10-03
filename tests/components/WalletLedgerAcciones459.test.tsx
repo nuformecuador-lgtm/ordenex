@@ -52,10 +52,9 @@ vi.mock("@/hooks/useToast", () => ({
 }));
 
 import { WalletLedger } from "@/app/(app)/wallet/_components/WalletLedger";
-import {
-  COLUMNAS_DESCARGA_WALLET_CAJA,
-  filaDescargaMovimientoCaja,
-} from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+import { COLUMNAS_DESCARGA_WALLET_CAJA } from "@/app/(app)/wallet/_components/wallet-ledger-descarga-columnas";
+// Ficha 468: la fila de la descarga es la de la hoja «Movimientos» (kardex).
+import { filaDeLibroCaja as filaDescargaMovimientoCaja } from "@/tests/fixtures/libro-kardex";
 import { opcionesDeConceptos } from "@/components/shared/wallet/conceptos-filtro";
 import { CATEGORIA_LABEL as CATEGORIA_LABEL_458, CATEGORIA_TODAS_OPTION } from "@/app/(app)/wallet/_components/wallet-labels";
 
@@ -148,10 +147,11 @@ describe("FICHA 459 — el cobro reclasificado en el libro y en su descarga (T C
   });
 
   it("la descarga lleva el MISMO origen legible, las mismas columnas y ningún id", () => {
+    // Ficha 468: «Concepto», «Detalle» (que empieza por el origen legible) y «Es dinero de».
     const f = filaDescargaMovimientoCaja(RECLASIFICADO);
-    expect(f.origen).toBe("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK");
-    expect(f.categoria).toBe("Ordenex paga un gasto de una tienda");
-    expect(f.dueno).toBe("Tienda");
+    expect(f.detalle).toBe("Cobro reclasificado como pago de un gasto de la tienda · Nuform · pago FACEBOOK");
+    expect(f.concepto).toBe("Ordenex paga un gasto de una tienda");
+    expect(f.esDineroDe).toBe("Tienda");
     expect(Object.keys(f).sort()).toEqual(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave).sort());
   });
 });
@@ -227,9 +227,9 @@ describe("FICHA 459 — concepto, origen y dueño del capital y del pago por cue
 
   it.each(ESPERADO)("descarga — $caso: las mismas tres palabras que la tabla", (e) => {
     const d = filaDescargaMovimientoCaja(e.movimiento);
-    expect(d.categoria).toBe(e.concepto);
-    expect(d.origen).toBe(e.origen);
-    expect(d.dueno).toBe(e.dueno);
+    expect(d.concepto).toBe(e.concepto);
+    expect(String(d.detalle).startsWith(e.origen)).toBe(true);
+    expect(d.esDineroDe).toBe(e.dueno);
   });
 
   it("el filtro por concepto del libro ofrece los cuatro conceptos nuevos con su nombre", () => {
