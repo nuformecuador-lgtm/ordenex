@@ -15,6 +15,7 @@ import { ToastProvider } from "@/providers/ToastProvider";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { buildXlsxRows } from "@/lib/utils/xlsx-template";
 import { claveColumnas } from "@/lib/manifiesto/preferencia-columnas";
 
@@ -159,11 +160,13 @@ function guardarPreferencia(preferencia: {
   window.localStorage.setItem(CLAVE_ORDENES, JSON.stringify(preferencia));
 }
 
-/** Fecha local de hoy en `YYYY-MM-DD`, misma convención que el nombre de archivo. */
+/**
+ * Hoy en `YYYY-MM-DD` con la MISMA convención que el nombre de archivo: el día calendario de COSTA
+ * RICA (`fechaCalendarioCR`, ficha 457 O3), no el del reloj local. Con la fecha local, entre las
+ * 00:00 y la 01:00 de una máquina en UTC−5 el test esperaba el día siguiente al del archivo.
+ */
 function hoyISO(): string {
-  const d = new Date();
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  return fechaCalendarioCR(new Date());
 }
 
 beforeEach(() => {

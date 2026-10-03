@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { ColumnasPopover } from "@/components/shared/ColumnasPopover";
 import { RadioGroup, type RadioGroupOption } from "@/components/ui/radio-group";
 import { descargarBlob } from "@/components/shared/descargar-blob";
+import { mensajeLimiteExcel } from "@/components/shared/descarga-resultado";
+import { LimiteExcelExcedidoError } from "@/lib/utils/limite-excel";
 import { usePreferenciaColumnas } from "@/hooks/usePreferenciaColumnas";
 import { claveDeAmbitoDescarga } from "@/lib/columnas/preferencia-columnas";
 import { useToast } from "@/hooks/useToast";
@@ -86,6 +88,14 @@ const MENSAJE_SIN_DATOS =
   "No hay datos que descargar con los filtros aplicados. Ajusta los filtros y vuelve a intentarlo.";
 const MENSAJE_FALLO =
   "No se pudo generar el archivo. Vuelve a intentarlo; el listado no cambió.";
+
+/**
+ * Ficha 470 (R21) — texto VISIBLE del botón mientras la descarga se prepara (lectura, transporte por
+ * el almacén temporal si el conjunto es grande y armado del archivo). El nombre accesible
+ * (`aria-label`) no cambia, para no romper a quien localiza el control por él; el botón queda
+ * deshabilitado y con `aria-busy`.
+ */
+export const TEXTO_PREPARANDO = "Preparando el archivo…";
 
 // --- Ficha 464: textos del selector con hoja de detalle (i18n-ready, sin dominio) ---------------
 
@@ -265,8 +275,14 @@ export function DescargarDatasetButton({
       });
       // R32: el archivo nace y muere en el navegador; ni subida ni almacenamiento.
       descargarBlob(archivo.contenido, archivo.mime, archivo.nombreArchivo);
-    } catch {
-      // R27 + docs/conventions: nada de catch vacío. Se avisa y NO se reintenta.
+    } catch (error) {
+      // Ficha 470 (R2): una hoja que no cabe en Excel tiene su propio aviso accionable.
+      if (error instanceof LimiteExcelExcedidoError) {
+        toast.error(mensajeLimiteExcel(error.hoja, error.filas, error.limite));
+        return;
+      }
+      // R27 + docs/conventions: nada de catch vacío. Se avisa y NO se reintenta. Ficha 470 (R15/R16):
+      // un fallo del almacén temporal o de su lectura llega aquí y da este mismo aviso, sin archivo.
       toast.error(MENSAJE_FALLO);
     } finally {
       enVueloRef.current = false;
@@ -302,7 +318,7 @@ export function DescargarDatasetButton({
         aria-expanded={eligeFormato ? menuAbierto : undefined}
       >
         {generando ? null : <Download aria-hidden="true" />}
-        {label ?? DEFAULT_LABEL}
+        {generando ? TEXTO_PREPARANDO : (label ?? DEFAULT_LABEL)}
       </Button>
 
       {/* R1 — control PARALELO al botón, no un paso de su camino: abrirlo no descarga, y el

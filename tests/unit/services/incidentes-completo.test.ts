@@ -18,6 +18,15 @@ import {
   filaDescargaIncidentePendiente,
 } from "@/app/(app)/incidentes/_components/incidentes-descarga-columnas";
 
+// Ficha 470 (T1.3, riesgo K6) — el tope real de la descarga es ahora el limite de Excel
+// (1.048.575 filas). Este archivo prueba la MECANICA del tope (N entra, N+1 no), que no depende
+// del valor: lo fija en 5000 para no construir un millon de filas por caso. Patron de
+// `tests/integration/db/estado-cuenta-servidor-458d.test.ts`.
+vi.mock("@/lib/config/descarga", async (original) => {
+  const real = await original<typeof import("@/lib/config/descarga")>();
+  return { ...real, descargaConfig: { ...real.descargaConfig, MAX_FILAS: 5000 } };
+});
+
 // Feature 184 — Tanda F (T F.2, R1/R2/R4/R5/R6) — los CONJUNTOS de los que salen los archivos de
 // «Incidentes pendientes de decisión» (listado 8) e «Incidentes — histórico» (listado 9).
 //

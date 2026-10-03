@@ -11,7 +11,6 @@ import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import {
   listarSaldosSatelitesAction,
-  listarSaldosSatelitesCompletoAction,
 } from "@/lib/actions/conciliacion-satelites";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import type { ResumenSatelitesDTO, SaldoSateliteDTO } from "@/lib/types/conciliacion-satelites";
@@ -41,6 +40,7 @@ import {
   hayFaltantePorRecibir,
   money,
 } from "./satelites-labels";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // ⭑ FICHA 431 (T21, R17/R21/R23) — LOS SALDOS DE LAS BODEGAS SATÉLITE.
@@ -334,7 +334,7 @@ export function SaldosSatelitesTable({ initialData, resumen }: Readonly<SaldosSa
             ambitoColumnas: AMBITO_DESCARGA_SALDOS_SATELITES,
             obtenerFilas: () =>
               filasDesdeResultado(
-                listarSaldosSatelitesCompletoAction({}),
+                descargarDatos("listarSaldosSatelitesCompleto", {}),
                 filaDescargaSaldoSatelite,
               ),
           }}

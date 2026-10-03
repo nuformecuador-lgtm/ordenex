@@ -21,6 +21,10 @@ import type {
 import { buildCsvRows } from "@/lib/utils/csv-template";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { buildXlsxLibro, buildXlsxRows, XLSX_MIME } from "@/lib/utils/xlsx-template";
+import { comprobarLimiteExcel } from "@/lib/utils/limite-excel";
+
+// Ficha 470 (R2): el error de la guardia de Excel se reexporta desde aqui, el generador comun.
+export { LimiteExcelExcedidoError } from "@/lib/utils/limite-excel";
 
 /** MIME del CSV con codificacion explicita, para el `Blob` de descarga (R7). */
 export const CSV_MIME = "text/csv;charset=utf-8";
@@ -164,6 +168,8 @@ export function nombreArchivoDescarga(
  * - Se emiten EXACTAMENTE las columnas declaradas, en su orden (R5); una fila que no
  *   aporta la clave deja la celda vacia (R6).
  *
+ * @throws LimiteExcelExcedidoError (ficha 470, R2) si en `xlsx` alguna hoja pasa de
+ * `EXCEL_FILAS_DATOS_POR_HOJA` filas: se comprueba antes de armar nada.
  * @throws si `columnas` esta vacio: no se produce archivo alguno (R9), mismo contrato
  * defensivo que `buildXlsxTemplate`/`buildXlsxRows`/`buildCsvRows`. Ficha 464: tambien
  * con `csv` + hojas adicionales (R12) y con una hoja adicional sin columnas.
@@ -208,6 +214,12 @@ export async function construirDescarga(
       nombreArchivo,
     };
   }
+
+  // Ficha 470 (design §4.4, R2): cada hoja (principal y adicionales) se cuenta ANTES de llamar a
+  // exceljs. Una que pase del limite de Excel no produce archivo: lanza `LimiteExcelExcedidoError`
+  // con la hoja y sus filas, y el control redacta el aviso accionable. El csv no tiene hojas: lo
+  // acota el tope de servicio.
+  comprobarLimiteExcel([{ titulo, filas }, ...hojasAdicionales]);
 
   if (hojasAdicionales.length === 0) {
     return {

@@ -16,7 +16,6 @@ import {
   eliminarPlantilla,
   enviarPlantillaAprobacion,
   listarPlantillas,
-  listarPlantillasCompleto,
   marcarPlantillaBienvenida,
 } from "@/lib/actions/plantillas";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
@@ -36,6 +35,7 @@ import {
 } from "./EditarPlantillaForm";
 import { FormSheet } from "./FormSheet";
 import { SincronizarPlantillasButton } from "./SincronizarPlantillasButton";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Opciones acotadas por MAX_PAGE_SIZE del backend (nunca una consulta sin límite).
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -304,7 +304,7 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
           titulo: TITULO_DESCARGA,
           columnas: COLUMNAS_DESCARGA_PLANTILLAS,
           obtenerFilas: () =>
-            filasDesdeResultado(listarPlantillasCompleto({}), filaDescargaPlantilla),
+            filasDesdeResultado(descargarDatos("listarPlantillasCompleto", {}), filaDescargaPlantilla),
         }}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las plantillas" : null}

@@ -19,7 +19,6 @@ import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import {
   listarIdsVigentesBodega,
-  listarOrdenesBodegaCompleto,
   listarOrdenesBodegaPaginado,
 } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
@@ -49,6 +48,7 @@ import {
   consolidacionesSinConciliarTitulo,
   type BodegaBloqueoCausa,
 } from "./asignacion-satelite-bloqueo";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 33 (T12, R6/R7/R8/R9): módulo de la bodega satélite. Recibe de su Server
 // Component padre lo que la pantalla necesita ya acotado a la zona del actor (datos
@@ -609,7 +609,7 @@ export function RecepcionSateliteModule({
                     items: [],
                     total: 0,
                   })
-                : listarOrdenesBodegaCompleto({ ...filtro }),
+                : descargarDatos("listarOrdenesBodegaCompleto", { ...filtro }),
               filaDescargaSatelite,
             )
           }

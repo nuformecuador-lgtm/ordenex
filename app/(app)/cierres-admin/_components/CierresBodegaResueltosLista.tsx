@@ -10,7 +10,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import {
-  listarHistoricoCierresBodegaCompleto,
   listarHistoricoCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
@@ -22,6 +21,7 @@ import {
   COLUMNAS_DESCARGA_BODEGA_RESUELTOS,
   filaDescargaBodegaResuelto,
 } from "./cierres-bodega-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Feature 170 — FASE 2 (T I.2, R43/R44/R52): el HISTÓRICO de «Cierres de bodega resueltos»
@@ -95,7 +95,7 @@ export function descargaBodegaResueltos(
     ambitoColumnas: AMBITO_DESCARGA_BODEGA_RESUELTOS,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarHistoricoCierresBodegaCompleto({ filtros }),
+        descargarDatos("listarHistoricoCierresBodegaCompleto", { filtros }),
         filaDescargaBodegaResuelto,
       ),
   };

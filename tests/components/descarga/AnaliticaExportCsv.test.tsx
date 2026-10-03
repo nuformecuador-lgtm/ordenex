@@ -20,6 +20,15 @@ import {
 } from "@/app/(app)/analitica/_components/operativo/ExportarOperativoPanel";
 import { FILTRO_INICIAL } from "@/app/(app)/analitica/_components/operativo/filtro-tablero";
 
+// Ficha 470 (T1.3, riesgo K6) — el tope real de la descarga es ahora el limite de Excel
+// (1.048.575 filas). Este archivo prueba la MECANICA del tope (N entra, N+1 no), que no depende
+// del valor: lo fija en 5000 para no construir un millon de filas por caso. Patron de
+// `tests/integration/db/estado-cuenta-servidor-458d.test.ts`.
+vi.mock("@/lib/config/descarga", async (original) => {
+  const real = await original<typeof import("@/lib/config/descarga")>();
+  return { ...real, descargaConfig: { ...real.descargaConfig, MAX_FILAS: 5000 } };
+});
+
 // Feature 134 — R16, R17, R21 y la accesibilidad del control (T4.3/T4.4), CON EL CONTROL
 // MONTADO. Los tres casos que viven aqui son de UI: lo que se juzga es que en las dos
 // situaciones que NO producen archivo no se produzca archivo, y que el usuario pueda elegir

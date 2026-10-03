@@ -1,0 +1,156 @@
+{
+  "caja-con-detalle": {
+    "archivos": {
+      "directo": "directo-caja-con-detalle-libro-de-movimientos-2026-10-02.xlsx",
+      "almacen": "almacen-caja-con-detalle-libro-de-movimientos-2026-10-03.xlsx"
+    },
+    "hojas": [
+      {
+        "nombre": "Libro de movimientos",
+        "filas": 39,
+        "columnas": 10,
+        "negritas": 3
+      },
+      {
+        "nombre": "Detalle por guía",
+        "filas": 113,
+        "columnas": 12,
+        "negritas": 37
+      }
+    ],
+    "identicos": true,
+    "tipos": [
+      {
+        "hoja": "Libro de movimientos",
+        "out": {
+          "Fecha": "null/string",
+          "Concepto": "string",
+          "Detalle": "null/string",
+          "A quién": "null/string",
+          "Es dinero de": "null/string",
+          "Entra": "null/number",
+          "Sale": "null/number",
+          "Cobrado a tiendas": "null/number",
+          "Saldo": "number",
+          "Registró": "null/string"
+        }
+      },
+      {
+        "hoja": "Detalle por guía",
+        "out": {
+          "Guía": "string/null",
+          "Remisión": "string/null",
+          "Destinatario": "string/null",
+          "Tienda": "string/null",
+          "Mensajero": "string/null",
+          "Cierre": "string/null",
+          "Resultado": "string/null",
+          "Concepto": "null/string",
+          "Detalle": "null/string",
+          "Entra": "null/number",
+          "Sale": "null/number",
+          "Cobrado a tiendas": "null/number"
+        }
+      }
+    ],
+    "cabeceraMovimientos": [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "A quién",
+      "Es dinero de",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas",
+      "Saldo",
+      "Registró"
+    ],
+    "cabeceraDetalle": [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Tienda",
+      "Mensajero",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas"
+    ],
+    "totalPeriodo": [
+      null,
+      "Total del periodo",
+      null,
+      null,
+      null,
+      13524733.22,
+      40800.5,
+      43729.9,
+      13483932.72,
+      null
+    ],
+    "totalGeneral": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "TOTAL GENERAL",
+      null,
+      13524733.22,
+      40800.5,
+      43729.9
+    ],
+    "hoja2IgualHoja1": true,
+    "filasDeMovimiento": 36,
+    "filasDetalleSinCabecera": 112
+  },
+  "ordenes-xlsx": {
+    "archivos": {
+      "directo": "directo-ordenes-xlsx-ordenes-2026-10-02.xlsx",
+      "almacen": "almacen-ordenes-xlsx-ordenes-2026-10-03.xlsx"
+    },
+    "hojas": [
+      {
+        "nombre": "Órdenes",
+        "filas": 86,
+        "columnas": 22,
+        "negritas": 1
+      }
+    ],
+    "identicos": true,
+    "tipos": [
+      {
+        "hoja": "Órdenes",
+        "out": {
+          "Nº Guía": "number/null",
+          "Nº Remisión": "string",
+          "Estado": "string",
+          "Destinatario": "string",
+          "Teléfono del destinatario": "string",
+          "Producto": "string",
+          "Peso (kg)": "null",
+          "Dirección": "string",
+          "Tienda": "string",
+          "Zona": "string",
+          "Provincia": "string",
+          "Cantón": "string",
+          "Distrito": "string",
+          "Monto a cobrar": "number/null",
+          "Flete + IVA": "string",
+          "Comisión + IVA": "string",
+          "Mensajero": "string/null",
+          "Intentos": "number",
+          "Fecha de creación": "string",
+          "Día de reparto": "string/null",
+          "Fecha de reprogramación": "null/string",
+          "Notas de la tienda": "null/string"
+        }
+      }
+    ]
+  }
+}

@@ -18,7 +18,6 @@ import { useAnchoDelScrollHorizontal } from "@/hooks/useAnchoDelScrollHorizontal
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   verDetalleDeMovimientoAction,
-  verDetalleDeMovimientoCompletoAction,
 } from "@/lib/actions/wallet";
 import { detalleMovimientoConfig } from "@/lib/config/detalle-movimiento";
 import type {
@@ -45,6 +44,7 @@ import {
 } from "./detalle-movimiento-labels";
 import { money } from "./wallet-labels";
 import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Ficha 344 (T6.2/T6.3, design §5) — LAS ÓRDENES QUE COMPONEN EL IMPORTE de una fila del libro
 // de movimientos de la caja principal.
@@ -132,7 +132,7 @@ async function detalleFetcher(movimientoId: string, page: number, resaltar?: str
  * pulsación, y el usuario merece leer el motivo en vez de un error genérico.
  */
 async function obtenerFilasDescarga(movimientoId: string): Promise<DescargaFilasResult> {
-  const res = await verDetalleDeMovimientoCompletoAction({ movimientoId });
+  const res = await descargarDatos("verDetalleDeMovimientoCompleto", { movimientoId });
   if (res.status === "sin_reparto") {
     return { status: "error", mensaje: DETALLE_MOVIMIENTO_SIN_REPARTO[res.motivo] };
   }

@@ -9,7 +9,6 @@ import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { incidentesConfig } from "@/lib/config/incidentes";
 import {
-  listarHistoricoIncidentesCompleto,
   listarHistoricoIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
@@ -23,6 +22,7 @@ import {
   COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
   filaDescargaIncidenteHistorico,
 } from "./incidentes-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Feature 170 — FASE 2 (T I.2, R43/R44/R52): el HISTÓRICO de incidentes resueltos (feature
@@ -135,7 +135,7 @@ export function IncidentesHistoricoTabla({
             columnas: COLUMNAS_DESCARGA_INCIDENTES_HISTORICO,
             obtenerFilas: () =>
               filasDesdeResultado(
-                listarHistoricoIncidentesCompleto(),
+                descargarDatos("listarHistoricoIncidentesCompleto", undefined),
                 filaDescargaIncidenteHistorico,
               ),
           }}

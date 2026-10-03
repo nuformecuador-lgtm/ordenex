@@ -18,7 +18,6 @@ import {
   rechazarIncidente,
   retractarIncidente,
   verIncidente,
-  listarPendientesIncidentesCompleto,
   listarPendientesIncidentesPaginado,
 } from "@/lib/actions/incidentes";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
@@ -48,6 +47,7 @@ import {
   COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
   filaDescargaIncidentePendiente,
 } from "./incidentes-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 // Feature 158 (T2.8, R49/R50/R54 — camino del ADMIN) — cola de aprobación de incidentes.
 // ESPEJO de `CierresAdminModule` (38), que es la aplicación original del patrón que el humano
@@ -426,7 +426,7 @@ export function IncidentesAdminModule({
               columnas: COLUMNAS_DESCARGA_INCIDENTES_PENDIENTES,
               obtenerFilas: () =>
                 filasDesdeResultado(
-                  listarPendientesIncidentesCompleto(),
+                  descargarDatos("listarPendientesIncidentesCompleto", undefined),
                   filaDescargaIncidentePendiente,
                 ),
             }}

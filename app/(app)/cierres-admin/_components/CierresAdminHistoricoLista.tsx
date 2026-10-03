@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { cierreConfig } from "@/lib/config/cierre";
-import { listarHistoricoCierresAdminCompleto } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type { FiltrosCierres } from "@/lib/types/filtros-cierres";
 import type { DescargaResumenCierres } from "./DescargarCierresButton";
@@ -18,6 +17,7 @@ import {
   filaDescargaCierreHistorico,
 } from "./cierres-admin-descarga-columnas";
 import { PendienteLiquidarBadge } from "./PendienteLiquidarBadge";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /**
  * Feature 170 — FASE 2 (T I.2, R43/R44/R52): el HISTÓRICO de «Cierres del día» (feature 38,
@@ -109,7 +109,7 @@ export function descargaHistoricoCierres(
     ambitoColumnas: AMBITO_DESCARGA_CIERRES_HISTORICO,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarHistoricoCierresAdminCompleto({ filtros }),
+        descargarDatos("listarHistoricoCierresAdminCompleto", { filtros }),
         filaDescargaCierreHistorico,
       ),
   };

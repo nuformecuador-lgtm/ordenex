@@ -31,8 +31,6 @@ import {
   // el efectivo llego, y eso lo hace `ConciliacionAcciones` con las acciones de la conciliacion.
   // El camino viejo sigue en el arbol (Q4) y es IMPOSIBLE de escribir contra la base por el
   // `CHECK` de R15; lo que se retira aqui es la superficie, que era su unica boca.
-  listarGestionesCierresBodegaCompleto,
-  listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
 import type {
@@ -95,6 +93,7 @@ import {
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
   filaDescargaBodegaPendiente,
 } from "./cierres-bodega-descarga-columnas";
+import { descargarDatos } from "@/components/shared/descarga-datos";
 
 /** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
@@ -366,7 +365,7 @@ function descargaColaBodega(filtros: FiltrosCierresBodega): DescargaResumenCierr
     ambitoColumnas: AMBITO_DESCARGA_BODEGA_PENDIENTES,
     obtenerFilas: () =>
       filasDesdeResultado(
-        listarPendientesCierresBodegaCompleto({ filtros }),
+        descargarDatos("listarPendientesCierresBodegaCompleto", { filtros }),
         filaDescargaBodegaPendiente,
       ),
   };
@@ -583,7 +582,7 @@ export function CierresBodegaAdminModule({
                 : descargaBodegaResueltos(filtros)
             }
             catalogo={catalogoFiltros}
-            accion={listarGestionesCierresBodegaCompleto}
+            accion={(f) => descargarDatos("listarGestionesCierresBodegaCompleto", f)}
             disabled={pendientesCargando}
           />
         </div>

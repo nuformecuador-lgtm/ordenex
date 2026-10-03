@@ -1,0 +1,43 @@
+{
+  "etiqueta": "directo",
+  "descargas": [
+    {
+      "nombre": "caja-con-detalle",
+      "archivo": "directo-caja-con-detalle-libro-de-movimientos-2026-10-02.xlsx",
+      "sugerido": "libro-de-movimientos-2026-10-02.xlsx",
+      "ms": 1513,
+      "vioPreparando": true,
+      "textoVisto": "Preparando el archivo…",
+      "acciones": [
+        {
+          "peticion": "[\"libroCajaKardexConDetalle\",{\"sortBy\":\"fecha\",\"sortDir\":\"asc\"}]",
+          "status": 200,
+          "bytesRespuesta": 41007,
+          "modo": "directo",
+          "url": null
+        }
+      ]
+    },
+    {
+      "nombre": "ordenes-xlsx",
+      "archivo": "directo-ordenes-xlsx-ordenes-2026-10-02.xlsx",
+      "sugerido": "ordenes-2026-10-02.xlsx",
+      "ms": 480,
+      "vioPreparando": true,
+      "textoVisto": "Preparando el archivo…",
+      "acciones": [
+        {
+          "peticion": "[\"listarOrdenesCompleto\",{\"sortBy\":\"created_at\",\"sortDir\":\"desc\"}]",
+          "status": 200,
+          "bytesRespuesta": 178730,
+          "modo": "directo",
+          "url": null
+        }
+      ]
+    }
+  ],
+  "walletPie": "1-20 de 36",
+  "walletOpcion": true,
+  "ordenesPie": "1-25 de 85",
+  "nota": "Ordenes solo ofrece Excel (sin formatos declarados): la tercera descarga era otro xlsx y se descarto"
+}

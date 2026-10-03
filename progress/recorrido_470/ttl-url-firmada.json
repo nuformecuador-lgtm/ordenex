@@ -1,0 +1,22 @@
+[
+  {
+    "descarga": "caja-con-detalle",
+    "iat": 1791007255,
+    "exp": 1791007555,
+    "ttl": 300,
+    "pedidaEn": 1791007650,
+    "segundosTrasEmitir": 395,
+    "status": 400,
+    "cuerpo": "{\"statusCode\":\"400\",\"error\":\"InvalidJWT\",\"message\":\"\\\"exp\\\" claim timestamp check failed\",\"code\":\"InvalidJWT\"}"
+  },
+  {
+    "descarga": "ordenes-xlsx",
+    "iat": 1791007267,
+    "exp": 1791007567,
+    "ttl": 300,
+    "pedidaEn": 1791007651,
+    "segundosTrasEmitir": 384,
+    "status": 400,
+    "cuerpo": "{\"statusCode\":\"400\",\"error\":\"InvalidJWT\",\"message\":\"\\\"exp\\\" claim timestamp check failed\",\"code\":\"InvalidJWT\"}"
+  }
+]
