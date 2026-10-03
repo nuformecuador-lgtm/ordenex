@@ -248,7 +248,7 @@ function orden(i: number): OrdenListItemDTO {
     numGuia: 100000 + i,
     numRemision: `REM-${String(i).padStart(6, "0")}`,
     estatusId: "est-uuid",
-    estatusValue: i % 3 === 0 ? "entregado" : "en_ruta",
+    estatusValue: "entregado",
     destinatario: `Destinatario ${i}`,
     telefonoDest: "0999999999",
     tiendaId: "tienda-uuid",

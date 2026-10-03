@@ -10,7 +10,7 @@
 // env no existen y rigen los defaults, que es lo correcto (el cliente solo usa `MAX_FILAS`).
 
 /** Excel: 1.048.576 filas por hoja, cabecera incluida ⇒ 1.048.575 filas de datos. */
-export const EXCEL_MAX_FILAS_DATOS = 1_048_575;
+export const EXCEL_FILAS_DATOS_POR_HOJA = 1_048_575;
 
 function readPositiveInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -48,7 +48,7 @@ export interface DescargaConfigEnv {
 
 export function loadDescargaConfig(): DescargaConfigEnv {
   return {
-    MAX_FILAS: EXCEL_MAX_FILAS_DATOS,
+    MAX_FILAS: EXCEL_FILAS_DATOS_POR_HOJA,
     UMBRAL_ALMACEN_BYTES: readPositiveInt("DESCARGA_UMBRAL_ALMACEN_BYTES", 2_000_000),
     TTL_URL_SEGUNDOS: readPositiveInt("DESCARGA_TTL_URL_SEGUNDOS", 300),
     RETENCION_MINUTOS: readPositiveInt("DESCARGA_RETENCION_MINUTOS", 60),

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { EXCEL_MAX_FILAS_DATOS, loadDescargaConfig } from "@/lib/config/descarga";
+import { EXCEL_FILAS_DATOS_POR_HOJA, loadDescargaConfig } from "@/lib/config/descarga";
 
 // Feature 151/T2 (R19) — el tope de filas de la descarga vivia en config, no en literales.
 // Ficha 470 (T1.1, R1/R3/R5/R10/R17/R9) — el tope pasa a ser el limite de Excel y deja de ser
@@ -21,7 +21,7 @@ afterEach(() => {
 describe("loadDescargaConfig · tope = limite de Excel (470 R1/R3)", () => {
   it("el limite de Excel es 1.048.575 filas de datos (1.048.576 con la cabecera)", () => {
     // Literal a proposito: ES el contrato (el limite de la hoja de Excel), no un valor derivado.
-    expect(EXCEL_MAX_FILAS_DATOS).toBe(1_048_575);
+    expect(EXCEL_FILAS_DATOS_POR_HOJA).toBe(1_048_575);
   });
 
   it("MAX_FILAS vale el limite de Excel sin variable de entorno", () => {

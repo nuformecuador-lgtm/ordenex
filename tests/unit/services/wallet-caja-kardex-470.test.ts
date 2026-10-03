@@ -6,7 +6,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletService } from "@/lib/interfaces/services/IWalletService";
 import type { CabeceraDeCierre, FiltroAportesEnLote, OrdenAporteEnLoteRow } from "@/lib/interfaces/repositories/ICierreAporteRepository";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
-import { EXCEL_MAX_FILAS_DATOS, descargaConfig } from "@/lib/config/descarga";
+import { EXCEL_FILAS_DATOS_POR_HOJA, descargaConfig } from "@/lib/config/descarga";
 
 /**
  * Ficha 470 (T1.2, R1/R4) — el caso medido en produccion: «Movimientos y detalle por guía» de la caja con
@@ -86,7 +86,7 @@ afterEach(() => {
 
 describe("470 — R4/R1: el detalle por guia de la caja ya no se corta en 5000", () => {
   it("el tope del servicio es el limite de Excel", () => {
-    expect(descargaConfig.MAX_FILAS).toBe(EXCEL_MAX_FILAS_DATOS);
+    expect(descargaConfig.MAX_FILAS).toBe(EXCEL_FILAS_DATOS_POR_HOJA);
   });
 
   it("R4: 14.153 filas de detalle devuelven `ok` con las dos hojas, no `limite_excedido`", async () => {
