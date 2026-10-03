@@ -25,8 +25,21 @@ export type CuentaConOrdenes = { tipo: "tienda" | "mensajero"; id: string };
 /** Prefijo de la clave SWR: otra lectura, otra caché (el libro de la caja usa la suya). */
 export const CLAVE_ORDENES_DE_FILA = "estado-cuenta:ordenes-de-fila";
 
-async function leerPagina(cuenta: CuentaConOrdenes, movimientoId: string, page: number, pageSize?: number) {
-  return verOrdenesDeFilaAction({ cuenta, movimientoId, page, ...(pageSize === undefined ? {} : { pageSize }) });
+async function leerPagina(
+  cuenta: CuentaConOrdenes,
+  movimientoId: string,
+  page: number,
+  pageSize?: number,
+  resaltar?: string,
+) {
+  return verOrdenesDeFilaAction({
+    cuenta,
+    movimientoId,
+    page,
+    ...(pageSize === undefined ? {} : { pageSize }),
+    // FICHA 469 (R25–R28) — solo con búsqueda por guía; el archivo nunca lo manda (no resalta).
+    ...(resaltar === undefined ? {} : { resaltar }),
+  });
 }
 
 /**
@@ -64,8 +77,8 @@ async function descargar(cuenta: CuentaConOrdenes, movimientoId: string): Promis
 export function fuenteOrdenesDeFila(cuenta: CuentaConOrdenes): FuenteDetalleMovimiento {
   return {
     clave: `${CLAVE_ORDENES_DE_FILA}:${cuenta.tipo}`,
-    leer: async (movimientoId, page): Promise<VistaDetalle> => {
-      const r = await leerPagina(cuenta, movimientoId, page);
+    leer: async (movimientoId, page, resaltar): Promise<VistaDetalle> => {
+      const r = await leerPagina(cuenta, movimientoId, page, undefined, resaltar);
       if (r.status === "sin_reparto") return { modo: "sin_reparto", motivo: r.motivo };
       if (r.status !== "ok") throw new Error(r.status);
       return { modo: "ok", data: r.data };

@@ -406,7 +406,8 @@ describe("467 R24 — el buscador compartido", () => {
   it("avisa de los caracteres que faltan, no lee con menos de 3 y busca con el placeholder de la superficie", async () => {
     const user = userEvent.setup();
     montarTienda();
-    expect(buscador()).toHaveAttribute("placeholder", "Buscar por descripción o quién registró");
+    // FICHA 469 (R24): la oficina nombra también la guía y la remisión.
+    expect(buscador()).toHaveAttribute("placeholder", "Buscar por guía, remisión, descripción o quién registró");
     await user.type(buscador(), "et");
     expect(await screen.findByText("Escribe al menos 3 caracteres para buscar")).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 700));

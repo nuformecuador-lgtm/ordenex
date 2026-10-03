@@ -294,7 +294,17 @@ export interface WalletLedgerProps {
    * descarga (`filtros` de `DataTable`, como `/ordenes`). Nodo OPACO: la tabla la coloca, no la mira.
    */
   filtros?: ReactNode;
+  /**
+   * FICHA 469 (R25–R28) — el término del libro PINTADO, solo si el servidor lo resolvió como búsqueda
+   * por guía. Baja al detalle de cada fila de cierre para destacar la guía buscada; ausente en modo texto.
+   */
+  resaltar?: string;
+  /** FICHA 469 (R22) — el texto del libro vacío; sin él, el de siempre. */
+  emptyMessage?: string;
 }
+
+/** El libro vacío de siempre (sin búsqueda por guía). */
+const LIBRO_VACIO = "No hay movimientos que coincidan con los filtros.";
 
 export function WalletLedger({
   movimientos,
@@ -303,6 +313,8 @@ export function WalletLedger({
   autoria: autoriaProp,
   obtenerFilasDescarga,
   filtros,
+  resaltar,
+  emptyMessage = LIBRO_VACIO,
 }: WalletLedgerProps) {
   const autoria = autoriaProp ?? AUTORIA_CARGANDO;
   // Feature 200 (tanda 3): cada columna declara su ancho MÍNIMO para que, cuando la pantalla no dé,
@@ -378,7 +390,7 @@ export function WalletLedger({
         rowKey="id"
         ariaLabel={TITULO_DESCARGA}
         isLoading={isLoading}
-        emptyMessage="No hay movimientos que coincidan con los filtros."
+        emptyMessage={emptyMessage}
         filtros={filtros}
         // R71/R72 (458-C): anulado = tachado y apagado, decidido por el servidor.
         rowClassName={claseDeFila}
@@ -399,6 +411,7 @@ export function WalletLedger({
               movimientoId={m.id}
               concepto={CATEGORIA_LABEL[m.categoria]}
               fecha={fechaDiaMovimientoCR(m.fechaMovimiento)}
+              resaltar={resaltar}
             />
           ) : null
         }

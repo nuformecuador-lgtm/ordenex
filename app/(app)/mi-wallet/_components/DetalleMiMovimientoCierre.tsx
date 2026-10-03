@@ -9,9 +9,11 @@ import {
   type Column,
   type DescargaFilasResult,
 } from "@/components/shared/DataTable";
+import { Badge } from "@/components/ui/badge";
 import { InfosEstado } from "@/components/shared/EstadoInfo";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
+import { BUSQUEDA_POR_GUIA_TEXTO } from "@/components/shared/wallet/busqueda-por-guia-labels";
 import { useAnchoDelScrollHorizontal } from "@/hooks/useAnchoDelScrollHorizontal";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -23,6 +25,7 @@ import type {
   DetalleMovimientoPayload,
   MotivoSinReparto,
   OrdenAporteDTO,
+  OrdenDeDetalleDTO,
 } from "@/lib/types/detalle-movimiento";
 import { PARAM_TERMINO_DEFAULT } from "@/lib/utils/filtros-url";
 
@@ -68,9 +71,18 @@ import { fechaDiaMovimientoCR } from "@/lib/utils/fecha-dia-iso";
 /** Prefijo de la clave SWR. Identifica esta lectura entre todas las de la app. */
 const CLAVE_DETALLE = "mi-wallet-libro:detalle-movimiento";
 
-/** R4 — clave SWR del detalle de UN movimiento: el movimiento y la página, y nada más. */
-function claveDetalle(movimientoId: string, page: number): readonly [string, string, number] {
-  return [CLAVE_DETALLE, movimientoId, page] as const;
+/**
+ * R4 — clave SWR del detalle de UN movimiento: el movimiento y la página, y nada más.
+ *
+ * FICHA 469 (design §4.3) — y el término de la búsqueda por guía (`resaltar`), que SÍ cambia la
+ * respuesta: dos términos no comparten caché.
+ */
+export function claveDetalleMiMovimiento(
+  movimientoId: string,
+  page: number,
+  resaltar?: string,
+): readonly [string, string, number, string] {
+  return [CLAVE_DETALLE, movimientoId, page, resaltar ?? ""] as const;
 }
 
 /**
@@ -89,8 +101,14 @@ type VistaDetalle =
  * `detalleMovimientoConfig` (R26). Las ramas de fallo —incluida `not_found`, que es lo que
  * responde un movimiento de otra tienda— se cuentan DENTRO de esta fila (R7).
  */
-async function detalleFetcher(movimientoId: string, page: number): Promise<VistaDetalle> {
-  const res = await verDetalleDeMiMovimientoAction({ movimientoId, page });
+async function detalleFetcher(movimientoId: string, page: number, resaltar?: string): Promise<VistaDetalle> {
+  // FICHA 469 (R28/R29) — `resaltar` solo viaja si el libro pintado volvió en modo guía; el alcance de
+  // la tienda lo pone el servidor.
+  const res = await verDetalleDeMiMovimientoAction({
+    movimientoId,
+    page,
+    ...(resaltar === undefined ? {} : { resaltar }),
+  });
   if (res.status === "sin_reparto") return { modo: "sin_reparto", motivo: res.motivo };
   if (res.status !== "ok") throw new Error(res.status);
   return { modo: "ok", data: res.data };
@@ -147,12 +165,63 @@ function AporteCelda({ aporte }: { aporte: string }) {
   return <span className="tabular-nums whitespace-nowrap">{money(aporte)}</span>;
 }
 
+/**
+ * FICHA 469 (R26) — la fila de la orden buscada se distingue TAMBIÉN sin color: una insignia con texto
+ * («Guía buscada»), que el lector de pantalla lee junto a la guía. El fondo de la fila es el refuerzo.
+ */
+function MarcaResaltada({ resaltada }: { resaltada: boolean }) {
+  return resaltada ? <Badge variant="info">{BUSQUEDA_POR_GUIA_TEXTO.guiaBuscada}</Badge> : null;
+}
+
+/**
+ * FICHA 469 (R25, R27) — las órdenes buscadas que aportan a este movimiento, ENCIMA de la lista, estén o
+ * no en la página visible. El aporte es el STRING del servidor —el mismo de su fila en la lista— pintado
+ * tal cual con `money`: aquí no se suma ni se opera (money-safe).
+ */
+function BloqueGuiaBuscada({
+  destacadas,
+  nombre,
+}: {
+  destacadas: readonly OrdenAporteDTO[];
+  nombre: string;
+}) {
+  if (destacadas.length === 0) return null;
+  return (
+    <section
+      aria-label={nombre}
+      className="flex flex-col gap-1 rounded-md border border-info/40 bg-info-soft p-2 text-sm dark:bg-info/15"
+    >
+      <h4 className="font-medium text-info-strong">{BUSQUEDA_POR_GUIA_TEXTO.guiaBuscada}</h4>
+      <ul className="flex flex-col gap-1">
+        {destacadas.map((o) => (
+          <li key={o.ordenId} className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 wrap-anywhere">
+            <EnlaceOrden guia={o.guia} />
+            <span>{o.destinatario}</span>
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <span>{resultadosTexto(o.resultados)}</span>
+              <InfosEstado codigos={o.resultados} />
+            </span>
+            <span className="ml-auto">
+              <AporteCelda aporte={o.aporte} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** R10/R13 — las CUATRO columnas del detalle en escritorio: guía, destinatario, resultado, aporte. */
-const COLUMNS: Column<OrdenAporteDTO>[] = [
+const COLUMNS: Column<OrdenDeDetalleDTO>[] = [
   {
     id: "guia",
     value: DETALLE_MI_MOVIMIENTO_COLUMNAS.guia,
-    render: (o) => <EnlaceOrden guia={o.guia} />,
+    render: (o) => (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <EnlaceOrden guia={o.guia} />
+        <MarcaResaltada resaltada={o.resaltada} />
+      </span>
+    ),
   },
   {
     id: "destinatario",
@@ -190,13 +259,16 @@ const COLUMNS: Column<OrdenAporteDTO>[] = [
  * `wrap-anywhere` y no `break-words`: el segundo no reduce el `min-content`, que es la medida que
  * decide si la tabla desborda. Y va en el TEXTO, nunca en el importe.
  */
-const COLUMNS_MOVIL: Column<OrdenAporteDTO>[] = [
+const COLUMNS_MOVIL: Column<OrdenDeDetalleDTO>[] = [
   {
     id: "orden",
     value: DETALLE_MI_MOVIMIENTO_COLUMNAS.orden,
     render: (o) => (
       <div className="flex flex-col gap-0.5 wrap-anywhere">
-        <EnlaceOrden guia={o.guia} />
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <EnlaceOrden guia={o.guia} />
+          <MarcaResaltada resaltada={o.resaltada} />
+        </span>
         <span>{o.destinatario}</span>
         {/* R13: la etiqueta legible del catálogo, nunca el valor del enum. */}
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -221,12 +293,18 @@ export interface DetalleMiMovimientoCierreProps {
   concepto: string;
   /** La fecha VISIBLE de la fila (`YYYY-MM-DD`). Compone los nombres accesibles con el anterior. */
   fecha: string;
+  /**
+   * FICHA 469 (R25–R28) — el término de la búsqueda por guía del libro PINTADO, solo si volvió en modo
+   * guía. Ausente ⇒ el detalle de siempre, sin bloque destacado ni filas resaltadas (R28).
+   */
+  resaltar?: string;
 }
 
 export function DetalleMiMovimientoCierre({
   movimientoId,
   concepto,
   fecha,
+  resaltar,
 }: DetalleMiMovimientoCierreProps) {
   const [page, setPage] = useState(1);
   /** UNA sola `<DataTable>` con dos juegos de columnas, no dos tablas (ver `COLUMNS_MOVIL`). */
@@ -266,8 +344,8 @@ export function DetalleMiMovimientoCierre({
       ? undefined
       : { maxWidth: `${anchoVisible}px`, position: "sticky" as const, left: 0 };
 
-  const { data, error, isLoading } = useSWR(claveDetalle(movimientoId, page), () =>
-    detalleFetcher(movimientoId, page),
+  const { data, error, isLoading } = useSWR(claveDetalleMiMovimiento(movimientoId, page, resaltar), () =>
+    detalleFetcher(movimientoId, page, resaltar),
   );
 
   const nombreRegion = DETALLE_MI_MOVIMIENTO_NOMBRE.region(concepto, fecha);
@@ -291,6 +369,8 @@ export function DetalleMiMovimientoCierre({
 
   const payload = data?.modo === "ok" ? data.data : undefined;
   const ordenes = payload?.ordenes ?? [];
+  // FICHA 469 (R25) — las órdenes buscadas que aportan a ESTA fila (vacío sin búsqueda por guía, R28).
+  const destacadas = payload?.destacadas ?? [];
   /** R28 — el total del CONJUNTO, contado por la BASE. Nunca `ordenes.length`. */
   const total = payload?.total ?? 0;
   /** R26 — el tamaño de página lo fija la CONFIGURACIÓN, no un literal de pantalla. */
@@ -321,11 +401,19 @@ export function DetalleMiMovimientoCierre({
         </header>
       ) : null}
 
+      {/* FICHA 469 (R25/R27) — la guía buscada, encima de la lista y fuera de su paginación. */}
+      <BloqueGuiaBuscada
+        destacadas={destacadas}
+        nombre={BUSQUEDA_POR_GUIA_TEXTO.bloque(concepto, fecha)}
+      />
+
       <div className="overflow-x-auto">
         <DataTable
           columns={columnas}
           data={ordenes}
           rowKey="ordenId"
+          // FICHA 469 (R26) — la fila buscada con fondo; el texto lo lleva su celda de guía.
+          rowClassName={(o) => (o.resaltada ? "bg-info-soft dark:bg-info/15" : undefined)}
           ariaLabel={DETALLE_MI_MOVIMIENTO_NOMBRE.tabla(concepto, fecha)}
           isLoading={isLoading}
           /* R7: el fallo se cuenta DENTRO de esta fila; el libro entero sigue en pie. */

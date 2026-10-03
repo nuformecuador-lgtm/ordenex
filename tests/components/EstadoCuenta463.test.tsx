@@ -135,12 +135,13 @@ afterEach(() => cleanup());
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 describe("463 R23/R27 — el placeholder del buscador por superficie", () => {
-  it("R23/R27: el placeholder de la oficina nombra a quién registró; el de `/mi-wallet`, solo la descripción", () => {
+  // FICHA 469 (R24): los dos nombran además la guía y la remisión.
+  it("R23/R27 (469 R24): el placeholder de la oficina nombra a quién registró; el de `/mi-wallet`, no", () => {
     envolver(<EstadoCuentaTienda inicial={estado({ filas: TRES, total: 3 })} puedeRegistrar={false} />);
-    expect(buscador()).toHaveAttribute("placeholder", "Buscar por descripción o quién registró");
+    expect(buscador()).toHaveAttribute("placeholder", "Buscar por guía, remisión, descripción o quién registró");
     cleanup();
     envolver(<MiEstadoCuenta inicial={estado({ filas: TRES, total: 3 })} cierres={{ opciones: [], hayMas: false, disponible: true }} />);
-    expect(buscador()).toHaveAttribute("placeholder", "Buscar por descripción");
+    expect(buscador()).toHaveAttribute("placeholder", "Buscar por guía, remisión o descripción");
   });
 });
 

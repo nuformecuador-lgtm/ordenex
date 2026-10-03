@@ -1,6 +1,7 @@
 "use server";
 
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { buildBusquedaPorGuia } from "@/lib/actions/_shared/busqueda-por-guia";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -72,6 +73,7 @@ function buildService(): IEstadoCuentaService {
     new EstadoCuentaRepository(prisma),
     new RechazoTiendaCobroAnulacionRepository(prisma),
     new OrigenLegibleService(new OrigenLegibleRepository(prisma)),
+    buildBusquedaPorGuia(prisma), // FICHA 469 (design §3.3): guia o texto en tienda, mensajero y /mi-wallet
   );
 }
 
@@ -83,6 +85,7 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
     new EstadoCuentaRepository(prisma),
+    buildBusquedaPorGuia(prisma), // FICHA 469 (R25–R29): la guia buscada, destacada
   );
 }
 

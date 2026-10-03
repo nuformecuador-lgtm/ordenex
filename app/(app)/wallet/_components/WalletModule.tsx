@@ -14,6 +14,9 @@ import { Pagination } from "@/components/shared/Pagination";
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { SUFIJO_REINTENTO, mensajeLimite, mensajeLimiteDetalle } from "@/components/shared/descarga-resultado";
 import { filasDetallePorGuia, filasKardex } from "@/components/shared/wallet/libro-kardex-descarga";
+import { BUSQUEDA_POR_GUIA_TEXTO } from "@/components/shared/wallet/busqueda-por-guia-labels";
+import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
+import type { ModoBusquedaLibro } from "@/lib/types/busqueda-por-guia";
 import { useToast } from "@/hooks/useToast";
 import {
   libroCajaKardexAction,
@@ -315,6 +318,9 @@ export function WalletModule({
   // lectura llegó bien (R49): si falla, la pantalla sigue diciendo lo que de verdad está pintado.
   const [filtrosWallet, setFiltrosWallet] = useState<FiltrosWallet>(FILTROS_WALLET_VACIOS);
   const [filtrosLibro, setFiltrosLibro] = useState<FiltrosLibro>(FILTROS_LIBRO_INICIALES);
+  // FICHA 469 (R21–R23, R28) — cómo resolvió el servidor el término del libro PINTADO. Se apunta junto con
+  // sus filas, solo cuando la lectura llegó bien: si la nueva falla, el aviso sigue siendo el de lo que se ve.
+  const [modoBusqueda, setModoBusqueda] = useState<ModoBusquedaLibro | undefined>(undefined);
   // R9 — el conteo de la tarjeta es de la WALLET: no lo mueven el término ni los filtros del libro.
   const [totalWallet, setTotalWallet] = useState(initialTotal);
   /**
@@ -482,6 +488,7 @@ export function WalletModule({
       setTotal(movRes.data.total);
       setPage(movRes.data.page);
       setFiltrosLibro(fl);
+      setModoBusqueda(movRes.data.modoBusqueda);
     } catch {
       if (mio === turno.current) fallo(null, fl);
     } finally {
@@ -506,6 +513,7 @@ export function WalletModule({
       setTotal(movRes.data.total);
       setPage(movRes.data.page);
       setFiltrosLibro(fl);
+      setModoBusqueda(movRes.data.modoBusqueda);
     } catch {
       if (mio === turno.current) fallo(null, fl);
     } finally {
@@ -606,6 +614,10 @@ export function WalletModule({
   }
 
   const loading = cargando !== null;
+  // FICHA 469 (R21/R23/R28) — el término APLICADO, solo si su lectura volvió en modo guía.
+  const terminoAplicado = filtrosLibro.termino.trim();
+  const terminoGuia =
+    modoBusqueda === "guia" && terminoAplicado.length >= BUSQUEDA_LIBRO_MIN_CHARS ? terminoAplicado : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -719,7 +731,13 @@ export function WalletModule({
             <CardTitle>Libro de movimientos</CardTitle>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="flex flex-col gap-3">
+            {/* FICHA 469 (R21/R23) — la búsqueda es por guía: se dice junto a la barra, con el término. */}
+            {terminoGuia !== null ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {BUSQUEDA_POR_GUIA_TEXTO.aviso(terminoGuia)}
+              </p>
+            ) : null}
             {/* Feature 170 (T C.4, R9/R10): la descarga trae el libro ENTERO con los filtros
                 VIGENTES, no la página pintada. El callback se construye EN EL RENDER (design
                 §5), así que cierra sobre los `filtros` de ESTE render: aplicar un filtro y
@@ -730,6 +748,9 @@ export function WalletModule({
               // Ficha 459 (R65) / 458-C (R60): anular o adjuntar desde el panel «Ver» relee libro, tarjetas, composición y desglose.
               onCambio={() => void recargarTrasCambio()}
               autoria={autoria}
+              // FICHA 469 (R22/R25–R28): el vacío propio y el término que destaca la guía en el detalle.
+              resaltar={terminoGuia ?? undefined}
+              emptyMessage={terminoGuia !== null ? BUSQUEDA_POR_GUIA_TEXTO.vacio : undefined}
               // FICHA 463 (R42): las dos zonas y el término vigentes.
               // FICHA 468 (R7/R53/R57): las dos opciones son UNA petición cada una con la MISMA entrada; el
               // orden del archivo es siempre cronológico ascendente (lo fuerza `descargaLibroCaja`).

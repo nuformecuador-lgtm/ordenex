@@ -1,0 +1,33 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (464 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio[0m
+[1;33mTu cambio toca cimientos, y para eso el modo rapido no alcanza:[0m
+    app/(app)/mi-wallet/_components/DetalleMiMovimientoCierre.tsx
+    app/(app)/mi-wallet/_components/MiEstadoCuenta.tsx
+    app/(app)/wallet/_components/DetalleMovimientoCierre.tsx
+    app/(app)/wallet/_components/WalletLedger.tsx
+    app/(app)/wallet/_components/WalletModule.tsx
+    app/(app)/wallet/_components/libro-caja-labels.ts
+    app/(app)/wallet/_components/ordenes-de-fila-cuenta.ts
+    app/(app)/wallet/mensajeros/_components/EstadoCuentaMensajero.tsx
+    app/(app)/wallet/tiendas/_components/EstadoCuentaTienda.tsx
+    components/shared/wallet/busqueda-por-guia-labels.ts
+    lib/actions/wallet-tienda.ts
+    lib/actions/wallet.ts
+    lib/interfaces/repositories/ICierreAporteRepository.ts
+    lib/interfaces/repositories/IWalletMovimientoRepository.ts
+    lib/interfaces/services/IWalletService.ts
+    lib/repositories/CierreAporteRepository.ts
+    lib/repositories/WalletMovimientoRepository.ts
+    lib/repositories/libro-caja-a-quien-sql.ts
+    lib/services/WalletService.ts
+    lib/types/busqueda-por-guia.ts
+    lib/types/detalle-movimiento.ts
+    lib/types/estado-cuenta.ts
+
+  El modo rapido corre 'vitest --changed', que selecciona por grafo de IMPORTS.
+  Una migracion no la importa nadie, y un tipo compartido lo importa medio repo:
+  en los dos casos 'los tests relacionados' no es la respuesta correcta.
+[0;31m✗ esto exige el gate completo. Corre: ./init.sh[0m
+INIT_EXIT=1

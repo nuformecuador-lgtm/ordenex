@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { detalleMovimientoConfig } from "@/lib/config/detalle-movimiento";
+import { BUSQUEDA_LIBRO_MAX_CHARS, BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
 import type { GestionResultado } from "@prisma/client";
 
 /**
@@ -68,6 +69,16 @@ export interface OrdenAporteDTO {
 }
 
 /**
+ * FICHA 469 (design §4.1, R26) — una fila de la PAGINA del detalle: la de siempre mas `resaltada`.
+ * Tipo aparte (y no un campo de `OrdenAporteDTO`) porque el ARCHIVO del detalle no resalta nada y sigue
+ * con `OrdenAporteDTO` tal cual. Desviacion menor del design §4.1, anotada en `progress/impl_469.md`.
+ */
+export interface OrdenDeDetalleDTO extends OrdenAporteDTO {
+  /** Esta orden es una de las que identifico la busqueda por guia (`resaltar`). `false` sin ella (R28). */
+  resaltada: boolean;
+}
+
+/**
  * Ficha 344 (design §3.2) — lo que se muestra al abrir una fila del libro.
  *
  * `total` (N) y `ordenesDelCierre` (M) son la frase que el humano fue a buscar y no encontro:
@@ -84,7 +95,14 @@ export interface DetalleMovimientoPayload {
   total: number;
   page: number;
   pageSize: number;
-  ordenes: OrdenAporteDTO[];
+  ordenes: OrdenDeDetalleDTO[];
+  /**
+   * FICHA 469 (design §4.1, R25/R27/R29) — las ordenes identificadas por la busqueda por guia que APORTAN
+   * a este movimiento, TODAS (no solo las de la pagina visible), con la MISMA forma y el MISMO aporte que
+   * su fila en `ordenes`. Vacio sin `resaltar` o si el termino no identifica ninguna orden del alcance
+   * (R28); en `/mi-wallet` y en la tienda, nunca una orden de otra tienda (R29).
+   */
+  destacadas: OrdenAporteDTO[];
 }
 
 /**
@@ -115,6 +133,13 @@ export const verDetalleDeMovimientoSchema = z
       .min(1)
       .max(detalleMovimientoConfig.MAX_PAGE_SIZE)
       .default(detalleMovimientoConfig.DEFAULT_PAGE_SIZE),
+    /**
+     * FICHA 469 (design §4.1, R25–R29) — el termino del libro, para destacar la guia buscada. Mismo
+     * esquema que `q` del libro (`terminoLibroSchema`: recortado, minimo y maximo de
+     * `lib/config/libro-wallet`; no se importa de `wallet.ts` para no arrastrar ese modulo aqui). La
+     * pantalla lo manda SOLO si la ultima lectura del libro volvio con `modoBusqueda === "guia"`.
+     */
+    resaltar: z.string().trim().min(BUSQUEDA_LIBRO_MIN_CHARS).max(BUSQUEDA_LIBRO_MAX_CHARS).optional(),
   })
   .strict();
 
@@ -128,7 +153,8 @@ export type VerDetalleDeMovimientoInput = z.infer<typeof verDetalleDeMovimientoS
  * que el paginado rechazaria. El tope de filas lo aplica el SERVICIO, no el navegador.
  */
 export const verDetalleDeMovimientoCompletoSchema = verDetalleDeMovimientoSchema
-  .omit({ page: true, pageSize: true })
+  // FICHA 469: el archivo del detalle no destaca nada (`resaltar` fuera: `.strict()` lo rechaza).
+  .omit({ page: true, pageSize: true, resaltar: true })
   .strict();
 
 export type VerDetalleDeMovimientoCompletoInput = z.infer<

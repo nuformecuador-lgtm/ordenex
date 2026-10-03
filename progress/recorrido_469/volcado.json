@@ -1,0 +1,821 @@
+[
+ {
+  "k": "login",
+  "v": "http://localhost:3000/dashboard"
+ },
+ {
+  "k": "modalSinpeCerrado",
+  "v": "http://localhost:3000/wallet"
+ },
+ {
+  "k": "caja:sinBuscar:filas",
+  "v": 20
+ },
+ {
+  "k": "caja:sinBuscar:paginacion",
+  "v": "1-20 de 36 ‹ ›"
+ },
+ {
+  "k": "caja:placeholder",
+  "v": "Buscar por guía, remisión, descripción, nombre o referencia anotada, o quién registró"
+ },
+ {
+  "k": "caja:guia:aviso",
+  "v": true
+ },
+ {
+  "k": "caja:guia:filas",
+  "v": [
+   "2026-09-24 Contra-entrega cobrado a los clientes de la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Quino QUEPOS Entra ₡6.000 Tienda Automático · Aprobación del cierre por Sat QUEPOS Ver",
+   "2026-09-24 IVA del flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Quino QUEPOS Entra ₡390 Ordenex Automático · Aprobación del cierre por Sat QUEPOS Ver",
+   "2026-09-24 IVA de la comisión cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Quino QUEPOS Entra ₡27,30 Ordenex Automático · Aprobación del cierre por Sat QUEPOS Ver",
+   "2026-09-24 Flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Quino QUEPOS Entra ₡3.000 Ordenex Automático · Aprobación del cierre por Sat QUEPOS Ver",
+   "2026-09-24 Comisión de contra-entrega cobrada a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Quino QUEPOS Entra ₡210 Ordenex Automático · Aprobación del cierre por Sat QUEPOS Ver"
+  ]
+ },
+ {
+  "k": "caja:guia:paginacion",
+  "v": "1-5 de 5 ‹ ›"
+ },
+ {
+  "k": "caja:tarjetasIguales",
+  "v": true
+ },
+ {
+  "k": "caja:detalle:bloque",
+  "v": "Guía buscada 38589325 Cliente Quepos 2 Tania Entregado ₡6.000"
+ },
+ {
+  "k": "caja:detalle:panel",
+  "v": "Cierre del día 2026-09-24 Mensajero: Quino QUEPOS 1 de 2 órdenes del cierre aportan a este concepto Importe del movimiento: ₡6.000 Guía buscada 38589325 Cliente Quepos 2 Tania Entregado ₡6.000 Descargar Guía Destinatario Tienda Resultado Aporte 38589325 Guía buscada Cliente Quepos 2 Tania Entregado ₡6.000 1-1 de 1 ‹ ›"
+ },
+ {
+  "k": "caja:detalle:filasResaltadas",
+  "v": 1
+ },
+ {
+  "k": "caja:detalle:claseFila",
+  "v": "border-b bg-info-soft"
+ },
+ {
+  "k": "03-caja-guia:botones",
+  "v": [
+   "Descargar Libro de movimientos",
+   "Elegir qué se descarga y sus columnas",
+   "Descargar Órdenes que componen Contra-entrega cobrado a los clientes de la tienda del 2026-09-24"
+  ]
+ },
+ {
+  "k": "03-caja-guia:botonDescarga",
+  "v": "Descargar Libro de movimientos"
+ },
+ {
+  "k": "03-caja-guia:excel",
+  "v": {
+   "hojas": [
+    "Libro de movimientos",
+    "Detalle por guía"
+   ],
+   "Libro de movimientos": {
+    "filas": 9,
+    "ultimas": [
+     [
+      "2026-09-24",
+      "IVA del flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Ordenex",
+      null,
+      null,
+      390,
+      13477932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Tienda",
+      6000,
+      null,
+      null,
+      13483932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      null,
+      "Total del periodo",
+      null,
+      null,
+      null,
+      6000,
+      0,
+      3627.3,
+      13483932.72
+     ],
+     [
+      null,
+      "Con filtros: Entra y Sale suman solo los movimientos de esta hoja; el saldo es el de toda la caja."
+     ]
+    ],
+    "primeras": [
+     [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "A quién",
+      "Es dinero de",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas",
+      "Saldo",
+      "Registró"
+     ],
+     [
+      null,
+      "Saldo al inicio del periodo",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0
+     ],
+     [
+      "2026-09-24",
+      "Comisión de contra-entrega cobrada a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Ordenex",
+      null,
+      null,
+      210,
+      13477932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Ordenex",
+      null,
+      null,
+      3000,
+      13477932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "IVA de la comisión cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Ordenex",
+      null,
+      null,
+      27.3,
+      13477932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "IVA del flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Ordenex",
+      null,
+      null,
+      390,
+      13477932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      "Quino QUEPOS",
+      "Tienda",
+      6000,
+      null,
+      null,
+      13483932.72,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      null,
+      "Total del periodo",
+      null,
+      null,
+      null,
+      6000,
+      0,
+      3627.3,
+      13483932.72
+     ]
+    ]
+   },
+   "Detalle por guía": {
+    "filas": 10,
+    "ultimas": [
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      null,
+      6000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Total de la guía",
+      null,
+      6000,
+      0,
+      3627.3
+     ],
+     [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Movimientos sin guía"
+     ],
+     [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "TOTAL GENERAL",
+      null,
+      6000,
+      0,
+      3627.3
+     ]
+    ],
+    "primeras": [
+     [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Tienda",
+      "Mensajero",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Cobrado a tiendas"
+     ],
+     [
+      "38589325",
+      "Q454-02",
+      "Cliente Quepos 2",
+      "Tania",
+      "Quino QUEPOS",
+      "2026-09-24",
+      "Entregado"
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Comisión de contra-entrega cobrada a la tienda",
+      null,
+      null,
+      null,
+      210
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Flete cobrado a la tienda",
+      null,
+      null,
+      null,
+      3000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "IVA de la comisión cobrado a la tienda",
+      null,
+      null,
+      null,
+      27.3
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "IVA del flete cobrado a la tienda",
+      null,
+      null,
+      null,
+      390
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      null,
+      6000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Total de la guía",
+      null,
+      6000,
+      0,
+      3627.3
+     ]
+    ]
+   },
+   "totales": {
+    "Libro de movimientos": [
+     " | Total del periodo |  |  |  | 6000 | 0 | 3627.3 | 13483932.72"
+    ],
+    "Detalle por guía": [
+     " |  |  |  |  |  |  | TOTAL GENERAL |  | 6000 | 0 | 3627.3"
+    ]
+   }
+  }
+ },
+ {
+  "k": "caja:remision:aviso",
+  "v": true
+ },
+ {
+  "k": "caja:remision:filas",
+  "v": 5
+ },
+ {
+  "k": "caja:remision:mismasQueGuia",
+  "v": true
+ },
+ {
+  "k": "caja:noGuia:aviso",
+  "v": false
+ },
+ {
+  "k": "caja:noGuia:filas",
+  "v": [
+   "No hay movimientos que coincidan con los filtros."
+  ]
+ },
+ {
+  "k": "caja:texto:aviso",
+  "v": false
+ },
+ {
+  "k": "caja:texto:filas",
+  "v": [
+   "2026-08-11 Corrección de caja (resta) Registrado a mano · Combustible flota — Sale ₡1.500,50 Ordenex Ana Admin Ver"
+  ]
+ },
+ {
+  "k": "caja:texto:paginacion",
+  "v": "1-1 de 1 ‹ ›"
+ },
+ {
+  "k": "tienda:tabla",
+  "v": "Estado de cuenta de Tania Tienda"
+ },
+ {
+  "k": "tienda:placeholder",
+  "v": "Buscar por guía, remisión, descripción o quién registró"
+ },
+ {
+  "k": "tienda:sinBuscar:filas",
+  "v": 20
+ },
+ {
+  "k": "tienda:guia:aviso",
+  "v": true
+ },
+ {
+  "k": "tienda:guia:filas",
+  "v": [
+   "2026-09-24 Flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Registró: Automático · Aprobación del cierre por Sat QUEPOS ₡3.000 ₡147.670,10 Ver",
+   "2026-09-24 Contra-entrega cobrado a los clientes de la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Registró: Automático · Aprobación del cierre por Sat QUEPOS ₡6.000 ₡150.670,10 Ver",
+   "2026-09-24 IVA de la comisión cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Registró: Automático · Aprobación del cierre por Sat QUEPOS ₡27,30 ₡145.800,10 Ver",
+   "2026-09-24 IVA del flete cobrado a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Registró: Automático · Aprobación del cierre por Sat QUEPOS ₡390 ₡145.827,40 Ver",
+   "2026-09-24 Comisión de contra-entrega cobrada a la tienda Cierre del día · 2026-09-24 · Quino QUEPOS Ver Registró: Automático · Aprobación del cierre por Sat QUEPOS ₡210 ₡146.217,40 Ver",
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "tienda:tarjetasIguales",
+  "v": true
+ },
+ {
+  "k": "tienda:detalle:bloque",
+  "v": "Guía buscada 38589325 Cliente Quepos 2 Tania Entregado ₡3.000"
+ },
+ {
+  "k": "06b-tienda-guia:botones",
+  "v": [
+   "Descargar Estado de cuenta de Tania Tienda",
+   "Elegir qué se descarga y sus columnas",
+   "Descargar Órdenes que componen Flete cobrado a la tienda del 2026-09-24",
+   "Descargar Pagos registrados de Tania Tienda"
+  ]
+ },
+ {
+  "k": "06b-tienda-guia:botonDescarga",
+  "v": "Descargar Estado de cuenta de Tania Tienda"
+ },
+ {
+  "k": "06b-tienda-guia:excel",
+  "v": {
+   "hojas": [
+    "Estado de cuenta de Tania Tien…",
+    "Detalle por guía"
+   ],
+   "Estado de cuenta de Tania Tien…": {
+    "filas": 9,
+    "ultimas": [
+     [
+      "2026-09-24",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      6000,
+      null,
+      150670.1,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      null,
+      3000,
+      147670.1,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      null,
+      "Total del periodo",
+      null,
+      6000,
+      3627.3,
+      147670.1
+     ],
+     [
+      null,
+      "Con filtros: Entra y Sale suman solo los movimientos de esta hoja; el saldo es el de toda la cuenta."
+     ]
+    ],
+    "primeras": [
+     [
+      "Fecha",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale",
+      "Saldo",
+      "Registró"
+     ],
+     [
+      null,
+      "Saldo al inicio del periodo",
+      null,
+      null,
+      null,
+      0
+     ],
+     [
+      "2026-09-24",
+      "Comisión de contra-entrega cobrada a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      null,
+      210,
+      146217.4,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "IVA del flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      null,
+      390,
+      145827.4,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "IVA de la comisión cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      null,
+      27.3,
+      145800.1,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      6000,
+      null,
+      150670.1,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      "2026-09-24",
+      "Flete cobrado a la tienda",
+      "Cierre del día · 2026-09-24 · Quino QUEPOS · 1 guía",
+      null,
+      3000,
+      147670.1,
+      "Automático · Aprobación del cierre por Sat QUEPOS"
+     ],
+     [
+      null,
+      "Total del periodo",
+      null,
+      6000,
+      3627.3,
+      147670.1
+     ]
+    ]
+   },
+   "Detalle por guía": {
+    "filas": 10,
+    "ultimas": [
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Flete cobrado a la tienda",
+      null,
+      null,
+      3000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Total de la guía",
+      null,
+      6000,
+      3627.3
+     ],
+     [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Movimientos sin guía"
+     ],
+     [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "TOTAL GENERAL",
+      null,
+      6000,
+      3627.3
+     ]
+    ],
+    "primeras": [
+     [
+      "Guía",
+      "Remisión",
+      "Destinatario",
+      "Mensajero",
+      "Cierre",
+      "Resultado",
+      "Concepto",
+      "Detalle",
+      "Entra",
+      "Sale"
+     ],
+     [
+      "38589325",
+      "Q454-02",
+      "Cliente Quepos 2",
+      "Quino QUEPOS",
+      "2026-09-24",
+      "Entregado"
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Comisión de contra-entrega cobrada a la tienda",
+      null,
+      null,
+      210
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "IVA del flete cobrado a la tienda",
+      null,
+      null,
+      390
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "IVA de la comisión cobrado a la tienda",
+      null,
+      null,
+      27.3
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Contra-entrega cobrado a los clientes de la tienda",
+      null,
+      6000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      "2026-09-24",
+      "Entregado",
+      "Flete cobrado a la tienda",
+      null,
+      null,
+      3000
+     ],
+     [
+      "38589325",
+      null,
+      null,
+      null,
+      null,
+      null,
+      "Total de la guía",
+      null,
+      6000,
+      3627.3
+     ]
+    ]
+   },
+   "totales": {
+    "Estado de cuenta de Tania Tien…": [
+     " | Total del periodo |  | 6000 | 3627.3 | 147670.1"
+    ],
+    "Detalle por guía": [
+     " |  |  |  |  |  | TOTAL GENERAL |  | 6000 | 3627.3"
+    ]
+   }
+  }
+ },
+ {
+  "k": "mensajero:sinBuscar:filas",
+  "v": 1
+ },
+ {
+  "k": "mensajero:guia:aviso",
+  "v": true
+ },
+ {
+  "k": "mensajero:guia:filas",
+  "v": [
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "mensajero:guia:vacioR22",
+  "v": 1
+ },
+ {
+  "k": "marco:sinBuscar:filas",
+  "v": [
+   "2026-08-13 Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡1.700 ₡5.100 Ver",
+   "2026-08-13 Pago devengado Cierre del día · 2026-08-13 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡3.400 ₡3.400 Ver",
+   "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Registró: Ana Admin ₡3.400 ₡0 Ver",
+   "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Registró: Ana Admin ₡600 -₡3.400 Ver",
+   "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. ₡600 -₡4.000 Ver",
+   "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Reparto mal imputado: se corrige entero. ₡3.400 -₡3.400 Ver",
+   "2026-08-13 Ajuste (devengo) Anulación Anulación de pago · Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Registró: Ana Admin ₡1.400 ₡0 Ver",
+   "2026-08-13 Liquidación Efectivo Pago de Ordenex a un mensajero · Marco Mensajero · 2026-08-13 Cómo se pagó: Efectivo Registró: Ana Admin Anulado el 2026-08-13 por Ana Admin · Verificacion de la ficha 210: la insignia de anulado cambia de variante. ₡1.400 -₡1.400 Ver",
+   "2026-08-12 Pago del efectivo Cierre del día · 2026-08-12 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡0 Ver",
+   "2026-08-12 Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡10.200 Ver",
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "marco:990004:aviso",
+  "v": true
+ },
+ {
+  "k": "marco:990004:filas",
+  "v": [
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "marco:990006:aviso",
+  "v": true
+ },
+ {
+  "k": "marco:990006:filas",
+  "v": [
+   "2026-08-12 Pago devengado Cierre del día · 2026-08-12 · Marco Mensajero Ver Registró: Automático · Aprobación del cierre por Ana Admin ₡10.200 ₡10.200 Ver",
+   "— Saldo inicial ₡0"
+  ]
+ },
+ {
+  "k": "marco:tarjetasIguales",
+  "v": true
+ },
+ {
+  "k": "mensajero:guia:filasQueSeAbren",
+  "v": 1
+ },
+ {
+  "k": "mensajero:detalle:bloque",
+  "v": "Guía buscada 990006 Luis Jimenez Tania Reprogramado ₡1.700"
+ },
+ {
+  "k": "satelite:enlaces",
+  "v": []
+ },
+ {
+  "k": "satelite:placeholder",
+  "v": "Buscar por descripción o quién registró"
+ },
+ {
+  "k": "satelite:guia:aviso",
+  "v": false
+ }
+]

@@ -1,3 +1,4 @@
+import type { ParDeGuia } from "@/lib/types/busqueda-por-guia";
 import type { HistorialAccionTipo } from "@/lib/types/historial-accion";
 import type { AQuienFiltro } from "@/lib/types/libro-caja-a-quien";
 import type { DireccionOrden } from "@/lib/types/ordenamiento-listado";
@@ -108,6 +109,12 @@ export interface ListarMovimientosFiltros {
    * en el LISTADO: `BalanceFiltros` no lo tiene, asi que ningun agregado de las cifras lo recibe (R12).
    */
   termino?: string;
+  /**
+   * FICHA 469 (design §3.1, R8–R10, R16) — la busqueda por GUIA: la lista CERRADA de pares que calculo
+   * `BusquedaPorGuiaService`. EXCLUYENTE con `termino` (si viene, el texto no cuenta: R10); `[]` = ninguna
+   * fila (R22). Como el termino, solo existe en el LISTADO: ningun agregado de las cifras lo recibe (R18).
+   */
+  porGuia?: readonly ParDeGuia[];
   /**
    * FICHA 463 (R33/R36) — el sentido de la tupla `fecha_movimiento, created_at, id`. Ausente ⇒
    * `desc` (lo mas nuevo primero), que es el orden de siempre.

@@ -63,6 +63,7 @@ import {
 } from "@/lib/types/detalle-movimiento";
 import { registrarMovimientoManualConLateralesSchema, separarComprobante } from "@/lib/types/wallet-laterales";
 import { buildComprobantes, leerComprobanteOpcional } from "@/lib/actions/_shared/comprobante-lateral";
+import { buildBusquedaPorGuia } from "@/lib/actions/_shared/busqueda-por-guia";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -146,7 +147,10 @@ function buildService(): IWalletService {
     // Ficha 458-C (revision B3, R71): el pago de Ordenex a una tienda y el premio del ranking.
     pagosATienda: new PagoTiendaCajaDocumentosRepository(prisma),
     premios: new PremioCajaDocumentosRepository(prisma),
-  }, buildComprobantes(prisma)); // Ficha 458-B (R74): el comprobante de la correccion
+  },
+  buildComprobantes(prisma), // Ficha 458-B (R74): el comprobante de la correccion
+  buildBusquedaPorGuia(prisma), // FICHA 469 (design §3.3): guia o texto en el libro y en su descarga
+  );
 }
 
 /**
@@ -177,6 +181,7 @@ function buildDetalleService(): IDetalleMovimientoService {
     new WalletTiendaMovimientoRepository(prisma),
     new CierreAporteRepository(prisma),
     new EstadoCuentaRepository(prisma), // 458-D (servidor, R19): la fila del mensajero; este borde no la usa
+    buildBusquedaPorGuia(prisma), // FICHA 469 (R25–R29): la guia buscada, destacada
   );
 }
 

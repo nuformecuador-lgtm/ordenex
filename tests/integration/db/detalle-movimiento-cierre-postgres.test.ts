@@ -19,6 +19,7 @@ import {
   enTransaccionRevertida,
   serializarEscriturasReales,
 } from "./_postgres-real";
+import { busquedaPorGuiaDe } from "./_fixtures/busqueda-469";
 
 /**
  * Ficha 344 (T5.1, design §6) — EL DETALLE DE UNA FILA DEL LIBRO, CONTRA POSTGRES DE VERDAD.
@@ -358,6 +359,7 @@ async function sembrar(tx: Tx, semilla: Semilla[] = SEMILLA): Promise<Sembrado> 
     new WalletTiendaMovimientoRepository(cliente),
     new CierreAporteRepository(cliente),
     new EstadoCuentaRepository(cliente),
+    busquedaPorGuiaDe(cliente),
   );
 
   const filaCaja = (categoria: WalletMovimientoCategoria) =>

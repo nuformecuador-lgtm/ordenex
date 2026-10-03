@@ -3,6 +3,7 @@ import type {
   AlcanceDeCierre,
   CabeceraDeCierre,
   FiltroAportesEnLote,
+  FiltroCierresDondeAporta,
   FiltroOrdenesQueAportan,
   ICierreAporteRepository,
   OrdenAporteEnLoteRow,
@@ -168,7 +169,11 @@ export class CierreAporteRepository implements ICierreAporteRepository {
   async listarOrdenesQueAportan(
     f: FiltroOrdenesQueAportan,
   ): Promise<PaginaRepositorio<OrdenAporteRow>> {
-    const where = buildWhere(f.cierreId, f.criterio, f.tiendaId);
+    // FICHA 469 (design §4.2): `ordenIds` acota en un `AND` APARTE, sin tocar `buildWhere` (el criterio
+    // sigue escrito una sola vez). Sin `ordenIds`, el `where` es exactamente el de siempre.
+    const base = buildWhere(f.cierreId, f.criterio, f.tiendaId);
+    const where: Prisma.CierreDetailWhereInput =
+      f.ordenIds === undefined ? base : { AND: [base, { ordenId: { in: [...f.ordenIds] } }] };
 
     // R28: la pagina y el TOTAL salen del MISMO `where`, en la misma llamada.
     const [filas, total] = await Promise.all([
@@ -256,6 +261,22 @@ export class CierreAporteRepository implements ICierreAporteRepository {
       ),
       cierreId: d.cierreId,
     }));
+  }
+
+  /**
+   * FICHA 469 (design §2.2) — el `whereDelLote` con la ORDEN fijada en cada rama: `OR` de
+   * `(buildWhere(cierre, criterio, tiendaId) AND orden_id = orden)`. La orden va en un `AND` aparte para
+   * no tocar `buildWhere` (es un acotamiento, como `tiendaId`, no una condicion del criterio).
+   */
+  async cierresDondeAporta(f: FiltroCierresDondeAporta): Promise<Array<{ cierreId: string; ordenId: string }>> {
+    if (f.pares.length === 0) return [];
+    return this.prisma.cierreDetail.findMany({
+      where: {
+        OR: f.pares.map((p) => ({ AND: [buildWhere(p.cierreId, f.criterio, f.tiendaId), { ordenId: p.ordenId }] })),
+      },
+      select: { cierreId: true, ordenId: true },
+      orderBy: [{ cierreId: "asc" }, { ordenId: "asc" }],
+    });
   }
 
   /** Ficha 464 — las cabeceras de un tramo de cierres, en una consulta. */

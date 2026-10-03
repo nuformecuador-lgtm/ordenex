@@ -22,6 +22,7 @@ import { SUFIJO_REINTENTO, mensajeLimiteDetalle } from "@/components/shared/desc
 import { filasDetallePorGuia, filasKardex } from "@/components/shared/wallet/libro-kardex-descarga";
 import { DetalleMovimientoPanel, type DetalleMovimiento } from "@/components/shared/wallet/DetalleMovimientoPanel";
 import { PANEL_TEXTO, textoRegistro } from "@/components/shared/wallet/detalle-movimiento-panel-labels";
+import { BUSQUEDA_POR_GUIA_TEXTO } from "@/components/shared/wallet/busqueda-por-guia-labels";
 import { ORIGEN_ENLACE_VISIBLE } from "@/components/shared/wallet/origen-movimiento";
 import { ORDEN_LIBRO, ORDEN_LIBRO_POR_DEFECTO, ZONA_LIBRO_TEXTO } from "@/components/shared/wallet/zonas-filtros-labels";
 import { BUSQUEDA_LIBRO_MIN_CHARS } from "@/lib/config/libro-wallet";
@@ -175,9 +176,14 @@ export interface DescargaDeLaSuperficie extends Required<Pick<DataTableDescarga,
   detalle?: DetalleDeLaDescarga;
 }
 
-/** FICHA 458-D (R19) — el despliegue de las órdenes de las filas que nacen de un cierre. */
+/**
+ * FICHA 458-D (R19) — el despliegue de las órdenes de las filas que nacen de un cierre.
+ *
+ * FICHA 469 (R25–R28) — `resaltar` es el término de la lectura PINTADA, SOLO si volvió en modo guía; el
+ * panel lo manda al servidor para destacar la guía buscada. Ausente en modo texto o sin búsqueda (R28).
+ */
 export interface DetalleDeFila {
-  render: (fila: FilaEstadoCuentaDTO, textos: { concepto: string; fecha: string }) => ReactNode;
+  render: (fila: FilaEstadoCuentaDTO, textos: { concepto: string; fecha: string; resaltar?: string }) => ReactNode;
   /** El nombre accesible del botón que la despliega: identifica SU fila (concepto y día). */
   nombre: (textos: { concepto: string; fecha: string }) => string;
 }
@@ -282,6 +288,17 @@ export function filtrosDeLectura(
     ...(termino.length >= BUSQUEDA_LIBRO_MIN_CHARS ? { q: termino } : {}),
     ...(libro.sortDir === ORDEN_LIBRO_POR_DEFECTO ? {} : { sortBy: "fecha" as const, sortDir: libro.sortDir }),
   };
+}
+
+/**
+ * FICHA 469 (R21, R23, R28) — el término de una lectura que volvió en MODO GUÍA, o `null`. Se mira la
+ * lectura PINTADA (su selección y su `modoBusqueda`), nunca la pedida: si la nueva falla, el aviso y el
+ * resaltado siguen siendo los de lo que se ve (regla R49 de la 463).
+ */
+export function terminoDeGuia(lectura: { seleccion: { termino: string }; estado: EstadoCuentaDTO } | undefined): string | null {
+  if (lectura === undefined || lectura.estado.modoBusqueda !== "guia") return null;
+  const termino = lectura.seleccion.termino.trim();
+  return termino.length >= BUSQUEDA_LIBRO_MIN_CHARS ? termino : null;
 }
 
 /** El orden que pide una lectura: el del filtro, o el de por defecto si no viaja (R34). */
@@ -581,6 +598,8 @@ export function EstadoCuenta({
 
   const vigente = data?.estado ?? inicial;
   const hayFallo = falloSobre !== null && falloSobre === data;
+  // FICHA 469 (R21–R23, R28) — búsqueda por guía de lo que se PINTA (no de lo pedido).
+  const terminoGuia = terminoDeGuia(data);
 
   /**
    * FICHA 463 (R49) — la lectura falló: se sigue pintando la última buena (`keepPreviousData` ya la
@@ -706,6 +725,13 @@ export function EstadoCuenta({
         </p>
       ) : null}
 
+      {/* FICHA 469 (R21/R23) — la búsqueda es por guía: se dice junto a la barra, con el término pintado. */}
+      {terminoGuia !== null ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {BUSQUEDA_POR_GUIA_TEXTO.aviso(terminoGuia)}
+        </p>
+      ) : null}
+
       <TablaEstadoCuenta
         estado={data?.estado}
         rotulos={rotulos}
@@ -717,7 +743,8 @@ export function EstadoCuenta({
         filtros={
           <BuscadorFiltros
             label={ZONA_LIBRO_TEXTO.buscar}
-            placeholder={ESTADO_CUENTA_TEXTO.buscarPlaceholder[vista]}
+            // FICHA 469 (R24/R36) — la satélite tiene su texto propio: no nombra la guía.
+            placeholder={ESTADO_CUENTA_TEXTO.buscarPlaceholder[tipo === "bodega" ? "bodega" : vista]}
             minChars={BUSQUEDA_LIBRO_MIN_CHARS}
             leerDeUrl={false}
             siembra={siembraTermino}
@@ -759,6 +786,7 @@ export function EstadoCuenta({
         onVer={panel === undefined ? undefined : (f) => (seAbre(f) ? setAbierta(f) : undefined)}
         conRegistro={vista === "oficina"}
         detalleDeFila={detalleDeFila}
+        resaltar={terminoGuia ?? undefined}
         accionDeFila={accionDeFila}
         descarga={{
           ...ambitoDeLaSuperficie,
@@ -778,7 +806,10 @@ export function EstadoCuenta({
         }}
       />
       {data !== undefined && data.estado.filas.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{ESTADO_CUENTA_TEXTO.vacio}</p>
+        <p className="text-sm text-muted-foreground">
+          {/* FICHA 469 (R22) — con búsqueda por guía, el vacío lo dice en esos términos. */}
+          {terminoGuia !== null ? BUSQUEDA_POR_GUIA_TEXTO.vacio : ESTADO_CUENTA_TEXTO.vacio}
+        </p>
       ) : null}
 
       <Pagination
@@ -852,6 +883,8 @@ export interface TablaEstadoCuentaProps {
   conRegistro?: boolean;
   /** R19 — el despliegue de órdenes de las filas que nacen de un cierre. */
   detalleDeFila?: DetalleDeFila;
+  /** FICHA 469 (R25–R28) — el término de la lectura pintada en modo guía; ausente en modo texto. */
+  resaltar?: string;
   /** R78 — acción de solo lectura por fila (en lugar de «Ver»). */
   accionDeFila?: AccionDeFila;
   descarga?: DataTableProps<LineaTabla>["descarga"];
@@ -910,6 +943,7 @@ export function TablaEstadoCuenta({
   onVer,
   conRegistro = true,
   detalleDeFila,
+  resaltar,
   accionDeFila,
   descarga,
   filtros,
@@ -1048,7 +1082,11 @@ export function TablaEstadoCuenta({
             ? undefined
             : (l) =>
                 l.tipo === "movimiento" && despliegaOrdenes(l.fila)
-                  ? detalleDeFila.render(l.fila, { concepto: rotulos.concepto(l.fila), fecha: l.fila.fecha })
+                  ? detalleDeFila.render(l.fila, {
+                      concepto: rotulos.concepto(l.fila),
+                      fecha: l.fila.fecha,
+                      ...(resaltar === undefined ? {} : { resaltar }),
+                    })
                   : null
         }
         expandAriaLabel={(l) =>

@@ -112,7 +112,8 @@ describe("/mi-wallet — el cierre se ELIGE, no se escribe (R22) [335 → 458-D]
     const busqueda = visibles.filter((i) => i.type === "search");
     expect(busqueda).toHaveLength(1);
     expect(busqueda[0]).toHaveAccessibleName("Buscar en el libro");
-    expect(busqueda[0].placeholder).toBe("Buscar por descripción");
+    // FICHA 469 (R24): y la guía o la remisión; sigue sin nombrar a quién registró (463 R27).
+    expect(busqueda[0].placeholder).toBe("Buscar por guía, remisión o descripción");
     expect(busqueda[0].placeholder).not.toMatch(/\bID\b|identificador/i);
   });
 

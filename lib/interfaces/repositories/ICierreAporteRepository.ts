@@ -33,6 +33,23 @@ export interface FiltroOrdenesQueAportan extends AlcanceDeCierre {
    */
   criterio: CriterioDeAporte;
   rango: RangoPagina;
+  /**
+   * FICHA 469 (design §4.2, R25) — acota a ESAS ordenes (las identificadas por la busqueda por guia),
+   * para el bloque «Guia buscada» del detalle. Es un acotamiento, como `tiendaId`, NO una condicion del
+   * criterio: va en un `AND` aparte y `buildWhere` no se toca. Ausente = sin acotar (el de siempre).
+   */
+  ordenIds?: readonly string[];
+}
+
+/**
+ * FICHA 469 (design §2.2) — el filtro de `cierresDondeAporta`: un criterio y los pares (cierre, orden)
+ * CANDIDATOS. Cada par es una rama `buildWhere(cierreId, criterio, tiendaId)` con la orden fijada.
+ */
+export interface FiltroCierresDondeAporta {
+  criterio: CriterioDeAporte;
+  pares: readonly { cierreId: string; ordenId: string }[];
+  /** Igual que en el detalle de una fila de ESA superficie: de la cuenta o del actor, nunca de la entrada. */
+  tiendaId?: string;
 }
 
 /**
@@ -110,4 +127,11 @@ export interface ICierreAporteRepository {
   listarAportesDeCierres(f: FiltroAportesEnLote): Promise<OrdenAporteEnLoteRow[]>;
   /** Ficha 464 — la cabecera de cada cierre del tramo, en una consulta. Un id inexistente no aparece. */
   cabecerasDeCierres(cierreIds: readonly string[]): Promise<Map<string, CabeceraDeCierre>>;
+  /**
+   * FICHA 469 (design §2.2, R8–R11, R34) — de los pares dados, los que CASAN con el criterio: la orden
+   * aporta a ese concepto en ese cierre. Es el `WHERE` del detalle de una fila (`buildWhere`) con la orden
+   * fijada en cada rama, asi que «sale en la busqueda» ⇔ «el detalle de esa fila la lista» por
+   * construccion (R11). Sin pares, sin consulta.
+   */
+  cierresDondeAporta(f: FiltroCierresDondeAporta): Promise<Array<{ cierreId: string; ordenId: string }>>;
 }

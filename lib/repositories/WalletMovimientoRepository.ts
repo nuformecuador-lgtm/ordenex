@@ -272,9 +272,11 @@ export class WalletMovimientoRepository implements IWalletMovimientoRepository, 
     // siendo total, pero el «Mas antiguas» de dos filas del mismo instante no seria el reverso exacto
     // del «Mas recientes».
     const sentido: DireccionOrden = filtros.sortDir ?? "desc";
-    if (filtros.aQuien !== undefined || filtros.termino !== undefined) {
+    if (filtros.aQuien !== undefined || filtros.termino !== undefined || filtros.porGuia !== undefined) {
       // Ficha 458-E (R59) y 463 (R24/R25): el MISMO orden total de abajo, en SQL, sobre el WHERE con
       // «A quién» y/o el termino. El conteo usa el MISMO WHERE: la pagina y el total no discrepan.
+      // FICHA 469 (R16/R19/R20): la busqueda por guia va por este mismo camino (mismo WHERE en la pagina
+      // y en el conteo, mismo orden total).
       const where = whereLibroCajaConTerminoSql(filtros);
       const dir = sentido === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
       const orden = Prisma.join(

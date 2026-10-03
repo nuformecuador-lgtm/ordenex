@@ -75,6 +75,8 @@ export function textoAQuien(a: AQuienDTO): string {
 /**
  * FICHA 463 (R23/R25) — el placeholder del buscador del libro de la caja. Es la documentación de lo que
  * el campo alcanza: la descripción, el nombre y la referencia anotados y quién registró.
+ *
+ * FICHA 469 (R24) — y la guía o la remisión de una orden (búsqueda por guía).
  */
 export const BUSCADOR_LIBRO_CAJA_PLACEHOLDER =
-  "Buscar por descripción, nombre o referencia anotada, o quién registró";
+  "Buscar por guía, remisión, descripción, nombre o referencia anotada, o quién registró";
