@@ -73,13 +73,15 @@ export function EstadoCuentaTienda({ inicial, puedeRegistrar }: Readonly<EstadoC
       // R19 (344/345) — las órdenes de ESTA tienda que componen el importe de una fila de cierre.
       detalleDeFila={{
         nombre: ({ concepto, fecha }) => DETALLE_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-        render: (f, { concepto, fecha }) =>
+        // FICHA 469 (R25–R28): `resaltar` solo llega con la lectura pintada en modo guía.
+        render: (f, { concepto, fecha, resaltar }) =>
           f.ref !== null && "movimientoId" in f.ref ? (
             <DetalleMovimientoCierre
               movimientoId={f.ref.movimientoId}
               concepto={concepto}
               fecha={fecha}
               fuente={fuenteOrdenesDeFila({ tipo: "tienda", id: tiendaId })}
+              resaltar={resaltar}
             />
           ) : null,
       }}

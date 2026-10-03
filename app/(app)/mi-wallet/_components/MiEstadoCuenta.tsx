@@ -134,9 +134,15 @@ export function MiEstadoCuenta({ inicial, cierres }: Readonly<MiEstadoCuentaProp
         selectorCierre={(valor, onCambiar) => <SelectorMiCierre cierres={cierres} valor={valor} onCambiar={onCambiar} />}
         detalleDeFila={{
           nombre: ({ concepto, fecha }) => DETALLE_MI_MOVIMIENTO_NOMBRE.abrir(concepto, fecha),
-          render: (f, { concepto, fecha }) =>
+          // FICHA 469 (R25–R29): `resaltar` solo llega con la lectura pintada en modo guía.
+          render: (f, { concepto, fecha, resaltar }) =>
             f.ref !== null && "movimientoId" in f.ref ? (
-              <DetalleMiMovimientoCierre movimientoId={f.ref.movimientoId} concepto={concepto} fecha={fecha} />
+              <DetalleMiMovimientoCierre
+                movimientoId={f.ref.movimientoId}
+                concepto={concepto}
+                fecha={fecha}
+                resaltar={resaltar}
+              />
             ) : null,
         }}
         accionDeFila={{

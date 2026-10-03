@@ -254,10 +254,11 @@ describe("458-D — los estados de cuenta de tienda y mensajero: ningún control
     expect(document.body.textContent ?? "").not.toMatch(UUID);
     // FICHA 463/467: el periodo es un calendario (casilla «Periodo» de la barra única); el único campo
     // que se escribe es el buscador del libro (R23), que busca por la descripción o quién registró.
+    // FICHA 469 (R24): y por la guía o la remisión de una orden.
     expect(screen.getAllByRole("searchbox")).toHaveLength(1);
     expect(screen.getByRole("searchbox", { name: "Buscar en el libro" })).toHaveAttribute(
       "placeholder",
-      "Buscar por descripción o quién registró",
+      "Buscar por guía, remisión, descripción o quién registró",
     );
     expect(screen.getByRole("button", { name: /^Filtros/ })).toBeInTheDocument();
   });

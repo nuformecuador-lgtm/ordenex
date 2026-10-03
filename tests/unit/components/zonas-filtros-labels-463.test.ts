@@ -32,14 +32,22 @@ describe("463 R33/R34 — el orden: «Más recientes» y «Más antiguas», y se
 });
 
 describe("463 R23/R25–R27 — los placeholders dicen qué se puede buscar", () => {
-  it("caja: descripción, nombre o referencia anotada y quién registró", () => {
-    expect(BUSCADOR_LIBRO_CAJA_PLACEHOLDER).toBe("Buscar por descripción, nombre o referencia anotada, o quién registró");
+  // FICHA 469 (R24): las superficies con búsqueda por guía nombran también la guía y la remisión.
+  it("caja (469 R24): guía, remisión, descripción, nombre o referencia anotada y quién registró", () => {
+    expect(BUSCADOR_LIBRO_CAJA_PLACEHOLDER).toBe(
+      "Buscar por guía, remisión, descripción, nombre o referencia anotada, o quién registró",
+    );
   });
 
-  it("oficina: descripción o quién registró; `/mi-wallet`: SOLO descripción (R27, no nombra a nadie de Ordenex)", () => {
-    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.oficina).toBe("Buscar por descripción o quién registró");
-    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.tienda).toBe("Buscar por descripción");
+  it("oficina (469 R24): guía, remisión, descripción o quién registró; `/mi-wallet`: sin quién registró (R27)", () => {
+    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.oficina).toBe("Buscar por guía, remisión, descripción o quién registró");
+    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.tienda).toBe("Buscar por guía, remisión o descripción");
     expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.tienda).not.toMatch(/registr/i);
+  });
+
+  it("469 R36: la bodega satélite NO nombra la guía (su buscador sigue siendo solo de texto)", () => {
+    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.bodega).toBe("Buscar por descripción o quién registró");
+    expect(ESTADO_CUENTA_TEXTO.buscarPlaceholder.bodega).not.toMatch(/guía|remisión/i);
   });
 });
 
@@ -54,6 +62,7 @@ describe("463 R48 — sin la sigla «SLA» ni jerga técnica en los textos nuevo
     BUSCADOR_LIBRO_CAJA_PLACEHOLDER,
     ESTADO_CUENTA_TEXTO.buscarPlaceholder.oficina,
     ESTADO_CUENTA_TEXTO.buscarPlaceholder.tienda,
+    ESTADO_CUENTA_TEXTO.buscarPlaceholder.bodega,
     BUSCADOR_SALDOS_TIENDAS.label,
     BUSCADOR_SALDOS_TIENDAS.placeholder,
   ];
