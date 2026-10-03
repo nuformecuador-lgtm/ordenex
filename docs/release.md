@@ -211,7 +211,8 @@ sino «por qué seguimos esperando».
 - **Sin migraciones.** Bucket `descargas` en producción: privado (`public = false`), creado por el recorrido T6.1 la noche anterior. `DESCARGA_MAX_FILAS` no existe en Vercel (T7.1).
 - **Gate sobre `27d437e5` (= `origin/dev`):** INIT_EXIT=0, 33.130 tests, 26 skipped preexistentes, sin flakes (`progress/gate_release_470.log`).
 - **La noche se perdió 9 h** porque un subagente pidió un permiso a la 01:18 con el humano ausente (memoria «Si el humano se va: autonomía total»).
-- **Pendiente:** T7.2/T7.4 repetir en producción, con sesión real, la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros (el leader no tiene credencial de producción); T7.3 la purga, ver abajo.
+- **T7.3 verificada:** primera corrida del cron `GET /api/cron/purga-descargas 200` a las 16:15 UTC; los 2 objetos temporales del recorrido borrados (`storage.objects` en `descargas` = 0). 0 errores de runtime tras desplegar.
+- **Pendiente:** T7.2/T7.4 repetir en producción, con sesión real, la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros (el leader no tiene credencial de producción).
 
 ## Release del 2026-10-02 — 463 a 469 (wallet: barra, búsqueda por guía, Excel kardex; devolución a origen; cobertura)
 
