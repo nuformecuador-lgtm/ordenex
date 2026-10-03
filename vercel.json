@@ -40,6 +40,10 @@
     {
       "path": "/api/cron/aviso-reparto-manana",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/purga-descargas",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

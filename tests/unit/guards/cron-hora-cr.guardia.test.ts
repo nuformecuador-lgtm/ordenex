@@ -182,7 +182,11 @@ describe("413 — el resto de los crons no se ha tocado (R40)", () => {
     expect(porRuta.get("/api/cron/purga-postulaciones-recurso")).toBe("30 9 * * *");
     expect(porRuta.get("/api/cron/avisos-diarios")).toBe("0 13 * * *");
     // Y el nuevo hace diez.
-    expect(crons()).toHaveLength(10);
+    expect(porRuta.get("/api/cron/aviso-reparto-manana")).toBe("0 1 * * *");
+    // Ficha 470 (R18): la purga de los objetos temporales de las descargas, cada 15 min, hace once.
+    // Es una barrida sin hora de pared (no avisa a nadie), por eso no entra en la regla nocturna.
+    expect(porRuta.get("/api/cron/purga-descargas")).toBe("*/15 * * * *");
+    expect(crons()).toHaveLength(11);
   });
 
   it("⭑ la corrida de esta ficha NO choca con el corte diario ni con el de gastos fijos", () => {
