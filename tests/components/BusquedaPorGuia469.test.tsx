@@ -295,7 +295,11 @@ describe("469 T13 — el detalle de una fila: `resaltar` solo en modo guía", ()
     const user = userEvent.setup();
     envolver(<EstadoCuentaTienda inicial={estado({ filas: TRES, total: 3 })} puedeRegistrar={false} />);
     await buscar(user, "etiquetas");
-    await waitFor(() => expect(screen.getAllByRole("button", { name: /^Ver las órdenes/ })).toHaveLength(1));
+    // Ancla de CONTENIDO: la fila del 11 (la que trae la lectura de texto) está y la del 13 ya no.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^Ver las órdenes que componen .* del 2026-09-11$/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Ver las órdenes que componen .* del 2026-09-13$/ })).toBeNull();
+    });
     await user.click(abrir());
     await waitFor(() => expect(H.ordenesDeFila).toHaveBeenCalledTimes(1));
     expect(H.ordenesDeFila.mock.calls[0][0]).not.toHaveProperty("resaltar");
