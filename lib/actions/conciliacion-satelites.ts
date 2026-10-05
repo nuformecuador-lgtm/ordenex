@@ -190,6 +190,26 @@ export async function marcarConsolidacionRecibidaAction(
 }
 
 /**
+ * ⭑ FICHA 473 (R10/R11) — CORREGIR el monto recibido de una consolidacion YA conciliada.
+ *
+ * Calco de `marcarConsolidacionRecibidaAction` con el MISMO schema (`.strict()`, monto > 0 con
+ * ≤ 2 decimales, nota ≤ 500): sesion primero, validacion en el borde, rol en el servicio.
+ */
+export async function corregirConsolidacionRecibidaAction(
+  input: unknown,
+  deps: ConciliacionSatelitesDeps = {},
+): Promise<MarcaConciliacionActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = marcarConsolidacionRecibidaSchema.parse(input);
+    const service = deps.service ?? buildService();
+    return service.corregirRecibida(data, actor);
+  });
+  return isAppErrorShape(r) ? toConciliacionActionError(r) : r;
+}
+
+/**
  * R12/R13 — REVERTIR la marca. Devuelve la consolidacion a «Pendiente de conciliar» y borra los
  * cuatro datos de la marca; el monto que se borra queda documentado en el historial.
  */
