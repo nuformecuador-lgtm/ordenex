@@ -56,6 +56,13 @@ describe("R21 — registro en el drenador", () => {
       "webhook_evento",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger: PUNTUAL, no va en buildRecurrencias
       "whatsapp_chat_envio", // feature 109
+      // FICHA 474: los cinco tipos de los envios automaticos por WhatsApp. Solo el mantenimiento es
+      // recurrente; los otros cuatro se encolan por cadena, por aviso o por reintento.
+      "whatsapp_envio_ejecucion",
+      "whatsapp_envio_evento",
+      "whatsapp_envio_mantenimiento",
+      "whatsapp_envio_programado",
+      "whatsapp_envio_reintento",
       "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });
@@ -75,6 +82,7 @@ describe("R21 — registro en el drenador", () => {
     expect([...recurrencias.keys()].sort()).toEqual([
       "analitica_rollup_diario",
       "liberar_reprogramadas",
+      "whatsapp_envio_mantenimiento", // ficha 474: mantenimiento diario 03:30 CR
     ]);
   });
 
