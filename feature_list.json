@@ -5626,12 +5626,12 @@
       "title": "Corregir la recepcion de dinero de una satelite",
       "description": "«Corregir» en una recepcion «Recibido incompleto» cambia el monto recibido en un solo paso y deja una fila de historial.",
       "zone": "fullstack",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana.",
-      "branch": null
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana. || SPEC APROBADO por el humano el 2026-10-05 con D1 (reusar cierre_bodega_conciliado, sin migracion) y D2 (la correccion mueve conciliadoAt/resuelto_at). backend_dev -> frontend_dev en worktree.",
+      "branch": "feature/473-corregir-recepcion-satelite"
     },
     {
       "id": 474,
@@ -5672,6 +5672,30 @@
         474
       ],
       "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias."
+    },
+    {
+      "id": 471,
+      "title": "el periodo de la caja corta el texto",
+      "description": "El selector de periodo de la caja (w-56) corta la etiqueta; debe verse completa.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "depends_on": null,
+      "status_note": "Aprobada por el humano el 2026-10-05.",
+      "branch": null
+    },
+    {
+      "id": 472,
+      "title": "tests de descarga de ordenes fallan de 00:00 a 01:00",
+      "description": "Los tests OrdenesDescarga* usan la hora local en vez de la de Costa Rica y fallan en esa franja; fijar la zona horaria.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "depends_on": null,
+      "status_note": "Aprobada por el humano el 2026-10-05. Solo tests. (c3, m1/m2 de la 464: DESCARTADA, sin registro escrito y la 468 retiro ese Excel.)",
+      "branch": null
     }
   ]
 }
