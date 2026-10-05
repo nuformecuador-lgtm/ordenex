@@ -5626,11 +5626,11 @@
       "title": "Corregir la recepcion de dinero de una satelite",
       "description": "«Corregir» en una recepcion «Recibido incompleto» cambia el monto recibido en un solo paso y deja una fila de historial.",
       "zone": "fullstack",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana.",
       "branch": null
     }
   ]
