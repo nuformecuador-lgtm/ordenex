@@ -25,6 +25,15 @@ export const crearPlantillaSchema = z
      * servidor: esto NO es una puerta para que el cliente fije el estado.
      */
     plantillaTienda: z.boolean().default(false),
+    /**
+     * Ficha 474 (R3) — plantilla «de informe»: la clave de un informe del catalogo. `null` u
+     * omitido = plantilla de orden (lo de siempre). Que la clave EXISTA en el catalogo lo valida el
+     * service (aqui solo la forma). SIN `.default()` a proposito: en la edicion, omitirlo tiene que
+     * significar «no se toca», no «vuelve a ser de orden».
+     */
+    informeClave: z.string().regex(/^[a-z0-9_]+$/).nullable().optional(),
+    /** Ficha 474 (R5/R6) — lleva cabecera documento. Omitido = `false` al crear, «no se toca» al editar. */
+    llevaDocumento: z.boolean().optional(),
   })
   .strict();
 export type CrearPlantillaInput = z.infer<typeof crearPlantillaSchema>;
@@ -94,10 +103,17 @@ export type ListarPlantillasCompletoResult = ListarCompletoResult<PlantillaListI
 // BORRADO 2026-08-07 (tanda 2): `ObtenerPlantillaResult` era el retorno de `obtenerPlantilla`,
 // borrada en la tanda 1 por nacer sin pantalla de detalle. Sin referencias desde entonces.
 export type ActualizarPlantillaResult = { status: "ok"; plantilla: PlantillaPublica } | ActionError;
+/**
+ * Ficha 474 (R10): la plantilla la usa al menos un envio automatico ENCENDIDO. Lleva los NOMBRES
+ * de esos envios para que la UI diga cuales apagar antes. No es `ActionError`: es un desenlace con
+ * palabras propias, no un fallo a reintentar.
+ */
+export type PlantillaEnUso = { status: "en_uso"; envios: string[] };
 export type CambiarEstadoPlantillaResult =
   | { status: "ok"; plantilla: PlantillaPublica }
+  | PlantillaEnUso
   | ActionError;
-export type EliminarPlantillaResult = { status: "ok" } | ActionError;
+export type EliminarPlantillaResult = { status: "ok" } | PlantillaEnUso | ActionError;
 /**
  * Envio a aprobacion (2026-08-26). `ya_enviada` y `no_configurado` NO son `ActionError`: son
  * desenlaces normales que la UI cuenta con sus propias palabras (uno es "no hacia falta", el
@@ -109,6 +125,20 @@ export type EnviarAprobacionPlantillaResult =
   | { status: "no_configurado" }
   /** Plantilla DE TIENDA: no pasa por Meta, no hay nada que enviar a aprobar. */
   | { status: "no_aplica" }
+  /**
+   * Ficha 474 (R9): plantilla CON DOCUMENTO y no se pudo identificar la app de Meta (o falta la
+   * credencial). `mensaje` es el texto en lenguaje claro de design §3; `codigo` el del fallo. El
+   * estado de la plantilla NO cambia.
+   */
+  | { status: "documento_no_disponible"; mensaje: string; codigo?: number }
+  | ActionError;
+/**
+ * Ficha 474 (R48) — ¿se pudo identificar la app de Meta? Lo pide la pantalla de plantillas al
+ * activar «Lleva documento adjunto». Nunca lleva el ID ni el token.
+ */
+export type EstadoAppMetaResult =
+  | { status: "ok"; estado: "identificada" }
+  | { status: "ok"; estado: "no_identificada"; mensaje: string }
   | ActionError;
 /**
  * Marcar el MENSAJE DE BIENVENIDA. Sin rama `conflict`: la accion desmarca a la anterior, asi

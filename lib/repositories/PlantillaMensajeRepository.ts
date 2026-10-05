@@ -5,12 +5,14 @@ import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   PlantillaDuplicadaError,
   type CreatePlantillaData,
+  type ILectorPlantillaDeInforme,
   type IPlantillaMensajeRepository,
   type ListarUsablesParaTextoParams,
   type ListPlantillasParams,
   type ListPlantillasResult,
   type PlantillaBienvenida,
   type PlantillaEnviable,
+  type PlantillaEnviableDeInforme,
   type PlantillaListItem,
   type PlantillaPublica,
   type PlantillaTextoEnviable,
@@ -37,6 +39,8 @@ const PUBLIC_SELECT = {
   plantillaTienda: true, // plantilla de tienda: no pasa por Meta
   templateId: true,
   templateIdioma: true,
+  informeClave: true, // ficha 474 (R3)
+  llevaDocumento: true, // ficha 474 (R5)
   createdBy: true,
   createdAt: true,
   updatedAt: true,
@@ -52,6 +56,8 @@ const LIST_SELECT = {
   welcomeMessage: true, // el listado RESALTA la plantilla de bienvenida
   plantillaTienda: true, // el listado le oculta "Enviar para aprobacion"
   templateId: true,
+  informeClave: true, // ficha 474: el listado distingue «de orden» / «de informe»
+  llevaDocumento: true,
   createdAt: true,
 } as const;
 
@@ -90,7 +96,9 @@ function aPlantillaListItem(row: FilaConSnapshot<PlantillaListItem>): PlantillaL
   return { ...row, variablesNombres: leerVariablesNombres(row.variablesNombres) };
 }
 
-export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
+export class PlantillaMensajeRepository
+  implements IPlantillaMensajeRepository, ILectorPlantillaDeInforme
+{
   constructor(private readonly prisma: PlantillaPrismaClient) {}
 
   async create(data: CreatePlantillaData): Promise<PlantillaPublica> {
@@ -110,6 +118,9 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
           ...(data.plantillaTienda !== undefined
             ? { plantillaTienda: data.plantillaTienda }
             : {}),
+          // Ficha 474 (R3/R5): solo si el service lo manda; si no, los defaults (`null`/`false`).
+          ...(data.informeClave !== undefined ? { informeClave: data.informeClave } : {}),
+          ...(data.llevaDocumento !== undefined ? { llevaDocumento: data.llevaDocumento } : {}),
           // El estado inicial lo DICE el service (hoy `saved_not_aprobation`), no el default
           // de la columna: ver `CreatePlantillaData.estado`.
           estado: data.estado,
@@ -173,6 +184,9 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
           ...(data.plantillaTienda !== undefined
             ? { plantillaTienda: data.plantillaTienda }
             : {}),
+          // Ficha 474 (R7): el service ya decidio que la plantilla no salio hacia Meta.
+          ...(data.informeClave !== undefined ? { informeClave: data.informeClave } : {}),
+          ...(data.llevaDocumento !== undefined ? { llevaDocumento: data.llevaDocumento } : {}),
         },
       });
       if (result.count === 0) return null; // R21
@@ -332,7 +346,8 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
 
   async listarEnviables(): Promise<PlantillaEnviable[]> {
     const rows = await this.prisma.plantillaMensaje.findMany({
-      where: { ...VIGENTE, estado: "activo", NOT: { templateId: null } },
+      // Ficha 474 (R8): una plantilla de INFORME no se ofrece en el envio del chat.
+      where: { ...VIGENTE, estado: "activo", NOT: { templateId: null }, informeClave: null },
       select: {
         id: true,
         nombre: true,
@@ -375,6 +390,8 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
       where: {
         ...VIGENTE,
         estado: { notIn: ["inactivo", "saved_not_aprobation"] },
+        // Ficha 474 (R8): una plantilla de INFORME no se ofrece en el flujo wa.me.
+        informeClave: null,
         // Las PLANTILLAS DE TIENDA solo se ofrecen donde su superficie lo permite. Ver
         // `ListarUsablesParaTextoParams.incluirDeTienda`.
         ...(opciones.incluirDeTienda ? {} : { plantillaTienda: false }),
@@ -399,7 +416,8 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
 
   async findEnviableById(id: string): Promise<PlantillaEnviable | null> {
     const r = await this.prisma.plantillaMensaje.findFirst({
-      where: { id, ...VIGENTE, estado: "activo", NOT: { templateId: null } },
+      // Ficha 474 (R8): el chat y la bienvenida no resuelven una plantilla de INFORME.
+      where: { id, ...VIGENTE, estado: "activo", NOT: { templateId: null }, informeClave: null },
       select: {
         id: true,
         nombre: true,
@@ -417,6 +435,37 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
       variables: r.variables,
       templateId: r.templateId as string,
       templateIdioma: r.templateIdioma ?? "",
+    };
+  }
+
+  /** Ficha 474 (R12/R34): la plantilla enviable de ESE informe, o `null`. */
+  async findEnviableDeInformeById(
+    id: string,
+    informeClave: string,
+  ): Promise<PlantillaEnviableDeInforme | null> {
+    const r = await this.prisma.plantillaMensaje.findFirst({
+      where: { id, ...VIGENTE, estado: "activo", NOT: { templateId: null }, informeClave },
+      select: {
+        id: true,
+        nombre: true,
+        cuerpo: true,
+        variables: true,
+        templateId: true,
+        templateIdioma: true,
+        informeClave: true,
+        llevaDocumento: true,
+      },
+    });
+    if (r === null || r.informeClave === null) return null;
+    return {
+      id: r.id,
+      nombre: r.nombre,
+      cuerpo: r.cuerpo,
+      variables: r.variables,
+      templateId: r.templateId as string,
+      templateIdioma: r.templateIdioma ?? "",
+      informeClave: r.informeClave,
+      llevaDocumento: r.llevaDocumento,
     };
   }
 }

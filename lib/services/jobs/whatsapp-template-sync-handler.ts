@@ -14,8 +14,7 @@ import type { JobHandler } from "@/lib/interfaces/services/IJobQueueService";
 import type { IPlantillaMensajeRepository } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { IWhatsappTemplatePort } from "@/lib/interfaces/services/IWhatsappTemplatePort";
 import { aplicarUpsertTemplate } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
-import { WhatsappTemplatePort } from "@/lib/services/whatsapp/WhatsappTemplatePort";
-import { WhatsappPlantillasClient } from "@/lib/clients/whatsapp-cloud";
+import { construirWhatsappTemplatePort } from "@/lib/services/whatsapp/construir-template-port";
 import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
@@ -36,7 +35,8 @@ export function buildWhatsappTemplateSyncDeps(): WhatsappTemplateSyncDeps {
   const prisma = getPrismaClient();
   const config = loadWhatsappConfig();
   return {
-    port: new WhatsappTemplatePort(new WhatsappPlantillasClient({ config }), config),
+    // Ficha 474: la MISMA fabrica que la propagacion en linea (cabecera documento incluida).
+    port: construirWhatsappTemplatePort(config),
     repo: new PlantillaMensajeRepository(prisma),
   };
 }

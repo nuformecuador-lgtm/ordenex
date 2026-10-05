@@ -14,6 +14,7 @@ import {
   type CrearPlantillaResult,
   type EliminarPlantillaResult,
   type EnviarAprobacionPlantillaResult,
+  type EstadoAppMetaResult,
   type ListarPlantillasCompletoResult,
   type ListarPlantillasResult,
   type MarcarBienvenidaPlantillaResult,
@@ -26,8 +27,13 @@ import type {
 import { PlantillaMensajeService } from "@/lib/services/PlantillaMensajeService";
 import { PlantillaMensajeRepository } from "@/lib/repositories/PlantillaMensajeRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
-import { WhatsappPlantillasClient } from "@/lib/clients/whatsapp-cloud";
-import { WhatsappTemplatePort } from "@/lib/services/whatsapp/WhatsappTemplatePort";
+import { construirWhatsappTemplatePort } from "@/lib/services/whatsapp/construir-template-port";
+import { WhatsappEnvioRepository } from "@/lib/repositories/WhatsappEnvioRepository";
+import {
+  ResolutorAppIdMeta,
+  mensajeAppIdNoResuelto,
+  type IResolutorAppIdMeta,
+} from "@/lib/clients/whatsapp-app-id";
 import { PlantillaWhatsappPropagator } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
 import { crearEncolarWhatsappTemplateSync } from "@/lib/services/jobs/whatsapp-template-sync-encolado";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
@@ -60,7 +66,14 @@ function toPlantillaActionError(shape: AppErrorShape): ActionError {
 function buildPlantillaService(): IPlantillaMensajeService {
   const prisma = getPrismaClient();
   const repo = new PlantillaMensajeRepository(prisma);
-  return new PlantillaMensajeService(repo, buildWhatsappPropagator(prisma, repo));
+  // Ficha 474: el tercer argumento NO es opcional aqui aunque lo sea en el constructor. Sin
+  // `envios`, R10 dejaria desactivar una plantilla que usa un envio encendido; sin
+  // `resolutorAppId`, R9 diria siempre «falta configurar WhatsApp» para una plantilla con
+  // documento. Lo vigila `tests/unit/actions/plantillas-composition-root-474.test.ts`.
+  return new PlantillaMensajeService(repo, buildWhatsappPropagator(prisma, repo), {
+    envios: new WhatsappEnvioRepository(prisma),
+    resolutorAppId: new ResolutorAppIdMeta(),
+  });
 }
 
 /**
@@ -78,7 +91,8 @@ function buildWhatsappPropagator(
   } catch {
     return undefined; // WhatsApp no configurado -> sin propagacion
   }
-  const port = new WhatsappTemplatePort(new WhatsappPlantillasClient({ config }), config);
+  // Ficha 474: la fabrica compartida con el job de reintento (cabecera documento incluida).
+  const port = construirWhatsappTemplatePort(config);
   const encolar = crearEncolarWhatsappTemplateSync(new JobRepository(prisma));
   return new PlantillaWhatsappPropagator(port, repo, encolar);
 }
@@ -86,6 +100,8 @@ function buildWhatsappPropagator(
 export interface PlantillaActionDeps {
   plantillaService?: IPlantillaMensajeService;
   getActor?: () => Promise<Actor | null>;
+  /** Ficha 474 (R48): inyectable en el test de `estadoAppMeta`. */
+  resolutorAppId?: IResolutorAppIdMeta;
 }
 
 /** R4/R5/R8: crear plantilla (nace `pending`). */
@@ -248,6 +264,23 @@ export async function marcarPlantillaBienvenida(
     }
     const service = deps.plantillaService ?? buildPlantillaService();
     return service.marcarMensajeBienvenida(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Ficha 474 (R48) — ¿se pudo identificar la app de Meta con el token configurado? La pantalla de
+ * plantillas la llama al activar «Lleva documento adjunto» y, si no, pinta el mensaje bajo el
+ * interruptor. Solo `maestro`. NUNCA devuelve el ID ni el token.
+ */
+export async function estadoAppMeta(deps: PlantillaActionDeps = {}): Promise<EstadoAppMetaResult> {
+  const r = await withErrorHandler(async (): Promise<EstadoAppMetaResult> => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    if (actor.rol !== "maestro") return { status: "forbidden" };
+    const resultado = await (deps.resolutorAppId ?? new ResolutorAppIdMeta()).resolver();
+    if (resultado.ok) return { status: "ok", estado: "identificada" };
+    return { status: "ok", estado: "no_identificada", mensaje: mensajeAppIdNoResuelto(resultado) };
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }
