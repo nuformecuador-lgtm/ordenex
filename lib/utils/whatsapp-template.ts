@@ -9,6 +9,20 @@
 
 import { EJEMPLOS_POR_CLAVE } from "@/lib/types/plantilla-datos";
 
+/** Ficha 474 (design §5.1) — opciones del alta/edicion del template en Meta. */
+export interface OpcionesComponentsTemplate {
+  /** Ejemplo por clave; sustituye a `EJEMPLOS_POR_CLAVE` en las plantillas de INFORME (R4). */
+  ejemplos?: (clave: string) => string;
+  /** Cabecera DOCUMENT con el handle del documento de ejemplo (R5). */
+  documento?: { headerHandle: string };
+}
+
+/** Ficha 474 (design §5.1) — opciones del ENVIO de un template. */
+export interface OpcionesComponentsEnvio {
+  /** PDF ya subido a Meta como cabecera documento (R33). */
+  documento?: { mediaId: string; nombreArchivo: string };
+}
+
 // Mismo placeholder que `lib/utils/plantilla-mensaje.ts` (R14): `{{` + clave [a-z0-9_]+ + `}}`.
 const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
 
@@ -46,14 +60,29 @@ function ejemploDe(clave: string): string {
  * (header/footer/botones quedan fuera de este alcance). Si el cuerpo tiene variables, se
  * adjunta `example.body_text` con un ejemplo por parametro, en el MISMO orden que `variables`.
  */
-export function construirComponentsTemplate(cuerpo: string, variables: string[]): unknown[] {
+export function construirComponentsTemplate(
+  cuerpo: string,
+  variables: string[],
+  opts?: OpcionesComponentsTemplate,
+): unknown[] {
+  const ejemplo = opts?.ejemplos ?? ejemploDe;
   const body: Record<string, unknown> = {
     type: "BODY",
     text: cuerpoANumerado(cuerpo, variables),
   };
   if (variables.length > 0) {
     // Meta espera un array de "conjuntos de ejemplo"; con un solo conjunto basta.
-    body.example = { body_text: [variables.map(ejemploDe)] };
+    body.example = { body_text: [variables.map(ejemplo)] };
+  }
+  // Ficha 474 (R5): la cabecera DOCUMENT va ANTES del cuerpo, con el `header_handle` del documento
+  // de ejemplo que exige Meta (subida reanudable, design §5.2). Sin `documento`, salida identica.
+  if (opts?.documento !== undefined) {
+    const header = {
+      type: "HEADER",
+      format: "DOCUMENT",
+      example: { header_handle: [opts.documento.headerHandle] },
+    };
+    return [header, body];
   }
   return [body];
 }
@@ -67,15 +96,30 @@ export function construirComponentsTemplate(cuerpo: string, variables: string[])
 export function construirComponentsEnvio(
   variables: string[],
   valores: Record<string, string>,
+  opts?: OpcionesComponentsEnvio,
 ): unknown[] {
-  if (variables.length === 0) return [];
-  return [
-    {
+  const componentes: unknown[] = [];
+  // Ficha 474 (R33): el PDF ya subido a Meta (`media_id`) como documento de cabecera, con el
+  // nombre de archivo que ve el destinatario. Sin `documento`, salida identica a la de siempre.
+  if (opts?.documento !== undefined) {
+    componentes.push({
+      type: "header",
+      parameters: [
+        {
+          type: "document",
+          document: { id: opts.documento.mediaId, filename: opts.documento.nombreArchivo },
+        },
+      ],
+    });
+  }
+  if (variables.length > 0) {
+    componentes.push({
       type: "body",
       parameters: variables.map((clave) => ({
         type: "text",
         text: valores[clave] ?? "",
       })),
-    },
-  ];
+    });
+  }
+  return componentes;
 }
