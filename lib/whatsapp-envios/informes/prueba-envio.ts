@@ -51,6 +51,7 @@ export const informePruebaEnvio: InformeWhatsapp<ParametrosPruebaEnvio> = {
   // Solo fecha y hora: no lleva datos de ninguna tienda.
   aptoParaAdminTienda: true,
   eventos: [],
+  soloPorEvento: false,
   async generar(ctx) {
     if (ctx.parametros.simularVacio) {
       return { tipo: "vacio", motivo: "Prueba con «simular vacío» activado." };

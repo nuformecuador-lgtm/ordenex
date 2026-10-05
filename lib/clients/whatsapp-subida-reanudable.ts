@@ -13,10 +13,11 @@
 // cabecera (nunca en URL, log ni error). Recibe el `appId` YA RESUELTO: no lee env.
 import { z } from "zod";
 import type { WhatsappConfig } from "@/lib/config/whatsapp";
+import { TIMEOUT_SUBIDA_MS } from "@/lib/config/chat-media-envio";
 
 const GRAPH_BASE = "https://graph.facebook.com";
 const OPERACION = "subir documento de ejemplo a meta";
-const TIMEOUT_MS = 20_000;
+const TIMEOUT_MS = TIMEOUT_SUBIDA_MS;
 
 export type SubidaReanudableOutcome =
   | { status: "ok"; handle: string }

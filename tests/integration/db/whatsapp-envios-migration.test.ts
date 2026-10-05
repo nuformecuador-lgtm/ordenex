@@ -111,6 +111,7 @@ describeSiHayBase("474/T1.5 — la base", () => {
       `SELECT count(*) AS n FROM information_schema.key_column_usage k
          JOIN information_schema.table_constraints t ON t.constraint_name = k.constraint_name
         WHERE t.constraint_type = 'FOREIGN KEY' AND k.table_name = 'whatsapp_envio_ejecucion'
+          AND k.table_schema = 'public' AND t.table_schema = 'public'
           AND k.column_name = 'notificacion_id'`,
     );
     expect(Number(fks[0].n)).toBe(0);

@@ -68,10 +68,12 @@ describe("410/R36 · guardia: ningun tipo de job se queda sin handler", () => {
     // Re-agendarlo mandaria un push por minuto a la misma persona, que es exactamente lo contrario
     // de la regla «uno al dia por tipo».
     expect(buildRecurrencias().has("push_web")).toBe(false);
-    // Los dos que SI lo son siguen estandolo.
+    // Los que SI lo son siguen estandolo. Ficha 474: el mantenimiento diario de los envios por
+    // WhatsApp (03:30 CR) es el tercero; sus otros cuatro tipos se encolan por evento o por cadena.
     expect([...buildRecurrencias().keys()].sort()).toEqual([
       "analitica_rollup_diario",
       "liberar_reprogramadas",
+      "whatsapp_envio_mantenimiento",
     ]);
   });
 });

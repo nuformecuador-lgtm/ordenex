@@ -81,6 +81,7 @@ export interface InformeResumen {
   descripcion: string;
   generaDocumento: boolean;
   aptoParaAdminTienda: boolean;
+  soloPorEvento: boolean;
   eventos: string[];
   parametrosPorDefecto: unknown;
   descriptores: InformeWhatsapp<unknown>["descriptores"];
@@ -94,6 +95,7 @@ export function resumenDeInforme(informe: InformeWhatsapp<unknown>): InformeResu
     descripcion: informe.descripcion,
     generaDocumento: informe.generaDocumento,
     aptoParaAdminTienda: informe.aptoParaAdminTienda,
+    soloPorEvento: informe.soloPorEvento,
     eventos: [...informe.eventos],
     parametrosPorDefecto: informe.parametrosPorDefecto,
     descriptores: informe.descriptores,

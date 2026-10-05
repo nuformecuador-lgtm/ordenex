@@ -1,6 +1,9 @@
 import { createServerClient } from "@/lib/supabase/client";
 import { bucketEnviosWhatsapp } from "@/lib/config/whatsapp-envios";
-import type { IAlmacenEnviosWhatsapp } from "@/lib/interfaces/external/IAlmacenEnviosWhatsapp";
+import {
+  PdfYaGuardadoError,
+  type IAlmacenEnviosWhatsapp,
+} from "@/lib/interfaces/external/IAlmacenEnviosWhatsapp";
 
 // Ficha 474 (design §5.3, R43/R44) — PDFs de las ejecuciones de envios por WhatsApp sobre Supabase
 // Storage, con el service role. Clon del patron de `SupabaseAlmacenDescargas` (470): cliente
@@ -76,6 +79,8 @@ export class SupabaseAlmacenEnviosWhatsapp implements IAlmacenEnviosWhatsapp {
       }
       r = await subir(); // reintento UNICO
     }
+    // R43: `upsert: false` -> un objeto existente NO se pisa; se avisa con un error tipado.
+    if (r.error && esBucketYaExistente(r.error)) throw new PdfYaGuardadoError(ruta);
     if (r.error || !r.data) {
       throw new Error(`fallo al guardar el PDF de la ejecucion: ${r.error?.message ?? "sin data"}`);
     }

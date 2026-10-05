@@ -25,6 +25,7 @@ const VIGENTE = { deletedAt: null } as const;
 
 const DETALLE_INCLUDE = {
   destinatarios: { select: { rol: true, usuarioId: true } },
+  plantilla: { select: { nombre: true } },
 } as const;
 
 type FilaDetalle = Prisma.WhatsappEnvioGetPayload<{ include: typeof DETALLE_INCLUDE }>;
@@ -41,12 +42,13 @@ function aDetalle(r: FilaDetalle): EnvioDetalle {
     nombre: r.nombre,
     informeClave: r.informeClave,
     plantillaId: r.plantillaId,
+    plantillaNombre: r.plantilla.nombre,
     parametros: r.parametros,
     disparo: r.disparo,
     diasSemana: r.diasSemana ?? [],
     hora: r.hora,
     eventoClave: r.eventoClave,
-    activo: r.activo,
+    encendido: r.encendido,
     destinatarios: { roles, usuarioIds },
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -82,7 +84,7 @@ export class WhatsappEnvioRepository implements IWhatsappEnvioRepository {
           diasSemana: data.diasSemana,
           hora: data.hora,
           eventoClave: data.eventoClave,
-          // R15: `activo` NO se escribe: el default de la columna es `false`.
+          // R15: `encendido` NO se escribe: el default de la columna es `false`.
           createdBy: data.actorId,
           updatedBy: data.actorId,
           destinatarios: { create: filasDestinatarios(data.destinatarios) },
@@ -141,10 +143,10 @@ export class WhatsappEnvioRepository implements IWhatsappEnvioRepository {
     return rows.map(aDetalle);
   }
 
-  async cambiarActivo(id: string, activo: boolean, actorId: string | null): Promise<boolean> {
+  async cambiarEncendido(id: string, encendido: boolean, actorId: string | null): Promise<boolean> {
     const r = await this.prisma.whatsappEnvio.updateMany({
       where: { id, ...VIGENTE },
-      data: { activo, updatedBy: actorId },
+      data: { encendido, updatedBy: actorId },
     });
     return r.count > 0;
   }
@@ -153,7 +155,7 @@ export class WhatsappEnvioRepository implements IWhatsappEnvioRepository {
     // R21: soft delete Y apagado en la misma escritura: un borrado nunca queda encendido.
     const r = await this.prisma.whatsappEnvio.updateMany({
       where: { id, ...VIGENTE },
-      data: { deletedAt: new Date(), activo: false, updatedBy: actorId },
+      data: { deletedAt: new Date(), encendido: false, updatedBy: actorId },
     });
     return r.count > 0;
   }
@@ -201,9 +203,18 @@ export class WhatsappEnvioRepository implements IWhatsappEnvioRepository {
     return rows.map((r) => ({ id: r.id, rol: r.rol.value }));
   }
 
+  async contactoDeUsuario(
+    usuarioId: string,
+  ): Promise<{ id: string; nombre: string; telefono: string } | null> {
+    return this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { id: true, nombre: true, telefono: true },
+    });
+  }
+
   async nombresEncendidosConPlantilla(plantillaId: string): Promise<string[]> {
     const rows = await this.prisma.whatsappEnvio.findMany({
-      where: { plantillaId, activo: true, ...VIGENTE },
+      where: { plantillaId, encendido: true, ...VIGENTE },
       select: { nombre: true },
       orderBy: { nombre: "asc" },
     });

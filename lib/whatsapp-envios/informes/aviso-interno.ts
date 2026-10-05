@@ -69,6 +69,7 @@ export function crearInformeAvisoInterno(
     generaDocumento: false,
     aptoParaAdminTienda: false,
     eventos: eventosDisponibles().map((e) => e.clave),
+    soloPorEvento: true,
     async generar(ctx): Promise<ResultadoInforme> {
       const base = deps.baseUrl();
       if (ctx.evento !== undefined) {

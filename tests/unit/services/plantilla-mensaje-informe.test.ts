@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { PlantillaMensajeService } from "@/lib/services/PlantillaMensajeService";
 import type {
+  CreatePlantillaData,
   IPlantillaMensajeRepository,
   PlantillaPublica,
+  UpdatePlantillaData,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { Actor } from "@/lib/interfaces/services/IPlantillaMensajeService";
 
@@ -33,14 +35,15 @@ function plantilla(o: Partial<PlantillaPublica> = {}): PlantillaPublica {
 }
 
 function repo(actual: PlantillaPublica = plantilla()) {
-  return {
-    create: vi.fn(async (d: Record<string, unknown>) => plantilla({ ...(d as Partial<PlantillaPublica>) })),
+  const dobles = {
+    create: vi.fn(async (d: CreatePlantillaData) => plantilla({ ...(d as Partial<PlantillaPublica>) })),
     findById: vi.fn(async () => actual),
     findByNombre: vi.fn(async () => null),
-    update: vi.fn(async (_id: string, d: Record<string, unknown>) => ({ ...actual, ...(d as Partial<PlantillaPublica>) })),
+    update: vi.fn(async (_id: string, d: UpdatePlantillaData) => ({ ...actual, ...(d as Partial<PlantillaPublica>) })),
     updateEstado: vi.fn(async () => actual),
     softDelete: vi.fn(async () => true),
-  } as unknown as IPlantillaMensajeRepository & Record<string, ReturnType<typeof vi.fn>>;
+  };
+  return dobles as unknown as IPlantillaMensajeRepository & typeof dobles;
 }
 
 describe("474/R3 — declarar una plantilla de informe", () => {
@@ -58,7 +61,7 @@ describe("474/R3 — declarar una plantilla de informe", () => {
   it("sin informeClave: el create NO recibe la clave (plantilla de orden, sin cambios)", async () => {
     const r = repo();
     await new PlantillaMensajeService(r).crear({ nombre: "x", cuerpo: "Hola", plantillaTienda: false }, MAESTRO);
-    const data = r.create.mock.calls[0][0] as Record<string, unknown>;
+    const data = r.create.mock.calls[0][0] as unknown as Record<string, unknown>;
     expect("informeClave" in data).toBe(false);
     expect("llevaDocumento" in data).toBe(false);
   });

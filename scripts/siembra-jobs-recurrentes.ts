@@ -5,6 +5,7 @@ import { JobRepository } from "@/lib/repositories/JobRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { seedJobLiberarReprogramadas } from "./seed-jobs-liberar-reprogramadas";
 import { seedJobAnaliticaRollupDiario } from "./seed-jobs-analitica-rollup-diario";
+import { seedJobWhatsappEnvioMantenimiento } from "./seed-jobs-whatsapp-envio-mantenimiento";
 
 // Ficha 313 — REGISTRO UNICO DE LAS SIEMBRAS DE LOS JOBS RECURRENTES, y lo que las corre.
 //
@@ -72,6 +73,17 @@ export const SIEMBRAS_RECURRENTES: readonly SiembraRecurrente[] = [
       "el rollup diario no se escribe: la tabla no se rompe, simplemente deja de crecer y el " +
       "tablero sirve cifras viejas sin que nada falle",
     sembrar: seedJobAnaliticaRollupDiario,
+  },
+  {
+    // Ficha 474 (design §1.6). La migracion `20261005120200` ya la siembra con la MISMA
+    // `dedupe_key`; esta entrada es la red si alguien recrea la base sin pasar por la migracion.
+    tipo: "whatsapp_envio_mantenimiento",
+    script: "scripts/seed-jobs-whatsapp-envio-mantenimiento.ts",
+    siNoCorre:
+      "los PDFs de los envios por WhatsApp no se purgan nunca (el bucket crece y el historial no " +
+      "los marca caducados) y un envio a hora fija cuya cadena se rompio no se re-siembra: deja de " +
+      "enviarse sin que nada falle",
+    sembrar: seedJobWhatsappEnvioMantenimiento,
   },
 ];
 

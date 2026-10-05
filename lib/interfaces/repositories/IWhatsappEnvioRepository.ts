@@ -16,19 +16,22 @@ export interface EnvioDetalle {
   nombre: string;
   informeClave: string;
   plantillaId: string;
+  /** Nombre ACTUAL de la plantilla (la lista lo muestra). */
+  plantillaNombre: string;
   parametros: unknown;
   disparo: WhatsappEnvioDisparo;
   diasSemana: number[];
   hora: string | null;
   eventoClave: string | null;
-  activo: boolean;
+  /** Columna `activo`: encendido / apagado (R15/R19). */
+  encendido: boolean;
   destinatarios: SeleccionDestinatarios;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
 }
 
-/** Datos de alta/edicion. `activo` NO viaja: nace apagado (R15) y se cambia con `cambiarActivo`. */
+/** Datos de alta/edicion. `encendido` NO viaja: nace apagado (R15) y se cambia con `cambiarEncendido`. */
 export interface GuardarEnvioData {
   nombre: string;
   informeClave: string;
@@ -76,7 +79,7 @@ export interface IWhatsappEnvioRepository {
   /** Todos los vigentes, por nombre. */
   listar(): Promise<EnvioDetalle[]>;
   /** Enciende/apaga un vigente. `false` si no existe o esta borrado. */
-  cambiarActivo(id: string, activo: boolean, actorId: string | null): Promise<boolean>;
+  cambiarEncendido(id: string, encendido: boolean, actorId: string | null): Promise<boolean>;
   /** Soft delete (R21): fija `deleted_at` y apaga. `false` si no existia o ya estaba borrado. */
   borrar(id: string, actorId: string | null): Promise<boolean>;
 
@@ -86,6 +89,8 @@ export interface IWhatsappEnvioRepository {
   resolverDestinatarios(envioId: string, rolesPermitidos: readonly RolValue[]): Promise<DestinatarioResuelto[]>;
   /** R16: rol de cada usuario pedido (exista o no su estado activo). */
   rolesDeUsuarios(usuarioIds: string[]): Promise<{ id: string; rol: RolValue }[]>;
+  /** R39/R40: nombre y telefono de quien pulsa «Probar ahora». `null` si no existe. */
+  contactoDeUsuario(usuarioId: string): Promise<{ id: string; nombre: string; telefono: string } | null>;
 
   /** R10: nombres de los envios ENCENDIDOS y vigentes que usan esa plantilla. */
   nombresEncendidosConPlantilla(plantillaId: string): Promise<string[]>;

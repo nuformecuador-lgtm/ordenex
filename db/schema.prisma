@@ -4623,9 +4623,9 @@ enum WhatsappEntregaEstado {
   en_curso // reclamada; si se queda aqui sin desenlace es «resultado desconocido» (R37) y NUNCA se reenvia
   aceptada
   enviada
-  entregada
+  recibida // `delivered` de Meta. No `entregada`: es un codigo RETIRADO de `order_status` (455)
   leida
-  rechazada
+  rechazo_permanente // error permanente (Meta u otra causa). No `rechazada`: codigo retirado (455)
   fallida
   telefono_invalido
 
@@ -4645,9 +4645,11 @@ model WhatsappEnvio {
   diasSemana   Int[]                @map("dias_semana") @db.SmallInt
   /// `HH:mm` de pared CR. Texto y no `time`: no arrastra zonas horarias.
   hora         String?
-  /// Un `NotificacionEvento` DISPONIBLE (lib/whatsapp-envios/eventos.ts). Texto, no el enum de la campana.
+  /// Un `NotificacionEvento` DISPONIBLE (lib/whatsapp-envios/eventos.ts). Texto, no el enum de los avisos.
   eventoClave  String?              @map("evento_clave")
-  activo       Boolean              @default(false)
+  /// Columna `activo` (design §1.2). En TS se llama `encendido`: «activo» a secas es el flag de
+  /// disponibilidad GEOGRAFICA, que una guardia (374) reserva a `geografia-activa.ts`.
+  encendido    Boolean              @default(false) @map("activo")
   createdBy    String?              @map("created_by")
   updatedBy    String?              @map("updated_by")
   createdAt    DateTime             @default(now()) @map("created_at")

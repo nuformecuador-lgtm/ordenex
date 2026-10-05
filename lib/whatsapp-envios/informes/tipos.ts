@@ -90,5 +90,11 @@ export interface InformeWhatsapp<P> {
   readonly aptoParaAdminTienda: boolean;
   /** Eventos DISPONIBLES (lib/whatsapp-envios/eventos.ts) que ofrece (R14). */
   readonly eventos: readonly NotificacionEvento[];
+  /**
+   * `true` = el informe solo tiene sentido «Cuando pase algo» (necesita un aviso: «Aviso de la
+   * app»). El service rechaza guardarlo con disparo a hora fija; `generar` responde «vacio» como
+   * cinturon (design §2.3).
+   */
+  readonly soloPorEvento: boolean;
   generar(ctx: ContextoInforme<P>): Promise<ResultadoInforme>;
 }

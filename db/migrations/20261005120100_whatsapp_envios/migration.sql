@@ -18,7 +18,7 @@ CREATE TYPE "whatsapp_envio_origen" AS ENUM ('programado', 'evento', 'prueba');
 CREATE TYPE "whatsapp_ejecucion_estado" AS ENUM ('pendiente', 'generando', 'enviando', 'completada', 'vacia', 'sin_destinatarios', 'omitida', 'error');
 
 -- CreateEnum
-CREATE TYPE "whatsapp_entrega_estado" AS ENUM ('pendiente', 'en_curso', 'aceptada', 'enviada', 'entregada', 'leida', 'rechazada', 'fallida', 'telefono_invalido');
+CREATE TYPE "whatsapp_entrega_estado" AS ENUM ('pendiente', 'en_curso', 'aceptada', 'enviada', 'recibida', 'leida', 'rechazo_permanente', 'fallida', 'telefono_invalido');
 
 -- AlterTable
 ALTER TABLE "plantilla_mensaje" ADD COLUMN     "informe_clave" TEXT,

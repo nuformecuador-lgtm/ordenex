@@ -101,7 +101,7 @@ export const EVENTOS_ENVIO_WHATSAPP = {
   devoluciones_represadas: {
     disponible: true,
     nombre: "Devoluciones represadas en bodega",
-    descripcion: "Hay paquetes por devolver que llevan días en bodega. Uno por día.",
+    descripcion: "Hay devoluciones que llevan días esperando en bodega. Uno por día.",
     ejemploTexto: textoDevolucionesRepresadas(4),
   },
   reprogramadas_esperan_cierre: {

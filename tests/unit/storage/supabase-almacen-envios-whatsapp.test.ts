@@ -48,7 +48,7 @@ describe("474/R43 — guardar", () => {
     const upload = vi.fn(async () => ({ data: null, error: { message: "The resource already exists", statusCode: "409" } }));
     const d = doble({ upload });
     const a = new SupabaseAlmacenEnviosWhatsapp(d.client, "b");
-    await expect(a.guardar("e", "x", new Uint8Array([1]))).rejects.toThrow(/fallo al guardar/);
+    await expect(a.guardar("e", "x", new Uint8Array([1]))).rejects.toThrow(/ya estaba guardado/);
   });
 });
 
