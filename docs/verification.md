@@ -19,7 +19,10 @@ verificada cuando hay evidencia ejecutable.
 >   es la red que de verdad muerde un `WHERE` de dinero o una migración;
 > - **desaparece el completo post-merge**. Precio aceptado: un `dev` que ya venía rojo se descubre
 >   en el completo de la release, no antes;
-> - un rojo se repite **aislado**; si pasa, es intermitente y no se vuelve a correr todo.
+> - un rojo se repite **aislado** y lo hace el propio `--rapido`: los archivos rojos se vuelven a
+>   correr solos, sin paralelismo (`scripts/archivos-rojos-de-reporte.mjs`); si pasan, salen como
+>   «intermitente» con su nombre y no tumban el gate. Medido: 3 de 418 de `integration/db` rojos en
+>   paralelo (deadlock 40P01, conteos de tabla entera), 3 de 3 verdes aislados en 3 s.
 >
 > Lo de abajo sobre el «completo post-merge» y «antes de cada PR» es HISTORIA de las reglas previas.
 

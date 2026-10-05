@@ -344,7 +344,7 @@ if [ -f package.json ]; then
   # SE BORRAN LOS REPORTES ANTES DE CORRER. Si una corrida se cae sin escribir el suyo, el de
   # la corrida ANTERIOR sigue en disco y la comparacion dictaminaria sobre una foto vieja. Un
   # gate que da un veredicto sobre datos de ayer es peor que uno que falla.
-  rm -f .vitest/rojos.json .vitest/rojos-cambiados.json .vitest/rojos-guardias.json .vitest/rojos-integracion.json
+  rm -f .vitest/rojos*.json
 
   if [ "$MODO" = "rapido" ]; then
     # LAS DOS CORRIDAS VAN SIEMPRE, cada una con su `|| true`, y NO se usa `pnpm run
@@ -379,6 +379,38 @@ if [ -f package.json ]; then
     echo "-> pnpm run test:json"
     pnpm run test:json || true
     REPORTES=".vitest/rojos.json"
+  fi
+
+  # UN ROJO SE REPITE AISLADO (2026-10-05, pedido del humano). En paralelo, la base local compartida
+  # da rojos que no son del cambio -deadlocks 40P01, conteos de tabla entera mientras otro test
+  # escribe-: medido ese mismo dia, 3 de 418 archivos de `tests/integration/db` rojos en paralelo y
+  # 3 de 3 verdes aislados en 3 s. Se repiten SOLO los archivos rojos, sin paralelismo, y su
+  # reporte SUSTITUYE al original en la comparacion: lo que sigue rojo aislado es rojo de verdad;
+  # lo que pasa se anuncia como intermitente, con su nombre, y no tumba el gate. Solo en modo
+  # rapido: el completo de la release se lee entero y a mano.
+  if [ "$MODO" = "rapido" ]; then
+    REPORTES_FINALES=""
+    for REP in $REPORTES; do
+      ROJOS="$(node scripts/archivos-rojos-de-reporte.mjs "$REP")"
+      if [ -n "$ROJOS" ]; then
+        REINTENTO="${REP%.json}-aislado.json"
+        rm -f "$REINTENTO"
+        echo "-> repitiendo AISLADOS los rojos de $REP:"
+        printf '%s
+' "$ROJOS" | sed 's/^/    /'
+        # shellcheck disable=SC2086
+        pnpm exec vitest run --no-file-parallelism $ROJOS --reporter=default --reporter=json --outputFile.json="$REINTENTO" || true
+        AUN_ROJOS="$(node scripts/archivos-rojos-de-reporte.mjs "$REINTENTO")"
+        for F in $ROJOS; do
+          printf '%s
+' "$AUN_ROJOS" | grep -qxF "$F" || warn "intermitente (rojo en paralelo, verde aislado): $F"
+        done
+        REPORTES_FINALES="$REPORTES_FINALES $REINTENTO"
+      else
+        REPORTES_FINALES="$REPORTES_FINALES $REP"
+      fi
+    done
+    REPORTES="$REPORTES_FINALES"
   fi
 
   # Los reportes se pasan JUNTOS a una sola llamada: el modo rapido son dos corridas parciales
