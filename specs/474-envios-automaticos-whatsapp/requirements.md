@@ -3,23 +3,33 @@
 > Ficha 474 de `feature_list.json` (zona `fullstack`, `sdd: true`, complejidad alta).
 > Es la BASE de las fichas 475 (informe de tránsito) y 476 (informe de picking), que dependen de ella.
 > Esta ficha entrega el motor, la pantalla, el historial y el CONTRATO que implementa un informe; el
-> catálogo de informes nace con UN solo informe, el de prueba (R47). Diseño técnico en `design.md`.
+> catálogo de informes nace con DOS informes: el de prueba (R47) y el «Aviso de la app» (R51), que
+> conecta los avisos internos con el disparo por evento. Diseño técnico en `design.md`.
+>
+> **Enmienda 2026-10-05.** El humano aprobó las maquetas de `design-whatsapp/` y respondió las cuatro
+> preguntas abiertas (D1–D4, ver «Decisiones cerradas» al final). Cambian R9, R14, R16, R26 y R27; se
+> añaden R48–R53. Ningún otro requisito cambia de número.
 
 ## Glosario
 
 - **Plantilla de orden**: plantilla de la feature 107 que existe hoy; sus variables salen del catálogo
   `CAMPOS_PLANTILLA` (datos de una orden).
 - **Plantilla de informe**: plantilla asociada a un informe del catálogo; sus variables son las que ese
-  informe declara.
+  informe declara más las comunes a todo informe (R53).
 - **Informe**: generador registrado en el catálogo de informes. Recibe sus parámetros y produce los
   valores de sus variables y, si lo declara, un PDF; o responde «vacío».
 - **Envío** (envío configurado): qué informe, con qué plantilla y parámetros, a qué destinatarios y con
   qué disparo. Lo configura una persona desde la pantalla.
 - **Ejecución**: una corrida concreta de un envío (programada, por evento o de prueba).
 - **Entrega**: el mensaje de una ejecución a UN destinatario.
+- **Aviso interno**: una notificación de la campana de la app (feature 146 y sucesoras), identificada
+  por su evento y su entidad. Un mismo aviso puede crearse para varios destinatarios.
+- **Evento disponible**: evento de aviso interno que el catálogo de eventos (R49) declara utilizable
+  como disparo.
 - **Día CR / hora CR**: fecha y hora de pared en `America/Costa_Rica`.
 - **Teléfono válido**: el que, normalizado con `normalizarTelefonoWa`, cumple la regla de `design.md` §6.4.
-- **Roles destinatarios permitidos**: `maestro`, `admin`, `adminSatelite`, `mensajero`.
+- **Roles destinatarios permitidos**: `maestro`, `admin`, `adminSatelite`, `adminTienda`, `mensajero`
+  (los cinco que muestra la maqueta aprobada; `apiKey` no es una persona).
 
 ## A. Acceso
 
@@ -36,8 +46,8 @@
   informe del catálogo. Las plantillas que no lo declaran DEBEN seguir comportándose como plantillas de
   orden, sin ningún cambio observable.
 - **R4** — MIENTRAS una plantilla sea de informe, el sistema DEBE ofrecer en el selector de variables solo
-  las variables de ese informe, usar sus ejemplos en la vista previa y marcar como desconocida cualquier
-  clave del cuerpo que el informe no declare.
+  las variables de ese informe y las comunes (R53), usar sus ejemplos en la vista previa y marcar como
+  desconocida cualquier clave del cuerpo que no esté entre ellas.
 - **R5** — DONDE una plantilla de informe esté marcada «lleva documento adjunto», CUANDO se envíe a
   aprobación, el sistema DEBE crear el template en Meta con una cabecera de tipo documento (con su
   documento de ejemplo) además del cuerpo.
@@ -50,9 +60,11 @@
 - **R8** — El sistema NO DEBE ofrecer una plantilla de informe en el envío de plantillas del chat, en el
   flujo wa.me del mensajero ni como mensaje de bienvenida; SI se intenta marcarla como bienvenida,
   ENTONCES el sistema DEBE responder «no aplica».
-- **R9** — SI al enviar a aprobación una plantilla con documento falta la configuración necesaria para
-  subir el documento de ejemplo a Meta, ENTONCES el sistema DEBE responder «no configurado» nombrando la
-  pieza que falta (nunca su valor) y NO DEBE cambiar el estado de la plantilla.
+- **R9** — *(enmendado 2026-10-05, D2)* SI al enviar a aprobación una plantilla con documento no se
+  puede obtener el identificador de la app de Meta (R48) o falta la credencial de WhatsApp, ENTONCES el
+  sistema DEBE responder con un texto en lenguaje claro que diga que las plantillas con documento no se
+  pueden enviar a aprobación y por qué (nombrando la pieza que falta o el código del fallo, nunca un
+  valor secreto), y NO DEBE cambiar el estado de la plantilla.
 - **R10** — SI se intenta eliminar o desactivar una plantilla que usa al menos un envío encendido,
   ENTONCES el sistema DEBE rechazar la operación indicando el nombre de esos envíos.
 
@@ -60,19 +72,26 @@
 
 - **R11** — El sistema DEBE permitir crear y editar un envío con: nombre (único entre los envíos no
   borrados), informe, plantilla, parámetros del informe, destinatarios y disparo, que es «hora fija»
-  (uno o más días de la semana y una hora CR en formato HH:mm) o «por evento» (un evento del catálogo).
+  (uno o más días de la semana y una hora CR en formato HH:mm) o «por evento» (un evento disponible).
 - **R12** — SI la plantilla elegida no está vigente, no está activa, no tiene template enlazado en Meta o
   pertenece a otro informe, ENTONCES el sistema DEBE rechazar el guardado con un error en el campo
   plantilla.
 - **R13** — El sistema DEBE validar los parámetros contra el esquema que declara el informe y, SI no son
   válidos, ENTONCES DEBE rechazar el guardado con un error por cada campo inválido. CUANDO se crea un
   envío, el sistema DEBE precargar los valores por defecto que declara el informe.
-- **R14** — SI el disparo es «por evento» y el evento no está entre los que ofrece el informe elegido,
-  ENTONCES el sistema DEBE rechazar el guardado.
+- **R14** — *(enmendado 2026-10-05, D4)* SI el disparo es «por evento» y el evento no es un evento
+  disponible (R49) o no está entre los que ofrece el informe elegido, ENTONCES el sistema DEBE rechazar
+  el guardado con un error en el campo evento.
 - **R15** — CUANDO se crea un envío, el sistema DEBE dejarlo apagado.
-- **R16** — El sistema DEBE permitir elegir destinatarios por rol y/o por usuario, solo entre los roles
-  destinatarios permitidos; SI se elige un rol no permitido o un usuario cuyo rol no lo es, o el conjunto
-  resuelto supera 50 usuarios, ENTONCES el sistema DEBE rechazar el guardado.
+- **R16** — *(enmendado 2026-10-05: se añade `adminTienda`, como en la maqueta aprobada)* El sistema DEBE
+  permitir elegir destinatarios por rol y/o por usuario, solo entre los roles destinatarios permitidos;
+  SI se elige un rol no permitido o un usuario cuyo rol no lo es, o el conjunto resuelto supera 50
+  usuarios, ENTONCES el sistema DEBE rechazar el guardado.
+  *(Enmienda del leader 2026-10-05)* Cada informe del catálogo DEBE declarar si es apto para
+  `adminTienda` (por defecto NO). SI el informe del envío no es apto y entre los destinatarios
+  resueltos hay un `adminTienda`, ENTONCES el sistema DEBE rechazar el guardado: un informe con
+  datos de varias tiendas (tránsito) no puede llegar a una tienda. El informe «Aviso de la app»
+  tampoco es apto. Test: unitario del service con un informe no apto + adminTienda ⇒ rechazo.
 - **R17** — CUANDO se editan los destinatarios, ANTES de guardar, la pantalla DEBE mostrar la lista
   resuelta y deduplicada por usuario, con un aviso por cada destinatario de teléfono inválido y por cada
   teléfono compartido entre dos o más destinatarios. Los avisos NO DEBEN impedir guardar.
@@ -101,12 +120,16 @@
   mantenimiento diario, el sistema DEBE volver a programar la próxima ejecución de todo envío encendido
   que no tenga ninguna.
 
-## E. Disparo por evento
+## E. Disparo por evento (puente con los avisos internos)
 
-- **R26** — CUANDO se emite un evento del catálogo con su referencia (identificador estable del hecho), el
-  sistema DEBE crear una ejecución por cada envío encendido configurado con ese evento.
-- **R27** — El sistema DEBE crear como máximo UNA ejecución por (envío, evento, referencia) y como máximo
-  UNA entrega por (ejecución, destinatario), aunque el mismo evento se emita más de una vez.
+- **R26** — *(reescrito 2026-10-05, D4)* CUANDO la app crea un aviso interno de un evento disponible
+  (R49) y hay al menos un envío encendido configurado con ese evento, el sistema DEBE encolar
+  exactamente UN trabajo por ese aviso y, al procesarlo, DEBE crear una ejecución por cada envío que
+  siga encendido con ese evento en ese momento. MIENTRAS no haya ningún envío encendido con ese evento,
+  el sistema NO DEBE encolar ningún trabajo ni escribir nada por ese aviso.
+- **R27** — *(reescrito 2026-10-05, D4)* El sistema DEBE crear como máximo UNA ejecución por (envío,
+  evento, entidad del aviso), aunque el mismo aviso se cree para varios destinatarios de la campana o el
+  mismo hecho se emita más de una vez, y como máximo UNA entrega por (ejecución, destinatario).
 
 ## F. Ejecución
 
@@ -161,7 +184,7 @@
 - **R43** — CUANDO una ejecución lleva PDF, el sistema DEBE guardarlo en almacenamiento PRIVADO en una ruta
   única por ejecución, sin sobrescribir nunca un objeto existente, y DEBE permitir descargarlo solo al
   maestro mediante un enlace firmado de corta duración.
-- **R44** — CUANDO un PDF guardado supera su caducidad (por defecto 30 días), el mantenimiento diario DEBE
+- **R44** — CUANDO un PDF guardado supera su caducidad (30 días, decisión D3), el mantenimiento diario DEBE
   borrarlo del almacenamiento y el historial DEBE mostrarlo como «caducado».
 
 ## I. Seguridad y catálogo de informes
@@ -172,38 +195,79 @@
 - **R46** — El catálogo de informes DEBE exigir que cada informe declare clave, nombre, descripción,
   esquema de parámetros con valores por defecto y descriptores para la pantalla, variables (clave, nombre,
   descripción y ejemplo), si genera documento y qué eventos ofrece; y el sistema DEBE rechazar (fallo en
-  test) un catálogo con claves de informe o de variable duplicadas o con formato distinto de `[a-z0-9_]+`.
+  test) un catálogo con claves de informe o de variable duplicadas, con una variable que repita una
+  común (R53) o con formato distinto de `[a-z0-9_]+`.
 - **R47** — El catálogo DEBE incluir el informe «Prueba de envío», que provee las variables `fecha` y `hora`
   (CR) del momento de la ejecución, genera un PDF de una página y acepta el parámetro «simular vacío»; con
   ese parámetro activo DEBE responder «vacío».
 
+## J. Identificador de la app de Meta (añadido 2026-10-05, D2)
+
+- **R48** — El sistema DEBE obtener el identificador de la app de Meta a partir del token de WhatsApp ya
+  configurado, sin pedirlo a ninguna persona, y DEBE reutilizar el valor obtenido mientras el proceso
+  siga vivo. DONDE exista la variable `WHATSAPP_APP_ID` con valor, el sistema DEBE usar ese valor sin
+  consultar a Meta. SI la obtención falla, ENTONCES la pantalla de plantillas DEBE decirlo con un texto
+  claro al marcar «lleva documento adjunto», y todo lo que no sea enviar a aprobación una plantilla con
+  documento DEBE seguir funcionando.
+
+## K. Avisos internos como disparo (añadido 2026-10-05, D4)
+
+- **R49** — El sistema DEBE mantener un catálogo de eventos que declare, para CADA evento de aviso
+  interno que existe, si está disponible como disparo —con un nombre en español claro, sin siglas como
+  «SLA»— o no disponible con su motivo. La pantalla DEBE ofrecer como eventos solo los disponibles. SI
+  aparece un evento de aviso interno nuevo sin declarar en el catálogo, ENTONCES la compilación o la
+  suite DEBEN fallar.
+- **R50** — El puente entre avisos internos y envíos NO DEBE hacer fallar, revertir ni esperar a Meta en la
+  creación del aviso original: SI el puente falla, ENTONCES el aviso DEBE quedar creado igual y el fallo
+  DEBE quedar registrado en el log con su causa. El puente NO DEBE consultar ni escribir nada cuando el
+  aviso se crea dentro de una transacción de negocio, cuando el aviso no llegó a crearse (lo absorbió la
+  deduplicación de la campana) o cuando el evento no está disponible.
+- **R51** — El catálogo de informes DEBE incluir el informe «Aviso de la app», que ofrece todos los
+  eventos disponibles, no genera documento y provee las variables `titulo` (nombre del evento en el
+  catálogo), `texto` (el texto del aviso tal como lo muestra la campana), `enlace` (dirección completa de
+  la pantalla de la app donde se atiende, o la de inicio si el aviso no tiene una) y `fecha` y `hora` (CR)
+  del momento en que se creó el aviso. El sistema NO DEBE pasar a un envío el anexo del aviso ni ningún
+  dato de persona, teléfono, dirección o monto que no esté ya en el texto del aviso.
+- **R52** — CUANDO se pulsa «Probar ahora» en un envío por evento, el sistema DEBE usar como valores de
+  `titulo` y `texto` el ejemplo que el catálogo de eventos declara para ese evento, y el resto de
+  variables con su valor real del momento.
+- **R53** — El sistema DEBE ofrecer en toda plantilla de informe la variable común `destinatario_nombre`,
+  cuyo valor en cada entrega es el nombre del usuario destinatario (en «Probar ahora», el de quien
+  pulsa), como muestra la maqueta aprobada («Buenos días Daniel»).
+
 ## Fuera de alcance
 
 - Los informes de tránsito (475) y picking (476): solo se define aquí el contrato que implementan.
-- Conectar eventos reales del dominio al disparador (ver Pregunta abierta 4): esta ficha entrega el
-  mecanismo, la clave de idempotencia y su prueba con un evento de test.
-- Personalizar el informe por destinatario (p. ej. cada satélite solo su zona): un informe produce el
-  mismo contenido para todos los destinatarios de una ejecución.
+- Avisos internos NO disponibles como disparo en esta ficha (motivo de cada uno en `design.md` §2.2):
+  `orden_rechazada` (se crea DENTRO de la transacción del registro de la gestión, R50), los avisos
+  personales en segunda persona dirigidos a un único usuario (`carga_masiva_terminada`,
+  `dia_reparto_corregido`, `cierre_dia_rechazado`, `reparto_manana`, `traspaso_ordenes_recibido`,
+  `traspaso_ordenes_cedido`) y `novedades_sin_gestionar` (solo existe acotado a una tienda y su texto no
+  la nombra). Hacerlos disponibles es una línea del catálogo más su motivo, salvo `orden_rechazada`, que
+  exige sacar el puente de la transacción.
+- Enviar el WhatsApp a los MISMOS destinatarios que el aviso de la campana (destinatarios dinámicos): el
+  envío por evento va a los destinatarios configurados en el envío.
+- Personalizar el contenido del informe por destinatario (p. ej. cada satélite solo su zona): un informe
+  produce el mismo contenido para todos los destinatarios de una ejecución; solo `destinatario_nombre`
+  (R53) cambia por entrega.
 - Apagar el sistema externo que hoy envía lo mismo: lo hace el humano (Daniel); por eso los envíos nacen
   apagados (R15).
 - Pruebas E2E (no hay harness; memoria del repo).
 
-## Preguntas abiertas (dependen del humano)
+## Decisiones cerradas (respondidas por el humano el 2026-10-05)
 
-1. **¿Solo `maestro` configura, o también `admin`?** El patrón medido del repo es maestro-only:
-   `/configuracion` y `/configuracion/plantillas` lo son (`lib/auth/menu-visibility.ts:545`,
-   `PlantillaMensajeService.ALLOWED_ROLES`). R1 está escrito así; abrirlo a `admin` le daría también
-   la gestión de plantillas o lo dejaría con envíos sin poder crear su plantilla.
-2. **`WHATSAPP_APP_ID` en Vercel (producción y preview).** Para aprobar una plantilla con PDF, Meta exige
-   un documento de ejemplo subido con su API de subida reanudable, que cuelga del **ID de la app** de
-   Meta, no del WABA ni del número. Hoy el repo no lo tiene (`lib/config/whatsapp.ts`). Quien tenga
-   acceso al panel de Meta tiene que dar ese ID. Sin él funciona todo salvo R5 (R9 lo dice en pantalla).
-3. **Cuánto se guarda el PDF.** Por defecto 30 días (R44), configurable por env. ¿Vale?
-4. **Primer evento real.** Esta ficha no engancha ningún hecho del dominio al disparo por evento
-   (475 y 476 son a hora fija). Si quieres uno ya (p. ej. «cierre del día por aprobar»), dilo y se añade
-   como requisito; si no, lo trae la ficha que lo necesite.
+- **D1 — Quién configura.** Solo el rol `maestro` (R1), el patrón del repo para `/configuracion` y
+  `/configuracion/plantillas`.
+- **D2 — `WHATSAPP_APP_ID`.** No se pide al humano: el servidor lo obtiene del token existente (R48);
+  la variable queda solo como anulación opcional. Si la obtención falla, se dice en pantalla (R9, R48).
+- **D3 — Retención del PDF.** 30 días (R44), configurable por env.
+- **D4 — Disparo por evento.** Disponible desde ya, puenteando los avisos internos de la app (R26, R27,
+  R49–R52). El catálogo de eventos es el de los avisos, filtrado con motivo.
 
-Decisiones técnicas tomadas sin preguntar (se pueden revertir en la revisión): `adminTienda` y `apiKey`
-no son destinatarios (son clientes y cuentas técnicas, no personal); máximo 50 destinatarios por envío;
-la ventana de tolerancia es 60 min; idempotencia por usuario, no por teléfono (dos cuentas con el mismo
-teléfono reciben dos mensajes, y R17 lo avisa).
+Ya no quedan preguntas abiertas.
+
+Decisiones técnicas tomadas sin preguntar (se pueden revertir en la revisión): `apiKey` no es
+destinatario (es una cuenta técnica); `adminTienda` sí lo es porque la maqueta aprobada lo ofrece;
+máximo 50 destinatarios por envío; la ventana de tolerancia es 60 min; idempotencia por usuario, no por
+teléfono (dos cuentas con el mismo teléfono reciben dos mensajes, y R17 lo avisa); el identificador de la
+app se pide a Meta con el token en la cabecera y no en la URL (invariante de `lib/clients/whatsapp-cloud.ts`).

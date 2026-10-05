@@ -5639,11 +5639,11 @@
       "description": "Pantalla para programar envios de plantillas por WhatsApp a roles o usuarios, a hora fija o por evento, con PDF adjunto opcional e historial.",
       "zone": "fullstack",
       "sdd": true,
-      "branch": null,
-      "status": "spec_ready",
+      "branch": "feature/474-envios-automaticos-whatsapp",
+      "status": "in_progress",
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 (WhatsApp interno). Referencia del sistema externo SOLO como logica, no copiar (un destinatario fijo, sin candado, zona por texto). Incluye: plantilla con cabecera DOCUMENT (hoy solo BODY), variables por dato, idempotencia dia CR+destinatario+envio, aviso de telefonos invalidos, Probar ahora, nacen apagados (el sistema externo sigue enviando hasta que Daniel lo apague). Pantalla nueva => /design. || SPEC escrito (47 R) + maqueta en design-whatsapp/; pendiente aprobacion y 4 decisiones (quien configura, WHATSAPP_APP_ID, retencion PDF 30 d, primer evento)."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 (WhatsApp interno). Referencia del sistema externo SOLO como logica, no copiar (un destinatario fijo, sin candado, zona por texto). Incluye: plantilla con cabecera DOCUMENT (hoy solo BODY), variables por dato, idempotencia dia CR+destinatario+envio, aviso de telefonos invalidos, Probar ahora, nacen apagados (el sistema externo sigue enviando hasta que Daniel lo apague). Pantalla nueva => /design. || SPEC escrito (47 R) + maqueta en design-whatsapp/; pendiente aprobacion y 4 decisiones (quien configura, WHATSAPP_APP_ID, retencion PDF 30 d, primer evento). || SPEC APROBADO 2026-10-05 (53 R): D1 solo maestro, D2 app id resuelto por /app con el token, D3 PDF 30 d, D4 eventos = puente de avisos internos (NotificacionEvento, 10 disponibles). Enmienda leader: informes no aptos para adminTienda. backend_dev -> frontend_dev en worktree, base local propia."
     },
     {
       "id": 475,
