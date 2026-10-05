@@ -56,6 +56,13 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
       "webhook_evento",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger
       "whatsapp_chat_envio", // feature 109
+      // FICHA 474: los cinco tipos de los envios automaticos por WhatsApp (solo el mantenimiento
+      // es recurrente).
+      "whatsapp_envio_ejecucion",
+      "whatsapp_envio_evento",
+      "whatsapp_envio_mantenimiento",
+      "whatsapp_envio_programado",
+      "whatsapp_envio_reintento",
       "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });
@@ -69,6 +76,7 @@ describe("R26 — el drenador resuelve el handler de webhook_estado y no lo re-a
     expect([...recurrencias.keys()]).toEqual([
       "liberar_reprogramadas",
       "analitica_rollup_diario",
+      "whatsapp_envio_mantenimiento", // ficha 474: mantenimiento diario 03:30 CR
     ]);
   });
 
