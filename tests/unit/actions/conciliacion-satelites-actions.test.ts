@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import {
+  corregirConsolidacionRecibidaAction,
   listarConsolidacionesSateliteAction,
   listarSaldosSatelitesAction,
   marcarConsolidacionRecibidaAction,
@@ -54,6 +55,7 @@ function fakeService(overrides: Partial<IConciliacionSatelitesService> = {}) {
     })),
     marcarRecibida: vi.fn(async () => ({ status: "ok" as const, cierreBodegaId: CB })),
     revertirConciliacion: vi.fn(async () => ({ status: "ok" as const, cierreBodegaId: CB })),
+    corregirRecibida: vi.fn(async () => ({ status: "ok" as const, cierreBodegaId: CB })),
     ...overrides,
   } as unknown as IConciliacionSatelitesService & Record<string, ReturnType<typeof vi.fn>>;
 }
@@ -215,5 +217,85 @@ describe("431/T8 — el borde transporta lo que el servicio decide, sin reinterp
     };
     expect(input.page).toBe(1);
     expect(input.pageSize).toBeGreaterThan(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 473 / T4 (R10/R11) — CORREGIR: el mismo borde que marcar, y la escritura propia.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("473/T4 — corregirConsolidacionRecibidaAction", () => {
+  it("R10 corregir sin sesion responde unauthenticated sin llamar al servicio", async () => {
+    const service = fakeService();
+    const r = await corregirConsolidacionRecibidaAction(
+      // Entrada INVALIDA a proposito: sin sesion se corta ANTES de validar.
+      { cierreBodegaId: "no-uuid", montoRecibido: "-1", extra: 1 },
+      { service, ...conActor(null) },
+    );
+    expect(r.status).toBe("unauthenticated");
+    for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["monto ausente", {}],
+    ["monto 0", { montoRecibido: "0" }],
+    ["monto negativo", { montoRecibido: "-5.00" }],
+    ["monto con tres decimales", { montoRecibido: "200800.001" }],
+    ["monto no numerico", { montoRecibido: "doscientos" }],
+    ["clave extra", { montoRecibido: "200800.00", actorUsuarioId: "otro" }],
+    ["nota de 501 caracteres", { montoRecibido: "200800.00", nota: "x".repeat(501) }],
+  ])(
+    "R11 corregir con %s responde validation_error sin llamar al servicio",
+    async (_n, parche) => {
+      const service = fakeService();
+      const r = await corregirConsolidacionRecibidaAction(
+        { cierreBodegaId: CB, ...parche },
+        { service, ...conActor(MAESTRO) },
+      );
+      expect(r.status).toBe("validation_error");
+      // La clave colada la reporta zod como error de FORMULARIO (`unrecognized_keys`), no de campo:
+      // es el mismo mapeo que hoy usa marcar. Los demas casos SI traen su campo.
+      if (r.status === "validation_error" && _n !== "clave extra") {
+        expect(Object.keys(r.fieldErrors).length).toBeGreaterThan(0);
+      }
+      for (const fn of Object.values(service)) expect(fn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("corregir ok: llama a corregirRecibida (con nota de 500) y NUNCA a marcarRecibida", async () => {
+    const service = fakeService();
+    const nota = "y".repeat(500);
+    const r = await corregirConsolidacionRecibidaAction(
+      { cierreBodegaId: CB, montoRecibido: "200800.00", nota },
+      { service, ...conActor(MAESTRO) },
+    );
+    expect(r).toEqual({ status: "ok", cierreBodegaId: CB });
+    expect(service.corregirRecibida).toHaveBeenCalledTimes(1);
+    expect(service.corregirRecibida).toHaveBeenCalledWith(
+      { cierreBodegaId: CB, montoRecibido: "200800.00", nota },
+      MAESTRO,
+    );
+    expect(service.marcarRecibida).not.toHaveBeenCalled();
+  });
+
+  it("marcar NO llama a corregirRecibida", async () => {
+    const service = fakeService();
+    await marcarConsolidacionRecibidaAction(
+      { cierreBodegaId: CB, montoRecibido: "1.00" },
+      { service, ...conActor(MAESTRO) },
+    );
+    expect(service.corregirRecibida).not.toHaveBeenCalled();
+  });
+
+  it("`conflict`, `no_encontrada` y `forbidden` del servicio llegan tal cual", async () => {
+    for (const status of ["conflict", "no_encontrada", "forbidden"] as const) {
+      const service = fakeService({ corregirRecibida: vi.fn(async () => ({ status })) });
+      expect(
+        await corregirConsolidacionRecibidaAction(
+          { cierreBodegaId: CB, montoRecibido: "1.00" },
+          { service, ...conActor(MAESTRO) },
+        ),
+      ).toEqual({ status });
+    }
   });
 });

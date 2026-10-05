@@ -47,6 +47,8 @@ export const MARCAR_RECIBIDO_TEXTO = {
   nota: "Nota",
   notaAyuda: "Opcional. Por ejemplo: «faltaron ₡15.000, entran el lunes».",
   confirmar: CONCILIACION_ACCION.marcar,
+  /** 473 (R15) — en modo corrección el botón dice lo que hace: corregir, no volver a marcar. */
+  confirmarCorregir: CONCILIACION_ACCION.corregir,
 } as const;
 
 /** Errores de campo que este formulario puede levantar por sí solo, antes de enviar. */
@@ -58,8 +60,13 @@ export const MARCAR_RECIBIDO_ERROR = {
 /** Lo que responde el servidor, traducido a algo accionable. */
 export const CONCILIACION_RESPUESTA = {
   marcada: (monto: string) => `Marcada como recibida por ${money(monto)}.`,
+  /** 473 (R16) — la corrección dice el monto que quedó, no el que había. */
+  corregida: (monto: string) => `Monto recibido corregido a ${money(monto)}.`,
   revertida: "Marca deshecha. La consolidación vuelve a estar pendiente de conciliar.",
-  /** R11 — alguien la marcó (o la desmarcó) mientras este diálogo estaba abierto. */
+  /**
+   * R11 — alguien la marcó (o la desmarcó) mientras este diálogo estaba abierto. Desde la 473
+   * (R17) «Actualizando la lista» es verdad: quien monta el diálogo lo cierra y refresca.
+   */
   conflicto: "Esta consolidación ya cambió de estado. Actualizando la lista.",
   noEncontrada: "Esta consolidación ya no está disponible.",
   forbidden: "No tenés permiso para conciliar consolidaciones de bodega.",

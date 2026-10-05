@@ -82,12 +82,16 @@ function fakeSaldos(overrides: Partial<ISaldosSatelitesRepository> = {}) {
   } as unknown as ISaldosSatelitesRepository & Record<string, ReturnType<typeof vi.fn>>;
 }
 
-type Escrituras = Pick<ICierresBodegaAdminRepository, "marcarConciliado" | "revertirConciliacion">;
+type Escrituras = Pick<
+  ICierresBodegaAdminRepository,
+  "marcarConciliado" | "revertirConciliacion" | "corregirConciliacion"
+>;
 
 function fakeEscrituras(overrides: Partial<Escrituras> = {}) {
   return {
     marcarConciliado: vi.fn(async () => "updated" as const),
     revertirConciliacion: vi.fn(async () => "updated" as const),
+    corregirConciliacion: vi.fn(async () => "updated" as const),
     ...overrides,
   } as unknown as Escrituras & Record<string, ReturnType<typeof vi.fn>>;
 }
@@ -262,6 +266,86 @@ describe("431/T8 — marcar y revertir: la UNICA llamada, y los tres desenlaces"
     expect(
       (await inexistente.service.revertirConciliacion({ cierreBodegaId: "cb1" }, MAESTRO)).status,
     ).toBe("no_encontrada");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// ⭑ FICHA 473 (R7/R9) — CORREGIR: la escritura propia, nunca la de marcar
+// ---------------------------------------------------------------------------------------------
+
+describe("473/T3 — corregirRecibida", () => {
+  it.each([
+    ["adminSatelite", ADMIN_SATELITE],
+    ["mensajero", MENSAJERO],
+    ["adminTienda", TIENDA],
+  ])(
+    "R9 corregir: un actor sin acceso total (%s) recibe forbidden y no se llama al repositorio",
+    async (_n, actor) => {
+      const { service, escrituras, saldos } = newService();
+      const r = await service.corregirRecibida(
+        { cierreBodegaId: "cb1", montoRecibido: "200800.00" },
+        actor,
+      );
+      expect(r).toEqual({ status: "forbidden" });
+      for (const fn of Object.values(escrituras)) expect(fn).not.toHaveBeenCalled();
+      for (const fn of Object.values(saldos)) expect(fn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["maestro", MAESTRO],
+    ["admin", ADMIN],
+  ])("corregir ok (%s): llama a corregirConciliacion con el actor y NUNCA a marcarConciliado", async (_n, actor) => {
+    const { service, escrituras, saldos } = newService();
+    const r = await service.corregirRecibida(
+      { cierreBodegaId: "cb1", montoRecibido: "200800.00", nota: "llego el resto" },
+      actor,
+    );
+    expect(r).toEqual({ status: "ok", cierreBodegaId: "cb1" });
+    expect(escrituras.corregirConciliacion).toHaveBeenCalledTimes(1);
+    expect(escrituras.corregirConciliacion).toHaveBeenCalledWith({
+      id: "cb1",
+      montoRecibido: "200800.00",
+      nota: "llego el resto",
+      actorUsuarioId: actor.usuarioId,
+    });
+    expect(escrituras.marcarConciliado).not.toHaveBeenCalled();
+    expect(escrituras.revertirConciliacion).not.toHaveBeenCalled();
+    for (const fn of Object.values(saldos)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("marcarRecibida NO llama a corregirConciliacion (ni al reves)", async () => {
+    const { service, escrituras } = newService();
+    await service.marcarRecibida({ cierreBodegaId: "cb1", montoRecibido: "1.00" }, MAESTRO);
+    expect(escrituras.marcarConciliado).toHaveBeenCalledTimes(1);
+    expect(escrituras.corregirConciliacion).not.toHaveBeenCalled();
+  });
+
+  it("corregir: la nota AUSENTE viaja como `null`", async () => {
+    const { service, escrituras } = newService();
+    await service.corregirRecibida({ cierreBodegaId: "cb1", montoRecibido: "1.00" }, MAESTRO);
+    const arg = llamadasDe(escrituras.corregirConciliacion)[0][0] as { nota: unknown };
+    expect(arg.nota).toBeNull();
+  });
+
+  it("corregir: `conflict` del repositorio -> `conflict` del servicio", async () => {
+    const { service } = newService(
+      fakeSaldos(),
+      fakeEscrituras({ corregirConciliacion: vi.fn(async () => "conflict" as const) }),
+    );
+    expect(
+      await service.corregirRecibida({ cierreBodegaId: "cb1", montoRecibido: "1.00" }, MAESTRO),
+    ).toEqual({ status: "conflict" });
+  });
+
+  it("R7 corregir: fuera_de_alcance se traduce a no_encontrada", async () => {
+    const { service } = newService(
+      fakeSaldos(),
+      fakeEscrituras({ corregirConciliacion: vi.fn(async () => "fuera_de_alcance" as const) }),
+    );
+    expect(
+      await service.corregirRecibida({ cierreBodegaId: "cb1", montoRecibido: "1.00" }, MAESTRO),
+    ).toEqual({ status: "no_encontrada" });
   });
 });
 
