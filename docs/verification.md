@@ -6,9 +6,22 @@ verificada cuando hay evidencia ejecutable.
 ## El gate tiene DOS niveles — usa el que toca
 
 ```bash
-./init.sh --rapido   # EL GATE NORMAL, tambien para abrir un PR: typecheck + lint + relacionados + guardias
-./init.sh            # ANTES DE UNA RELEASE A `prod`, y DESPUES DE CADA MERGE A `dev`: la suite entera
+./init.sh --rapido   # EL GATE DE TODO EL TRABAJO (tandas, PR, tras merge): typecheck + lint + relacionados + guardias
+                     #   con dinero o datos en el diff se AMPLIA solo con tests/integration/db
+./init.sh            # SOLO ANTES DE UNA RELEASE A `prod`: la suite entera
 ```
+
+> **Cambiado el 2026-10-05 (pedido del humano: «solo deberías correr los test de lo que tocas»).**
+> Medido en la ficha 473 —5 archivos, uno con «cierre» en el nombre—: el completo corrió tres veces
+> (backend 19 min, frontend ~20, post-merge 28) cuando lo relacionado eran ~280 tests, y arrastró
+> dos deadlocks 40P01 de la base compartida que hubo que descartar a mano. Desde hoy:
+> - dinero y datos **ya no exigen el completo**: amplían el rápido con `tests/integration/db`, que
+>   es la red que de verdad muerde un `WHERE` de dinero o una migración;
+> - **desaparece el completo post-merge**. Precio aceptado: un `dev` que ya venía rojo se descubre
+>   en el completo de la release, no antes;
+> - un rojo se repite **aislado**; si pasa, es intermitente y no se vuelve a correr todo.
+>
+> Lo de abajo sobre el «completo post-merge» y «antes de cada PR» es HISTORIA de las reglas previas.
 
 > **Cambiado el 2026-08-20.** Antes el completo era obligatorio **antes de cada PR, sin excepción**.
 > Se midió lo que costaba: mover un enlace de la nav de la landing = **16.346 tests, 5–11 minutos**,
@@ -65,7 +78,16 @@ su motivo y su fecha escritos.
 > Si tratara la ausencia como recuperación, el gate pediría borrar entradas que siguen rojas — un
 > aviso falso, que es peor que el problema que vino a resolver.
 
-### Cuándo `--rapido` se niega, y por qué esas rutas
+### Cuándo `--rapido` se niega o se amplía (2026-10-05)
+
+Ahora solo **se niega** (pide el completo) con `init.sh`, `tests/fixtures/sin-comentarios.ts` y la
+config de build/tests (`package.json`, `pnpm-lock.yaml`, `tsconfig.json`, `middleware.ts`,
+`next.config.ts`, `vitest.config.ts`, `prisma.config.ts`, `eslint.config.mjs`, `.env.example`).
+Migraciones, `db/schema.prisma`, `lib/types/` y nombres de dinero **amplían** la corrida con
+`tests/integration/db`; sin `DATABASE_URL` el modo ampliado falla. La tabla de abajo explica por
+qué esas rutas son delicadas (sigue siendo cierto; lo que cambió es el remedio).
+
+#### Historia: la regla anterior (todas esas rutas exigían el completo)
 
 `init.sh --rapido` mira tu diff contra la base común con `origin/dev` —**lo commiteado y lo que
 todavía no**— y **falla** si toca alguna de estas:
@@ -147,7 +169,8 @@ Se seleccionan por patron (`vitest run guard`), no por lista: una guardia nueva 
 - Un cambio en un archivo **sin tests que lo importen** selecciona cero tests y sale verde.
 - Regresiones lejanas que solo aparecen con la suite entera.
 
-Por eso **antes de abrir un PR se corre `./init.sh` completo, sin excepcion**. La leccion de los
+Por eso **antes de una release a `prod` se corre `./init.sh` completo, sin excepcion** (hasta el
+2026-10-05 se exigía también antes de cada PR; ver arriba). La leccion de los
 PRs #209 y #237 de este repo va justo en esa direccion: se mergeo mirando el estado del PR —que es
 un build y **no corre tests**— y entro un guard rojo en `dev`.
 
