@@ -3,12 +3,12 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { WhatsappEjecucionRepository } from "@/lib/repositories/WhatsappEjecucionRepository";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida, serializarEscriturasReales } from "./_postgres-real";
-import { crearEnvio, crearPlantilla, crearUsuario, usuarioModelo } from "./_whatsapp-envios-474";
+import { crearEnvio, crearPlantilla } from "./_whatsapp-envios-474";
 
 // Ficha 474 (T6.2, R23) — COMO MUCHO UN mensaje por (dia CR, destinatario, envio), TAMBIEN con
 // ejecuciones CONCURRENTES. La concurrencia de verdad exige dos conexiones y filas COMMITEADAS (una
-// transaccion revertida no la ve otra conexion): este archivo siembra commiteando con nombres
-// unicos y lo BORRA en `afterAll`. Las pruebas («Probar ahora») NO consumen el cupo del dia.
+// transaccion revertida no la ve otra conexion): este archivo siembra commiteando (plantilla y envio
+// con nombres unicos, destinatarios = usuarios YA existentes) y lo BORRA en `afterAll`. Las pruebas («Probar ahora») NO consumen el cupo del dia.
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
@@ -20,16 +20,21 @@ describeSiHayBase("474/R23 — idempotencia de la ejecucion programada", () => {
   beforeAll(async () => {
     a = crearPrismaDeTest();
     b = crearPrismaDeTest();
-    // Siembra COMMITEADA (la ven las dos conexiones).
+    // Siembra COMMITEADA (la ven las dos conexiones). Los destinatarios son DOS usuarios QUE YA
+    // EXISTEN (los mas antiguos): crear y borrar usuarios commiteados abre una carrera con los
+    // archivos que eligen «cualquier usuario» en su `beforeAll` (p. ej. `cierre-bloqueo-nv-sql-real`
+    // toma `usuario.findMany({ take: 3 })`): si eligen uno de estos y este archivo lo borra, su FK
+    // revienta. Aqui solo se commitean y se borran filas de tablas de la 474.
+    const existentes = await a.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT "id" FROM "usuario" ORDER BY "created_at", "id" LIMIT 2`,
+    );
+    if (existentes.length < 2) throw new Error("474: hacen falta dos usuarios en la base de test");
+    sembrado.usuarios = existentes.map((u) => u.id);
     await a.$transaction(async (tx) => {
       await serializarEscriturasReales(tx);
-      const modelo = await usuarioModelo(tx);
-      const u1 = await crearUsuario(tx, modelo, "admin");
-      const u2 = await crearUsuario(tx, modelo, "maestro");
       const p = await crearPlantilla(tx);
-      sembrado.usuarios = [u1.id, u2.id];
       sembrado.plantillaId = p.id;
-      sembrado.envioId = await crearEnvio(tx, { plantillaId: p.id, nombre: `474 R23 ${randomUUID()}`, usuarioIds: [u1.id, u2.id] });
+      sembrado.envioId = await crearEnvio(tx, { plantillaId: p.id, nombre: `474 R23 ${randomUUID()}`, usuarioIds: sembrado.usuarios });
     });
   });
 
@@ -37,7 +42,6 @@ describeSiHayBase("474/R23 — idempotencia de la ejecucion programada", () => {
     await a.$executeRawUnsafe(`DELETE FROM "whatsapp_envio_ejecucion" WHERE "envio_id" = $1`, sembrado.envioId);
     await a.$executeRawUnsafe(`DELETE FROM "whatsapp_envio" WHERE "id" = $1`, sembrado.envioId);
     await a.$executeRawUnsafe(`DELETE FROM "plantilla_mensaje" WHERE "id" = $1`, sembrado.plantillaId);
-    await a.$executeRawUnsafe(`DELETE FROM "usuario" WHERE "id" = ANY($1::text[])`, sembrado.usuarios);
     await a.$disconnect();
     await b.$disconnect();
   });
