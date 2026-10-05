@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid transparent; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .btn.outline { border-color: #e3e8f2; background: #f7f8fc; color: #12233f; }
+    .btn.ghost { background: transparent; color: #4a5368; }
+    .btn.sm { height: 28px; font-size: 13px; padding: 0 8px; }
+    .lbl { font-size: 14px; font-weight: 500; color: #12233f; display: block; margin-bottom: 6px; }
+    .hint { font-size: 12px; color: #4a5368; margin-top: 6px; line-height: 1.5; }
+    .num { width: 64px; height: 32px; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: flex-end; padding: 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+    .cb { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .cb.on { background: #f26419; border-color: #f26419; }
+    .cb.on::after { content: ""; width: 8px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px,-1px); }
+    .rd { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .rd.on { border-color: #f26419; }
+    .rd.on::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #f26419; }
+    .chk { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 30px; }
+    .bdg { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .bdg.neu { background: #eef1f8; color: #17233b; }
+    table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .t th { height: 36px; padding: 0 8px; text-align: left; font-weight: 500; font-size: 13px; white-space: nowrap; border-bottom: 1px solid #e3e8f2; }
+    .t td { padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid #e3e8f2; }
+    .t tr:last-child td { border-bottom: 0; }
+    .grp { padding-top: 18px; margin-top: 18px; border-top: 1px solid #e3e8f2; }
+    .sub { font-size: 12px; color: #4a5368; }
+  </style>
+</helmet>
+
+<div style="width: 720px; padding: 24px; background: #f7f8fc; color: #12233f;">
+  <section style="background: #fff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+      <h2 style="margin: 0; font-size: 16px; font-weight: 600;">Parámetros del informe de tránsito</h2>
+      <span class="btn ghost sm">Plegar</span>
+    </div>
+    <p style="margin: 0 0 16px; font-size: 13px; color: #4a5368; line-height: 1.5;">
+      Entran los paquetes que aún no tienen cierre logístico y ya están por vencer su plazo o lo pasaron.
+    </p>
+
+    <!-- Plazos por zona -->
+    <label class="lbl">Plazo por zona</label>
+    <div style="border: 1px solid #e3e8f2; border-radius: 10px; padding: 0 8px;">
+      <table class="t">
+        <thead>
+          <tr>
+            <th>Zona</th>
+            <th style="text-align:right;">Plazo máximo</th>
+            <th style="text-align:right;">Avisar antes</th>
+            <th style="text-align:right;">Entra en alerta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="font-weight:500;">GAM</td><td style="text-align:right;"><span class="num">10</span> días</td><td style="text-align:right;"><span class="num">2</span> días</td><td style="text-align:right;" class="sub">el día 8</td></tr>
+          <tr><td>FGAM El Coco</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM Guanacaste (Tempisque)</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM Limon Abajo</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM Limon Arriba</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM Puntarenas</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM San Carlos</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM San Ramon</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+          <tr><td>FGAM Zona Sur</td><td style="text-align:right;"><span class="num">20</span> días</td><td style="text-align:right;"><span class="num">5</span> días</td><td style="text-align:right;" class="sub">el día 15</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="hint">Días naturales. Una zona nueva aparece aquí con los valores de la GAM hasta que la cambies.</div>
+
+    <!-- Hito de inicio -->
+    <div class="grp">
+      <label class="lbl">Desde cuándo se cuentan los días</label>
+      <div class="chk"><span class="rd on"></span>Desde que entra a bodega central</div>
+      <div class="chk"><span class="rd"></span>Desde que se crea la orden</div>
+      <div class="chk"><span class="rd"></span>Desde que se genera la guía</div>
+      <div class="hint">Si un paquete todavía no ha pasado por ese momento, no entra en el informe.</div>
+    </div>
+
+    <!-- Estados incluidos + umbral de parado -->
+    <div class="grp">
+      <label class="lbl">Estados que entran, y cuándo uno está «parado»</label>
+      <p class="hint" style="margin: 0 0 10px;">Parado = lleva más de esos días sin cambiar de estado. Sale arriba del PDF, en el bloque de atención. Vacío = no se marca como parado.</p>
+      <div style="border: 1px solid #e3e8f2; border-radius: 10px; padding: 0 8px;">
+        <table class="t">
+          <thead>
+            <tr><th>Estado</th><th style="text-align:right;">Parado si lleva más de</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><div class="chk"><span class="cb on"></span>En ruta a bodega central</div></td><td style="text-align:right;"><span class="num" style="color:#4a5368;">—</span></td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>En bodega central</div></td><td style="text-align:right;"><span class="num">2</span> días</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Mensajero recogiendo en la bodega</div></td><td style="text-align:right;"><span class="num" style="color:#4a5368;">—</span></td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>En ruta a bodega satélite</div></td><td style="text-align:right;"><span class="num">2</span> días</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>En bodega satélite</div></td><td style="text-align:right;"><span class="num">2</span> días</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>En reparto</div></td><td style="text-align:right;"><span class="num" style="color:#4a5368;">—</span></td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Reprogramado</div></td><td style="text-align:right;"><span class="num">3</span> días</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Novedad</div></td><td style="text-align:right;"><span class="num">1</span> día</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Novedad interna</div></td><td style="text-align:right;"><span class="num">1</span> día</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Incidente</div></td><td style="text-align:right;"><span class="num">1</span> día</td></tr>
+            <tr><td><div class="chk"><span class="cb on"></span>Por devolver a bodega central</div></td><td style="text-align:right;"><span class="num" style="color:#4a5368;">—</span></td></tr>
+            <tr style="color:#4a5368;"><td><div class="chk"><span class="cb"></span>En preparación</div></td><td style="text-align:right;"><span class="sub">no entra</span></td></tr>
+            <tr style="color:#4a5368;"><td><div class="chk"><span class="cb"></span>Por recolectar en tienda</div></td><td style="text-align:right;"><span class="sub">no entra</span></td></tr>
+            <tr style="color:#4a5368;"><td><div class="chk"><span class="cb"></span>Recolectando</div></td><td style="text-align:right;"><span class="sub">no entra</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hint">Los estados con cierre logístico (por ejemplo Entregado o Devuelta a tienda) no se listan: nunca entran.</div>
+    </div>
+
+    <div class="grp" style="display: flex; justify-content: space-between; align-items: center;">
+      <span class="sub">Con estos valores, hoy entrarían <strong style="color:#12233f;">15 paquetes</strong> (8 parados).</span>
+      <span class="btn outline sm">Volver a los valores de partida</span>
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

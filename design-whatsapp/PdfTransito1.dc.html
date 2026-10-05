@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; }
+    .hoja { width: 794px; height: 1123px; background: #fff; color: #12233f; padding: 40px 44px; display: flex; flex-direction: column; position: relative; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .tile { flex: 1; border: 1px solid #e3e8f2; border-radius: 8px; padding: 10px 12px; }
+    .tile .k { font-size: 10px; color: #4a5368; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .tile .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+    .tile .s { font-size: 10px; color: #4a5368; }
+    table.p { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .p th { text-align: left; font-weight: 600; font-size: 9.5px; color: #4a5368; text-transform: uppercase; letter-spacing: .04em; padding: 5px 6px; border-bottom: 1.5px solid #12233f; white-space: nowrap; }
+    .p td { padding: 6px; border-bottom: 1px solid #e3e8f2; vertical-align: top; }
+    .p td.r, .p th.r { text-align: right; }
+    .p tr.venc td { color: #b91c1c; }
+    .p tr.venc td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+    .tag { display: inline-block; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; padding: 1px 5px; border-radius: 3px; vertical-align: 1px; }
+    .tag.v { background: #fee2e2; color: #b91c1c; }
+    .tag.p { background: #fef3c7; color: #92400e; }
+    .zona { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 4px; }
+    .zona h3 { margin: 0; font-size: 13px; font-weight: 600; }
+    .zona span { font-size: 10px; color: #4a5368; }
+    .pie { position: absolute; left: 44px; right: 44px; bottom: 24px; display: flex; justify-content: space-between; font-size: 9px; color: #4a5368; border-top: 1px solid #e3e8f2; padding-top: 6px; }
+  </style>
+</helmet>
+
+<div class="hoja">
+  <!-- encabezado -->
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px solid #f26419;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div style="width: 18px; height: 18px; border-radius: 5px; background: #f26419;"></div>
+        <span style="font-size: 13px; font-weight: 600;">Ordenex</span>
+      </div>
+      <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em;">Informe de tránsito</div>
+      <div style="font-size: 11px; color: #4a5368; margin-top: 2px;">Paquetes sin cierre logístico que están por vencer su plazo o ya lo pasaron</div>
+    </div>
+    <div style="text-align: right; font-size: 11px; line-height: 1.6;">
+      <div style="font-weight: 600;">Lunes 5 de octubre de 2026</div>
+      <div style="color: #4a5368;">05:00 · hora de Costa Rica</div>
+      <div style="color: #4a5368;">Días contados desde la entrada a bodega central</div>
+    </div>
+  </div>
+
+  <!-- totales -->
+  <div style="display: flex; gap: 10px; margin-top: 16px;">
+    <div class="tile" style="border-color:#ef4444; background:#fee2e2;">
+      <div class="k" style="color:#b91c1c;">Vencidos</div>
+      <div class="v" style="color:#b91c1c;">7</div>
+      <div class="s" style="color:#b91c1c;">pasaron su plazo</div>
+    </div>
+    <div class="tile">
+      <div class="k">En alerta</div>
+      <div class="v">8</div>
+      <div class="s">vencen en los próximos días</div>
+    </div>
+    <div class="tile" style="border-color:#f59e0b; background:#fef3c7;">
+      <div class="k" style="color:#92400e;">Parados</div>
+      <div class="v" style="color:#92400e;">8</div>
+      <div class="s" style="color:#92400e;">sin moverse de estado</div>
+    </div>
+    <div class="tile">
+      <div class="k">Por cobrar</div>
+      <div class="v">₡322.900</div>
+      <div class="s">en estos 15 paquetes</div>
+    </div>
+  </div>
+
+  <!-- ATENCIÓN -->
+  <div style="margin-top: 16px; border: 1.5px solid #f59e0b; border-radius: 8px; overflow: hidden;">
+    <div style="background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 6px 12px;">ATENCIÓN · 8 PAQUETES PARADOS</div>
+    <table class="p" style="font-size: 10px;">
+      <thead><tr><th style="padding-left:12px;">Estado · parado si lleva más de</th><th>Guía</th><th>Zona</th><th class="r">Días en el estado</th><th class="r" style="padding-right:12px;">Días totales</th></tr></thead>
+      <tbody>
+        <tr><td style="padding-left:12px;" rowspan="3"><strong>En bodega satélite</strong> · 2 días</td><td class="mono">47690</td><td>FGAM Zona Sur</td><td class="r"><strong>9</strong></td><td class="r" style="padding-right:12px;">24</td></tr>
+        <tr><td class="mono">47710</td><td>FGAM Limon Arriba</td><td class="r"><strong>6</strong></td><td class="r" style="padding-right:12px;">23</td></tr>
+        <tr><td class="mono">47880</td><td>FGAM San Carlos</td><td class="r"><strong>3</strong></td><td class="r" style="padding-right:12px;">16</td></tr>
+        <tr><td style="padding-left:12px;" rowspan="2"><strong>Reprogramado</strong> · 3 días</td><td class="mono">47650</td><td>FGAM Guanacaste (Tempisque)</td><td class="r"><strong>5</strong></td><td class="r" style="padding-right:12px;">21</td></tr>
+        <tr><td class="mono">48203</td><td>GAM</td><td class="r"><strong>4</strong></td><td class="r" style="padding-right:12px;">11</td></tr>
+        <tr><td style="padding-left:12px;" rowspan="2"><strong>Novedad</strong> · 1 día</td><td class="mono">47801</td><td>FGAM Zona Sur</td><td class="r"><strong>3</strong></td><td class="r" style="padding-right:12px;">17</td></tr>
+        <tr><td class="mono">48251</td><td>GAM</td><td class="r"><strong>2</strong></td><td class="r" style="padding-right:12px;">8</td></tr>
+        <tr><td style="padding-left:12px; border-bottom:0;"><strong>Novedad interna</strong> · 1 día</td><td class="mono" style="border-bottom:0;">47866</td><td style="border-bottom:0;">FGAM San Carlos</td><td class="r" style="border-bottom:0;"><strong>4</strong></td><td class="r" style="padding-right:12px; border-bottom:0;">22</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- GAM -->
+  <div class="zona"><h3>GAM</h3><span>Plazo 10 días · alerta desde el día 8 · 5 paquetes · ₡91.300 por cobrar</span></div>
+  <table class="p">
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">GM-10482</td><td class="mono">48127</td><td class="r"><strong>12</strong>/10</td><td>En reparto <span class="tag v">VENCIDO</span></td><td>María Jiménez</td><td>San José · Hatillo</td><td class="r">₡18.500</td></tr>
+      <tr class="venc"><td class="mono">GM-10511</td><td class="mono">48203</td><td class="r"><strong>11</strong>/10</td><td>Reprogramado <span class="tag v">VENCIDO</span> <span class="tag p">PARADO</span></td><td>José Alfaro</td><td>Alajuela · San Rafael</td><td class="r">₡24.900</td></tr>
+      <tr><td class="mono">NF-2231</td><td class="mono">48219</td><td class="r"><strong>9</strong>/10</td><td>En bodega central</td><td>Ana Lucía Brenes</td><td>Heredia · Mercedes</td><td class="r" style="color:#4a5368;">—</td></tr>
+      <tr><td class="mono">GM-10533</td><td class="mono">48240</td><td class="r"><strong>8</strong>/10</td><td>En reparto</td><td>Randall Solís</td><td>Cartago · Oriental</td><td class="r">₡32.000</td></tr>
+      <tr><td class="mono">SC-7781</td><td class="mono">48251</td><td class="r"><strong>8</strong>/10</td><td>Novedad <span class="tag p">PARADO</span></td><td>Pamela Chaves</td><td>San José · Pavas</td><td class="r">₡15.900</td></tr>
+    </tbody>
+  </table>
+
+  <p style="margin: 14px 0 0; font-size: 9.5px; color: #4a5368; line-height: 1.5;">
+    «Días» = días desde la entrada a bodega central / plazo de la zona. En rojo y con la marca VENCIDO, los que ya pasaron el plazo. «—» en Por cobrar: el paquete ya está pagado. Las zonas fuera de la GAM siguen en la página 2.
+  </p>
+
+  <div class="pie"><span>Ordenex · Informe de tránsito · 5 oct 2026 05:00</span><span>Página 1 de 2</span></div>
+</div>
+</x-dc>
+</body>
+</html>

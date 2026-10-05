@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; }
+    a { color: #d4530d; } a:hover { color: #b8450a; }
+    * { box-sizing: border-box; }
+    .side-item { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #aab6d2; }
+    .side-sub { padding: 6px 12px 6px 30px; border-radius: 8px; font-size: 13px; color: #aab6d2; }
+    .side-sub.on { background: #14294a; color: #fff; font-weight: 500; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid transparent; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .btn.outline { border-color: #e3e8f2; background: #f7f8fc; color: #12233f; }
+    .inp { height: 32px; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; padding: 0 10px; font-size: 14px; color: #12233f; display: inline-flex; align-items: center; gap: 8px; }
+    .sel::after { content: ""; margin-left: 10px; width: 7px; height: 7px; border-right: 1.5px solid #4a5368; border-bottom: 1.5px solid #4a5368; transform: rotate(45deg) translate(-2px,-2px); }
+    .bdg { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .bdg.ok { background: #d1fae5; color: #047857; }
+    .bdg.info { background: #eff6ff; color: #1d4ed8; }
+    .bdg.bad { background: #fee2e2; color: #b91c1c; }
+    .bdg.neu { background: #eef1f8; color: #17233b; }
+    .bdg.acc { background: #fff0e8; color: #d4530d; }
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .t th { height: 40px; padding: 0 8px; text-align: left; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #e3e8f2; }
+    .t td { padding: 9px 8px; vertical-align: middle; border-bottom: 1px solid #e3e8f2; white-space: nowrap; }
+    .t tr.day td { background: #f1f4fb; font-size: 12px; font-weight: 600; color: #4a5368; padding: 6px 8px; }
+    .sub { font-size: 12px; color: #4a5368; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1280px; height: 860px; background: #f7f8fc; color: #12233f;">
+  <aside style="width: 220px; flex: 0 0 220px; background: #0d2444; padding: 16px 12px; display: flex; flex-direction: column; gap: 2px;">
+    <div style="display: flex; align-items: center; gap: 9px; padding: 4px 12px 18px;">
+      <div style="width: 24px; height: 24px; border-radius: 7px; background: #f26419;"></div>
+      <span style="color: #fff; font-size: 16px; font-weight: 600;">Ordenex</span>
+    </div>
+    <div class="side-item">Inicio</div>
+    <div class="side-item">Órdenes</div>
+    <div class="side-item" style="color:#fff;">Configuración</div>
+    <div class="side-sub">Usuarios</div>
+    <div class="side-sub">Plantillas</div>
+    <div class="side-sub on">Envíos automáticos</div>
+    <div class="side-sub">Geografía</div>
+  </aside>
+
+  <main style="flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0;">
+    <header style="display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid #e3e8f2;">
+      <div>
+        <div style="font-size: 13px; color: #4a5368; margin-bottom: 2px;"><a href="#">Envíos automáticos</a> › Paquetes por vencer</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Historial</h1>
+        <p style="margin: 4px 0 0; font-size: 14px; color: #4a5368;">Una fila por persona y por envío. Lun–Sáb 05:00 · PDF de tránsito</p>
+      </div>
+      <span class="btn outline">Editar envío</span>
+    </header>
+
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+        <span class="inp sel">Últimos 7 días</span>
+        <span class="inp sel">Todos los resultados</span>
+        <span class="inp sel">Todas las personas</span>
+        <span style="margin-left: auto; font-size: 13px; color: #4a5368;">
+          <strong style="color:#12233f;">17</strong> entregados · <strong style="color:#12233f;">2</strong> rechazados · <strong style="color:#12233f;">1</strong> día sin novedades
+        </span>
+      </div>
+
+      <div style="background: #fff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 4px 8px;">
+        <table class="t">
+          <thead>
+            <tr><th>Hora</th><th>Destinatario</th><th>Teléfono</th><th>Resultado</th><th>Detalle</th><th style="text-align:right;">PDF</th></tr>
+          </thead>
+          <tbody>
+            <tr class="day"><td colspan="6">Lunes 5 de octubre</td></tr>
+            <tr><td>05:00</td><td>Daniel Mora</td><td class="mono">8812 3344</td><td><span class="bdg ok">Entregado</span></td><td class="sub">Leído 05:41</td><td style="text-align:right;"><a href="#">transito-2026-10-05.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Laura Quesada</td><td class="mono">8705 1290</td><td><span class="bdg ok">Entregado</span></td><td class="sub"></td><td style="text-align:right;"><a href="#">transito-2026-10-05.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Marco Vargas</td><td class="mono">6021 4478</td><td><span class="bdg info">Enviado</span></td><td class="sub">WhatsApp aún no confirma la entrega</td><td style="text-align:right;"><a href="#">transito-2026-10-05.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Sofía Arce</td><td class="mono">8390 6612</td><td><span class="bdg ok">Entregado</span></td><td class="sub"></td><td style="text-align:right;"><a href="#">transito-2026-10-05.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Karla Méndez</td><td class="mono">8890 12</td><td><span class="bdg bad">Rechazado</span></td><td style="color:#b91c1c; font-size:13px;">Teléfono incompleto: no se intentó enviar</td><td style="text-align:right;" class="sub">—</td></tr>
+
+            <tr class="day"><td colspan="6">Sábado 3 de octubre</td></tr>
+            <tr><td>05:00</td><td colspan="2" class="sub">Todos los destinatarios</td><td><span class="bdg neu">Sin novedades</span></td><td class="sub">No había paquetes en alerta: no se mandó nada</td><td style="text-align:right;" class="sub">—</td></tr>
+
+            <tr class="day"><td colspan="6">Viernes 2 de octubre</td></tr>
+            <tr><td>05:00</td><td>Daniel Mora</td><td class="mono">8812 3344</td><td><span class="bdg ok">Entregado</span></td><td class="sub"></td><td style="text-align:right;"><a href="#">transito-2026-10-02.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Laura Quesada</td><td class="mono">8705 1290</td><td><span class="bdg ok">Entregado</span></td><td class="sub"></td><td style="text-align:right;"><a href="#">transito-2026-10-02.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Marco Vargas</td><td class="mono">6021 4478</td><td><span class="bdg bad">Rechazado</span></td><td style="color:#b91c1c; font-size:13px;">WhatsApp no lo entregó: el número no tiene WhatsApp</td><td style="text-align:right;"><a href="#">transito-2026-10-02.pdf</a></td></tr>
+            <tr><td>05:00</td><td>Sofía Arce</td><td class="mono">8390 6612</td><td><span class="bdg ok">Entregado</span></td><td class="sub"></td><td style="text-align:right;"><a href="#">transito-2026-10-02.pdf</a></td></tr>
+
+            <tr class="day"><td colspan="6">Jueves 1 de octubre</td></tr>
+            <tr><td>15:22</td><td>Carlos Restrepo <span class="bdg acc">Prueba</span></td><td class="mono">8456 7781</td><td><span class="bdg ok">Entregado</span></td><td class="sub">«Probar ahora», solo a quien lo pidió</td><td style="text-align:right;"><a href="#">transito-2026-10-01.pdf</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin: 0; font-size: 12px; color: #4a5368;">Una persona nunca recibe dos veces el mismo envío en el mismo día, aunque se reintente.</p>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

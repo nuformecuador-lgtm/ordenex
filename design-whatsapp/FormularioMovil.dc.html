@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; }
+    a { color: #d4530d; }
+    * { box-sizing: border-box; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid transparent; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .btn.primary { background: #f26419; color: #fff; }
+    .btn.outline { border-color: #e3e8f2; background: #f7f8fc; color: #12233f; }
+    .lbl { font-size: 14px; font-weight: 500; color: #12233f; display: block; margin-bottom: 6px; }
+    .inp { height: 44px; width: 100%; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; padding: 0 12px; font-family: inherit; font-size: 14px; color: #12233f; display: flex; align-items: center; gap: 8px; }
+    .sel::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid #4a5368; border-bottom: 1.5px solid #4a5368; transform: rotate(45deg) translate(-2px,-2px); }
+    .hint { font-size: 12px; color: #4a5368; margin-top: 6px; line-height: 1.5; }
+    .bdg { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 26px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .bdg.ok { background: #d1fae5; color: #047857; }
+    .sw { display: inline-flex; align-items: center; width: 36px; height: 20px; padding: 0 2px; border-radius: 999px; background: #e3e8f2; flex: 0 0 auto; }
+    .sw::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #f7f8fc; box-shadow: 0 1px 2px rgba(18,35,63,.2); }
+    .sw.on { background: #f26419; justify-content: flex-end; }
+    .cb { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .cb.on { background: #f26419; border-color: #f26419; }
+    .cb.on::after { content: ""; width: 8px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px,-1px); }
+    .rd { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .rd.on { border-color: #f26419; }
+    .rd.on::after { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #f26419; }
+    .chk { display: flex; align-items: center; gap: 10px; font-size: 14px; min-height: 44px; }
+    .chk .n { margin-left: auto; font-size: 12px; color: #4a5368; }
+    .card { background: #fff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 16px; }
+    .sec { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+    .seg { display: flex; border: 1px solid #e3e8f2; border-radius: 10px; overflow: hidden; }
+    .seg span { flex: 1; text-align: center; height: 44px; line-height: 44px; font-size: 14px; color: #4a5368; border-right: 1px solid #e3e8f2; background: #fff; }
+    .seg span:last-child { border-right: 0; }
+    .seg span.on { background: #fff0e8; color: #d4530d; font-weight: 500; }
+    .day { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: #4a5368; }
+    .day.on { background: #f26419; border-color: #f26419; color: #fff; font-weight: 500; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 4px 0 10px; border-radius: 26px; background: #eef1f8; color: #17233b; font-size: 13px; }
+    .chip i { font-style: normal; color: #4a5368; width: 24px; text-align: center; }
+    .num { width: 64px; height: 44px; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: flex-end; padding: 0 12px; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</helmet>
+
+<div style="width: 390px; background: #f7f8fc; color: #12233f;">
+  <header style="display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 12px; background: #0d2444;">
+    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #fff;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+    </div>
+    <span style="color: #fff; font-size: 16px; font-weight: 600;">Editar envío</span>
+  </header>
+
+  <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div style="font-size: 20px; font-weight: 600; letter-spacing: -0.02em;">Picking del día</div>
+      <label style="display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 12px; color: #4a5368;">Encendido <span class="sw on"></span></label>
+    </div>
+
+    <!-- Qué se manda -->
+    <section class="card">
+      <h2 class="sec">Qué se manda</h2>
+      <div style="margin-bottom: 14px;">
+        <label class="lbl">Nombre del envío</label>
+        <div class="inp">Picking del día</div>
+      </div>
+      <div style="margin-bottom: 14px;">
+        <label class="lbl">Plantilla</label>
+        <div class="inp sel"><span class="mono" style="font-size:13px;">recordatorio_bodega</span><span class="bdg ok">Aprobada</span></div>
+      </div>
+
+      <label class="lbl">Informe adjunto</label>
+      <div class="seg"><span>Ninguno</span><span>Tránsito</span><span class="on">Picking</span></div>
+
+      <!-- aviso: la plantilla no lleva documento -->
+      <div style="margin-top: 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px;">
+        <div style="font-size: 13px; font-weight: 600; color: #92400e; margin-bottom: 4px;">Esta plantilla no lleva documento</div>
+        <div style="font-size: 12px; color: #92400e; line-height: 1.5;">
+          WhatsApp no deja pegar el PDF a <span class="mono">recordatorio_bodega</span>. Elige una plantilla con documento, como <span class="mono">aviso_picking</span>, o quita el informe. Así no se puede guardar.
+        </div>
+      </div>
+
+      <!-- panel de parámetros de Picking -->
+      <div style="margin-top: 12px; border: 1px solid #e3e8f2; border-radius: 10px; background: #f1f4fb; padding: 14px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 2px;">Parámetros del informe de picking</div>
+        <div class="hint" style="margin: 0 0 8px;">Solo salen las tiendas con fulfillment. Cada tienda va en su propio PDF.</div>
+        <label class="lbl" style="margin-top: 6px;">Tiendas</label>
+        <div class="chk"><span class="cb on"></span>Gameos <span class="n">25 en preparación</span></div>
+        <div class="chk"><span class="cb on"></span>Nuform <span class="n">61 en preparación</span></div>
+        <div class="chk"><span class="cb on"></span>Sicommer <span class="n">34 en preparación</span></div>
+        <div style="margin-top: 12px;">
+          <label class="lbl">Marcar las órdenes atrasadas</label>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">más de <span class="num">2</span> días en preparación</div>
+          <div class="hint">Salen señaladas junto a su guía, para prepararlas primero.</div>
+        </div>
+        <div class="hint" style="margin-top: 10px;">Una tienda sin nada en preparación no genera PDF.</div>
+      </div>
+    </section>
+
+    <!-- A quién -->
+    <section class="card">
+      <h2 class="sec">A quién</h2>
+      <label class="lbl">Roles</label>
+      <div class="chk"><span class="cb"></span>Maestro <span class="n">2</span></div>
+      <div class="chk"><span class="cb on"></span>Admin <span class="n">3</span></div>
+      <div class="chk"><span class="cb"></span>Admin de satélite <span class="n">8</span></div>
+      <div class="chk"><span class="cb"></span>Admin de tienda <span class="n">14</span></div>
+      <div class="chk"><span class="cb"></span>Mensajero <span class="n">18</span></div>
+      <label class="lbl" style="margin-top: 10px;">Además, estas personas</label>
+      <div class="inp" style="color:#4a5368;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Buscar por nombre o teléfono
+      </div>
+      <div style="margin-top: 12px; font-size: 13px;">Lo recibirán <strong>3 personas</strong></div>
+    </section>
+
+    <!-- Cuándo -->
+    <section class="card">
+      <h2 class="sec">Cuándo</h2>
+      <div class="chk"><span class="rd on"></span>A una hora fija</div>
+      <div style="display: flex; gap: 4px; margin: 4px 0 10px;">
+        <span class="day on">L</span><span class="day on">M</span><span class="day on">M</span><span class="day on">J</span><span class="day on">V</span><span class="day on">S</span><span class="day">D</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">a las <div class="inp" style="width: 110px;"><span class="mono">06:30</span></div> <span style="font-size:12px;color:#4a5368;">hora CR</span></div>
+      <div class="chk" style="color:#4a5368; margin-top: 6px;"><span class="rd"></span>Cuando pase algo</div>
+      <div style="margin-top: 10px; padding-top: 12px; border-top: 1px solid #f1f4fb; display: flex; gap: 12px; align-items: flex-start;">
+        <span class="sw" style="margin-top: 2px;"></span>
+        <div>
+          <div style="font-size: 14px; font-weight: 500;">Enviar aunque esté vacío</div>
+          <div class="hint" style="margin-top: 2px;">Apagado: si ninguna tienda tiene nada en preparación, no se manda.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista previa (plegable en móvil) -->
+    <section class="card" style="display: flex; justify-content: space-between; align-items: center; min-height: 56px; padding: 0 16px;">
+      <span style="font-size: 14px; font-weight: 500;">Ver vista previa del mensaje</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </section>
+  </div>
+
+  <!-- acciones fijas abajo -->
+  <div style="position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e3e8f2; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px;">
+    <span class="btn primary" style="width: 100%; opacity: .5;">Guardar</span>
+    <span class="btn outline" style="width: 100%; opacity: .5;">Probar ahora (solo a mí)</span>
+    <span style="font-size: 12px; color: #4a5368; text-align: center;">Cambia la plantilla o quita el informe para seguir.</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

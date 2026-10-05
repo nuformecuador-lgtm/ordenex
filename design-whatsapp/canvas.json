@@ -1,0 +1,67 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Configuración › Envíos automáticos — la lista", "x": 0, "y": 0, "w": 1280, "h": 820 },
+    { "file": "ListaMovil.dc.html", "title": "La lista en el teléfono", "x": 1400, "y": 0, "w": 390, "h": 844 },
+    { "file": "Vacio.dc.html", "title": "Sin envíos todavía", "x": 1890, "y": 0, "w": 390, "h": 640 },
+    { "file": "Formulario.dc.html", "title": "Crear un envío (nace apagado)", "x": 0, "y": 1100, "w": 1280, "h": 1640 },
+    { "file": "ParamsTransito.dc.html", "title": "Parámetros · Tránsito (abierto)", "x": 1400, "y": 1100, "w": 720, "h": 1720 },
+    { "file": "FormularioMovil.dc.html", "title": "Editar en el teléfono · Picking y plantilla sin documento", "x": 2240, "y": 1100, "w": 390, "h": 2060 },
+    { "file": "ParamsPicking.dc.html", "title": "Parámetros · Picking", "x": 2750, "y": 1100, "w": 620, "h": 520 },
+    { "file": "Historial.dc.html", "title": "Historial de un envío", "x": 0, "y": 3000, "w": 1280, "h": 860 },
+    { "file": "PdfTransito1.dc.html", "title": "PDF Tránsito · página 1 (A4)", "x": 1400, "y": 3000, "w": 794, "h": 1123 },
+    { "file": "PdfTransito2.dc.html", "title": "PDF Tránsito · página 2 (A4)", "x": 2294, "y": 3000, "w": 794, "h": 1123 },
+    { "file": "PdfPicking.dc.html", "title": "PDF Picking · Gameos (A4, uno por tienda)", "x": 3188, "y": 3000, "w": 794, "h": 1123 }
+  ],
+  "annotations": [
+    {
+      "id": "nace-apagado",
+      "x": 0,
+      "y": -230,
+      "w": 620,
+      "text": "NACE APAGADO, Y SE PRUEBA ANTES DE ENCENDER\n\nEl sistema externo sigue mandando estos mismos avisos hasta que Daniel lo apague. Si un envío nuevo naciera encendido, el equipo recibiría el informe dos veces la primera mañana.\n\nPor eso «Guardar» no enciende nada: el interruptor vive en la lista, y «Probar ahora» lo manda solo a quien lo pide, con los datos del momento, y queda en el historial marcado como prueba."
+    },
+    {
+      "id": "por-rol",
+      "x": 700,
+      "y": -230,
+      "w": 580,
+      "text": "DESTINATARIOS POR ROL, Y EL TELÉFONO MALO SE VE ANTES\n\nPor rol, una persona nueva lo recibe sin que nadie toque el envío. La lista resume «Rol admin · 2 usuarios» y cuántas personas son en total.\n\nUn teléfono vacío o incompleto no da error al enviar: simplemente no llega. Por eso el formulario lo dice al guardar, con nombre, y el historial lo deja como «Rechazado» con el motivo."
+    },
+    {
+      "id": "valores-partida",
+      "x": 1400,
+      "y": 900,
+      "w": 720,
+      "text": "QUÉ ESTÁ DECIDIDO Y QUÉ ES PROPUESTA\n\nDecidido (ficha 475): GAM plazo 10 días con aviso 2 antes (alerta el día 8); fuera de la GAM 20 días con aviso 5 antes (alerta el día 15). Las 9 zonas son las de la tabla de zonas, por id, no por texto.\n\nPROPUESTA A CONFIRMAR: qué estados entran marcados de partida y los días de «parado» de cada uno. Los dibujé para que el PDF sea coherente, no salen de ningún documento."
+    },
+    {
+      "id": "plantilla-documento",
+      "x": 2240,
+      "y": 900,
+      "w": 620,
+      "text": "LA PLANTILLA MANDA SOBRE EL PDF\n\nWhatsApp solo deja adjuntar un PDF si la plantilla aprobada tiene cabecera de documento. Si se elige un informe con una plantilla que no la tiene, el aviso sale en el acto y no deja guardar ni probar: si no, el envío saldría cada mañana sin PDF."
+    },
+    {
+      "id": "sin-novedades",
+      "x": 0,
+      "y": 2880,
+      "w": 1280,
+      "text": "«SIN NOVEDADES» ES UNA FILA, NO UN HUECO. Si un día no hay nada que informar y el envío no está en «enviar aunque esté vacío», el historial lo anota. Así un día sin mensaje se distingue de un día en que el envío falló."
+    },
+    {
+      "id": "pdf-papel",
+      "x": 1400,
+      "y": 4200,
+      "w": 1688,
+      "text": "EL PDF SE LEE EN EL TELÉFONO Y SE IMPRIME. Vencido no es solo rojo: lleva la marca VENCIDO y la barra lateral, para que se lea en blanco y negro. Los días van como «12/10» (días / plazo) para no tener que recordar el plazo de cada zona. Las cifras de portada cuadran con las tablas: 7 vencidos + 8 en alerta = 15 paquetes, ₡91.300 + ₡231.600 = ₡322.900, y son las mismas que el mensaje."
+    },
+    {
+      "id": "picking",
+      "x": 3188,
+      "y": 4200,
+      "w": 794,
+      "text": "PICKING: UNA HOJA POR TIENDA, PENSADA PARA EL PISO. Producto con más unidades arriba, la casilla para tachar a mano y la guía atrasada resaltada en el mismo sitio donde se va a buscar. 25 + 61 + 34 = 120 órdenes, las medidas hoy en las tres tiendas con fulfillment."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
