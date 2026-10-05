@@ -11,7 +11,7 @@
 
 ## Backend
 
-- [ ] **T1 — Repositorio: `corregirConciliacion` + su entrada en el censo** (R4, R5, R8)
+- [x] **T1 — Repositorio: `corregirConciliacion` + su entrada en el censo** (R4, R5, R8)
   - Contrato `CorregirConciliacionInput` y `corregirConciliacion(...)` en
     `lib/interfaces/repositories/ICierresBodegaAdminRepository.ts`; implementación en
     `lib/repositories/CierresBodegaAdminRepository.ts` según `design.md §2.1` (sin corte previo por
@@ -26,7 +26,7 @@
     al borrar a mano el `appendAccion` de `corregirConciliacion` (medido, revertido, anotado);
     los unitarios de R4/R8 verdes.
 
-- [ ] **T2 — Integración contra Postgres del `WHERE`** (R1, R2, R3, R4, R6, R7, R12, R13) · depende de T1
+- [x] **T2 — Integración contra Postgres del `WHERE`** (R1, R2, R3, R4, R6, R7, R12, R13) · depende de T1
   - Nuevo `tests/integration/db/corregir-conciliacion.int.test.ts`, molde de
     `marca-conciliacion.int.test.ts` (transacción revertida, sufijo propio, `serializarEscriturasReales`).
   - Siembra: consolidación con declarado 200800.00 marcada por 177800.00 con `marcarConciliado`
@@ -37,7 +37,7 @@
     este archivo; las mutaciones 1 y 2 de `design.md §6` lo ponen ROJO (medido, revertido, anotado en
     `progress/impl_473.md`). Un verde sin haberlo visto rojo no cuenta.
 
-- [ ] **T3 — Servicio `corregirRecibida`** (R7, R9) · depende de T1 · [P] con T2
+- [x] **T3 — Servicio `corregirRecibida`** (R7, R9) · depende de T1 · [P] con T2
   - `lib/interfaces/services/IConciliacionSatelitesService.ts` + `lib/services/ConciliacionSatelitesService.ts`
     (`Pick` ampliado, guard primero; `design.md §2.2`).
   - Ampliar `fakeEscrituras` en `tests/unit/services/conciliacion-satelites-service.test.ts` y casos
@@ -45,7 +45,7 @@
     y que `corregirRecibida` no llama a `marcarConciliado` (ni al revés).
   - **Hecho cuando:** unitarios verdes y typecheck verde.
 
-- [ ] **T4 — Server action `corregirConsolidacionRecibidaAction`** (R10, R11) · depende de T3
+- [x] **T4 — Server action `corregirConsolidacionRecibidaAction`** (R10, R11) · depende de T3
   - `lib/actions/conciliacion-satelites.ts`, calco de la de marcar con el mismo schema (`design.md §2.3`).
   - Casos en `tests/unit/actions/conciliacion-satelites-actions.test.ts`: sin sesión, monto 0,
     negativo, tres decimales, no numérico, clave extra, nota de 501 → nunca llama al servicio; ok →
@@ -55,7 +55,7 @@
 
 ## Frontend
 
-- [ ] **T5 — Diálogo y acciones** (R14, R15, R16, R17) · depende de T4
+- [x] **T5 — Diálogo y acciones** (R14, R15, R16, R17) · depende de T4
   - `components/shared/conciliacion/conciliacion-labels.ts`: `confirmarCorregir`, `corregida(monto)`.
   - `MarcarRecibidoDialog.tsx`: `confirmLabel` por modo; prop `onConflicto` que cierra y delega.
   - `ConciliacionAcciones.tsx`: envío por modo (corregir vs marcar), toast de corrección,
@@ -73,7 +73,7 @@
 
 ## Cierre
 
-- [ ] **T6 — Gate completo y evidencia** · depende de T1-T5
+- [x] **T6 — Gate completo y evidencia** · depende de T1-T5
   - `./init.sh` completo, log sin `tail`, `INIT_EXIT` dentro del log; contar `skipped`.
   - `progress/impl_473.md`: mapa R→test con resultado, las tres mutaciones (2 rojas en integración, 1
     roja en unitario) y la de R14.

@@ -5724,3 +5724,9 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - R1–R24; mapa en `progress/impl_470.md`. Revisión APROBADA (`progress/review_470.md`). PR #845, release #846.
 - Medido (T5): servidor 200k filas 3 s; navegador 200k filas ~2,2 GB de heap → si algún día hace falta, armar el
   xlsx en el servidor (Q1). Menores: novedades y KPIs pierden el corte sin pasar por el almacén (K4).
+
+## 473 — Corregir la recepción de dinero de una satélite (2026-10-05)
+- «Corregir» reusaba la acción de marcar (WHERE solicitado + conciliadoAt nulo) y respondía conflict siempre sin escribir; caso real FGAM Zona Sur 2026-10-01 corregido a mano.
+- Método atómico `corregirConciliacion` + service + action; una fila de historial (reusa `cierre_bodega_conciliado`, D1) con monto anterior y nuevo; mueve `resuelto_at` (D2). El conflicto cierra el diálogo y refresca.
+- R1–R17; mapa en `progress/impl_473.md`. Revisión APROBADA (`progress/review_473.md`), 4 mutaciones en rojo. PR #847.
+- Gate post-merge (`progress/gate_dev_tras_847.log`): 2 rojos por deadlock 40P01 de la base compartida, verdes aislados 2/2, ajenos al diff. Menores abiertos: M3 (modo corrección derivado distinto en botón y diálogo; peor caso conflict sin escritura).
