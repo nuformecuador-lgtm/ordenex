@@ -1,3 +1,11 @@
+# ESTADO 2026-10-05 — 470 VALIDADA EN PROD; siguiente: WhatsApp interno
+
+- **470 T7.2 OK**: Carlos bajó en prod `libro-de-movimientos-2026-10-05.xlsx` por la vía de almacén (objeto de 777 KB en `descargas`, bucket `public=false`). «Detalle por guía» trae 24.806 filas (el tope viejo era 5.000; antes fallaba con 14.153); los totales de las dos hojas cuadran (49.850.534,60 / 46.771.418,96 / 13.815.087,55). `get_runtime_errors` dio timeout dos veces: queda sin mirar. T7.4 (Órdenes sin filtros) aún sin descarga en prod.
+- **468 T16 OK**: 0 celdas «sin repartir» en ese Excel (que abarca todo el historial).
+- Corrección de caja: hecha por Carlos. WhatsApp de las 54 conversaciones: descartado por Carlos.
+- Google Maps: 403 / REQUEST_DENIED en optimización y geocodificación (rutas sin ordenar, direcciones sin ubicar); Carlos lo deja así por ahora.
+- WhatsApp interno: arrancando. Teléfonos de personal inválidos medidos hoy: 10 de 41 activos (sin contar tiendas ni apiKey).
+
 # ESTADO 2026-10-03 — 470 DESPLEGADA (PR #846, 11:12 CR); in_progress = 0
 
 - Pendiente de la 470: que Carlos repita en prod la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros. WhatsApp (54 conversaciones sin mensaje): siguiente sesión. T16 de la 468 (contar «Diferencia sin repartir» en el Excel de la caja de todo el historial): ahora posible con la 470.
