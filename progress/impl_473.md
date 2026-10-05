@@ -63,7 +63,7 @@ corregirConsolidacionRecibidaAction(input: unknown): Promise<MarcaConciliacionAc
 | R11 | action · «R11 corregir con monto ausente/0/negativo/tres decimales/no numérico/clave extra/nota de 501 responde validation_error sin llamar al servicio» | verde |
 | R12 | int · «R12: corregir no escribe en wallet_movimiento, wallet_tienda_movimiento ni pago_mensajero_movimiento» + unit «R12: no toca ningun libro de dinero» | verde |
 | R13 | int · «R13: corregida a lo declarado: SaldosSatelitesRepository devuelve faltaPorRecibir 0.00 y conciliado» y «R13: corregida por debajo: faltante recalculado» (parte servidor; la de UI, `wallet-satelites.test.tsx` L530, es de T5) | verde |
-| R14-R17 | UI — T5, frontend_dev | pendiente |
+| R14-R17 | UI — T5, frontend_dev | ver «FRONTEND (T5)» abajo |
 
 `corregir-conciliacion.int.test.ts` aislado contra la base local migrada (`localhost:5432`, `migrate status`: up to date): **10 passed, 0 skipped**.
 
@@ -96,6 +96,43 @@ Rojos de corridas anteriores, ya resueltos:
    de tabla entera en READ COMMITTED con otro archivo commiteando en paralelo. Aislado (con el test nuevo
    al lado) 3/3 verde, y verde en las corridas 1 y 3 → flake ajeno. El R12 del test nuevo, que tiene la
    misma forma, se blindó con `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ` como primera sentencia.
+
+## FRONTEND (T5) — frontend_dev
+
+Código (commit `44849eae`):
+- `components/shared/conciliacion/conciliacion-labels.ts` — `MARCAR_RECIBIDO_TEXTO.confirmarCorregir`, `CONCILIACION_RESPUESTA.corregida(monto)`. El texto de `conflicto` NO cambia (con R17 pasa a ser verdad).
+- `components/shared/conciliacion/MarcarRecibidoDialog.tsx` — `confirmLabel` por modo; prop opcional `onConflicto` (en `conflict`: cierra y delega; sin ella, aviso en el diálogo como antes).
+- `components/shared/conciliacion/ConciliacionAcciones.tsx` — `enviar` por modo (`incompleto` → `corregirConsolidacionRecibidaAction`, `pendiente` → marcar), toast `corregida`/`marcada`, `trasConflicto` = toast de conflicto + `onCambio()`.
+- Las pantallas que montan el componente (`ConciliacionSatelite.tsx`, `CierresBodegaAdminModule.tsx`) no se tocan. Money-safe: sin `Number(`/`parseFloat`/restas.
+
+Tests: `tests/integration/wallet-satelites.test.tsx` (mock con `corregirConsolidacionRecibidaAction`; describe nuevo «473 — corregir el monto recibido (R14-R17)»). Los demás `vi.mock` de la action (BusquedaPorGuia469, EstadoCuenta463, EstadoCuentaBarra467, EstadoCuentaSatelite, WalletListados464, wallet-sin-uuid) no hizo falta tocarlos: verdes sin cambio.
+
+| R | Test (`wallet-satelites.test.tsx`) | Resultado |
+|---|---|---|
+| R13 (UI) | «R27 — sin permiso NO se monta…» / «sobre una INCOMPLETA se ofrece «Corregir»…» (existentes, se conservan) | verde |
+| R14 | «R14 — Corregir llama a la action de corregir y nunca a la de marcar» + en «marcar por MENOS…» `expect(corregirMock).not.toHaveBeenCalled()` | verde |
+| R15 | «R15 — el diálogo de Corregir arranca con el monto registrado (485000.00, no el declarado) y su botón dice Corregir» | verde |
+| R16 | «R16 — corrección ok: cierra el diálogo, avisa el monto corregido y refresca» (toast «Monto recibido corregido a ₡500.000.» en el visor, diálogo cerrado, `onCambio` llamado y `listarConsolidacionesSateliteAction` releída) | verde |
+| R17 | «R17 — conflict al corregir / al marcar: cierra el diálogo, muestra el aviso y refresca» (`it.each`, mismas cuatro comprobaciones) | verde |
+
+Mutaciones (aplicar → correr → restaurar con `cp` + `cmp`):
+
+| # | Mutación en `ConciliacionAcciones.tsx` | Resultado real |
+|---|---|---|
+| 5 | modo corrección llama a `marcarConsolidacionRecibidaAction` | **ROJO** — 2 failed (R14, R17 al corregir) |
+| 6 | quitar `onConflicto={trasConflicto}` | **ROJO** — 2 failed (R17 al corregir, R17 al marcar) |
+
+Gate: `./init.sh` COMPLETO, log `progress/gate_473_frontend.log` (sin `tail`, `INIT_EXIT` dentro), base
+`localhost:5432` (`migrate status`: up to date). **Test Files 2391 passed (2391); Tests 33173 passed | 26
+skipped; `INIT_EXIT=0`**. Los 26 skipped son `AnaliticaPage.test.tsx` (17) y `AnaliticaShell.test.tsx` (9);
+**0 skipped en `tests/integration/db`** (`corregir-conciliacion.int.test.ts`: 10 tests). La guardia
+`superficie-de-uso` pasa a verde (la action ya está montada) sin `@sin-superficie`. El flake de
+`marca-conciliacion.int.test.ts` R14 no apareció. La primera corrida del gate cayó en el paso 2
+(`node_modules` del worktree vacío): `pnpm install --frozen-lockfile` + `prisma generate` y se relanzó.
+
+Herramientas (frontend): sin consultar el grafo; los archivos venían citados en design §2.4 y se
+leyeron enteros. La rama local se llama `fe-473` (la de nombre `feature/473-…` estaba tomada por otro
+worktree) y empuja a `origin/feature/473-corregir-recepcion-satelite`.
 
 ## Herramientas
 
