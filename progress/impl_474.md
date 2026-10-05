@@ -268,4 +268,41 @@ T11.2 (`gh pr checks`), T11.3 (nota de release), T11.4 (recorrido contra la API 
 
 ## Gate
 
-<!-- GATE -->
+`./init.sh` COMPLETO (la ficha toca migraciones y `db/schema.prisma`), en el worktree, con su `.env`
+apuntando a `ordenex_474`. Log íntegro en `progress/gate_474_backend.log`, con `INIT_EXIT` dentro.
+
+Salida real (corrida 3, SHA `3f6a512c`):
+
+```
+✓ dependencias: 58 declaradas, todas presentes
+✓ feature_list.json: sin ids duplicados (471 fichas), cupo por zona respetado (in_progress=2) y specs en su sitio
+✓ typecheck paso                       (pnpm run typecheck → tsc --noEmit, 0 errores)
+✖ 235 problems (0 errors, 235 warnings)
+✓ lint paso
+ Test Files  2437 passed (2437)
+      Tests  33432 passed | 26 skipped (33458)
+✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 2437 ejecutado(s), todos en el baseline conocido)
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at   (ajenas, previas)
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**`skipped`:** los 26 son de `tests/components/AnaliticaPage.test.tsx` (17) y
+`tests/components/AnaliticaShell.test.tsx` (9). NINGÚN archivo de `tests/integration/db` se saltó (no
+aparece el aviso «sin DATABASE_URL»); los 446 resultados de `integration/db` corrieron contra el clon.
+
+**Las dos corridas rojas anteriores, y por qué:**
+
+1. Corrida 1 (`INIT_EXIT=1`): `tests/integration/api/procesar-jobs-geocodificacion.test.ts` y
+   `procesar-jobs-webhook-estado.test.ts` — censos EXACTOS de handlers/recurrencias que no incluían los
+   cinco tipos nuevos. Míos: ampliados (commit `7e3b5018`).
+2. Corrida 2 (`INIT_EXIT=1`): `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`, FK
+   `cierre_dia_mensajero_id_fkey`. Aislado: verde. Causa probable y eliminada: su `beforeAll` toma
+   `usuario.findMany({ take: 3 })` sin orden, y mi test de R23 commiteaba dos usuarios y los borraba en
+   `afterAll`; si los elegía, su FK reventaba. El test de R23 usa ahora usuarios QUE YA EXISTEN y solo
+   commitea/borra filas de tablas de la 474 (commit `3f6a512c`; M7/M8 re-medidas: siguen MATADAS).
+3. Corrida 3: verde (arriba).
+
+**Veredicto:** backend de la 474 (F0–F9) implementado, 53 R con test (los de pantalla, en frontend),
+20/20 mutaciones obligatorias y propias MATADAS, gate completo verde contra base propia.
