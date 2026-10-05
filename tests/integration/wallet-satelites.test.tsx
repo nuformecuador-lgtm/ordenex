@@ -37,8 +37,10 @@ const listarConsolidacionesMock = vi.fn();
 const listarConsolidacionesCompletoMock = vi.fn();
 const marcarMock = vi.fn();
 const revertirMock = vi.fn();
+const corregirMock = vi.fn();
 const resumenMock = vi.fn();
 vi.mock("@/lib/actions/conciliacion-satelites", () => ({
+  corregirConsolidacionRecibidaAction: (...a: unknown[]) => corregirMock(...a),
   listarSaldosSatelitesAction: (...a: unknown[]) => listarSaldosMock(...a),
   listarSaldosSatelitesCompletoAction: (...a: unknown[]) => listarSaldosCompletoMock(...a),
   listarConsolidacionesSateliteAction: (...a: unknown[]) => listarConsolidacionesMock(...a),
@@ -256,6 +258,7 @@ beforeEach(() => {
   });
   marcarMock.mockResolvedValue({ status: "ok", cierreBodegaId: "cb-1" });
   revertirMock.mockResolvedValue({ status: "ok", cierreBodegaId: "cb-2" });
+  corregirMock.mockResolvedValue({ status: "ok", cierreBodegaId: "cb-2" });
 });
 
 afterEach(cleanup);
@@ -493,6 +496,8 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
       // La nota vacía NO se manda: el schema del borde es `.strict()` y una cadena vacía sería
       // una nota en blanco guardada como si alguien la hubiera escrito.
     });
+    // 473 (R14) — la otra mitad: marcar NUNCA pasa por la action de corregir.
+    expect(corregirMock).not.toHaveBeenCalled();
     // 458-D (R30): tras marcar se relee el estado de cuenta de ESTA bodega.
     await waitFor(() => expect(onCambioConciliacion).toHaveBeenCalled());
   });
@@ -531,6 +536,115 @@ describe("R25 — marcar recibido, corregir y desmarcar", () => {
     // Pero SÍ ve los datos: la mitad de mirar no se le quita a nadie que llegue a la pantalla.
     expect(within(region).getByText("Recibido incompleto")).toBeInTheDocument();
   });
+});
+
+// =========================================================================
+// FICHA 473 (T5, R14-R17) — «Corregir» corrige de verdad, y el conflicto refresca de verdad.
+//
+// Antes de la 473, «Corregir» abría el diálogo de marcar y llamaba a la action de MARCAR, cuyo
+// `WHERE` exige una consolidación SIN marcar: `conflict` el 100 % de las veces, sin escribir, y
+// un aviso que prometía «Actualizando la lista» sin refrescar nada.
+
+/** Abre el diálogo de «Corregir» sobre la INCOMPLETA (₡485.000 de ₡500.000). */
+async function abrirCorregir(user: ReturnType<typeof userEvent.setup>) {
+  const region = await montarConciliacion();
+  await user.click(
+    await within(region).findByRole("button", {
+      name: /Corregir el monto recibido de FGAM Puntarenas/,
+    }),
+  );
+  return screen.findByRole("dialog");
+}
+
+/**
+ * El título del aviso en el VISOR de notificaciones. Se acota al visor porque un aviso de error
+ * se anuncia además en un nodo vivo aparte (dos nodos con el mismo texto), y porque el aviso que
+ * importa es el que sobrevive al diálogo, no el que se pintaba dentro de él.
+ */
+async function avisoEnVisor(texto: string): Promise<HTMLElement> {
+  const visor = await screen.findByRole("region", { name: "Notificaciones", hidden: true });
+  return within(visor).findByText(texto, { selector: "h2" });
+}
+
+describe("473 — corregir el monto recibido (R14-R17)", () => {
+  it("R14 — Corregir llama a la action de corregir y nunca a la de marcar", async () => {
+    const user = userEvent.setup();
+    const dialogo = await abrirCorregir(user);
+    const campo = within(dialogo).getByLabelText(/Monto recibido/);
+    await user.clear(campo);
+    await user.type(campo, "500000.00");
+    await user.click(within(dialogo).getByRole("button", { name: "Corregir" }));
+
+    await waitFor(() => expect(corregirMock).toHaveBeenCalledTimes(1));
+    expect(corregirMock.mock.calls[0][0]).toEqual({
+      cierreBodegaId: "cb-2",
+      montoRecibido: "500000.00",
+    });
+    expect(marcarMock).not.toHaveBeenCalled();
+  });
+
+  it("R15 — el diálogo de Corregir arranca con el monto registrado y su botón dice Corregir", async () => {
+    const user = userEvent.setup();
+    const dialogo = await abrirCorregir(user);
+    // Lo ya registrado (485.000), NO lo declarado (500.000): corregir parte de lo que se dijo.
+    expect(within(dialogo).getByLabelText(/Monto recibido/)).toHaveValue("485000.00");
+    expect(within(dialogo).getByRole("button", { name: "Corregir" })).toBeInTheDocument();
+    expect(within(dialogo).queryByRole("button", { name: "Marcar recibido" })).toBeNull();
+  });
+
+  it("R16 — corrección ok: cierra el diálogo, avisa el monto corregido y refresca", async () => {
+    const user = userEvent.setup();
+    const dialogo = await abrirCorregir(user);
+    const lecturasAntes = listarConsolidacionesMock.mock.calls.length;
+    const campo = within(dialogo).getByLabelText(/Monto recibido/);
+    await user.clear(campo);
+    await user.type(campo, "500000.00");
+    await user.click(within(dialogo).getByRole("button", { name: "Corregir" }));
+
+    expect(await avisoEnVisor("Monto recibido corregido a ₡500.000.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(onCambioConciliacion).toHaveBeenCalled());
+    // Y la lista se RELEE: no basta con avisar al padre.
+    await waitFor(() =>
+      expect(listarConsolidacionesMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
+    );
+  });
+
+  it.each([
+    {
+      caso: "al corregir",
+      boton: /Corregir el monto recibido de FGAM Puntarenas/,
+      confirmar: "Corregir",
+      action: () => corregirMock,
+    },
+    {
+      caso: "al marcar",
+      boton: /Marcar recibido la consolidación de FGAM Puntarenas/,
+      confirmar: "Marcar recibido",
+      action: () => marcarMock,
+    },
+  ])(
+    "R17 — conflict $caso: cierra el diálogo, muestra el aviso y refresca",
+    async ({ boton, confirmar, action }) => {
+      action().mockResolvedValue({ status: "conflict" });
+      const user = userEvent.setup();
+      const region = await montarConciliacion();
+      await user.click(await within(region).findByRole("button", { name: boton }));
+      const dialogo = await screen.findByRole("dialog");
+      const lecturasAntes = listarConsolidacionesMock.mock.calls.length;
+      await user.click(within(dialogo).getByRole("button", { name: confirmar }));
+
+      // En el VISOR de avisos, no dentro del diálogo: el aviso en línea moría con el diálogo.
+      expect(
+        await avisoEnVisor("Esta consolidación ya cambió de estado. Actualizando la lista."),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() => expect(onCambioConciliacion).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(listarConsolidacionesMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
+      );
+    },
+  );
 });
 
 // =========================================================================

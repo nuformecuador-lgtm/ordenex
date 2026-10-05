@@ -80,6 +80,13 @@ export interface MarcarRecibidoDialogProps {
   onMarcar: (campos: MarcarRecibidoCampos) => Promise<MarcaConciliacionActionResult>;
   /** Se invoca cuando el servidor confirmó, con el monto que quedó registrado. */
   onMarcado?: (montoRecibido: string) => void | Promise<void>;
+  /**
+   * 473 (R17) — el servidor respondió `conflict`: la consolidación ya no está en el estado en que
+   * se abrió el diálogo. Con este manejador el diálogo SE CIERRA y delega el aviso y el refresco
+   * en quien lo monta, que es quien sabe qué lista releer. Sin él conserva el comportamiento
+   * anterior: el aviso dentro del diálogo, que queda abierto.
+   */
+  onConflicto?: () => void | Promise<void>;
 }
 
 /** Traduce la respuesta del servidor a un aviso. Fuera del componente para que el `switch` sea
@@ -113,6 +120,7 @@ export function MarcarRecibidoDialog({
   notaActual = null,
   onMarcar,
   onMarcado,
+  onConflicto,
 }: Readonly<MarcarRecibidoDialogProps>) {
   const esCorreccion = montoActual !== null;
   const idBase = useId();
@@ -190,6 +198,11 @@ export function MarcarRecibidoDialog({
       setErrorNota(resultado.fieldErrors.nota?.[0]);
       return;
     }
+    if (resultado.status === "conflict" && onConflicto) {
+      onOpenChange(false);
+      await onConflicto();
+      return;
+    }
     setAviso(avisoDe(resultado));
   }
 
@@ -199,7 +212,9 @@ export function MarcarRecibidoDialog({
       onOpenChange={onOpenChange}
       title={esCorreccion ? MARCAR_RECIBIDO_TEXTO.tituloCorregir : MARCAR_RECIBIDO_TEXTO.titulo}
       description={MARCAR_RECIBIDO_TEXTO.descripcion(bodega, fecha)}
-      confirmLabel={MARCAR_RECIBIDO_TEXTO.confirmar}
+      confirmLabel={
+        esCorreccion ? MARCAR_RECIBIDO_TEXTO.confirmarCorregir : MARCAR_RECIBIDO_TEXTO.confirmar
+      }
       cancelLabel={CONCILIACION_ACCION.cancelar}
       confirmDisabled={!formularioValido}
       onConfirm={confirmar}
