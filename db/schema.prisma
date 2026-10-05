@@ -181,6 +181,13 @@ model Usuario {
   preferencia                         UsuarioPreferencia?                @relation("UsuarioPreferenciaUsuario") // ficha 422/R1/R4: LA DECISION DE ESTA PERSONA sobre los avisos, aparte de sus dispositivos. 1:1. La FK es CASCADE: una preferencia no es evidencia (criterio de `push_suscripcion`, no el de `historial_accion`). Tabla propia y no columna aqui a proposito: ver el comentario del modelo `UsuarioPreferencia`.
   asistenteUsoDiario                  AsistenteUsoDiario[]               @relation("AsistenteUsoDiarioUsuario") // ficha 436/R16/R17: cuantas veces le pregunto ESTA persona al asistente cada dia. CASCADE por el mismo criterio que `push_envio_dia`: es un CONTADOR de un canal, no historia, y el conteo de alguien que ya no existe no significa nada
   vistasFiltro                        VistaFiltro[]                      @relation("VistaFiltroUsuario") // ficha 453/R2/R4: las combinaciones de filtros que ESTA persona guardo con nombre. N filas por persona (no 1:1, por eso no cabe en `usuario_preferencia`). La FK es CASCADE: una vista no es evidencia —es un atajo de trabajo— y se va con la persona, mismo criterio que `push_suscripcion`
+  // FICHA 474 (design §1.2-§1.5): envios automaticos por WhatsApp. Las cinco relaciones inversas
+  // que Prisma exige; la politica de cada FK (SET NULL / CASCADE) esta en el modelo del otro lado.
+  whatsappEnviosCreados               WhatsappEnvio[]                    @relation("WhatsappEnvioCreador")
+  whatsappEnviosActualizados          WhatsappEnvio[]                    @relation("WhatsappEnvioActualizador")
+  whatsappEnvioDestinos               WhatsappEnvioDestinatario[]        @relation("WhatsappEnvioDestinatarioUsuario")
+  whatsappEnvioPruebas                WhatsappEnvioEjecucion[]           @relation("WhatsappEnvioEjecucionSolicitante")
+  whatsappEnvioEntregas               WhatsappEnvioEntrega[]             @relation("WhatsappEnvioEntregaUsuario")
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -255,6 +262,13 @@ model PlantillaMensaje {
   // marcador de "enviable" (no NULL + estado activo).
   templateId       String?         @map("template_id")
   templateIdioma   String?         @map("template_idioma") // code de idioma del template en Meta (p. ej. "es", "es_CO")
+  /// FICHA 474 (design §1.1, R3): `NULL` = plantilla de ORDEN (lo de siempre). No nulo = clave de un
+  /// informe del catalogo `INFORMES_WHATSAPP` (validada en el service, no por FK: el catalogo vive
+  /// en codigo). CHECK `plantilla_mensaje_tienda_sin_informe_check`: una de tienda no es de informe.
+  informeClave     String?         @map("informe_clave")
+  /// FICHA 474 (R5/R6): la plantilla lleva cabecera DOCUMENT en Meta. CHECK
+  /// `plantilla_mensaje_documento_requiere_informe_check`: solo una plantilla de informe la lleva.
+  llevaDocumento   Boolean         @default(false) @map("lleva_documento")
   createdBy        String?         @map("created_by") // FK -> usuario (maestro actor); SET NULL al borrar el usuario
   deletedAt        DateTime?       @map("deleted_at") // R27: soft delete; NULL = vigente
   createdAt        DateTime        @default(now()) @map("created_at")
@@ -263,6 +277,7 @@ model PlantillaMensaje {
   creador Usuario? @relation("PlantillaMensajeCreador", fields: [createdBy], references: [id], onDelete: SetNull)
 
   chatMensajes ChatMensaje[] @relation("ChatMensajePlantilla") // feature 109: salientes de tipo plantilla que referencian esta plantilla
+  whatsappEnvios WhatsappEnvio[] @relation("WhatsappEnvioPlantilla") // ficha 474: envios automaticos que usan esta plantilla (ON DELETE RESTRICT)
 
   @@index([createdAt]) // R6: orden determinista del listado
   @@index([estado]) // filtro por estado
@@ -3005,6 +3020,11 @@ enum JobTipo {
   whatsapp_bienvenida // mensaje de bienvenida: envia la plantilla marcada al recoger el paquete (por_recoger -> en_reparto, familia `recoleccion`); PUNTUAL, encolado por el choke point de estado, payload { ordenId, mensajeroId, ocurridoAt }
   push_web // ficha 410 (design 7): entrega de UNA notificacion ya creada a las suscripciones push de sus destinatarios. PUNTUAL, lo encola el decorador del repositorio de notificaciones; payload { notificacionId }, dedupe_key `push:<notificacionId>`, max_intentos 3
   webhook_evento // ficha 454 (design §12.1): entrega firmada de UN hecho de orden (`orden_evento`) a su integrador. PUNTUAL, encolado en la MISMA tx que el hecho; payload { ordenEventoId } (sin datos personales), dedupe_key `webhook_evento:<ordenEventoId>`
+  whatsapp_envio_programado // ficha 474 (design §4.1): UNA ocurrencia a hora fija de un envio; payload { envioId, fechaCr, hora }, dedupe `wa_envio:<envioId>:<fechaCr>:<hora>`. Cadena por envio: cada job encola el siguiente
+  whatsapp_envio_evento // ficha 474 (design §4.2): UN aviso interno puenteado; payload { evento, referencia, notificacionId, datos }, dedupe `wa_envio_evento:<evento>:<entidadId>`
+  whatsapp_envio_ejecucion // ficha 474 (design §4.2): ejecuta UNA ejecucion de origen `evento` ya creada; payload { ejecucionId }
+  whatsapp_envio_reintento // ficha 474 (design §4.3): reintenta UNA entrega con fallo transitorio de Meta; payload { entregaId }, max_intentos 5
+  whatsapp_envio_mantenimiento // ficha 474 (design §1.6): RECURRENTE diario 03:30 CR; purga PDFs caducados (R44) y re-siembra cadenas rotas (R25). Payload {}
 
   @@map("job_tipo")
 }
@@ -4551,4 +4571,179 @@ model AsistenteUsoDiario {
   /// `ranking_snapshot_dia_fecha_key`.
   @@unique([usuarioId, fecha])
   @@map("asistente_uso_diario")
+}
+
+// ---------------------------------------------------------------------------------------------
+// FICHA 474 — ENVIOS AUTOMATICOS POR WHATSAPP (design §1). Cuatro tablas, todas con RLS habilitada
+// SIN policies (solo service role, patron `jobs` / `geocode_cache`): guardan telefonos y nombres.
+//
+// LOS INDICES PARCIALES NO estan aqui: Prisma no los expresa y viven a mano en
+// `20261005120100_whatsapp_envios` (mismo caso que `jobs.dedupe_key` y la bienvenida):
+//   - `whatsapp_envio_nombre_vigente_key`        UNIQUE (nombre) WHERE deleted_at IS NULL (R11)
+//   - `whatsapp_envio_evento_encendido_idx`      (evento_clave) WHERE activo AND deleted_at IS NULL AND disparo = 'evento' (R26, el puente)
+//   - `whatsapp_envio_destinatario_rol_key`      UNIQUE (envio_id, rol) WHERE rol IS NOT NULL
+//   - `whatsapp_envio_destinatario_usuario_key`  UNIQUE (envio_id, usuario_id) WHERE usuario_id IS NOT NULL
+//   - `whatsapp_envio_ejecucion_programado_key`  UNIQUE (envio_id, fecha_cr) WHERE origen = 'programado' (R23)
+//   - `whatsapp_envio_ejecucion_evento_key`      UNIQUE (envio_id, evento_clave, evento_referencia) WHERE origen = 'evento' (R27)
+//   - `whatsapp_envio_ejecucion_purga_idx`       (pdf_caduca_at) WHERE pdf_ruta IS NOT NULL AND pdf_purgado_at IS NULL (R44)
+//   - `whatsapp_envio_ejecucion_prueba_idx`      (solicitada_por, envio_id, created_at DESC) WHERE origen = 'prueba' (R41)
+//   - `whatsapp_envio_entrega_wa_message_id_key` UNIQUE (wa_message_id) WHERE wa_message_id IS NOT NULL (R38)
+// ---------------------------------------------------------------------------------------------
+
+enum WhatsappEnvioDisparo {
+  hora_fija
+  evento
+
+  @@map("whatsapp_envio_disparo")
+}
+
+enum WhatsappEnvioOrigen {
+  programado
+  evento
+  prueba
+
+  @@map("whatsapp_envio_origen")
+}
+
+enum WhatsappEjecucionEstado {
+  pendiente
+  generando
+  enviando
+  completada
+  vacia
+  sin_destinatarios
+  omitida
+  error
+
+  @@map("whatsapp_ejecucion_estado")
+}
+
+enum WhatsappEntregaEstado {
+  pendiente
+  en_curso // reclamada; si se queda aqui sin desenlace es «resultado desconocido» (R37) y NUNCA se reenvia
+  aceptada
+  enviada
+  entregada
+  leida
+  rechazada
+  fallida
+  telefono_invalido
+
+  @@map("whatsapp_entrega_estado")
+}
+
+/// Un envio configurado (R11): que informe, con que plantilla y parametros, a quien y cuando.
+/// Nace APAGADO (R15). Soft delete (R21): nunca se borra fisicamente, el historial lo referencia.
+model WhatsappEnvio {
+  id           String               @id @default(uuid())
+  nombre       String
+  informeClave String               @map("informe_clave")
+  plantillaId  String               @map("plantilla_id")
+  parametros   Json                 @default("{}") @db.JsonB
+  disparo      WhatsappEnvioDisparo
+  /// ISO 1 = lunes … 7 = domingo. Solo `hora_fija` (CHECK `whatsapp_envio_disparo_forma_check`).
+  diasSemana   Int[]                @map("dias_semana") @db.SmallInt
+  /// `HH:mm` de pared CR. Texto y no `time`: no arrastra zonas horarias.
+  hora         String?
+  /// Un `NotificacionEvento` DISPONIBLE (lib/whatsapp-envios/eventos.ts). Texto, no el enum de la campana.
+  eventoClave  String?              @map("evento_clave")
+  activo       Boolean              @default(false)
+  createdBy    String?              @map("created_by")
+  updatedBy    String?              @map("updated_by")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  deletedAt    DateTime?            @map("deleted_at")
+
+  plantilla     PlantillaMensaje            @relation("WhatsappEnvioPlantilla", fields: [plantillaId], references: [id], onDelete: Restrict)
+  creador       Usuario?                    @relation("WhatsappEnvioCreador", fields: [createdBy], references: [id], onDelete: SetNull)
+  actualizador  Usuario?                    @relation("WhatsappEnvioActualizador", fields: [updatedBy], references: [id], onDelete: SetNull)
+  destinatarios WhatsappEnvioDestinatario[] @relation("WhatsappEnvioDestinatarios")
+  ejecuciones   WhatsappEnvioEjecucion[]    @relation("WhatsappEnvioEjecuciones")
+
+  @@index([plantillaId])
+  @@map("whatsapp_envio")
+}
+
+/// Un destinatario configurado: un ROL o un USUARIO, nunca ambos (CHECK). Los roles permitidos se
+/// validan en el service (R16): es politica, no forma.
+model WhatsappEnvioDestinatario {
+  id        String    @id @default(uuid())
+  envioId   String    @map("envio_id")
+  rol       RolValue?
+  usuarioId String?   @map("usuario_id")
+
+  envio   WhatsappEnvio @relation("WhatsappEnvioDestinatarios", fields: [envioId], references: [id], onDelete: Cascade)
+  usuario Usuario?      @relation("WhatsappEnvioDestinatarioUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([envioId])
+  @@index([usuarioId])
+  @@map("whatsapp_envio_destinatario")
+}
+
+/// Una corrida de un envio (programada, por evento o de prueba). El contenido (valores + PDF) se
+/// FIJA una sola vez (R35). Las claves de idempotencia son indices unicos PARCIALES (ver arriba).
+model WhatsappEnvioEjecucion {
+  id                 String                  @id @default(uuid())
+  envioId            String                  @map("envio_id")
+  origen             WhatsappEnvioOrigen
+  fechaCr            DateTime?               @map("fecha_cr") @db.Date
+  instanteProgramado DateTime?               @map("instante_programado")
+  eventoClave        String?                 @map("evento_clave")
+  eventoReferencia   String?                 @map("evento_referencia")
+  /// Foto del aviso `{ texto, rolFila, creadoAt }`: SIN anexo ni PII (R51).
+  eventoDatos        Json?                   @map("evento_datos") @db.JsonB
+  /// Trazabilidad a la fila de `notificacion` que disparo el puente. SIN FK a proposito (design §1.4).
+  notificacionId     String?                 @map("notificacion_id")
+  solicitadaPor      String?                 @map("solicitada_por")
+  estado             WhatsappEjecucionEstado @default(pendiente)
+  motivo             String?
+  plantillaId        String?                 @map("plantilla_id")
+  plantillaNombre    String?                 @map("plantilla_nombre")
+  parametros         Json?                   @db.JsonB
+  /// Valores FIJADOS de las variables (R35). No incluye `destinatario_nombre`, que es por entrega.
+  valores            Json?                   @db.JsonB
+  pdfRuta            String?                 @map("pdf_ruta")
+  pdfNombre          String?                 @map("pdf_nombre")
+  pdfBytes           Int?                    @map("pdf_bytes")
+  pdfCaducaAt        DateTime?               @map("pdf_caduca_at")
+  pdfPurgadoAt       DateTime?               @map("pdf_purgado_at")
+  mediaId            String?                 @map("media_id")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+  terminadaAt        DateTime?               @map("terminada_at")
+
+  envio       WhatsappEnvio          @relation("WhatsappEnvioEjecuciones", fields: [envioId], references: [id], onDelete: Restrict)
+  solicitante Usuario?               @relation("WhatsappEnvioEjecucionSolicitante", fields: [solicitadaPor], references: [id], onDelete: SetNull)
+  entregas    WhatsappEnvioEntrega[] @relation("WhatsappEnvioEjecucionEntregas")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([envioId, createdAt(sort: Desc)])
+  @@map("whatsapp_envio_ejecucion")
+}
+
+/// El mensaje de una ejecucion a UN destinatario. Idempotencia por USUARIO (R23/R27), no por
+/// telefono.
+model WhatsappEnvioEntrega {
+  id                 String                @id @default(uuid())
+  ejecucionId        String                @map("ejecucion_id")
+  usuarioId          String?               @map("usuario_id")
+  /// Snapshot de `usuario.nombre`; es tambien el valor de la variable comun (R53).
+  destinatarioNombre String                @map("destinatario_nombre")
+  /// Normalizado, snapshot. Nunca sale completo hacia la UI (R42/R45).
+  telefono           String
+  estado             WhatsappEntregaEstado @default(pendiente)
+  motivo             String?
+  codigoMeta         Int?                  @map("codigo_meta")
+  waMessageId        String?               @map("wa_message_id")
+  intentos           Int                   @default(0)
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  enviadaAt          DateTime?             @map("enviada_at")
+
+  ejecucion WhatsappEnvioEjecucion @relation("WhatsappEnvioEjecucionEntregas", fields: [ejecucionId], references: [id], onDelete: Cascade)
+  usuario   Usuario?               @relation("WhatsappEnvioEntregaUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@unique([ejecucionId, usuarioId], map: "whatsapp_envio_entrega_ejecucion_usuario_key")
+  @@index([usuarioId])
+  @@map("whatsapp_envio_entrega")
 }
