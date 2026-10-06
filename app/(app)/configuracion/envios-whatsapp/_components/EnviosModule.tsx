@@ -115,15 +115,23 @@ export function EnviosModule({ initialItems }: EnviosModuleProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <span>{items.length === 1 ? "1 envío" : `${items.length} envíos`}</span>
-        <span aria-hidden="true">·</span>
-        <span>
-          <strong className="text-foreground">{encendidos}</strong> {encendidos === 1 ? "encendido" : "encendidos"}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>Hora de Costa Rica</span>
-      </p>
+      {/* Barra de la lista: resumen a la izquierda y el botón de crear a la derecha, como el resto de
+          Configuración (Plantillas, Usuarios). En el teléfono el botón va arriba y a ancho completo
+          (ListaMovil.dc.html). Solo existe con envíos: vacía, el único botón es «+ Crear el primero». */}
+      <div className="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
+        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>{items.length === 1 ? "1 envío" : `${items.length} envíos`}</span>
+          <span aria-hidden="true">·</span>
+          <span>
+            <strong className="text-foreground">{encendidos}</strong> {encendidos === 1 ? "encendido" : "encendidos"}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>Hora de Costa Rica</span>
+        </p>
+        <Link href={`${RUTA}/nuevo`} className={cn(buttonVariants({ className: "h-11 w-full md:h-8 md:w-auto" }))}>
+          + Nuevo envío
+        </Link>
+      </div>
 
       {rechazo ? (
         <div role="alert" className="rounded-lg border border-danger/40 bg-danger-soft p-3 text-sm text-danger-strong">
