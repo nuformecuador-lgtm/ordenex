@@ -532,6 +532,11 @@ function fijarFuente(doc: jsPDF, fuente: FuentePdf, tam: number): void {
 
 /** R16 — el PDF A4 del picking. */
 export function pdfDePicking(modelo: ModeloPicking): Uint8Array {
+  return renderizarPicking(modelo).bytes;
+}
+
+/** El PDF y el numero de paginas de SU maqueta (el humo del test los cruza con el PDF real). */
+export function renderizarPicking(modelo: ModeloPicking): { bytes: Uint8Array; paginas: number } {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
   registrarFuente(doc, fuenteEtiqueta);
   const medir: MedirTexto = (texto, tam, fuente) => {
@@ -562,5 +567,5 @@ export function pdfDePicking(modelo: ModeloPicking): Uint8Array {
       }
     }
   });
-  return new Uint8Array(doc.output("arraybuffer"));
+  return { bytes: new Uint8Array(doc.output("arraybuffer")), paginas: maqueta.paginas.length };
 }
