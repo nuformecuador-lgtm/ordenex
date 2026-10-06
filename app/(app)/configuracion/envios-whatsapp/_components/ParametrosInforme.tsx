@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FieldError } from "@/components/shared/FieldError";
 import type { InformeDTO } from "@/lib/types/envios-whatsapp";
 
+import { ParamsTransito } from "./ParamsTransito";
+
 type Descriptor = InformeDTO["descriptores"][number];
 
 export interface ParametrosInformeProps {
@@ -27,24 +29,63 @@ export interface ParametrosInformeProps {
  * un control que no guarda nada.
  *
  * Un informe sin descriptores («Aviso de la app») no pinta el panel.
+ *
+ * Ficha 475 (design §8.1): un descriptor `panel` pinta el componente registrado para su nombre
+ * (`transito` → `ParamsTransito`) con TODOS los parámetros y los errores de sus `campos`. Ese panel
+ * trae el título de su maqueta, así que el genérico no se repite encima.
  */
 export function ParametrosInforme({ informe, valores, onCambiar, errores }: ParametrosInformeProps) {
   if (informe.descriptores.length === 0) return null;
+  const conPanel = informe.descriptores.some((d) => d.tipo === "panel");
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3">
-      <p className="text-sm font-medium">Parámetros del informe «{informe.nombre}»</p>
-      {informe.descriptores.map((d) => (
-        <CampoParametro
-          key={d.campo}
-          descriptor={d}
-          valor={valores[d.campo]}
-          onCambiar={(v) => onCambiar(d.campo, v)}
-          error={errores[`parametros.${d.campo}`]}
-        />
-      ))}
+      {conPanel ? null : <p className="text-sm font-medium">Parámetros del informe «{informe.nombre}»</p>}
+      {informe.descriptores.map((d) =>
+        d.tipo === "panel" ? (
+          <PanelDeInforme
+            key={d.campo}
+            descriptor={d}
+            valores={valores}
+            onCambiar={onCambiar}
+            errores={erroresDeCampos(errores, d.campos)}
+          />
+        ) : (
+          <CampoParametro
+            key={d.campo}
+            descriptor={d}
+            valor={valores[d.campo]}
+            onCambiar={(v) => onCambiar(d.campo, v)}
+            error={errores[`parametros.${d.campo}`]}
+          />
+        ),
+      )}
       {errores.parametros ? <FieldError id="parametros-error" messages={errores.parametros} /> : null}
     </div>
   );
+}
+
+/** Los errores `parametros.<campo>` y `parametros.<campo>.…` de los campos que edita un panel. */
+function erroresDeCampos(errores: Record<string, string[]>, campos: readonly string[]): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(errores).filter(([k]) => campos.some((c) => k === `parametros.${c}` || k.startsWith(`parametros.${c}.`))),
+  );
+}
+
+function PanelDeInforme({
+  descriptor: d,
+  valores,
+  onCambiar,
+  errores,
+}: {
+  descriptor: Extract<Descriptor, { tipo: "panel" }>;
+  valores: Record<string, unknown>;
+  onCambiar: (campo: string, valor: unknown) => void;
+  errores: Record<string, string[]>;
+}) {
+  switch (d.panel) {
+    case "transito":
+      return <ParamsTransito etiqueta={d.etiqueta} valores={valores} onCambiar={onCambiar} errores={errores} />;
+  }
 }
 
 function CampoParametro({
