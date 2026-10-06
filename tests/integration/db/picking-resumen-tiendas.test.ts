@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
-import { repoDeTest, sembrarEscenario } from "./_picking-476";
+import { crearOrden, crearTienda, repoDeTest, sembrarEscenario } from "./_picking-476";
 import { listarTiendasPicking } from "@/lib/actions/informe-picking";
 import { crearInformePicking } from "@/lib/whatsapp-envios/informes/picking/informe";
 
@@ -12,7 +12,8 @@ import { crearInformePicking } from "@/lib/whatsapp-envios/informes/picking/info
 //
 // Mutacion obligatoria: quitar `fulfillment: true` del `where` de `tiendasFulfillment`
 // (`lib/repositories/PickingRepository.ts`) → ROJO (aparece la tienda C). Quitar `rol: { value:
-// "adminTienda" }` → ROJO (aparece el usuario admin E).
+// "adminTienda" }` → ROJO (aparece el usuario admin E). Quitar `estado: "activo"` → ROJO (M8a: aparecen
+// las tiendas Zeta inactiva/bloqueada/pendiente del ultimo test).
 //
 // Correr: `pnpm exec vitest run tests/integration/db/picking-resumen-tiendas.test.ts` con DATABASE_URL.
 
@@ -73,5 +74,23 @@ describeSiHayBase("476/R3 — tiendas del selector contra Postgres", () => {
     const a = r.lista.tiendas.find((t) => t.tiendaId === r.e.tiendas.A);
     expect(a).toBeDefined();
     expect([String(a!.ordenes), String(a!.atrasadas)]).toEqual([r.gen.valores.ordenes, r.gen.valores.atrasadas]);
+  });
+
+  it("⭑ decision del leader: una tienda con fulfillment y ordenes pero estado ≠ activo NO sale en el selector", async () => {
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      const e = await sembrarEscenario(tx, AHORA);
+      const zetas: string[] = [];
+      for (const estado of ["inactivo", "bloqueado", "pendiente"] as const) {
+        const F = await crearTienda(tx, e.base, `Zeta ${estado}`, { fulfillment: true, estado });
+        await crearOrden(tx, e.base, { tiendaId: F, remision: `ZZ-${estado}`, estado: "en_preparacion", createdAt: e.hace(4) });
+        zetas.push(F);
+      }
+      const res = await listarTiendasPicking({ diasAtraso: 2 }, { getActor: MAESTRO, repo: () => repoDeTest(tx), now: () => AHORA });
+      if (res.status !== "ok") throw new Error(`476: ${res.status}`);
+      return { e, zetas, ids: res.tiendas.filter((t) => t.nombre.startsWith(e.base.sufijo)).map((t) => t.tiendaId) };
+    });
+    expect(r.zetas).toHaveLength(3);
+    // Exacto: las tres activas de siempre, ninguna Zeta.
+    expect(r.ids).toEqual([r.e.tiendas.A, r.e.tiendas.B, r.e.tiendas.D]);
   });
 });

@@ -70,11 +70,11 @@ Modificados
 | --- | --- |
 | R1 | `tests/unit/whatsapp-envios/informe-picking.test.ts` «476/R1»; `catalogo-informes.test.ts` (474) |
 | R2 | `informe-picking.test.ts` «476/R2» (schema); `tests/unit/services/whatsapp-envio-service-picking.test.ts` «476/R2» (guardar → `parametros.tiendaId` / `parametros.diasAtraso`) |
-| R3 | int `tests/integration/db/picking-resumen-tiendas.test.ts` (solo adminTienda+fulfillment, orden, N=2/N=5, cruce selector = generar); `informe-picking.test.ts` «476/R3»; `informe-picking-actions.test.ts` «476/R3»; `picking-modelo.test.ts` «476/R3» (misma definición de atrasada) |
+| R3 | int `tests/integration/db/picking-resumen-tiendas.test.ts` (solo adminTienda+fulfillment, orden, N=2/N=5, cruce selector = generar, «decision del leader»: estado ≠ activo no sale); `informe-picking.test.ts` «476/R3»; `informe-picking-actions.test.ts` «476/R3»; `picking-modelo.test.ts` «476/R3» (misma definición de atrasada) |
 | R4 | `tests/unit/actions/informe-picking-actions.test.ts` «476/R4» (sin sesión, 5 roles → sin construir el repo) |
 | R5 | `whatsapp-envio-service-picking.test.ts` «476/R5» (rol y usuario adminTienda, informe REAL del catálogo) |
 | R6 | int `picking-ordenes-en-preparacion.test.ts` «R6/R26», «R6: tienda sin fulfillment», «R6/R3 entradas» |
-| R7 | `informe-picking.test.ts` «476/R7» (3 casos); `tests/unit/services/ejecucion-envio-informe-error.test.ts` (motor: error terminal, sin entregas/PDF/Meta); int «R7/R8 por el catálogo» |
+| R7 | `informe-picking.test.ts` «476/R7» (4 casos, + inactiva); `tests/unit/services/ejecucion-envio-informe-error.test.ts` (motor: error terminal, sin entregas/PDF/Meta); int «R7/R8 por el catálogo»; int «R7 (decision del leader)» (inactivo/bloqueado/pendiente → error «no está activa») |
 | R8 | `informe-picking.test.ts` «476/R8»; int «R7/R8 por el catálogo» |
 | R9 | int «R30/R9» (`updated_at`/estado intactos, historial sin filas nuevas, +1 día sigue, movida ya no) |
 | R10, R11 | `tests/unit/whatsapp-envios/picking-modelo.test.ts` «476/R10», «476/R11» |
@@ -127,8 +127,29 @@ comprobado tras aplicar, nº de tests ejecutados leído de la salida, restauraci
 | U19 | fila «(continúa)» descarta el resto de fichas | MUERE |
 | U20 | `remision_hasta` = la primera | MUERE (2) |
 
-**PENDIENTES PARA EL LEADER (necesitan Postgres)** — aplicar UNA, comprobar con `git diff`, correr,
-debe salir ROJO, revertir, verde:
+**MEDIDAS CONTRA POSTGRES (2026-10-05, checkout principal, base local).** Arnés: cambios de la ronda en
+el ÍNDICE (`git add`), cada mutación aplicada por reemplazo exacto (patrón único), `git diff --stat` leído,
+los 2 archivos de integración corridos con `--reporter=json` (10 tests, **0 skipped** en todas),
+`git checkout -- <archivo>` y `git diff --stat` vacío tras cada una. Base inicial y final: 10/10 verdes.
+**11/11 mueren.**
+
+| # | `git diff --stat` | Ejecutados | Rojos |
+| --- | --- | --- | --- |
+| M1 | `PickingRepository.ts \| 1 -` | 10, 0 skipped | 4: «R6/R26», «R6/R3 entradas», «R30/R9», «solo adminTienda… N=2/N=5» |
+| M2 | `PickingRepository.ts \| 1 -` | 10, 0 skipped | 2: «R6: tienda sin fulfillment», «R6/R3 entradas» |
+| M3 | `PickingRepository.ts \| 2 +-` | 10, 0 skipped | 4: «R6/R26», «R6/R3 entradas», «R30/R9», «solo adminTienda…» |
+| M4 | `PickingRepository.ts \| 2 +-` | 10, 0 skipped | 5: «R6/R26», «R6: sin fulfillment», «R30/R9», «R7/R8 por el catálogo», «conteo del selector = generar» |
+| M5 | `PickingRepository.ts \| 2 +-` | 10, 0 skipped | 2: «solo adminTienda…», «decision del leader» (selector) |
+| M6 | `informe.ts \| 2 +-` | 10, 0 skipped | 1: «R30/R9» |
+| M7 | `PickingRepository.ts \| 2 +-` | 10, 0 skipped | 3: «R14», «R30/R9», «solo adminTienda… N=2/N=5» |
+| M8a | quitar `estado: "activo"` de `tiendasFulfillment` (`PickingRepository.ts \| 2 +-`) | 10, 0 skipped | 1: «decision del leader» (selector) |
+| M8b | quitar `!tienda.activo` del `if` de `generar` (`informe.ts \| 2 +-`) | 10, 0 skipped | 1: «R7 (decision del leader)» |
+| M8c | `activo: u.estado === "activo"` → `activo: true` (`PickingRepository.ts \| 2 +-`) | 10, 0 skipped | 1: «R7 (decision del leader)» |
+| M9 | volver a MEMOIZAR el repo en `depsDeProduccion` (el bug; `informe.ts \| 3 ++-`) | 10, 0 skipped | 2: «R7/R8 por el catálogo», «R7 (decision del leader)» (P2028) |
+
+Ninguna sobrevivió: no hizo falta endurecer tests. M6 se aplicó sobre la línea nueva (sin memo).
+
+Tabla original de pendientes (ya medidas arriba):
 
 | # | Ubicación exacta | Mutación | Debe poner ROJO |
 | --- | --- | --- | --- |
@@ -168,8 +189,47 @@ pnpm exec vitest run tests/integration/db/picking-ordenes-en-preparacion.test.ts
    texto Helvetica sea `seguroEnFuenteEstandar` y que todo texto embebido esté en su cobertura.
 7. **`catalogo-informes.test.ts` (474) enmendado**: «defaults válidos» tiene UNA excepción afirmada
    (picking, solo `tiendaId`), consecuencia directa de design §4.2.
-8. **Abierto (no inventado):** el spec no dice si una tienda con `usuario.estado` distinto de `activo`
-   debe salir en el selector; hoy sale si es `adminTienda` con fulfillment.
+8. **Cerrado por el leader (2026-10-05):** una tienda con `usuario.estado` distinto de `activo` NO sale en
+   el selector (`tiendasFulfillment`: `where { fulfillment: true, estado: "activo", rol adminTienda }`) y
+   `generar` para ella devuelve `{ tipo: "error", motivo: "La tienda «X» no está activa: revisa el envío." }`
+   (mismo desenlace que «sin fulfillment»). `TiendaPicking` gana `activo`. La SELECCION SQL
+   (`seleccionEnPreparacion`) NO se toca: las entradas de una tienda inactiva no llegan a ningún sitio
+   (el resumen solo cuenta las tiendas que devuelve `tiendasFulfillment`, y `generar` corta antes).
+
+## Ronda leader contra Postgres (2026-10-05, checkout principal `int-476`)
+
+**Bug: «R7/R8 por el catálogo» rojo con `informe picking: tiendaDelPicking falló`.**
+- Causa real (`error.cause`): `PrismaClientKnownRequestError` **P2028** «Transaction already closed: A query
+  cannot be executed on a transaction that was rolled back», en `PickingRepository.tiendaDelPicking`.
+- Por qué: `depsDeProduccion()` en `informe.ts` MEMOIZABA `{ repo: new PickingRepository(getPrismaClient()) }`
+  con `??=`. El informe registrado en el catálogo es un singleton de módulo, así que el repo quedaba atado
+  al cliente de la PRIMERA llamada. En la integración, «R30/R9» redirige `getPrismaClient` a SU transacción
+  (revertida al acabar) y «R7/R8» llegaba después con el repo viejo. Aislado, «R7/R8» pasaba (medido).
+  No era el SQL ni `PickingRepository`. En producción `getPrismaClient()` es un singleton y no se
+  manifestaba, pero era estado oculto innecesario.
+- Arreglo mínimo: `depsDeProduccion` construye el repo en cada `generar` (sin memo; sigue sin abrir conexión
+  al importar; `getPrismaClient()` devuelve el singleton). La 475 (`transito/informe.ts:65`) tiene el MISMO
+  patrón memoizado: fuera de alcance, no tocado (mismo riesgo, solo en tests).
+- Motivo en el log: `JobQueueService.mensajeError` guarda en `jobs.last_error` SOLO `error.message` (500 c.);
+  el `cause` se perdía. `leer()` ahora añade el motivo SANEADO: `informe picking: <op> falló (<NombreClase>
+  <codigo>)`, p. ej. `(PrismaClientKnownRequestError P2028)`. Nunca el `message` de la causa (el de Prisma
+  copia la invocación con argumentos); el código solo si casa `^[A-Za-z0-9_]{1,20}$`. Función exportada
+  `detalleDeCausa`; test unit «el mensaje lleva el motivo SANEADO…».
+
+**Inactivas** — ver Desvíos 8.
+
+Archivos de esta ronda: `lib/whatsapp-envios/informes/picking/{informe,tipos}.ts`,
+`lib/repositories/PickingRepository.ts`, `lib/interfaces/repositories/IPickingRepository.ts`,
+`tests/integration/db/{_picking-476,picking-ordenes-en-preparacion.test,picking-resumen-tiendas.test}.ts`,
+`tests/unit/repositories/picking-repository.test.ts`, `tests/unit/services/ejecucion-envio-informe-error.test.ts`,
+`tests/unit/whatsapp-envios/informe-picking.test.ts`.
+
+Verificación de esta ronda (salida real):
+- Integración 476: `Tests 10 passed (10)`, 0 skipped (antes 8; +1 test por archivo).
+- `pnpm run typecheck` → exit 0. `pnpm run lint` → `✖ 235 problems (0 errors, 235 warnings)`, exit 0
+  (igual que antes; `eslint` sobre los 10 archivos tocados: sin avisos).
+- `pnpm exec vitest related --run <los 10 archivos>` → `Test Files 205 passed (205)`, `Tests 2635 passed (2635)`.
+- `pnpm exec vitest run guard` → `Test Files 274 passed (274)`, `Tests 3764 passed (3764)` (con base: 0 skipped).
 
 ## Verificación (salida real, 2026-10-05)
 
@@ -190,3 +250,6 @@ pnpm exec vitest run tests/integration/db/picking-ordenes-en-preparacion.test.ts
 
 Veredicto: backend de la 476 hecho y verde en unit/guardias/typecheck/lint, 20/20 mutaciones sin base muertas;
 falta que el leader corra las 2 integraciones contra Postgres y mida M1–M7.
+
+Veredicto (ronda leader): bug P2028 arreglado (repo sin memo + motivo saneado en `last_error`), inactivas
+fuera del selector y en `error`, integración 10/10 sin saltos y 11/11 mutaciones contra Postgres muertas.

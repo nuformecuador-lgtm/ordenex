@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   CLAVE_INFORME_PICKING,
   crearInformePicking,
+  detalleDeCausa,
   motivoSinOrdenes,
   resumenTiendasPicking,
 } from "@/lib/whatsapp-envios/informes/picking/informe";
@@ -17,7 +18,7 @@ import type { FilaPicking, TiendaPicking } from "@/lib/whatsapp-envios/informes/
 
 const UN_DIA = 24 * 60 * 60 * 1000;
 const AHORA = new Date("2026-10-05T12:30:00.000Z");
-const TIENDA: TiendaPicking = { id: "t-gameos", nombre: "Gameos", fulfillment: true, esTienda: true };
+const TIENDA: TiendaPicking = { id: "t-gameos", nombre: "Gameos", fulfillment: true, esTienda: true, activo: true };
 
 function filas(): FilaPicking[] {
   return [
@@ -100,6 +101,7 @@ describe("476/R7 — tienda que ya no sirve → error terminal, sin leer ordenes
     ["no existe", null, "La tienda del envío ya no existe: revisa el envío y elige otra tienda."],
     ["perdio el fulfillment", { ...TIENDA, fulfillment: false }, "La tienda «Gameos» ya no tiene fulfillment: revisa el envío."],
     ["ya no es adminTienda", { ...TIENDA, esTienda: false }, "«Gameos» ya no es una tienda con fulfillment: revisa el envío."],
+    ["inactiva (estado ≠ activo)", { ...TIENDA, activo: false }, "La tienda «Gameos» no está activa: revisa el envío."],
   ])("%s", async (_caso, tienda, motivo) => {
     const r = repo({ tienda });
     const res = await crearInformePicking({ repo: r }).generar(ctx());
@@ -124,6 +126,27 @@ describe("476 — fallo de lectura", () => {
     await expect(crearInformePicking({ repo: repo({ falla: "tiendaDelPicking" }) }).generar(ctx())).rejects.toThrow(
       "informe picking: tiendaDelPicking falló",
     );
+  });
+
+  it("el mensaje lleva el motivo SANEADO de la causa (nombre y codigo), nunca su texto; la causa queda en `cause`", async () => {
+    const causa = Object.assign(new Error("Invalid `prisma.usuario.findUnique()` invocation: id 'secreto'"), {
+      name: "PrismaClientKnownRequestError",
+      code: "P2028",
+    });
+    const r = repo();
+    r.tiendaDelPicking.mockRejectedValueOnce(causa);
+    const err = await crearInformePicking({ repo: r })
+      .generar(ctx())
+      .then(
+        () => new Error("476: generar debia lanzar"),
+        (e: unknown) => e as Error,
+      );
+    expect(err.message).toBe("informe picking: tiendaDelPicking falló (PrismaClientKnownRequestError P2028)");
+    expect(err.message).not.toContain("secreto");
+    expect(err.cause).toBe(causa);
+    expect(detalleDeCausa(new Error("x"))).toBe("Error");
+    expect(detalleDeCausa("texto")).toBe("error desconocido");
+    expect(detalleDeCausa(Object.assign(new Error("x"), { code: "a b; DROP" }))).toBe("Error");
   });
 });
 

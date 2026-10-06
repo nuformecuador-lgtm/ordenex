@@ -13,7 +13,7 @@ const AHORA = new Date("2026-10-05T12:30:00.000Z");
 
 function montar(origen: "programado" | "prueba" = "programado") {
   const repo: IPickingRepository = {
-    tiendaDelPicking: vi.fn(async () => ({ id: "t1", nombre: "Gameos", fulfillment: false, esTienda: true })),
+    tiendaDelPicking: vi.fn(async () => ({ id: "t1", nombre: "Gameos", fulfillment: false, esTienda: true, activo: true })),
     ordenesEnPreparacion: vi.fn(async () => []),
     tiendasFulfillment: vi.fn(async () => []),
     entradasEnPreparacion: vi.fn(async () => []),

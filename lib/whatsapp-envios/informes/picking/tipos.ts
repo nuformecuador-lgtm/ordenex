@@ -28,6 +28,8 @@ export interface TiendaPicking {
   fulfillment: boolean;
   /** `true` si su rol es `adminTienda`. */
   esTienda: boolean;
+  /** `true` si `usuario.estado = 'activo'` (decision del leader: una tienda inactiva no hace picking). */
+  activo: boolean;
 }
 
 /** Una tienda ofrecible en el selector: `adminTienda` con `fulfillment = true` (R3). */

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
-import { UN_DIA, estatusId, repoDeTest, sembrarEscenario } from "./_picking-476";
+import { UN_DIA, crearOrden, crearTienda, estatusId, repoDeTest, sembrarEscenario } from "./_picking-476";
 import { INFORMES_WHATSAPP } from "@/lib/whatsapp-envios/informes/catalogo";
 import type { ParametrosPicking } from "@/lib/whatsapp-envios/informes/picking/parametros";
 
@@ -14,6 +14,10 @@ import type { ParametrosPicking } from "@/lib/whatsapp-envios/informes/picking/p
 //   M3 quitar `o."deleted_at" IS NULL` (dejar `WHERE true`) → «R6: exactamente las 3…» (sale la borrada)
 //   M4 quitar `AND o."tienda_id" = ${tiendaId}` (en `ordenesEnPreparacion`) → «R6: exactamente las 3…»
 //   M5 (R30) registrar el informe con un lector vacio → «R30/R9…»
+//   M8b quitar `!tienda.activo` del `if` de `generar` (informe.ts) → «R7 (decision del leader)…»
+//
+// «R7/R8 por el catalogo» corre DESPUES de «R30/R9» con otra transaccion: si `depsDeProduccion`
+// memoizara el repo, quedaria atado a la tx ya revertida (P2028). Ese orden es el que lo muerde.
 //
 // Correr: `pnpm exec vitest run tests/integration/db/picking-ordenes-en-preparacion.test.ts` con
 // DATABASE_URL (sin base, se SALTA: mira los `skipped`).
@@ -139,5 +143,27 @@ describeSiHayBase("476 — seleccion del picking contra Postgres", () => {
     expect(r.noTienda.tipo).toBe("error");
     expect(r.noExiste.tipo).toBe("error");
     expect(r.vacia).toEqual({ tipo: "vacio", motivo: `La tienda ${r.e.base.sufijo} Delta vacia no tiene órdenes en preparación.` });
+  });
+
+  it("⭑ R7 (decision del leader): tienda con fulfillment y ordenes pero estado ≠ activo → error «no está activa», nunca contenido", async () => {
+    const informe = INFORMES_WHATSAPP.get("picking")!;
+    const r = await enTransaccionRevertida(prisma, async (tx) => {
+      cliente.actual = tx;
+      const e = await sembrarEscenario(tx, AHORA);
+      const res: Record<string, unknown> = {};
+      for (const estado of ["inactivo", "bloqueado", "pendiente"] as const) {
+        const F = await crearTienda(tx, e.base, `Zeta ${estado}`, { fulfillment: true, estado });
+        await crearOrden(tx, e.base, { tiendaId: F, remision: `ZZ-${estado}`, estado: "en_preparacion", createdAt: e.hace(1) });
+        res[estado] = await informe.generar({ parametros: { tiendaId: F, diasAtraso: 2 }, ahora: AHORA, conDocumento: true });
+      }
+      return { e, res };
+    });
+    cliente.actual = null;
+    for (const estado of ["inactivo", "bloqueado", "pendiente"]) {
+      expect(r.res[estado], estado).toEqual({
+        tipo: "error",
+        motivo: `La tienda «${r.e.base.sufijo} Zeta ${estado}» no está activa: revisa el envío.`,
+      });
+    }
   });
 });

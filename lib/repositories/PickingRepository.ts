@@ -67,10 +67,16 @@ export class PickingRepository implements IPickingRepository {
   async tiendaDelPicking(tiendaId: string): Promise<TiendaPicking | null> {
     const u = await this.prisma.usuario.findUnique({
       where: { id: tiendaId },
-      select: { id: true, nombre: true, fulfillment: true, rol: { select: { value: true } } },
+      select: { id: true, nombre: true, fulfillment: true, estado: true, rol: { select: { value: true } } },
     });
     if (u === null) return null;
-    return { id: u.id, nombre: u.nombre, fulfillment: u.fulfillment, esTienda: u.rol.value === "adminTienda" };
+    return {
+      id: u.id,
+      nombre: u.nombre,
+      fulfillment: u.fulfillment,
+      esTienda: u.rol.value === "adminTienda",
+      activo: u.estado === "activo",
+    };
   }
 
   async ordenesEnPreparacion(tiendaId: string): Promise<FilaPicking[]> {
@@ -88,7 +94,8 @@ export class PickingRepository implements IPickingRepository {
 
   async tiendasFulfillment(): Promise<TiendaFulfillment[]> {
     return this.prisma.usuario.findMany({
-      where: { fulfillment: true, rol: { value: "adminTienda" } },
+      // Decision del leader (2026-10-05): una tienda con `estado` distinto de `activo` no se ofrece.
+      where: { fulfillment: true, estado: "activo", rol: { value: "adminTienda" } },
       select: { id: true, nombre: true },
     });
   }

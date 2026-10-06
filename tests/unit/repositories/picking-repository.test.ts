@@ -76,20 +76,22 @@ describe("476/R29 — una sentencia por generacion, sin N+1", () => {
 describe("476/R7/R3 — lecturas de tienda", () => {
   it("tiendaDelPicking: rol adminTienda → esTienda; otro rol → no; inexistente → null", async () => {
     const d = doble(0);
-    d.findUnique.mockResolvedValueOnce({ id: "t1", nombre: "Gameos", fulfillment: true, rol: { value: "adminTienda" } });
-    expect(await d.repo.tiendaDelPicking("t1")).toEqual({ id: "t1", nombre: "Gameos", fulfillment: true, esTienda: true });
-    d.findUnique.mockResolvedValueOnce({ id: "m1", nombre: "Ana", fulfillment: false, rol: { value: "admin" } });
+    d.findUnique.mockResolvedValueOnce({ id: "t1", nombre: "Gameos", fulfillment: true, estado: "activo", rol: { value: "adminTienda" } });
+    expect(await d.repo.tiendaDelPicking("t1")).toEqual({ id: "t1", nombre: "Gameos", fulfillment: true, esTienda: true, activo: true });
+    d.findUnique.mockResolvedValueOnce({ id: "m1", nombre: "Ana", fulfillment: false, estado: "activo", rol: { value: "admin" } });
     expect(await d.repo.tiendaDelPicking("m1")).toMatchObject({ esTienda: false });
+    d.findUnique.mockResolvedValueOnce({ id: "t2", nombre: "Baja", fulfillment: true, estado: "inactivo", rol: { value: "adminTienda" } });
+    expect(await d.repo.tiendaDelPicking("t2")).toMatchObject({ esTienda: true, activo: false });
     d.findUnique.mockResolvedValueOnce(null);
     expect(await d.repo.tiendaDelPicking("x")).toBeNull();
     expect(d.findUnique.mock.calls[0][0]).toMatchObject({ where: { id: "t1" } });
   });
 
-  it("tiendasFulfillment: solo adminTienda con fulfillment", async () => {
+  it("tiendasFulfillment: solo adminTienda ACTIVAS con fulfillment", async () => {
     const d = doble(0);
     await d.repo.tiendasFulfillment();
     expect(d.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { fulfillment: true, rol: { value: "adminTienda" } } }),
+      expect.objectContaining({ where: { fulfillment: true, estado: "activo", rol: { value: "adminTienda" } } }),
     );
   });
 });

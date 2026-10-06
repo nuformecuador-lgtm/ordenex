@@ -5,7 +5,7 @@
 // preparacion vuelve a salir en el envio siguiente; lo que avanzo de estado, no.
 //
 // Tres desenlaces de `generar`:
-//   - la tienda ya no existe / no es tienda / perdio el fulfillment → `{ tipo: "error" }` (D4/R7):
+//   - la tienda ya no existe / no es tienda / no esta activa / perdio el fulfillment → `{ tipo: "error" }` (D4/R7):
 //     terminal y visible en el historial, nunca «Sin novedades»;
 //   - sin ordenes en preparacion → `{ tipo: "vacio" }` (R8);
 //   - contenido: valores y, si la plantilla lleva documento, el PDF (R16/R24).
@@ -37,12 +37,24 @@ export interface DepsInformePicking {
   pdf?: (modelo: ModeloPicking) => Uint8Array;
 }
 
-/** Envuelve un fallo de lectura con la operacion y lo propaga. */
+/**
+ * El motivo SANEADO de un fallo de lectura: el nombre de la clase y, si lo trae, el codigo
+ * (`P2028`, `40P01`…). Nunca el `message` de la causa: el de Prisma copia la invocacion con sus
+ * argumentos. Sin esto, `jobs.last_error` (que guarda solo `error.message`) decia «falló» sin el
+ * porque, y el `cause` se perdia en el salto por la cola.
+ */
+export function detalleDeCausa(cause: unknown): string {
+  if (!(cause instanceof Error)) return "error desconocido";
+  const codigo = (cause as { code?: unknown }).code;
+  return typeof codigo === "string" && /^[A-Za-z0-9_]{1,20}$/.test(codigo) ? `${cause.name} ${codigo}` : cause.name;
+}
+
+/** Envuelve un fallo de lectura con la operacion y el motivo saneado, y lo propaga. */
 async function leer<T>(operacion: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (cause) {
-    throw new Error(`informe picking: ${operacion} falló`, { cause });
+    throw new Error(`informe picking: ${operacion} falló (${detalleDeCausa(cause)})`, { cause });
   }
 }
 
@@ -50,6 +62,7 @@ async function leer<T>(operacion: string, fn: () => Promise<T>): Promise<T> {
 export function motivoTiendaNoValida(tienda: TiendaPicking | null): string {
   if (tienda === null) return "La tienda del envío ya no existe: revisa el envío y elige otra tienda.";
   if (!tienda.esTienda) return `«${tienda.nombre}» ya no es una tienda con fulfillment: revisa el envío.`;
+  if (!tienda.activo) return `La tienda «${tienda.nombre}» no está activa: revisa el envío.`;
   return `La tienda «${tienda.nombre}» ya no tiene fulfillment: revisa el envío.`;
 }
 
@@ -82,10 +95,14 @@ export async function resumenTiendasPicking(
     }));
 }
 
-/** Deps de produccion: el repo real sobre el cliente Prisma compartido, construido al USARSE. */
+/**
+ * Deps de produccion: el repo real sobre el cliente Prisma compartido, construido EN CADA `generar`
+ * (no al importar: no abre conexion). NO se memoiza: memoizado, el repo quedaba atado al cliente de
+ * la PRIMERA llamada para siempre — en la integracion, una transaccion ya revertida (P2028, «R7/R8
+ * por el catalogo» rojo tras «R30/R9»). Construirlo es gratis: `getPrismaClient()` es el singleton.
+ */
 function depsDeProduccion(): () => DepsInformePicking {
-  let deps: DepsInformePicking | null = null;
-  return () => (deps ??= { repo: new PickingRepository(getPrismaClient()) });
+  return () => ({ repo: new PickingRepository(getPrismaClient()) });
 }
 
 /**
@@ -147,7 +164,7 @@ export function crearInformePicking(deps?: DepsInformePicking): InformeWhatsapp<
       const { repo, pdf = pdfDePicking } = resolver();
       const { tiendaId, diasAtraso } = ctx.parametros;
       const tienda = await leer("tiendaDelPicking", () => repo.tiendaDelPicking(tiendaId));
-      if (tienda === null || !tienda.esTienda || !tienda.fulfillment) {
+      if (tienda === null || !tienda.esTienda || !tienda.activo || !tienda.fulfillment) {
         return { tipo: "error", motivo: motivoTiendaNoValida(tienda) };
       }
       const filas = await leer("ordenesEnPreparacion", () => repo.ordenesEnPreparacion(tiendaId));

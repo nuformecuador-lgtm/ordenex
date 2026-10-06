@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient, RolValue } from "@prisma/client";
+import type { EstadoUsuario, PrismaClient, RolValue } from "@prisma/client";
 import type { TxDeTest } from "./_postgres-real";
 import { PickingRepository } from "@/lib/repositories/PickingRepository";
 
@@ -57,12 +57,12 @@ export function estatusId(base: Base476, value: string): string {
   return id;
 }
 
-/** Un usuario (por defecto una TIENDA `adminTienda`) con el fulfillment pedido. */
+/** Un usuario (por defecto una TIENDA `adminTienda` ACTIVA) con el fulfillment pedido. */
 export async function crearTienda(
   tx: TxDeTest,
   base: Base476,
   nombre: string,
-  o: { fulfillment: boolean; rol?: RolValue },
+  o: { fulfillment: boolean; rol?: RolValue; estado?: EstadoUsuario },
 ): Promise<string> {
   const slug = `${base.sufijo}-${randomUUID().slice(0, 8)}`;
   const rolId = base.roles.get(o.rol ?? "adminTienda");
@@ -76,7 +76,7 @@ export async function crearTienda(
       cedula: `T-${slug}`,
       tipoIdentificacionId: base.tipoIdentificacionId,
       rolId,
-      estado: "activo",
+      estado: o.estado ?? "activo",
       fulfillment: o.fulfillment,
     },
     select: { id: true },
