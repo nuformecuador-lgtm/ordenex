@@ -204,9 +204,9 @@ export function DateRangeFilter({
     <div
       role="group"
       aria-label={label}
-      className={cn("flex flex-wrap items-end gap-2", className)}
+      className={cn("flex max-w-full flex-wrap items-end gap-2", className)}
     >
-      <div className="relative flex flex-col gap-1.5">
+      <div className="relative flex max-w-full flex-col gap-1.5">
         {/* La etiqueta va SOLO para lectores de pantalla: en una barra de filtros el
             resto de controles (multi, single) llevan su nombre DENTRO del disparador
             ("Zona: Todas"), así que una etiqueta encima dejaba este control más alto
@@ -222,7 +222,10 @@ export function DateRangeFilter({
             disabled={disabled}
             className={cn(
               buttonVariants({ variant: "outline" }),
-              "w-56 justify-between font-normal",
+              // Feature 471 — ancho MINIMO, no fijo: con `w-56` la etiqueta del periodo
+              // elegido ("Periodo: 01/09/2026 – 30/09/2026") se cortaba. Crece con el texto
+              // y solo recorta si no cabe en la fila (`max-w-full`, p. ej. a 390 px).
+              "w-auto min-w-56 max-w-full justify-between font-normal",
               !haySeleccion && "text-muted-foreground",
             )}
           >
