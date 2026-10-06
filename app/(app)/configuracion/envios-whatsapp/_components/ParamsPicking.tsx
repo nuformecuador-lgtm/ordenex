@@ -47,6 +47,8 @@ export interface ParamsPickingProps {
 type Lista =
   | { tipo: "ok"; dias: number; tiendas: TiendaPickingDTO[] }
   | { tipo: "sin_permiso" }
+  // m3 (revisión 476): sesión caducada ≠ sin permiso. No es terminal: se reintenta a mano o con otro N.
+  | { tipo: "sesion_expirada"; dias: number }
   | { tipo: "invalido"; dias: number; mensajes: string[] };
 
 /** Las claves de error del servidor que pinta este panel, SIN el prefijo `parametros.`. */
@@ -65,6 +67,7 @@ function listaDe(r: ListarTiendasPickingResult, n: number): Lista {
   if (r.status === "validation_error") {
     return { tipo: "invalido", dias: n, mensajes: mensajeDeCampoPicking("diasAtraso", r.fieldErrors.diasAtraso ?? []) };
   }
+  if (r.status === "unauthenticated") return { tipo: "sesion_expirada", dias: n };
   return { tipo: "sin_permiso" };
 }
 
@@ -147,6 +150,8 @@ export function ParamsPicking({
 
   function reintentar() {
     setErrorCarga(false);
+    // Tras volver a entrar, la lista caducada se descarta y se pide en el acto.
+    if (lista?.tipo === "sesion_expirada") setLista(null);
     setIntento((i) => i + 1);
   }
 
@@ -197,7 +202,12 @@ export function ParamsPicking({
   }));
   const guardadaFuera = tiendas !== null && tiendaId !== "" && !tiendas.some((t) => t.tiendaId === tiendaId);
   const tiendaErrorId = `${base}-tienda-error`;
+  const tiendaFueraId = `${base}-tienda-fuera`;
   const ayudaTiendaId = `${base}-tienda-ayuda`;
+  // m4 (revisión 476): el grupo se describe con su error (si lo hay) y con su ayuda.
+  const describeTienda = [errTienda ? tiendaErrorId : null, guardadaFuera ? tiendaFueraId : null, ayudaTiendaId]
+    .filter(Boolean)
+    .join(" ");
 
   let cuerpoTiendas;
   if (errorCarga && tiendas === null) {
@@ -205,6 +215,17 @@ export function ParamsPicking({
       <div className="flex flex-col items-start gap-2">
         <p role="alert" className="text-sm text-destructive">
           {T.errorTiendas}
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={reintentar}>
+          {T.reintentar}
+        </Button>
+      </div>
+    );
+  } else if (lista?.tipo === "sesion_expirada") {
+    cuerpoTiendas = (
+      <div className="flex flex-col items-start gap-2">
+        <p role="alert" className="text-sm text-destructive">
+          {T.sesionExpirada}
         </p>
         <Button type="button" variant="outline" size="sm" onClick={reintentar}>
           {T.reintentar}
@@ -230,6 +251,7 @@ export function ParamsPicking({
       <RadioGroup
         aria-label={T.tiendaTitulo}
         aria-invalid={errTienda || guardadaFuera ? true : undefined}
+        aria-describedby={describeTienda}
         value={guardadaFuera ? "" : tiendaId}
         options={opciones}
         onValueChange={(v) => cambiar("tiendaId", v)}
@@ -266,7 +288,7 @@ export function ParamsPicking({
           {T.ayudaTiendaVacia}
         </p>
         {guardadaFuera ? (
-          <p role="alert" className="mt-1 text-sm text-destructive">
+          <p id={tiendaFueraId} role="alert" className="mt-1 text-sm text-destructive">
             {T.tiendaYaNoEsta}
           </p>
         ) : null}
@@ -297,7 +319,7 @@ export function ParamsPicking({
               min={RANGO_DIAS.min}
               max={RANGO_DIAS.max}
               aria-invalid={errDias ? true : undefined}
-              aria-describedby={errDias ? `${diasId}-error` : `${diasId}-ayuda`}
+              aria-describedby={errDias ? `${diasId}-error ${diasId}-ayuda` : `${diasId}-ayuda`}
               className="h-11 w-16 text-right font-mono sm:h-8"
               value={diasCrudo === undefined || diasCrudo === null ? "" : String(diasCrudo)}
               onChange={(e) => {

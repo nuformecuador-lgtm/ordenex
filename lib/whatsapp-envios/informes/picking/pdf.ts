@@ -332,7 +332,7 @@ function lineasDeFichas(g: GrupoPicking, identificadores: Map<string, string>, m
   const fichas: Ficha[] = g.ordenes.map((o) => {
     let texto = identificadores.get(o.ordenId) ?? o.identificador;
     if (o.cantidad > 1) texto += ` ×${o.cantidad}`;
-    if (o.atrasada) texto += ` · ${o.dias}d`;
+    if (o.atrasada) texto += ` · ${o.dias} d`;
     const lineas = partirEnLineas(texto, anchoCelda - 2 * PAD_FICHA_H, TAM_FICHA, "embebida", medir);
     const w = Math.min(anchoCelda, Math.max(...lineas.map((l) => medir(l, TAM_FICHA, "embebida"))) + 2 * PAD_FICHA_H);
     return { lineas, w, h: lineas.length * INTERLINEA_FICHA + 2 * PAD_FICHA_V, atrasada: o.atrasada };

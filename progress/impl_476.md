@@ -336,3 +336,9 @@ Revertidas ambas: 15/15 verdes.
   vitest, tsc y eslint corrieron con los binarios de `../../../node_modules`, que Node resuelve subiendo directorios.
 
 Veredicto frontend: panel del picking montado, 15 tests y 2 mutaciones rojas; falta la verificación visual (T5.2).
+
+## Arreglos menores de la revisión (`fix/476-ui`)
+
+- m3: `unauthenticated` ya no cae en «Solo un maestro…»: picking y tránsito (475, mismo defecto; además pintaba «sin zonas») dicen «Tu sesión expiró. Vuelve a iniciar sesión.» con «Reintentar» que vuelve a pedir; `forbidden` sigue igual.
+- m4: `RadioGroup` acepta `aria-describedby`; el selector de tienda se describe con su error, el aviso de tienda fuera y la ayuda; el número de días con error + ayuda; el hito de la 475, igual.
+- m5: la ficha atrasada del PDF dice «· 3 d» (antes «· 3d»).

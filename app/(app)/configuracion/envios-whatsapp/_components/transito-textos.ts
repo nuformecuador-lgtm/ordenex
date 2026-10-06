@@ -36,6 +36,7 @@ export const TEXTOS_TRANSITO = {
   errorZonas: "No se pudieron cargar las zonas. Inténtalo de nuevo en un momento.",
   reintentar: "Reintentar",
   sinPermiso: "Solo un maestro puede ver cuántos paquetes entrarían hoy.",
+  sesionExpirada: "Tu sesión expiró. Vuelve a iniciar sesión.",
 } as const;
 
 /** Las tres opciones del hito, en el orden de la maqueta. */
