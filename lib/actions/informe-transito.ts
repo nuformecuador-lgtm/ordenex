@@ -32,7 +32,7 @@ const ROLES_PERMITIDOS = new Set<string>(["maestro"]);
  * R38/R39 — cuantos paquetes entrarian HOY con estos parametros, cuantos estan parados y cuantos
  * no tienen el momento de inicio.
  *
- * @sin-superficie ficha 475 en curso: el backend llega antes que el panel; la importa `ParamsTransito` (F6, frontend_dev), y la guardia obliga a quitar esta anotacion en cuanto la importe.
+ * La importa el panel `ParamsTransito` (formulario de envios, 474).
  */
 export async function previsualizarInformeTransito(
   parametros: unknown,
