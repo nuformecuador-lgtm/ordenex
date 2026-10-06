@@ -1,0 +1,94 @@
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex/.claude/worktrees/agent-a2a0f45ca19a7a56d
+
+ ❯ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts (15 tests | 1 failed) 4158ms
+     × R1 — el arbol REAL de este repo tiene todas sus dependencias declaradas 237ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts > guardia 420 — el verificador de dependencias > R1 — el arbol REAL de este repo tiene todas sus dependencias declaradas
+AssertionError: expected 'faltan 58 de las 58 dependencias decl…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ faltan 58 de las 58 dependencias declaradas en package.json:
++     - @base-ui/react
++     - @daypicker/react
++     - @googlemaps/routeoptimization
++     - @prisma/adapter-pg
++     - @prisma/client
++     - @supabase/ssr
++     - @supabase/supabase-js
++     - @vercel/oidc
++     - bcryptjs
++     - bwip-js
++     - class-variance-authority
++     - clsx
++     - embla-carousel-react
++     - exceljs
++     - google-auth-library
++     - html5-qrcode
++     - jsbarcode
++     - jspdf
++     - leaflet
++     - lucide-react
++     - next
++     - nodemailer
++     - qrcode
++     - qrcode.react
++     - react
++     - react-barcode
++     - react-countup
++     - react-dom
++     - react-leaflet
++     - recharts
++     - shadcn
++     - swr
++     - tailwind-merge
++     - tw-animate-css
++     - web-push
++     - yet-another-react-lightbox
++     - zod
++     - @playwright/test
++     - @tailwindcss/postcss
++     - @testing-library/jest-dom
++     - @testing-library/react
++     - @testing-library/user-event
++     - @types/leaflet
++     - @types/node
++     - @types/nodemailer
++     - @types/qrcode
++     - @types/react
++     - @types/react-dom
++     - @types/web-push
++     - eslint
++     - eslint-config-next
++     - jsdom
++     - prisma
++     - sharp
++     - tailwindcss
++     - tsx
++     - typescript
++     - vitest
++   Reparalo con: pnpm install --frozen-lockfile
++   (medido el 2026-09-11: ~1,7 s sobre un arbol ya instalado)
++
+
+ ❯ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts:223:19
+    221|     const { codigo, salida, error } = correrVerificador(REPO_ROOT);
+    222|
+    223|     expect(error).toBe("");
+       |                   ^
+    224|     expect(codigo).toBe(0);
+    225|     expect(salida).toMatch(/^\d+ declaradas, todas presentes/);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 271 passed | 2 skipped (274)
+      Tests  1 failed | 3744 passed | 19 skipped (3764)
+   Start at  21:35:45
+   Duration  92.96s (transform 96.79s, setup 21.96s, import 312.86s, tests 133.86s, environment 53.98s)
+
+GUARD_EXIT=1

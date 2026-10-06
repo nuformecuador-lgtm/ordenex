@@ -158,3 +158,102 @@ Procedimiento: verde sin mutar → `sed` → `grep`/`git diff --stat` confirma e
 
 Backend F1–F5 hecho y commiteado; unit verdes con 4 mutaciones medidas (+1 extra); integración escrita y saltada por
 falta de base: M1–M10 y M13-int quedan para el leader.
+
+---
+
+# FRONTEND (F6) — panel `ParamsTransito` (R34–R37 y el pintado de R38)
+
+- Rama `fe-475` (empujada como `fe/475`), nacida de `origin/feature/475-informe-transito-whatsapp` + merge de
+  `origin/dev`; `git merge-base --is-ancestor c28429f6 HEAD` → OK.
+- Grafo `codebase-memory`: no usado; el contrato se leyó de esta bitácora y de los archivos (`parametros.ts`,
+  `tipos.ts`, `lib/actions/informe-transito.ts`, `ParametrosInforme.tsx`).
+- Herramientas con los binarios del checkout principal (el worktree no tiene `node_modules` propio).
+
+## Archivos
+
+Nuevos
+- `app/(app)/configuracion/envios-whatsapp/_components/ParamsTransito.tsx` — el panel.
+- `app/(app)/configuracion/envios-whatsapp/_components/transito-textos.ts` — textos y mensajes propios por campo
+  (puro, sin React).
+- `tests/components/ParamsTransito.test.tsx` — 21 tests (action doblada).
+
+Modificados
+- `app/(app)/configuracion/envios-whatsapp/_components/ParametrosInforme.tsx` — rama `tipo: "panel"` → `PanelDeInforme`
+  (`transito` → `ParamsTransito`) con TODOS los valores y solo los errores `parametros.<campo>[.…]` de sus `campos`;
+  con panel, no se repite el título genérico encima.
+- `lib/actions/informe-transito.ts` — quitado el `@sin-superficie` (la importa el panel).
+- `tests/unit/guards/estado-con-info.guardia.test.ts` — excepción `control-con-hermano` para `ParamsTransito.tsx`:
+  el nombre del estado es la etiqueta de su casilla y lleva `InfoEstado` como hermano (guardia 456).
+
+## Cómo funciona
+
+- Al montar llama UNA vez a `previsualizarInformeTransito(valores)` (zonas reales + primer conteo). Si faltan
+  entradas de zona, rellena `zonas` con una por cada zona mostrada (`plazoEfectivo`, partida de su tipo) y el conteo
+  recibido se ata a los valores ya rellenos (no se vuelve a preguntar).
+- Validación viva en el cliente con `parametrosTransitoSchema`: con valores inválidos, errores por campo y NINGÚN
+  conteo, y no se llama al servidor. Con válidos, a los 400 ms sin cambios, nueva llamada; cada respuesta se ata a la
+  clave de los valores con que se pidió (una respuesta tardía de valores viejos no se pinta).
+- Errores: mensajes PROPIOS por campo en español claro (`mensajeDeCampo`, p. ej. «Pon un número entero de días entre
+  0 y 9: el aviso tiene que ser menor que el plazo.»), junto al campo, con `aria-invalid` y `aria-describedby`. Los
+  del servidor al guardar se muestran hasta que se toca el panel. Una ruta desconocida usa el mensaje del servidor sin
+  su prefijo de clave. No se toca ningún traductor global de zod.
+- Fallo de la vista previa (promesa rechazada) → «No se pudo calcular…» sin conteo; fallo de la carga de zonas →
+  aviso + «Reintentar». `forbidden`/`unauthenticated` → «Solo un maestro puede ver…».
+
+## Mapa R → test (components `ParamsTransito`)
+
+| R | Test |
+| --- | --- |
+| R34 | «pinta TODAS las zonas reales…» (10/2 → día 8, 20/5 → día 15), «recalcula el día N», «tres opciones de hito», «los 18 estados ofrecidos… cierre logístico», «no usa la sigla SLA» |
+| R35 | «sin entradas, rellena cada zona con la partida de su tipo», «una zona con plazo propio lo conserva» (30/7 → día 23), «al editar una zona se manda una entrada por CADA zona» |
+| R36 | «restablece hito, plazos de todas las zonas, estados incluidos y umbrales» (valores enviados Y pantalla) |
+| R37 | «los no incluidos de partida dicen «no entra» y su número está deshabilitado», «desmarcar un estado…» |
+| R38 (pintado) | «hoy entrarían N paquetes (M parados)» + sin hito, singular, «vuelve a preguntar con los parámetros nuevos», «aviso >= plazo: error junto al campo… sin conteo y sin preguntar», «ningún estado incluido», «umbral fuera de rango», «error del servidor al guardar junto a su campo», «si la vista previa falla», «si no se pueden cargar las zonas» |
+| design §8.1 | «pinta ParamsTransito… y le pasa SOLO los errores de sus campos» (vía `ParametrosInforme`) |
+
+Valores esperados LITERALES (la partida está escrita a mano en el test, no importada de `PARAMETROS_POR_DEFECTO`).
+
+## Mutaciones (medidas; commit → `sed` → `git diff --stat` → test → `git checkout --` → árbol limpio)
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| F1 | `entradaDe`: toda zona sin entrada recibe 10/2 (la «partida de la GAM» del texto viejo de la maqueta) | MEDIDA: muerta (5 rojos: R34, R35×3, R38) |
+| F2 | número del umbral siempre habilitado (`disabled={false}`) | MEDIDA: muerta (2 rojos, R37) |
+| F3 | sin la puerta de validación local (pregunta y pinta conteo con valores inválidos) | MEDIDA: muerta (2 rojos, R38) |
+
+Medidas antes de añadir `InfoEstado` (cambio que no toca esas líneas); tras él, los 21 verdes de nuevo.
+
+## Verificación (salida real)
+
+- `tsc --noEmit -p tsconfig.json` → `TSC_EXIT=0`.
+- `eslint` sobre los 6 archivos tocados → `LINT_EXIT=0`, sin avisos.
+- `vitest related --run` sobre los archivos tocados → `Test Files 5 passed (5)` · `Tests 74 passed (74)`
+  (`progress/related_475_frontend.log`).
+- Guardias (`vitest run guard`) → `271 passed | 1 failed | 2 skipped`; el único rojo es
+  `dependencias-declaradas-presentes` («faltan 58 de las 58»), AMBIENTAL (sin `node_modules` en el worktree), igual
+  que en el backend (`progress/guardias_475_frontend.log`).
+- T6.3 (ver la app contra la maqueta, «Probar ahora», PDF del historial): **NO HECHO** — sin base ni dev server en
+  este worktree; queda para el leader. T6.4 (`./init.sh --rapido`) tampoco: por instrucción, solo related + tsc + lint.
+
+## Diferencias con la maqueta
+
+1. Texto de las zonas: «Una zona nueva aparece aquí con los valores de partida de su tipo (10 y 2 días en la GAM,
+   20 y 5 fuera de ella)» en vez de «con los valores de la GAM» (pregunta abierta 1 / design §8.2).
+2. 18 estados, no 14: añade `devolucion_a_origen_por_rechazo`, `devolviendo_a_bodega_central`,
+   `por_devolver_a_tienda`, `devolviendo_a_tienda` (pregunta abierta 2). Nombres del catálogo (`nombreDeEstado`).
+3. Cada estado lleva el botón de información (ⓘ) de la 456 junto a su nombre (guardia `estado-con-info`).
+4. Un estado no incluido muestra su número DESHABILITADO y «no entra» a su lado (la maqueta solo pinta «no entra»):
+   T6.2 pide «número deshabilitado».
+5. Bajo el conteo, si hay paquetes sin el momento de inicio: «K paquetes en esos estados aún no han pasado por ese
+   momento: no entran.» (R38; la maqueta no lo pinta).
+6. Zonas como lista en rejilla, no `<table>`: en ≥ 640 px se ve como la tabla (cabecera de 4 columnas); a 390 px
+   cada zona es un bloque (nombre arriba; plazo y aviso lado a lado con su etiqueta; «Entra en alerta el día N»
+   debajo). Cada número tiene `<Label>` propio con la zona («Plazo máximo de GAM»). No verificado en navegador.
+7. Con panel, el título genérico «Parámetros del informe «Informe de tránsito»» de la 474 no se pinta: el panel trae
+   el de la maqueta. «Enviar aunque no haya nada que informar» lo sigue pintando el renderizador genérico, debajo.
+8. Botón «Plegar» funcional (alterna con «Desplegar», `aria-expanded`).
+
+## Veredicto (frontend)
+
+F6 implementado: R34–R37 y el pintado de R38 con 21 tests de componente y 3 mutaciones medidas; falta T6.3 (ver la
+app) y el gate `--rapido`, que corre el leader.

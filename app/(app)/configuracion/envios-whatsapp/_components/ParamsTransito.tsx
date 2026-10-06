@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
+import { InfoEstado } from "@/components/shared/EstadoInfo";
 import { FieldError } from "@/components/shared/FieldError";
 import { previsualizarInformeTransito } from "@/lib/actions/informe-transito";
 import { nombreDeEstado } from "@/lib/types/order-status";
@@ -362,6 +363,8 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, errores, retardoM
             />
             <span className="min-w-0">{nombre}</span>
           </label>
+          {/* Guardia 456: el nombre de un estado va con su botón de información, como hermano. */}
+          <InfoEstado codigo={estado} />
           <div className="flex shrink-0 items-center gap-2 text-sm">
             <Label htmlFor={nid} className="sr-only">
               {T.colParado} (días), {nombre}

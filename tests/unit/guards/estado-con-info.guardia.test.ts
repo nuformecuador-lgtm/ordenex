@@ -220,6 +220,7 @@ export const USOS_PERMITIDOS: Readonly<Record<string, UsoPermitido>> = {
   "app/(app)/analitica/_components/entregas/CohorteCargaTabla.tsx": { clase: R, motivo: "encabezados de columnas numéricas de la tabla de cohortes" },
   "app/(app)/ranking/historico/_components/ranking-historico-labels.ts": { clase: R, motivo: "encabezado de columna numérica del histórico del ranking" },
   // ── Control con hermano ──
+  "app/(app)/configuracion/envios-whatsapp/_components/ParamsTransito.tsx": { clase: H, motivo: "475: nombre de cada estado como etiqueta de su casilla (dentro del `<label>`) y en el nombre accesible de su umbral de «parado»; `InfoEstado` va como hermano de la etiqueta" },
   "app/(app)/ordenes/_components/filtro-estado-def.ts": { clase: H, motivo: "etiqueta de cada opción del filtro de estado (dentro del `<button role=option>`); el botón lo pinta `MultiSelectFilter` por `codigoEstado`" },
   "app/(app)/ordenes/_components/EstatusBadge.tsx": { clase: H, motivo: "reexporta `ORDER_STATUS_LABELS` (455); el chip se pinta con `EstadoConInfo`" },
   "app/(app)/mis-asignaciones/_components/chat/chat-format.ts": { clase: H, motivo: "texto del chip de la fila del chat, DENTRO del `<button>` de la fila (su nombre accesible)", hermanoEn: ["app/(app)/mis-asignaciones/_components/chat/ChatOrdenesLista.tsx"] },
