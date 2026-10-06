@@ -69,6 +69,21 @@ describe("lista de envíos", () => {
     expect(screen.getByRole("link", { name: "Plantillas" })).toHaveAttribute("href", "/configuracion/plantillas");
   });
 
+  it("botón de crear: con envíos hay UNO solo («+ Nuevo envío»); vacía, solo «+ Crear el primero»", () => {
+    const enlacesCrear = () =>
+      screen.queryAllByRole("link").filter((l) => l.getAttribute("href") === "/configuracion/envios-whatsapp/nuevo");
+
+    montar([envio(), envio({ id: "e2", nombre: "Otro" })]);
+    expect(enlacesCrear()).toHaveLength(1);
+    expect(enlacesCrear()[0]).toHaveTextContent("+ Nuevo envío");
+    cleanup();
+
+    montar([]);
+    expect(enlacesCrear()).toHaveLength(1);
+    expect(enlacesCrear()[0]).toHaveTextContent("+ Crear el primero");
+    expect(screen.queryByRole("link", { name: "+ Nuevo envío" })).toBeNull();
+  });
+
   it("pinta nombre, plantilla, informe, «Cuándo» (hora fija y evento por su nombre) y el último envío", () => {
     montar([
       envio({ ultimaEjecucion: { instante: new Date("2026-10-03T11:00:00Z"), estado: "vacia" } }),

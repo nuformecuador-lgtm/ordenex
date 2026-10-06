@@ -1,10 +1,6 @@
-import Link from "next/link";
-
 import { AppPage } from "@/components/shared/AppPage";
-import { buttonVariants } from "@/components/ui/button";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarEnvios } from "@/lib/actions/envios-whatsapp";
-import { cn } from "@/lib/utils";
 
 import { EnviosModule } from "./_components/EnviosModule";
 
@@ -15,6 +11,10 @@ const SIN_PERMISO_ENVIOS = "No tienes permiso para acceder a esta sección.";
  * Ficha 474 (T10.3, R1) — `/configuracion/envios-whatsapp`: la lista de envíos automáticos por
  * WhatsApp. Server Component: el rol se resuelve SOLO en el servidor, como Plantillas (D1). Otro rol
  * o sin sesión → el aviso de «sin permiso» en lugar del módulo, y no se lee nada de envíos.
+ *
+ * Sin `actions` en el header: ahí el botón quedaba en la barra superior global, junto a fecha/tema/
+ * Salir. «+ Nuevo envío» vive en la barra del propio módulo, como el botón de crear del resto de
+ * Configuración, y con la lista vacía no aparece (allí manda «+ Crear el primero»).
  */
 export default async function EnviosWhatsappPage() {
   const actor = await resolveActorFromSession();
@@ -32,13 +32,7 @@ export default async function EnviosWhatsappPage() {
   return (
     <AppPage
       title={TITULO_ENVIOS}
-      description="Mensajes de WhatsApp que Ordenex manda solo, a una hora fija o cuando pasa algo"
-      actions={
-        <Link href="/configuracion/envios-whatsapp/nuevo" className={cn(buttonVariants())}>
-          + Nuevo envío
-        </Link>
-      }
-    >
+      description="Mensajes de WhatsApp que Ordenex manda solo, a una hora fija o cuando pasa algo"    >
       <EnviosModule initialItems={r.status === "ok" ? r.items : []} />
     </AppPage>
   );
