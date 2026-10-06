@@ -30,6 +30,8 @@ export interface RadioGroupProps {
   "aria-label"?: string;
   /** Marca el grupo como inválido (mismo contrato que los campos del panel). */
   "aria-invalid"?: boolean;
+  /** Ids (separados por espacio) de los textos que describen el grupo: su error y su ayuda. */
+  "aria-describedby"?: string;
   /** Clases extra para el contenedor del grupo. */
   className?: string;
 }
@@ -62,6 +64,7 @@ export function RadioGroup({
       disabled={disabled}
       aria-label={rest["aria-label"]}
       aria-invalid={rest["aria-invalid"] ? true : undefined}
+      aria-describedby={rest["aria-describedby"] || undefined}
       className={cn("flex flex-col gap-2", className)}
     >
       {options.map((option) => (

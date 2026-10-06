@@ -17,6 +17,7 @@ export const TEXTOS_PICKING = {
   errorTiendas: "No se pudieron cargar las tiendas. Inténtalo de nuevo en un momento.",
   reintentar: "Reintentar",
   sinPermiso: "Solo un maestro puede ver las tiendas del picking.",
+  sesionExpirada: "Tu sesión expiró. Vuelve a iniciar sesión.",
   calculando: "calculando…",
   tiendaYaNoEsta:
     "La tienda guardada ya no tiene fulfillment o no está activa: el envío fallará hasta que elijas otra.",

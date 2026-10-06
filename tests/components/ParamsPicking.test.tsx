@@ -178,6 +178,19 @@ describe("R3 — estados de la lista", () => {
     expect(listar).toHaveBeenCalledTimes(1);
   });
 
+  it("m3 (revisión 476) — sesión caducada: lo dice (no «solo un maestro») y «Reintentar» vuelve a pedir", async () => {
+    const user = userEvent.setup();
+    listar.mockResolvedValueOnce({ status: "unauthenticated" });
+    render(<Harness inicial={{ tiendaId: "", diasAtraso: 2 }} />);
+    expect(await screen.findByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeTruthy();
+    expect(screen.queryByText("Solo un maestro puede ver las tiendas del picking.")).toBeNull();
+    expect(listar).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("radio", { name: /Gameos/ })).toBeTruthy();
+    expect(listar).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeNull();
+  });
+
   it("si la carga falla, avisa y «Reintentar» vuelve a pedir", async () => {
     const user = userEvent.setup();
     listar.mockRejectedValueOnce(new Error("red"));
@@ -219,6 +232,28 @@ describe("R2 de pantalla — errores junto a su campo", () => {
     expect(screen.getByRole("radiogroup").getAttribute("aria-invalid")).toBe("true");
     await user.click(screen.getByRole("radio", { name: /Sicommer/ }));
     expect(screen.queryByText("Elige la tienda del picking.")).toBeNull();
+  });
+
+  it("m4 (revisión 476) — el error de la tienda forma parte de la descripción accesible del selector", async () => {
+    await montar({ tiendaId: "", diasAtraso: 2 }, { "parametros.tiendaId": ["Elige la tienda del picking."] });
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(expect.stringContaining("Elige la tienda del picking."));
+  });
+
+  it("m4 (revisión 476) — una tienda guardada que ya no está también describe el selector", async () => {
+    await montar({ tiendaId: "t-borrada", diasAtraso: 2 });
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+      expect.stringContaining("La tienda guardada ya no tiene fulfillment o no está activa"),
+    );
+  });
+
+  it("m4 (revisión 476) — el error del número de días forma parte de su descripción accesible", async () => {
+    const user = userEvent.setup();
+    await montar();
+    const n = screen.getByLabelText("Marcar las órdenes atrasadas");
+    await user.clear(n);
+    await user.type(n, "31");
+    await screen.findByText("Escribe un número entero de días entre 1 y 30.");
+    expect(n).toHaveAccessibleDescription(expect.stringContaining("Escribe un número entero de días entre 1 y 30."));
   });
 
   it("el error de «Guardar» en diasAtraso sale junto al número en español claro", async () => {

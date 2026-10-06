@@ -342,3 +342,9 @@ Veredicto frontend: panel del picking montado, 15 tests y 2 mutaciones rojas; fa
 - m2: el sello del pie del PDF de picking se recorta con «…» (`recortarAlAncho`) al hueco que deja «Página X de Y», que sale siempre entero; la medida real de jsPDF se expone como `medidorDe(doc)`. Test «m2: una tienda de 200 caracteres…» en `picking-pdf.test.ts` (anchos con jsPDF y la fuente embebida); mutación «`texto: sello` sin recortar» muerta (1 rojo). El pie de tránsito no lleva datos (texto fijo + fecha, ~60 mm de 186): sin riesgo, sin cambio.
 - Gate de los menores: `tsc --noEmit` exit 0; `eslint` de los 7 archivos exit 0; `vitest related --run` → `Test Files 204 passed | 6 skipped (210)`, `Tests 2685 passed | 16 skipped` (los saltados: integración sin `DATABASE_URL` en el worktree).
 - m1 (de la 475): ver `progress/impl_475.md`; `detalleDeCausa` pasa a `lib/whatsapp-envios/informes/causa.ts` (picking lo reexporta).
+## Arreglos menores de la revisión (`fix/476-ui`)
+
+- m3: `unauthenticated` ya no cae en «Solo un maestro…»: picking y tránsito (475, mismo defecto; además pintaba «sin zonas») dicen «Tu sesión expiró. Vuelve a iniciar sesión.» con «Reintentar» que vuelve a pedir; `forbidden` sigue igual.
+- m4: `RadioGroup` acepta `aria-describedby`; el selector de tienda se describe con su error, el aviso de tienda fuera y la ayuda; el número de días con error + ayuda; el hito de la 475, igual.
+- m5: la ficha atrasada del PDF dice «· 3 d» (antes «· 3d»).
+- Mutaciones (todas rojas, restauradas): m3 quitar la rama `unauthenticated` → 2 tests rojos; m4 no pasar `aria-describedby` en `RadioGroup` → 3 rojos; m4 días solo con la ayuda → 1 rojo. Gate: tsc 0, eslint 0, `vitest related` 321 archivos verdes | 6 saltados (sin `.env`).

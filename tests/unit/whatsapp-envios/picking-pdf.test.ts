@@ -88,7 +88,7 @@ describe("476/R19 — atrasadas", () => {
     const ops = todas(m.paginas);
     expect(deRol(ops, "atrasadas-titulo").join(" ")).toBe("2 órdenes llevan más de 2 días en preparación, prepáralas primero:");
     expect(deRol(ops, "atrasadas-lista").join(" ")).toBe("NA-3 (7 días) · NA-2 (5 días)");
-    expect(deRol(ops, "ficha-atrasada").sort()).toEqual(["NA-2 ×2 · 5d", "NA-3 · 7d"]);
+    expect(deRol(ops, "ficha-atrasada").sort()).toEqual(["NA-2 ×2 · 5 d", "NA-3 · 7 d"]);
     expect(deRol(ops, "ficha")).toEqual(["NA-1"]);
     const rectAtrasada = ops.find((o) => o.tipo === "rect" && o.rol === "ficha-atrasada");
     const rectNormal = ops.find((o) => o.tipo === "rect" && o.rol === "ficha");
