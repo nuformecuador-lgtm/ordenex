@@ -396,3 +396,9 @@ nueva del rápido ampliado, y no se mergeó `dev` en la rama):
 **Pendiente para cerrar:** repetir `./init.sh --rapido` con `DATABASE_URL` de `ordenex_474` exportada
 (lo único que cambia frente a la corrida del backend son pantallas; ningún archivo de
 `tests/integration/db` ni de `lib/repositories` se tocó).
+
+## Arreglos menores de la revisión (rama `fix/474-m12`, 2026-10-05)
+
+- **m2** (`HistorialEnvios.tsx`): la pestaña del PDF se abre EN el clic, antes del `await` (patrón de `VerComprobanteMiMovimiento`), y recibe la URL al resolver; si el navegador no la deja abrir, se dice y queda el enlace «Abrir el PDF» a un clic; si el servidor falla o caducó, se cierra y avisa. Mutación (mover `window.open` tras el `await`) → muere 1 test.
+- **m1** (`EnvioForm.tsx`): en un envío ENCENDIDO con cambios sin guardar, «Probar ahora» queda deshabilitado con «Guarda los cambios antes de probar…» (`aria-describedby`) y no guarda; apagado, igual que antes. Lo guardado pasa de ref a estado porque ahora decide el render (`react-hooks/refs`). Mutación (`probarPideGuardar = false && …`) → muere 1 test.
+- Gate: `vitest related --run` sobre los 4 archivos → 3 archivos / 34 tests verdes; eslint de los 4 limpio; `tsc --noEmit` sin errores.
