@@ -137,7 +137,10 @@ describe("R1 — solo el maestro entra en Envíos automáticos", () => {
     render(await p.lista());
     expect(screen.getByTestId("envios-module")).toBeInTheDocument();
     expect(moduloProps[0]).toEqual({ initialItems: [ENVIO] });
-    expect(screen.getByRole("link", { name: "+ Nuevo envío" })).toHaveAttribute("href", "/configuracion/envios-whatsapp/nuevo");
+    // Arreglo visual: la página NO pasa `actions` al header (el botón quedaba flotando en la barra
+    // global). Con el módulo sustituido por un stub, cualquier botón de crear vendría del header.
+    expect(screen.queryByRole("link", { name: "+ Nuevo envío" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /nuevo|crear/i })).toBeNull();
   });
 
   it("el formulario de alta recibe solo plantillas DE INFORME aprobadas (R12)", async () => {
