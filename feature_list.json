@@ -5652,12 +5652,12 @@
       "zone": "fullstack",
       "sdd": true,
       "branch": null,
-      "status": "pending",
+      "status": "spec_ready",
       "complexity": "media",
       "depends_on": [
         474
       ],
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Parametros: plazo y aviso por zona (zona_id, no texto), hito de inicio, estados incluidos, umbral de parado por estado, enviar si vacio. Valores de partida GAM 8/10, FGAM 15/20."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Parametros: plazo y aviso por zona (zona_id, no texto), hito de inicio, estados incluidos, umbral de parado por estado, enviar si vacio. Valores de partida GAM 8/10, FGAM 15/20. || SPEC escrito (40 R), sin migracion; pendiente aprobacion: zona nueva 20/5, 4 estados de devolucion incluidos, incidente con umbral 1 dia."
     },
     {
       "id": 476,
