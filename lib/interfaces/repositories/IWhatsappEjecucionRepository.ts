@@ -65,8 +65,11 @@ export interface NuevaEntrega {
   usuarioId: string;
   destinatarioNombre: string;
   telefono: string;
-  /** `pendiente`, o `telefono_invalido` (R29) con su motivo. */
-  estado: "pendiente" | "telefono_invalido";
+  /**
+   * `pendiente`, o `telefono_invalido` (R29) con su motivo, o `rechazo_permanente` si se excluye
+   * antes de enviar (R16: informe no apto para `adminTienda`). Solo `pendiente` se envia.
+   */
+  estado: "pendiente" | "telefono_invalido" | "rechazo_permanente";
   motivo: string | null;
 }
 

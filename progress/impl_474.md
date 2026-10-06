@@ -396,3 +396,7 @@ nueva del rápido ampliado, y no se mergeó `dev` en la rama):
 **Pendiente para cerrar:** repetir `./init.sh --rapido` con `DATABASE_URL` de `ordenex_474` exportada
 (lo único que cambia frente a la corrida del backend son pantallas; ningún archivo de
 `tests/integration/db` ni de `lib/repositories` se tocó).
+
+## Arreglo m4 de la review (rama fix/474-m4)
+
+- **m4 (R16 al ejecutar):** `EjecucionEnvioService.ejecutar` excluye a los `adminTienda` resueltos si el informe no es `aptoParaAdminTienda`; cada excluido queda como entrega `rechazo_permanente` con `MOTIVOS.adminTienda`, y si no queda nadie la ejecución termina `sin_destinatarios` con `MOTIVOS.todosAdminTienda`. Tests: unit `ejecucion-envio-service` (3 casos; mutación «filtro anulado» → 2 rojos) e int `whatsapp-envio-ejecucion-admintienda` (usuario que pasa a `adminTienda` tras guardar; requiere `DATABASE_URL`, no corrida aquí).

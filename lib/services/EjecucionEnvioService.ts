@@ -62,6 +62,8 @@ export const MOTIVOS = {
   sinPdf: "El informe no generó el PDF.",
   sinNombre: "El destinatario no tiene nombre.",
   telefonoInvalido: "Teléfono inválido: no se intentó enviar.",
+  adminTienda: "No se envió: este informe no es apto para Admin Tienda y el destinatario tiene ese rol.",
+  todosAdminTienda: "Todos los destinatarios son Admin Tienda y este informe no es apto para ellos: no se envió nada.",
   desconocido: "Resultado desconocido: Meta respondió algo inesperado. No se reenvía para no duplicar.",
   noConfigurado: (pieza: string) => `WhatsApp no está configurado (falta ${pieza}).`,
   faltaVariable: (clave: string) => `Falta el valor de la variable «${clave}».`,
@@ -134,13 +136,34 @@ export class EjecucionEnvioService implements IEjecucionEnvioService {
     if (!params.success) return this.terminar(e.id, "error", MOTIVOS.parametros);
 
     // R28/R30/R39: destinatarios resueltos AHORA; prueba -> solo quien pulsa.
-    const destinatarios =
-      e.origen === "prueba"
-        ? opts.destinatarioPrueba !== undefined
-          ? [opts.destinatarioPrueba]
-          : []
-        : await this.deps.envios.resolverDestinatarios(envio.id, ROLES_PERMITIDOS);
+    const resueltos =
+      e.origen === "prueba" ? null : await this.deps.envios.resolverDestinatarios(envio.id, ROLES_PERMITIDOS);
+    let destinatarios: DestinatarioPrueba[] =
+      resueltos ?? (opts.destinatarioPrueba !== undefined ? [opts.destinatarioPrueba] : []);
     if (destinatarios.length === 0) return this.terminar(e.id, "sin_destinatarios", null);
+
+    // R16 (enmienda, m4 de la review): la regla «no apto para adminTienda» se valida al guardar y
+    // al encender, pero un usuario elegido puede pasar DESPUES a `adminTienda`. Se vuelve a aplicar
+    // AQUI, con el rol resuelto ahora: el excluido no recibe nada y queda VISIBLE en el historial
+    // de esta ejecucion (una entrega `rechazo_permanente` con su motivo), nunca en silencio. La
+    // prueba (R39) va solo a quien pulsa, que es maestro: no aplica.
+    if (resueltos !== null && !informe.aptoParaAdminTienda) {
+      const excluidos = resueltos.filter((d) => d.rol === "adminTienda");
+      if (excluidos.length > 0) {
+        await this.deps.ejecuciones.insertarEntregas(
+          e.id,
+          excluidos.map((d) => ({
+            usuarioId: d.usuarioId,
+            destinatarioNombre: d.nombre,
+            telefono: normalizarTelefonoWa(d.telefono),
+            estado: "rechazo_permanente" as const,
+            motivo: MOTIVOS.adminTienda,
+          })),
+        );
+        destinatarios = resueltos.filter((d) => d.rol !== "adminTienda");
+        if (destinatarios.length === 0) return this.terminar(e.id, "sin_destinatarios", MOTIVOS.todosAdminTienda);
+      }
+    }
 
     // R31/R32/R33/R35: el contenido se fija UNA vez; un reintento lo reutiliza.
     let fila: EjecucionFila = e;

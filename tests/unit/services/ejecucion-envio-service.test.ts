@@ -105,6 +105,58 @@ describe("474/R29 — telefono invalido", () => {
   });
 });
 
+describe("474/R16 enmienda (m4) — adminTienda excluido AL EJECUTAR si el informe no es apto", () => {
+  const noApto = { ...informePruebaEnvio, aptoParaAdminTienda: false } as unknown as InformeWhatsapp<unknown>;
+
+  it("el adminTienda no recibe nada y queda VISIBLE como rechazo con motivo; el resto se envia", async () => {
+    const { s, ej, mt } = montar({
+      informe: noApto,
+      destinatarios: [
+        destinatario({ usuarioId: "u1", nombre: "Ana", telefono: "88881111", rol: "admin" }),
+        destinatario({ usuarioId: "u2", nombre: "Tienda", telefono: "88882222", rol: "adminTienda" }),
+      ],
+    });
+    const r = await s.ejecutar("ej-1");
+    expect(r.estado).toBe("completada");
+    expect(ej.entregas().map((e) => [e.usuarioId, e.estado, e.motivo])).toEqual([
+      ["u2", "rechazo_permanente", MOTIVOS.adminTienda],
+      ["u1", "aceptada", null],
+    ]);
+    expect(mt.enviarPlantilla).toHaveBeenCalledTimes(1);
+    expect(mt.enviarPlantilla.mock.calls[0][0]).toBe("50688881111");
+  });
+
+  it("si TODOS son adminTienda: sin_destinatarios con motivo, una entrada por excluido, sin generar ni enviar", async () => {
+    const generar = vi.fn();
+    const informe = { ...informePruebaEnvio, aptoParaAdminTienda: false, generar } as unknown as InformeWhatsapp<unknown>;
+    const { s, ej, mt } = montar({
+      informe,
+      destinatarios: [
+        destinatario({ usuarioId: "t1", nombre: "T1", rol: "adminTienda" }),
+        destinatario({ usuarioId: "t2", nombre: "T2", rol: "adminTienda" }),
+      ],
+    });
+    const r = await s.ejecutar("ej-1");
+    expect(r).toMatchObject({ estado: "sin_destinatarios", motivo: MOTIVOS.todosAdminTienda });
+    expect(ej.fila().motivo).toBe(MOTIVOS.todosAdminTienda);
+    expect(ej.entregas().map((e) => [e.usuarioId, e.estado])).toEqual([
+      ["t1", "rechazo_permanente"],
+      ["t2", "rechazo_permanente"],
+    ]);
+    expect(generar).not.toHaveBeenCalled();
+    expect(mt.enviarPlantilla).not.toHaveBeenCalled();
+  });
+
+  it("informe APTO: el adminTienda SI recibe (la regla no sobre-filtra)", async () => {
+    const { s, ej, mt } = montar({
+      destinatarios: [destinatario({ usuarioId: "u2", nombre: "Tienda", telefono: "88882222", rol: "adminTienda" })],
+    });
+    await s.ejecutar("ej-1");
+    expect(ej.entregas().map((e) => [e.usuarioId, e.estado])).toEqual([["u2", "aceptada"]]);
+    expect(mt.enviarPlantilla).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("474/R31 — vacio", () => {
   it("el informe responde vacio -> vacia con su motivo y no se envia nada", async () => {
     const { s, ej, mt } = montar({ envio: envio({ encendido: true, parametros: { simularVacio: true } }) });

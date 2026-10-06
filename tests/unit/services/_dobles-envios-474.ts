@@ -133,7 +133,7 @@ export function ejecucionesRepo(inicial: EjecucionFila = ejecucionFila()) {
     fijarMediaId: vi.fn(async (_id: string, mediaId: string) => {
       fila = { ...fila, mediaId };
     }),
-    insertarEntregas: vi.fn(async (_id: string, nuevas: { usuarioId: string; destinatarioNombre: string; telefono: string; estado: "pendiente" | "telefono_invalido"; motivo: string | null }[]) => {
+    insertarEntregas: vi.fn(async (_id: string, nuevas: { usuarioId: string; destinatarioNombre: string; telefono: string; estado: "pendiente" | "telefono_invalido" | "rechazo_permanente"; motivo: string | null }[]) => {
       for (const e of nuevas) {
         if ([...entregas.values()].some((x) => x.usuarioId === e.usuarioId)) continue; // ON CONFLICT
         n += 1;
