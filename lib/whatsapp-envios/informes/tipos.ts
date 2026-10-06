@@ -35,7 +35,31 @@ export type DescriptorParametro =
         | { origen: "catalogo"; catalogo: "zonas" | "estados_orden" | "tiendas" };
       ayuda?: string;
     }
-  | { campo: string; etiqueta: string; tipo: "tabla"; columnas: DescriptorParametro[]; ayuda?: string };
+  | { campo: string; etiqueta: string; tipo: "tabla"; columnas: DescriptorParametro[]; ayuda?: string }
+  | DescriptorPanel;
+
+/**
+ * Ficha 475 (design §8.1) — paneles PROPIOS de un informe. Cuando un formulario no cabe en los
+ * descriptores genericos (columnas calculadas, filas que salen de datos reales, «volver a los
+ * valores de partida»), el informe declara un panel con NOMBRE y la pantalla pinta el componente
+ * registrado para ese nombre: sin `if (clave === "...")` en la pantalla. Una ficha que añade un
+ * panel (476: picking) suma su nombre a esta union y su rama al renderizador.
+ */
+export type PanelParametros = "transito";
+
+export interface DescriptorPanel {
+  /**
+   * Identificador del descriptor. NO es una clave de los parametros: los campos que el panel
+   * edita son `campos` (los errores del servidor `parametros.<campo>` se le entregan por ellos).
+   */
+  campo: string;
+  etiqueta: string;
+  tipo: "panel";
+  panel: PanelParametros;
+  /** Claves de primer nivel de los parametros que edita el panel. */
+  campos: readonly string[];
+  ayuda?: string;
+}
 
 export type ResultadoInforme =
   | { tipo: "vacio"; motivo: string } // R31
