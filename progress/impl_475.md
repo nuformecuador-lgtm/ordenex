@@ -100,19 +100,21 @@ Procedimiento: verde sin mutar → `sed` → `grep`/`git diff --stat` confirma e
 | --- | --- | --- | --- |
 | M11 | `vencido = dias >= plazo` | unit `informe-transito-calculo` | MEDIDA: muerta (1 rojo, «10/10 por vencer…») |
 | M12 | `parado = diasEnEstado >= umbral` | unit `informe-transito-calculo` | MEDIDA: muerta (2 rojos) |
-| M13 | catálogo registra `crearInformeTransito({repo: stub vacío})` | unit `informe-transito-composicion` | MEDIDA: muerta (1 rojo). Falta la versión int (`informe-transito-catalogo-real`) → leader |
+| M13 | catálogo registra `crearInformeTransito({repo: stub vacío})` | unit `informe-transito-composicion`; int `informe-transito-catalogo-real` | MEDIDA: muerta en unit (1 rojo) y en int (1 rojo, «expected +0 to be 1» en `total_en_alerta`) |
 | M14 | `generar` envuelve la selección en `catch { return vacío }` | unit `informe-transito-informe` | MEDIDA: muerta (4 rojos) |
 | extra | quitar `devolviendo_a_bodega_central` de `ESTADOS_OFRECIDOS` | unit `informe-transito-parametros` | MEDIDA: muerta (2 rojos) |
-| M1 | quitar `o."deleted_at" IS NULL` (`candidatas`, `InformeTransitoRepository.ts`) | int `informe-transito-seleccion` | **PENDIENTE (leader, necesita base)** |
-| M2 | quitar `s."value" IN (...)` | int `informe-transito-seleccion` | **PENDIENTE** |
-| M3 | quitar `NOT IN ('entregado','devuelta_a_tienda')` | int `informe-transito-seleccion` (consulta los pide) | **PENDIENTE** |
-| M4 | un solo corte para todas las zonas (p. ej. `hito."at" < (SELECT MAX("corte") FROM "cortes")`) | int `informe-transito-zonas` | **PENDIENTE** |
-| M5 | `hito."at" <= z."corte"` | int `informe-transito-zonas` (frontera) | **PENDIENTE** |
-| M6 | `MAX` en el fragmento `entrada_bodega_central` | int `informe-transito-hitos` (reingreso) | **PENDIENTE** |
-| M7 | quitar `AND sd."value" = 'en_bodega_central'` | int `informe-transito-hitos` | **PENDIENTE** |
-| M8 | quitar `OR (h."estatus_origen_id" IS NULL AND sd."value" = 'por_recolectar_en_tienda')` | int `informe-transito-hitos` (G2) | **PENDIENTE** |
-| M9 | `ORDER BY h."created_at" ASC, h."id" ASC` en `ult` | int `informe-transito-parados` | **PENDIENTE** |
-| M10 | `contarSinHito` con un `cand` sin `s."value" IN (...)` | int `informe-transito-hitos` («R14») | **PENDIENTE** |
+| M1 | quitar `o."deleted_at" IS NULL` (`candidatas`, `InformeTransitoRepository.ts`) | int `informe-transito-seleccion` | MEDIDA: muerta (3 rojos: los 2 de `seleccion`, `borrada: 1`; y «R14» de `hitos`) |
+| M2 | quitar `s."value" IN (...)` | int `informe-transito-seleccion` | MEDIDA: muerta (3 rojos: los 2 de `seleccion`, `noIncluida: 1`; y «R14» de `hitos`) |
+| M3 | quitar `NOT IN ('entregado','devuelta_a_tienda')` | int `informe-transito-seleccion` (consulta los pide) | MEDIDA: muerta (2 rojos, los 2 de `seleccion`) |
+| M4 | un solo corte para todas las zonas (p. ej. `hito."at" < (SELECT MAX("corte") FROM "cortes")`) | int `informe-transito-zonas` | MEDIDA: muerta (1 rojo, «dos zonas con cortes distintos») |
+| M5 | `hito."at" <= z."corte"` | int `informe-transito-zonas` (frontera) | MEDIDA: muerta (1 rojo, «frontera exacta») |
+| M6 | `MAX` en el fragmento `entrada_bodega_central` | int `informe-transito-hitos` (reingreso) | MEDIDA: muerta (1 rojo, «R11», 05-04 en vez de 05-02) |
+| M7 | quitar `AND sd."value" = 'en_bodega_central'` | int `informe-transito-hitos` | MEDIDA: muerta (2 rojos, «R11» y «R14») |
+| M8 | quitar `OR (h."estatus_origen_id" IS NULL AND sd."value" = 'por_recolectar_en_tienda')` | int `informe-transito-hitos` (G2) | MEDIDA: muerta (1 rojo, «R13») |
+| M9 | `ORDER BY h."created_at" ASC, h."id" ASC` en `ult` | int `informe-transito-parados` | MEDIDA: muerta (1 rojo, «R16») |
+| M10 | `contarSinHito` con un `cand` sin `s."value" IN (...)` | int `informe-transito-hitos` («R14») | MEDIDA: muerta (1 rojo, «R14», 3 en vez de 2) |
+
+M1–M10 y M13-int medidas el 2026-10-05 en `int-475` (HEAD 1ae660b8) contra la base local: sin mutar, `Test Files 5 passed (5)` · `Tests 11 passed (11)`, 0 `skipped`, antes y después de la serie. En cada mutación: aplicada con reemplazo exacto (patrón único o aborta), `git diff --stat` confirmado ANTES y DESPUÉS de vitest (seguía aplicada al terminar), todos los rojos son `AssertionError` (ninguno de SQL/Prisma), y `git checkout --` dejó `lib/` y `tests/` sin cambios. Ninguna sobrevivió: no hizo falta endurecer tests.
 
 ## Verificación (salida real)
 
@@ -124,7 +126,7 @@ Procedimiento: verde sin mutar → `sed` → `grep`/`git diff --stat` confirma e
 - Guardias (`vitest run guard`): tras los arreglos, `censo-order-status-rename` y `superficie-de-uso` verdes;
   queda roja `dependencias-declaradas-presentes` («faltan 58 de las 58»): es AMBIENTAL (el worktree no tiene
   `node_modules` propio; se ejecuta con los binarios del checkout principal). No la causa esta ficha.
-- Integración contra Postgres: **NO EJECUTADA** (sin base en el entorno). Para el leader, con la base local
+- Integración contra Postgres: ejecutada después por el leader en `int-475` con base local: 11/11 `passed`, 0 `skipped`; mutaciones M1–M10 y M13-int muertas (tabla de arriba). Nota original: Para el leader, con la base local
   compartida (ya tiene las migraciones de la 474; esta ficha no migra):
   `pnpm exec vitest run tests/integration/db/informe-transito-seleccion.test.ts tests/integration/db/informe-transito-zonas.test.ts tests/integration/db/informe-transito-hitos.test.ts tests/integration/db/informe-transito-parados.test.ts tests/integration/db/informe-transito-catalogo-real.test.ts`
   — comprobar que los 11 tests salen `passed` y NO `skipped`; después M1–M10 y M13-int con el procedimiento de arriba.
@@ -158,3 +160,4 @@ Procedimiento: verde sin mutar → `sed` → `grep`/`git diff --stat` confirma e
 
 Backend F1–F5 hecho y commiteado; unit verdes con 4 mutaciones medidas (+1 extra); integración escrita y saltada por
 falta de base: M1–M10 y M13-int quedan para el leader.
+Actualización 2026-10-05: integración 11/11 verde contra la base local y M1–M10 + M13-int medidas, todas muertas.
