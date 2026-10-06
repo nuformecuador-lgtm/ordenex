@@ -5736,3 +5736,12 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - 3 migraciones; idempotencia en base; app id de Meta resuelto con el token (D2). R1–R53; mapa en `progress/impl_474.md`.
 - Revisión APROBADA (`progress/review_474.md`); arreglados m1, m2 (PDF en Safari) y m4 (adminTienda excluido al ejecutar). PR #848.
 - Gate con la regla nueva (`--rapido` ampliado): 785 archivos, 2 intermitentes repetidos aislados en verde. Pendiente de release: T10.4 (verlo) y T11.4 (Meta real) en `docs/release.md`.
+
+## 475 — Informe de tránsito por WhatsApp (2026-10-05)
+- Informe del catálogo de la 474: paquetes sin cierre logístico que vencen o están por vencer, por zona_id, hito desde orden_historial_estado (entrada a bodega central por defecto), estados y umbral de «parado» configurables; PDF A4 + variables; panel con vista previa. Decisiones: zona nueva 20/5, 4 devoluciones en tránsito incluidas, incidente con umbral 1.
+- R1–R40; mapa en `progress/impl_475.md`. M1–M14 + F1–F3 muertas (SQL medido contra Postgres por el leader). Revisión APROBADA; m1/m3/m4 arreglados. PR #851.
+- Pendiente de release: T7.2 (EXPLAIN en prod) y T6.3 (verlo) en `docs/release.md`.
+
+## Validaciones en español (2026-10-05)
+- Mapa de errores de zod en español claro (servidor por `instrumentation.ts`, cliente por `<ZodEnEspanol />`, tests por `tests/setup`), mensajes propios en Envíos y Plantillas. Gate completo verde (33554). PR #850.
+- `init.sh`: `tests/setup/` e `instrumentation.ts` pasan a exigir el completo.

@@ -510,6 +510,12 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
   4. **T10.4 — verlo con sesión de maestro** (en preview lo revisa Carlos el 2026-10-05).
   5. Después: el job diario de mantenimiento (`whatsapp_envio_mantenimiento`) aparece en `jobs` y
      corre; `get_runtime_errors` sin errores de `envios-whatsapp`.
+- **475** (informe de tránsito): sin migración. Al desplegar: T7.2 — `EXPLAIN` (solo lectura) de
+  `filasEnAlerta` en producción con los parámetros de partida; T6.3 — ver el panel y un PDF real
+  contra `design-whatsapp/ParamsTransito` y `PdfTransito1/2` (escritorio y 390 px), con «Probar ahora».
+  Comparar sus cifras con el PDF del sistema externo del mismo día antes de que Daniel lo apague.
+- **Mensajes de validación en español** (PR #850): `instrumentation.ts` nuevo en la raíz; tras
+  desplegar, comprobar que una action con un campo vacío responde en español (lo carga `register()`).
 
 ### Qué lleva esta release
 
