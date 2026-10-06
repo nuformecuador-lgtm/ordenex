@@ -24,6 +24,7 @@ import type {
   PreviewServiceResult,
 } from "@/lib/interfaces/services/IWhatsappEnvioService";
 import {
+  MENSAJES_ENVIO,
   ROLES_DESTINATARIO,
   type EnvioDetalleDTO,
   type EnvioListItemDTO,
@@ -50,19 +51,23 @@ import { MAX_DESTINATARIOS } from "@/lib/config/whatsapp-envios";
 const ALLOWED_ROLES = new Set<string>(["maestro"]);
 const ROLES_PERMITIDOS: readonly RolValue[] = ROLES_DESTINATARIO;
 
+// Los que también puede dar el schema (nombre, días, hora, evento vacío, sin destinatarios) salen de
+// `MENSAJES_ENVIO`: el mismo fallo dice lo mismo lo detecte zod en el borde o este service.
 export const MSG = {
-  nombreVacio: "El nombre es obligatorio",
+  nombreVacio: MENSAJES_ENVIO.nombre,
   informe: "Ese informe no existe",
   plantilla: "La plantilla no está aprobada, no está activa o es de otro informe",
-  dias: "Elige al menos un día de la semana",
-  hora: "La hora debe tener el formato HH:mm",
+  dias: MENSAJES_ENVIO.dias,
+  hora: MENSAJES_ENVIO.hora,
   soloPorEvento: "Este informe solo funciona con «Cuando pase algo»",
+  /** No se eligió ninguno. */
+  eventoVacio: MENSAJES_ENVIO.evento,
   evento: "Ese evento no está disponible para este informe",
   rolNoPermitido: "Ese rol no puede recibir envíos",
   usuarioNoPermitido: "Ese usuario no existe o su rol no puede recibir envíos",
   tope: `El envío supera ${MAX_DESTINATARIOS} destinatarios`,
   adminTienda: "Este informe no se puede enviar a un admin de tienda",
-  sinDestinatarios: "Elige al menos un destinatario",
+  sinDestinatarios: MENSAJES_ENVIO.destinatarios,
   noEncendibleSinTelefono: "Ningún destinatario activo tiene un teléfono válido",
 } as const;
 
@@ -246,7 +251,9 @@ export class WhatsappEnvioService implements IWhatsappEnvioService {
       if (informe?.soloPorEvento) agregar(e, "disparo", MSG.soloPorEvento);
     } else {
       const ev = input.eventoClave;
-      if (ev === null || !esEventoDisponible(ev) || informe === null || !informe.eventos.includes(ev)) {
+      if (ev === null) {
+        agregar(e, "eventoClave", MSG.eventoVacio);
+      } else if (!esEventoDisponible(ev) || informe === null || !informe.eventos.includes(ev)) {
         agregar(e, "eventoClave", MSG.evento);
       }
     }

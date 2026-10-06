@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Poppins, JetBrains_Mono } from "next/font/google";
 import { RESCATE_INLINE } from "@/lib/pwa/rescate-inline";
+import { ZodEnEspanol } from "@/components/shared/ZodEnEspanol";
 import "./globals.css";
 
 const sans = Poppins({
@@ -58,6 +59,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: RESCATE_INLINE }} />
       </head>
       <body className="min-h-full flex flex-col">
+        {/* Mensajes de validación de zod en español en el navegador (el servidor los carga en
+            `instrumentation.ts`). No pinta nada. */}
+        <ZodEnEspanol />
         {children}
         {/* PWA (feature 64): el service worker SOLO se registra en produccion. En
             desarrollo cachea los chunks de Next y, como sus hashes cambian en cada

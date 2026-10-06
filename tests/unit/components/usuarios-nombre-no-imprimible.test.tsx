@@ -242,9 +242,9 @@ describe("392 — el aviso del nombre de tienda que la etiqueta no puede imprimi
   }, 25000);
 
   it("⭑ un rechazo de la validación de CLIENTE conserva el genérico: su texto no es del servidor", async () => {
-    // Dejar el nombre en blanco lo rechaza el zod del navegador, sin llegar a la acción, y su
-    // mensaje está en inglés («Too small: expected string to have >=1 characters»). Reenviarlo al
-    // toast sería cambiar un mensaje pobre por uno peor, así que aquí manda el genérico.
+    // Dejar el nombre en blanco lo rechaza el zod del navegador, sin llegar a la acción. Su
+    // mensaje es el genérico de zod (hoy en español, «Este campo es obligatorio»; antes en inglés)
+    // y ya sale junto al campo: no es un motivo del servidor, así que el toast lleva el genérico.
     const user = userEvent.setup();
     renderModule(<UsuariosModule initialData={INITIAL} />);
 
@@ -254,8 +254,11 @@ describe("392 — el aviso del nombre de tienda que la etiqueta no puede imprimi
 
     await waitFor(() => expect(errorMock).toHaveBeenCalledWith(GENERICO));
     expect(actualizarUsuarioMock).not.toHaveBeenCalled();
-    // Ni una sola llamada al toast lleva el texto de zod, ni entero ni por dentro.
+    // El texto de zod va junto al campo…
+    expect(await screen.findByText("Este campo es obligatorio")).toBeInTheDocument();
+    // …y ni una sola llamada al toast lo lleva, ni entero ni por dentro (ni el inglés de antes).
     for (const [texto] of errorMock.mock.calls as [string][]) {
+      expect(texto).not.toContain("Este campo es obligatorio");
       expect(texto).not.toContain("Too small");
     }
   }, 25000);

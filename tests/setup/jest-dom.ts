@@ -122,3 +122,10 @@ if (typeof window !== "undefined") {
     URL.revokeObjectURL = () => {};
   }
 }
+
+// Mensajes de zod en español (`lib/validacion/zod-es.ts`). En la app los cargan
+// `instrumentation.ts` (servidor) y `ZodEnEspanol` en el layout raíz (cliente), y ninguno de los
+// dos corre en un test: sin esta línea la suite validaría con los textos ingleses de zod que el
+// usuario ya no ve, y un test de formulario afirmaría un mensaje que la app no pinta. Que esos dos
+// puntos de entrada de verdad lo carguen lo comprueba `tests/unit/validacion/zod-es.test.tsx`.
+await import("@/lib/validacion/zod-es");
