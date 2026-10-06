@@ -336,3 +336,9 @@ Revertidas ambas: 15/15 verdes.
   vitest, tsc y eslint corrieron con los binarios de `../../../node_modules`, que Node resuelve subiendo directorios.
 
 Veredicto frontend: panel del picking montado, 15 tests y 2 mutaciones rojas; falta la verificación visual (T5.2).
+
+## Menores de la revisión (fix/476-pdf)
+
+- m2: el sello del pie del PDF de picking se recorta con «…» (`recortarAlAncho`) al hueco que deja «Página X de Y», que sale siempre entero; la medida real de jsPDF se expone como `medidorDe(doc)`. Test «m2: una tienda de 200 caracteres…» en `picking-pdf.test.ts` (anchos con jsPDF y la fuente embebida); mutación «`texto: sello` sin recortar» muerta (1 rojo). El pie de tránsito no lleva datos (texto fijo + fecha, ~60 mm de 186): sin riesgo, sin cambio.
+- Gate de los menores: `tsc --noEmit` exit 0; `eslint` de los 7 archivos exit 0; `vitest related --run` → `Test Files 204 passed | 6 skipped (210)`, `Tests 2685 passed | 16 skipped` (los saltados: integración sin `DATABASE_URL` en el worktree).
+- m1 (de la 475): ver `progress/impl_475.md`; `detalleDeCausa` pasa a `lib/whatsapp-envios/informes/causa.ts` (picking lo reexporta).

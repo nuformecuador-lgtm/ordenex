@@ -8,6 +8,7 @@
 import type { IInformeTransitoRepository } from "@/lib/interfaces/repositories/IInformeTransitoRepository";
 import type { InformeWhatsapp, ResultadoInforme } from "@/lib/whatsapp-envios/informes/tipos";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { detalleDeCausa } from "@/lib/whatsapp-envios/informes/causa";
 import { InformeTransitoRepository } from "@/lib/repositories/InformeTransitoRepository";
 import {
   PARAMETROS_POR_DEFECTO,
@@ -30,12 +31,15 @@ export interface DepsInformeTransito {
   repo: IInformeTransitoRepository;
 }
 
-/** Envuelve un fallo de lectura con la operacion (R22) y lo propaga. */
+/**
+ * Envuelve un fallo de lectura con la operacion y el motivo saneado (R22) y lo propaga: el historial
+ * (`jobs.last_error`, solo `message`) conserva el porque sin copiar el `message` de Prisma.
+ */
 async function leer<T>(operacion: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (cause) {
-    throw new Error(`informe transito: ${operacion} falló`, { cause });
+    throw new Error(`informe transito: ${operacion} falló (${detalleDeCausa(cause)})`, { cause });
   }
 }
 
@@ -61,10 +65,14 @@ export async function seleccionarTransito(
   return { zonas, modelo: clasificar(filas, zonas, parametros, ahora, sinHito) };
 }
 
-/** Deps de produccion: el repo real sobre el cliente Prisma compartido, construido al usarse. */
+/**
+ * Deps de produccion: el repo real sobre el cliente Prisma compartido, construido EN CADA `generar`
+ * (no al importar: no abre conexion). NO se memoiza (revision 476, m1): memoizado, el repo quedaba
+ * atado al cliente de la PRIMERA llamada para siempre — lo que en el picking dio P2028 en la
+ * integracion. Construirlo es gratis: `getPrismaClient()` es el singleton.
+ */
 function depsDeProduccion(): () => DepsInformeTransito {
-  let deps: DepsInformeTransito | null = null;
-  return () => (deps ??= { repo: new InformeTransitoRepository(getPrismaClient()) });
+  return () => ({ repo: new InformeTransitoRepository(getPrismaClient()) });
 }
 
 export const MOTIVO_SIN_ALERTAS = "Ningún paquete está en alerta con estos parámetros.";

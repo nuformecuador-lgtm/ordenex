@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { jsPDF } from "jspdf";
 import {
   ROTULOS_HELVETICA,
   maquetarPicking,
+  medidorDe,
   renderizarPicking,
   type MedirTexto,
   type OpPdf,
@@ -9,7 +11,7 @@ import {
 import { construirModeloPicking } from "@/lib/whatsapp-envios/informes/picking/modelo";
 import type { FilaPicking } from "@/lib/whatsapp-envios/informes/picking/tipos";
 import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
-import { cubreTexto, seguroEnFuenteEstandar } from "@/lib/pdf/etiquetas-fuente-registro";
+import { cubreTexto, registrarFuente, seguroEnFuenteEstandar } from "@/lib/pdf/etiquetas-fuente-registro";
 
 // Ficha 476 (T2.3) — el PDF del picking sobre su MAQUETA (operaciones por pagina): R16, R17, R19-R22.
 // Mas un humo del PDF real con jsPDF: bytes `%PDF` y numero de paginas = el de la maqueta.
@@ -174,6 +176,34 @@ describe("476/R21 — paginacion", () => {
     expect(productos.slice(1).every((p) => p.includes("(continúa)"))).toBe(true);
     expect(deRol(todas(m.paginas), "ficha")).toHaveLength(400);
     expect(deRol(todas(m.paginas), "unidades")).toEqual(["400"]);
+  });
+
+  it("m2: una tienda de 200 caracteres no pisa «Página X de Y» (anchos medidos con jsPDF)", () => {
+    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    registrarFuente(doc, fuenteEtiqueta);
+    const real = medidorDe(doc);
+    const tienda = "Tienda ".padEnd(200, "Muy Larga ");
+    expect(tienda).toHaveLength(200);
+    const modelo = construirModeloPicking([fila("1 * Crema X")], { ahora: AHORA, diasAtraso: 2, tienda });
+    const m = maquetarPicking(modelo, real);
+    const Y = m.paginas.length;
+    m.paginas.forEach((ops, i) => {
+      const [pie] = textos(ops).filter((t) => t.rol === "pie");
+      const [pagina] = textos(ops).filter((t) => t.rol === "pie-pagina");
+      expect(pagina.texto).toBe(`Página ${i + 1} de ${Y}`);
+      expect(pie.texto.startsWith("Ordenex · Picking Tienda Muy Larga")).toBe(true);
+      expect(pie.texto.endsWith("…")).toBe(true);
+      // El sello acaba (x + ancho) antes de donde empieza «Página X de Y» (alineado a la derecha).
+      const finSello = pie.x + real(pie.texto, pie.tam, pie.fuente);
+      const inicioPagina = pagina.x - real(pagina.texto, pagina.tam, pagina.fuente);
+      expect(finSello).toBeLessThan(inicioPagina);
+      expect(cubreTexto(fuenteEtiqueta, pie.texto), pie.texto).toBe(true);
+    });
+  });
+
+  it("m2: un sello que cabe sale entero, sin «…»", () => {
+    const { m } = maqueta([fila("1 * Crema X")], 2, "Gameos");
+    expect(deRol(todas(m.paginas), "pie")).toEqual(["Ordenex · Picking Gameos · 5 oct 2026 06:30"]);
   });
 });
 

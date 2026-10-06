@@ -15,6 +15,7 @@ import type { IPickingRepository } from "@/lib/interfaces/repositories/IPickingR
 import type { InformeWhatsapp, ResultadoInforme } from "@/lib/whatsapp-envios/informes/tipos";
 import type { TiendaPicking, TiendaPickingDTO } from "@/lib/whatsapp-envios/informes/picking/tipos";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { detalleDeCausa } from "@/lib/whatsapp-envios/informes/causa";
 import { PickingRepository } from "@/lib/repositories/PickingRepository";
 import {
   PARAMETROS_PICKING_POR_DEFECTO,
@@ -37,17 +38,8 @@ export interface DepsInformePicking {
   pdf?: (modelo: ModeloPicking) => Uint8Array;
 }
 
-/**
- * El motivo SANEADO de un fallo de lectura: el nombre de la clase y, si lo trae, el codigo
- * (`P2028`, `40P01`…). Nunca el `message` de la causa: el de Prisma copia la invocacion con sus
- * argumentos. Sin esto, `jobs.last_error` (que guarda solo `error.message`) decia «falló» sin el
- * porque, y el `cause` se perdia en el salto por la cola.
- */
-export function detalleDeCausa(cause: unknown): string {
-  if (!(cause instanceof Error)) return "error desconocido";
-  const codigo = (cause as { code?: unknown }).code;
-  return typeof codigo === "string" && /^[A-Za-z0-9_]{1,20}$/.test(codigo) ? `${cause.name} ${codigo}` : cause.name;
-}
+/** Vive en `informes/causa.ts` (lo comparte el transito); se reexporta para no romper importaciones. */
+export { detalleDeCausa };
 
 /** Envuelve un fallo de lectura con la operacion y el motivo saneado, y lo propaga. */
 async function leer<T>(operacion: string, fn: () => Promise<T>): Promise<T> {

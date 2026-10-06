@@ -186,6 +186,21 @@ export function partirEnLineas(texto: string, ancho: number, tam: number, fuente
   return lineas;
 }
 
+/** Separacion minima (mm) entre el sello del pie y «Página X de Y». */
+const HUECO_PIE = 4;
+
+/**
+ * Recorta `texto` con «…» para que quepa en `ancho` (una sola linea). Para el PIE, donde no cabe
+ * saltar de linea: una tienda de nombre largo pisaba «Página X de Y» (revision 476, m2).
+ */
+export function recortarAlAncho(texto: string, ancho: number, tam: number, fuente: FuentePdf, medir: MedirTexto): string {
+  if (medir(texto, tam, fuente) <= ancho) return texto;
+  const elipsis = fuente !== "embebida" || cubreCodePoint(fuenteEtiqueta, 0x2026) ? "…" : "...";
+  const chars = [...texto];
+  while (chars.length > 0 && medir(`${chars.join("").trimEnd()}${elipsis}`, tam, fuente) > ancho) chars.pop();
+  return `${chars.join("").trimEnd()}${elipsis}`;
+}
+
 interface Ficha {
   lineas: string[];
   w: number;
@@ -506,12 +521,24 @@ export function maquetarPicking(modelo: ModeloPicking, medir: MedirTexto): Maque
   const total = m.paginas.length;
   const sello = `Ordenex · Picking ${tienda} · ${fechaCortaCR(modelo.ahora)} ${horaCRLegible(modelo.ahora)}`;
   m.paginas.forEach((ops, i) => {
+    const pagina = `${ROTULOS_HELVETICA.pagina} ${i + 1} de ${total}`;
+    // El sello se recorta al hueco que deja «Página X de Y», que se ve SIEMPRE entero (m2).
+    const hueco = UTIL - medir(pagina, 7, "helvetica") - HUECO_PIE;
     ops.push({ tipo: "linea", x1: MARGEN, y1: ALTO - 14, x2: ANCHO - MARGEN, y2: ALTO - 14, color: LINEA, grosor: 0.2 });
-    ops.push({ tipo: "texto", rol: "pie", texto: sello, x: MARGEN, y: ALTO - 9, tam: 7, fuente: "embebida", color: GRIS });
+    ops.push({
+      tipo: "texto",
+      rol: "pie",
+      texto: recortarAlAncho(sello, hueco, 7, "embebida", medir),
+      x: MARGEN,
+      y: ALTO - 9,
+      tam: 7,
+      fuente: "embebida",
+      color: GRIS,
+    });
     ops.push({
       tipo: "texto",
       rol: "pie-pagina",
-      texto: `${ROTULOS_HELVETICA.pagina} ${i + 1} de ${total}`,
+      texto: pagina,
       x: ANCHO - MARGEN,
       y: ALTO - 9,
       tam: 7,
@@ -530,6 +557,14 @@ function fijarFuente(doc: jsPDF, fuente: FuentePdf, tam: number): void {
   doc.setFontSize(tam);
 }
 
+/** La medida REAL de jsPDF (`getTextWidth` con la misma fuente con que se dibuja). */
+export function medidorDe(doc: jsPDF): MedirTexto {
+  return (texto, tam, fuente) => {
+    fijarFuente(doc, fuente, tam);
+    return doc.getTextWidth(texto);
+  };
+}
+
 /** R16 — el PDF A4 del picking. */
 export function pdfDePicking(modelo: ModeloPicking): Uint8Array {
   return renderizarPicking(modelo).bytes;
@@ -539,10 +574,7 @@ export function pdfDePicking(modelo: ModeloPicking): Uint8Array {
 export function renderizarPicking(modelo: ModeloPicking): { bytes: Uint8Array; paginas: number } {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
   registrarFuente(doc, fuenteEtiqueta);
-  const medir: MedirTexto = (texto, tam, fuente) => {
-    fijarFuente(doc, fuente, tam);
-    return doc.getTextWidth(texto);
-  };
+  const medir = medidorDe(doc);
   const maqueta = maquetarPicking(modelo, medir);
   maqueta.paginas.forEach((ops, i) => {
     if (i > 0) doc.addPage("a4", "portrait");
