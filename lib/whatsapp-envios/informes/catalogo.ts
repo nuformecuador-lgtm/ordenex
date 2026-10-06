@@ -7,6 +7,7 @@
 import type { InformeWhatsapp, VariableInforme } from "@/lib/whatsapp-envios/informes/tipos";
 import { informePruebaEnvio } from "@/lib/whatsapp-envios/informes/prueba-envio";
 import { crearInformeAvisoInterno } from "@/lib/whatsapp-envios/informes/aviso-interno";
+import { crearInformeTransito } from "@/lib/whatsapp-envios/informes/transito/informe";
 import { CAMPOS_PLANTILLA_OFRECIDOS } from "@/lib/types/plantilla-datos";
 
 /**
@@ -25,9 +26,15 @@ export const VARIABLES_COMUNES: readonly VariableInforme[] = [
 
 export const CLAVE_DESTINATARIO_NOMBRE = "destinatario_nombre";
 
-/** El catalogo. Una entrada por informe; la clave del mapa es la `clave` del informe. */
+/**
+ * El catalogo. Una entrada por informe; la clave del mapa es la `clave` del informe. Cada fabrica
+ * se llama SIN argumentos: son las dependencias de produccion (475: el repositorio real, comprobado
+ * por `informe-transito-catalogo-real`, lección «composition root que no inyecta»).
+ */
 export const INFORMES_WHATSAPP: ReadonlyMap<string, InformeWhatsapp<unknown>> = new Map(
-  ([informePruebaEnvio, crearInformeAvisoInterno()] as InformeWhatsapp<unknown>[]).map((i) => [
+  (
+    [informePruebaEnvio, crearInformeAvisoInterno(), crearInformeTransito()] as unknown as InformeWhatsapp<unknown>[]
+  ).map((i) => [
     i.clave,
     i,
   ]),

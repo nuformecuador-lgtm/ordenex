@@ -10,8 +10,8 @@ const FORMATO = /^[a-z0-9_]+$/;
 describe("474/R46 — catalogo de informes", () => {
   const informes = [...INFORMES_WHATSAPP.values()];
 
-  it("nace con los dos informes de esta ficha", () => {
-    expect([...INFORMES_WHATSAPP.keys()].sort()).toEqual(["aviso_interno", "prueba_envio"]);
+  it("los dos informes de esta ficha y el de transito (475)", () => {
+    expect([...INFORMES_WHATSAPP.keys()].sort()).toEqual(["aviso_interno", "prueba_envio", "transito"]);
   });
 
   it("la clave del mapa es la clave del informe, sin duplicados y con formato [a-z0-9_]+", () => {
@@ -30,7 +30,13 @@ describe("474/R46 — catalogo de informes", () => {
       expect(i.parametros.safeParse(i.parametrosPorDefecto).success).toBe(true);
       expect(Array.isArray(i.descriptores)).toBe(true);
       for (const d of i.descriptores) {
-        expect((i.parametrosPorDefecto as Record<string, unknown>)[d.campo]).not.toBeUndefined();
+        // 475 (design §8.1): un descriptor `panel` edita los campos que declara en `campos`; su
+        // `campo` es solo su identificador. Cada campo editado debe tener valor de partida.
+        const campos = d.tipo === "panel" ? d.campos : [d.campo];
+        expect(campos.length).toBeGreaterThan(0);
+        for (const campo of campos) {
+          expect((i.parametrosPorDefecto as Record<string, unknown>)[campo]).not.toBeUndefined();
+        }
       }
     }
   });
