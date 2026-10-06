@@ -306,3 +306,93 @@ aparece el aviso «sin DATABASE_URL»); los 446 resultados de `integration/db` c
 
 **Veredicto:** backend de la 474 (F0–F9) implementado, 53 R con test (los de pantalla, en frontend),
 20/20 mutaciones obligatorias y propias MATADAS, gate completo verde contra base propia.
+
+---
+
+# FRONTEND (frontend_dev, F10 — T10.1/T10.2/T10.3 y lo de T11.1 que es de pantalla)
+
+Rama `feature/474-envios-automaticos-whatsapp` (local `fe-474`), sobre `60c1a1fb`
+(`merge-base --is-ancestor 60c1a1fb HEAD` OK). Búsqueda de código: grep/Read (el MCP de grafo no se
+usó: lo que había que leer eran los archivos nuevos del backend, enteros).
+
+## Qué se construyó
+
+- **Menú (T10.2, R2):** «Envíos automáticos» en Configuración, JUSTO DESPUÉS de «Plantillas» como la
+  maqueta (design §7 lo permite: no es el primer hijo). Censos ampliados: `menu-visibility.test.ts`
+  (hijos de Configuración) y `pwa-manifiesto-atajos.guardia` (maestro 22 → 23, nadie más).
+- **Páginas (T10.3):** `/configuracion/envios-whatsapp` (lista), `/nuevo`, `/[id]` (editar),
+  `/historial?envio=<id>`. Server Components, solo `maestro` (otro rol → «sin permiso», sin leer nada).
+  Componentes en `app/(app)/configuracion/envios-whatsapp/_components/`.
+- **Plantillas (T10.1):** «Tipo de plantilla» (de orden / de informe), «Lleva documento adjunto» con
+  bloqueos R6/R7, aviso R48 bajo el interruptor (llama a `estadoAppMeta` al ENCENDER), selector y vista
+  previa por catálogo del informe (local, con los ejemplos; `previewPlantilla` sigue para las de
+  orden), sin «plantilla de tienda» ni «bienvenida» en las de informe, toasts de
+  `documento_no_disponible` (R9) y `en_uso` (R10). Las variables llegan por `listarInformesWhatsapp()`
+  desde el servidor; el catálogo NO se importa en cliente.
+- **16 actions montadas → 16 `@sin-superficie` retirados** (15 en `envios-whatsapp.ts` +
+  `estadoAppMeta`). `superficie-de-uso.guardia` verde.
+
+## Mapa R → test (frontend)
+
+| R | Test |
+| --- | --- |
+| R1 | `tests/components/ConfiguracionEnviosWhatsappPage.test.tsx` (las 4 páginas × 6 actores sin permiso: aviso y cero lecturas) |
+| R2 | `tests/unit/auth/menu-visibility-envios-whatsapp.test.ts`; `menu-visibility.test.ts` (censo); `destino-post-login.test.ts` intacto |
+| R3, R6, R7 | `tests/components/PlantillasInforme.test.tsx` |
+| R4, R53 | `PlantillasInforme.test.tsx` (selector y vista previa del informe, clave desconocida); `envios-whatsapp-formulario.test.tsx` (vista previa + «De dónde sale cada dato», nombre del 1.er destinatario) |
+| R8, R9, R10 | `PlantillasInforme.test.tsx` (listado) |
+| R11, R13, R15 | `envios-whatsapp-formulario.test.tsx` (payload exacto, defaults, error por campo, «Se guarda apagado», no enciende) |
+| R12 | `envios-whatsapp-formulario.test.tsx` (solo plantillas del informe; plantilla sin documento + informe con PDF ⇒ no guarda ni prueba); `ConfiguracionEnviosWhatsappPage.test.tsx` (solo de informe aprobadas, recorre páginas) |
+| R14, R49 | `envios-whatsapp-formulario.test.tsx` (solo eventos disponibles ∩ del informe, por su nombre, sin «SLA») |
+| R16 | `envios-whatsapp-formulario.test.tsx` («Admin de tienda» con conteo; informe no apto ⇒ aviso y rechazo del servidor visible) |
+| R17 | `envios-whatsapp-formulario.test.tsx` (lista resuelta, teléfono inválido y compartido, guarda igual; búsqueda de personas) |
+| R18, R19, R25 | `EnviosWhatsappLista.test.tsx`; R18/R21 también en `envios-whatsapp-formulario.test.tsx` |
+| R37, R42, R43, R44 | `EnviosWhatsappHistorial.test.tsx` |
+| R39, R40, R41 | `envios-whatsapp-formulario.test.tsx` (solo lo guardado; guarda antes si hay cambios; nuevo ⇒ crea apagado y prueba) |
+| R48 | `tests/components/plantillas-aviso-app-meta.test.tsx` |
+
+## Mutaciones de UI (medidas: test verde antes, mutación aplicada y comprobada con `git diff --stat`, test, `git checkout --` y árbol limpio)
+
+| # | Mutación | Test | Resultado |
+| --- | --- | --- | --- |
+| F1 | `bloqueado` sin `faltaDocumento` (EnvioForm) | formulario | 1 failed — MATADA |
+| F2 | avisos de teléfono inválido vacíos (DestinatariosField) | formulario (R17) | 1 failed — MATADA |
+| F3 | no pintar el mensaje de `estadoAppMeta` (PlantillaInformeFields) | aviso-app-meta (R48) | 2 failed — MATADA |
+| F4 | ignorar `avisoSinProxima` (EnviosModule) | lista (R25) | 1 failed — MATADA |
+| F5 | bienvenida visible en plantilla de informe (plantillas-columns) | PlantillasInforme (R8) | 1 failed — MATADA |
+| F6 | editar manda tipo/documento aunque esté bloqueado (EditarPlantillaForm) | PlantillasInforme (R7) | 1 failed — MATADA |
+
+## Verificación visual
+
+Sin base de datos (ver Gate) el middleware no deja pasar a ninguna página privada. Se capturaron los
+componentes REALES con datos de ejemplo en un arnés temporal bajo una ruta pública (borrado, nunca
+commiteado), un solo dev server, apagado al terminar. Capturas (fuera del repo):
+`%TEMP%/claude/.../scratchpad/capturas/{lista,vacio,nuevo,editar,historial}-{escritorio,movil}.png`.
+Arreglado tras mirarlas: días en una fila a 390 px, hora sin cortar, barra fija móvil más corta.
+
+Diferencias con la maqueta (decididas):
+- Lista sin columna «Destinatarios» (el DTO `EnvioListItemDTO` no la trae) y el último envío dice el
+  estado de la ejecución, no «4 de 5 enviados» (tampoco hay conteos en el DTO).
+- «Informe adjunto» = selector de INFORMES del catálogo (no «Ninguno/Tránsito/Picking»): design §7.
+- «Enviar aunque no haya nada que informar» no se pinta (design §7: es de 475/476).
+- Historial: una fila por EJECUCIÓN con «Ver destinatarios» desplegable (el contrato es por ejecución),
+  no una fila por persona; filtro por envío; sin filtros de fecha/resultado/persona.
+- Sin la barra lateral en las capturas (el arnés no pasa por el layout autenticado).
+
+## Gate
+
+Ver `progress/gate_474_frontend.log` (con `INIT_EXIT` dentro). Resumen en el informe al leader.
+
+Sobre HEAD `090a2efe`, con el `init.sh` de `origin/dev` (6d919734; la rama todavía no trae la regla
+nueva del rápido ampliado, y no se mergeó `dev` en la rama):
+
+- `./init.sh --rapido` → clasifica «AMPLIADO» (la rama toca migraciones y `lib/types/`), typecheck y
+  lint pasan, y **FALLA** con `INIT_EXIT=1`: «el modo ampliado existe para medir contra Postgres y no
+  hay DATABASE_URL». El worktree no tiene `.env` y copiarlo/leerlo fue denegado por el clasificador de
+  permisos: la integración contra `ordenex_474` NO se ha corrido desde frontend.
+- Parcial sin base (NO es el gate), mismo HEAD: relacionados `--changed origin/dev` 406 archivos
+  verdes / 119 saltados (los de Postgres); guardias 272 verdes / 2 saltados. Sin intermitentes.
+
+**Pendiente para cerrar:** repetir `./init.sh --rapido` con `DATABASE_URL` de `ordenex_474` exportada
+(lo único que cambia frente a la corrida del backend son pantallas; ningún archivo de
+`tests/integration/db` ni de `lib/repositories` se tocó).
