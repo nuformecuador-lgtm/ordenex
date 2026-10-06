@@ -1,3 +1,10 @@
+# ESTADO 2026-10-06 (madrugada) — RELEASE DESPLEGADA (PR #854, c0acf469, dpl_7dSqmdrVqpLHatwdZFN5x8kvqgG1)
+
+- En prod: 471, 473, 474 (+#849), validaciones en español, 475, 476. Migraciones 20261005120000/120100/120200 aplicadas 06:29 UTC; job `whatsapp_envio_mantenimiento` sembrado (pending). Runtime: 0 errores, 47×200 en la primera hora. `prod` devuelto a `dev`.
+- Gate completo previo: `progress/gate_release_06oct.log` (33800 verdes; 1 intermitente FK de la 454, 3/3 aislado).
+- ANTHROPIC_API_KEY de Production cambiada por Carlos antes del build (sale con esta release). Pendiente: comprobar una respuesta del asistente en prod (logs sin 401) y recrear la variable como Sensitive.
+- PENDIENTE POST-DESPLIEGUE (docs/release.md › «473 y 474…»): Daniel apaga su sistema ANTES de encender envíos; T11.4 Meta real (plantilla con documento, app id); T10.4/T6.3/T5.2 verlo; EXPLAIN de tránsito; comparar PDFs con el sistema externo; un envío por tienda.
+
 # ESTADO 2026-10-06 — 473, 474, 475, 476 y validaciones en español HECHAS en `dev`, SIN DESPLEGAR; in_progress = 0
 
 - En `dev` (sin desplegar): 473 (#847), 474 (#848 + botón #849), validaciones en español (#850), 475 (#851), 476 (#852). 472 ya resuelta por la 470. Lo que hay que hacer al desplegar está en `docs/release.md` › «473 y 474…» (Daniel apaga su sistema ANTES de encender envíos; NEXT_PUBLIC_APP_URL; Meta real T11.4; EXPLAIN de tránsito; verlo todo; un envío por tienda).
