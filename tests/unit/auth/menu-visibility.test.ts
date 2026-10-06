@@ -342,6 +342,10 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
       "/configuracion/tarifas",
       "/configuracion/api",
       "/configuracion/plantillas",
+      // ⭑ Ficha 474 (R2): «Envíos automáticos» JUSTO DESPUÉS de «Plantillas», como la maqueta
+      // aprobada. No es el primer hijo, así que no mueve el aterrizaje (lo afirma
+      // `menu-visibility-envios-whatsapp.test.ts`).
+      "/configuracion/envios-whatsapp",
       // Ficha 273: el catalogo de tipos de vehiculo pasa a administrarse por CRUD y
       // hereda la visibilidad maestro-only del item padre.
       "/configuracion/vehiculos",

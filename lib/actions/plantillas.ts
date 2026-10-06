@@ -272,7 +272,6 @@ export async function marcarPlantillaBienvenida(
  * Ficha 474 (R48) — ¿se pudo identificar la app de Meta con el token configurado? La pantalla de
  * plantillas la llama al activar «Lleva documento adjunto» y, si no, pinta el mensaje bajo el
  * interruptor. Solo `maestro`. NUNCA devuelve el ID ni el token.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): el aviso bajo «Lleva documento adjunto» lo pinta frontend_dev en T10.1 (R48) sobre este contrato. En cuanto la pantalla la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function estadoAppMeta(deps: PlantillaActionDeps = {}): Promise<EstadoAppMetaResult> {
   const r = await withErrorHandler(async (): Promise<EstadoAppMetaResult> => {

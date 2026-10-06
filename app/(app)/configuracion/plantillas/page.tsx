@@ -1,6 +1,7 @@
 import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarPlantillas } from "@/lib/actions/plantillas";
+import { listarInformesWhatsapp } from "@/lib/actions/envios-whatsapp";
 import { plantillasConfig } from "@/lib/config/plantillas";
 
 import {
@@ -29,10 +30,23 @@ export default async function PlantillasPage() {
     );
   }
 
-  const res = await listarPlantillas({
-    page: 1,
-    pageSize: plantillasConfig.DEFAULT_PAGE_SIZE,
-  });
+  // Ficha 474 (T10.1): el catálogo de informes viaja por la action, no por import (arrastra jspdf).
+  const [res, inf] = await Promise.all([
+    listarPlantillas({
+      page: 1,
+      pageSize: plantillasConfig.DEFAULT_PAGE_SIZE,
+    }),
+    listarInformesWhatsapp(),
+  ]);
+  const informes =
+    inf.status === "ok"
+      ? inf.informes.map((i) => ({
+          clave: i.clave,
+          nombre: i.nombre,
+          generaDocumento: i.generaDocumento,
+          variables: i.variables,
+        }))
+      : [];
 
   const data: PlantillasPageData =
     res.status === "ok"
@@ -44,7 +58,7 @@ export default async function PlantillasPage() {
       title="Plantillas"
       description="Plantillas de mensaje con campos variables"
     >
-      <PlantillasModule initialData={data} />
+      <PlantillasModule initialData={data} informes={informes} />
     </AppPage>
   );
 }

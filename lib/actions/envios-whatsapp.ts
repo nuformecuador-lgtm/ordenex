@@ -81,12 +81,10 @@ async function ejecutar<T>(fn: () => Promise<T>): Promise<T | EnviosActionError>
   return isAppErrorShape(r) ? aError(r) : (r as T);
 }
 
-/** @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla. */
 export async function listarEnvios(deps: EnviosWhatsappActionDeps = {}): Promise<ListarEnviosResult> {
   return ejecutar(async () => configuracion(deps).listar(await actorOError(deps)));
 }
 
-/** @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla. */
 export async function obtenerEnvio(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ObtenerEnvioResult> {
   return ejecutar(async () => {
     const actor = await actorOError(deps);
@@ -96,7 +94,6 @@ export async function obtenerEnvio(id: unknown, deps: EnviosWhatsappActionDeps =
 
 /**
  * R11-R16. Nace apagado (R15).
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function crearEnvio(input: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<GuardarEnvioResult> {
   return ejecutar(async () => {
@@ -109,7 +106,6 @@ export async function crearEnvio(input: unknown, deps: EnviosWhatsappActionDeps 
 
 /**
  * R11-R16 + R20.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function actualizarEnvio(
   id: unknown,
@@ -126,7 +122,6 @@ export async function actualizarEnvio(
 
 /**
  * R18/R22.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function encenderEnvio(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<EncenderEnvioResult> {
   return ejecutar(async () => {
@@ -137,7 +132,6 @@ export async function encenderEnvio(id: unknown, deps: EnviosWhatsappActionDeps 
 
 /**
  * R19.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function apagarEnvio(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ApagarEnvioResult> {
   return ejecutar(async () => {
@@ -148,7 +142,6 @@ export async function apagarEnvio(id: unknown, deps: EnviosWhatsappActionDeps = 
 
 /**
  * R25: «Reprogramar» cuando falta la proxima ejecucion.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function reprogramarEnvio(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ReprogramarEnvioResult> {
   return ejecutar(async () => {
@@ -159,7 +152,6 @@ export async function reprogramarEnvio(id: unknown, deps: EnviosWhatsappActionDe
 
 /**
  * R21.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function borrarEnvio(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<BorrarEnvioResult> {
   return ejecutar(async () => {
@@ -170,7 +162,6 @@ export async function borrarEnvio(id: unknown, deps: EnviosWhatsappActionDeps = 
 
 /**
  * R17: NO escribe.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function previsualizarDestinatarios(
   seleccion: unknown,
@@ -185,7 +176,6 @@ export async function previsualizarDestinatarios(
 
 /**
  * R49: los diez eventos disponibles con su nombre.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function listarEventosDisponibles(
   deps: EnviosWhatsappActionDeps = {},
@@ -195,7 +185,6 @@ export async function listarEventosDisponibles(
 
 /**
  * El catalogo de informes para el formulario (defaults R13, eventos R14, descriptores).
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function listarInformesWhatsapp(deps: EnviosWhatsappActionDeps = {}): Promise<ListarInformesResult> {
   return ejecutar(async () => configuracion(deps).listarInformes(await actorOError(deps)));
@@ -203,7 +192,6 @@ export async function listarInformesWhatsapp(deps: EnviosWhatsappActionDeps = {}
 
 /**
  * R39-R41/R52: «Probar ahora», solo a quien pulsa, con el resultado en la misma respuesta.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function probarEnvioWhatsapp(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ProbarEnvioResult> {
   return ejecutar(async () => {
@@ -216,7 +204,6 @@ export async function probarEnvioWhatsapp(id: unknown, deps: EnviosWhatsappActio
 
 /**
  * R42: historial paginado, mas reciente primero, filtrable por envio.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function listarEjecuciones(input: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ListarEjecucionesResult> {
   return ejecutar(async () => {
@@ -231,7 +218,6 @@ export async function listarEjecuciones(input: unknown, deps: EnviosWhatsappActi
 
 /**
  * R42: detalle de una ejecucion con sus entregas (telefono enmascarado).
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function obtenerEjecucion(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<ObtenerEjecucionResult> {
   return ejecutar(async () => {
@@ -247,7 +233,6 @@ export async function obtenerEjecucion(id: unknown, deps: EnviosWhatsappActionDe
 
 /**
  * R43/R44: enlace firmado de corta duracion; `caducado` si ya se purgo. Solo maestro.
- * @sin-superficie FICHA 474 (backend antes que frontend, tasks F9 -> F10): la pantalla `/configuracion/envios-whatsapp` la construye frontend_dev en T10.3 sobre este contrato (progress/impl_474.md). En cuanto la importe, esta anotacion caduca y la guardia exige retirarla.
  */
 export async function firmarPdfEjecucion(id: unknown, deps: EnviosWhatsappActionDeps = {}): Promise<FirmarPdfEjecucionResult> {
   return ejecutar(async () => {
