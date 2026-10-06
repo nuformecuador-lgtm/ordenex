@@ -407,8 +407,8 @@ describe("design §8.1 — el renderizador de la 474 pinta el panel del descript
 describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () => {
   it("un descriptor `panel` desconocido se dice en claro y el resto de parámetros sigue", () => {
     const informe = {
-      clave: "picking",
-      nombre: "Informe de picking",
+      clave: "futuro",
+      nombre: "Informe futuro",
       descripcion: "",
       generaDocumento: true,
       aptoParaAdminTienda: false,
@@ -416,8 +416,9 @@ describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () =>
       eventos: [],
       parametrosPorDefecto: {},
       descriptores: [
-        // Un DTO de otra versión: el tipo no lo admite (por eso el cast), pero puede llegar.
-        { campo: "picking", etiqueta: "Parámetros del picking", tipo: "panel", panel: "picking", campos: [] },
+        // Un DTO de otra versión: el tipo no lo admite (por eso el cast), pero puede llegar. (476: antes
+        // era «picking», que ya tiene rama; el caso sigue siendo un panel que esta versión NO conoce.)
+        { campo: "futuro", etiqueta: "Parámetros del informe futuro", tipo: "panel", panel: "futuro", campos: [] },
         { campo: "enviarSiVacio", etiqueta: "Enviar aunque no haya nada que informar", tipo: "booleano" },
       ],
       variables: [],
@@ -425,7 +426,7 @@ describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () =>
     render(<ParametrosInforme informe={informe} valores={{}} onCambiar={() => {}} errores={{}} />);
     const aviso = screen.getByRole("status");
     expect(aviso.textContent).toBe(
-      "«Parámetros del picking»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.",
+      "«Parámetros del informe futuro»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.",
     );
     expect(screen.getByRole("switch", { name: "Enviar aunque no haya nada que informar" })).toBeTruthy();
     expect(previsualizar).not.toHaveBeenCalled();
