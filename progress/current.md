@@ -3,6 +3,7 @@
 - En prod: 471, 473, 474 (+#849), validaciones en español, 475, 476. Migraciones 20261005120000/120100/120200 aplicadas 06:29 UTC; job `whatsapp_envio_mantenimiento` sembrado (pending). Runtime: 0 errores, 47×200 en la primera hora. `prod` devuelto a `dev`.
 - Gate completo previo: `progress/gate_release_06oct.log` (33800 verdes; 1 intermitente FK de la 454, 3/3 aislado).
 - ANTHROPIC_API_KEY de Production cambiada por Carlos antes del build (sale con esta release). Pendiente: comprobar una respuesta del asistente en prod (logs sin 401) y recrear la variable como Sensitive.
+- PLANTILLAS: Carlos crea en prod (desde la app, con documento) `prueba_envios_ordenex`, `alerta_transito_ordenex` y `picking_bodega_ordenex` con los textos dados el 2026-10-06 y las manda a aprobación; vuelve cuando Meta las apruebe. Siguiente: «Probar ahora» con la de prueba, luego envíos reales apagados.
 - PENDIENTE POST-DESPLIEGUE (docs/release.md › «473 y 474…»): Daniel apaga su sistema ANTES de encender envíos; T11.4 Meta real (plantilla con documento, app id); T10.4/T6.3/T5.2 verlo; EXPLAIN de tránsito; comparar PDFs con el sistema externo; un envío por tienda.
 
 # ESTADO 2026-10-06 — 473, 474, 475, 476 y validaciones en español HECHAS en `dev`, SIN DESPLEGAR; in_progress = 0
