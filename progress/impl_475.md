@@ -260,3 +260,9 @@ Medidas antes de añadir `InfoEstado` (cambio que no toca esas líneas); tras é
 
 F6 implementado: R34–R37 y el pintado de R38 con 21 tests de componente y 3 mutaciones medidas; falta T6.3 (ver la
 app) y el gate `--rapido`, que corre el leader.
+
+## Menores de la revisión (fix/475-menores)
+
+- m1: `PanelDeInforme` tiene `default` con `const sinRama: never = d.panel` (compilación: añadir `"picking"` a `PanelParametros` sin rama da TS2322, medido) y reserva visible «este informe no tiene panel de parámetros todavía» (`role="status"`); test en `ParamsTransito.test.tsx`, mutación «default → null» muerta.
+- m4: el relleno de zonas de R35 va por el nuevo `onNormalizar` (si falta, `onCambiar`); `EnvioForm` lo aplica a los parámetros Y a la foto de lo guardado: abrir un envío encendido no deja «cambios sin guardar» y «Probar ahora» sigue habilitado; al guardar, la zona completada sí viaja. Tests en `envios-whatsapp-formulario.test.tsx` y `ParamsTransito.test.tsx`; mutaciones «sin `onNormalizar` en EnvioForm» y «el panel vuelve a `onCambiar`» muertas.
+- m3: `clasificar` agrupa por zona con `push` (antes copiaba el arreglo en cada inserción, O(n²)); `informe-transito-calculo` sigue verde.

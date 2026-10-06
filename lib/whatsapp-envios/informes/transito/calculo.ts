@@ -184,7 +184,11 @@ export function clasificar(
   });
 
   const porZona = new Map<string, PaqueteTransito[]>();
-  for (const p of paquetes) porZona.set(p.zonaId, [...(porZona.get(p.zonaId) ?? []), p]);
+  for (const p of paquetes) {
+    const lista = porZona.get(p.zonaId);
+    if (lista) lista.push(p);
+    else porZona.set(p.zonaId, [p]);
+  }
 
   const conAlertas: ZonaConAlertas[] = [];
   const sinAlertas: ZonaInforme[] = [];

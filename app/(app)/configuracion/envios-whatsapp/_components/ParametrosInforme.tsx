@@ -15,6 +15,12 @@ export interface ParametrosInformeProps {
   informe: InformeDTO;
   valores: Record<string, unknown>;
   onCambiar: (campo: string, valor: unknown) => void;
+  /**
+   * m4 (revisión 475): el panel completa un valor de partida que faltaba (no lo ha tocado el
+   * maestro). Quien lo reciba debe tratarlo como lo ya guardado, no como un cambio. Sin él, va por
+   * `onCambiar`.
+   */
+  onNormalizar?: (campo: string, valor: unknown) => void;
   /** Errores por campo del backend, con la clave `parametros.<campo>` (R13). */
   errores: Record<string, string[]>;
 }
@@ -34,7 +40,7 @@ export interface ParametrosInformeProps {
  * (`transito` → `ParamsTransito`) con TODOS los parámetros y los errores de sus `campos`. Ese panel
  * trae el título de su maqueta, así que el genérico no se repite encima.
  */
-export function ParametrosInforme({ informe, valores, onCambiar, errores }: ParametrosInformeProps) {
+export function ParametrosInforme({ informe, valores, onCambiar, onNormalizar, errores }: ParametrosInformeProps) {
   if (informe.descriptores.length === 0) return null;
   const conPanel = informe.descriptores.some((d) => d.tipo === "panel");
   return (
@@ -47,6 +53,7 @@ export function ParametrosInforme({ informe, valores, onCambiar, errores }: Para
             descriptor={d}
             valores={valores}
             onCambiar={onCambiar}
+            onNormalizar={onNormalizar}
             errores={erroresDeCampos(errores, d.campos)}
           />
         ) : (
@@ -75,16 +82,36 @@ function PanelDeInforme({
   descriptor: d,
   valores,
   onCambiar,
+  onNormalizar,
   errores,
 }: {
   descriptor: Extract<Descriptor, { tipo: "panel" }>;
   valores: Record<string, unknown>;
   onCambiar: (campo: string, valor: unknown) => void;
+  onNormalizar?: (campo: string, valor: unknown) => void;
   errores: Record<string, string[]>;
 }) {
   switch (d.panel) {
     case "transito":
-      return <ParamsTransito etiqueta={d.etiqueta} valores={valores} onCambiar={onCambiar} errores={errores} />;
+      return (
+        <ParamsTransito
+          etiqueta={d.etiqueta}
+          valores={valores}
+          onCambiar={onCambiar}
+          onNormalizar={onNormalizar}
+          errores={errores}
+        />
+      );
+    default: {
+      // m1 (revisión 475): un panel nuevo en `PanelParametros` sin su rama aquí NO compila (`never`)
+      // y, si llegara igual (un DTO de otra versión), se dice en claro en vez de no pintar nada.
+      const sinRama: never = d.panel;
+      return (
+        <p role="status" data-panel={String(sinRama)} className="text-sm text-muted-foreground">
+          «{d.etiqueta}»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.
+        </p>
+      );
+    }
   }
 }
 

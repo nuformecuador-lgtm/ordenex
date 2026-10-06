@@ -403,3 +403,51 @@ describe("design §8.1 — el renderizador de la 474 pinta el panel del descript
     expect(screen.getAllByText("enviarSiVacio: debe ser sí o no.")).toHaveLength(1);
   });
 });
+
+describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () => {
+  it("un descriptor `panel` desconocido se dice en claro y el resto de parámetros sigue", () => {
+    const informe = {
+      clave: "picking",
+      nombre: "Informe de picking",
+      descripcion: "",
+      generaDocumento: true,
+      aptoParaAdminTienda: false,
+      soloPorEvento: false,
+      eventos: [],
+      parametrosPorDefecto: {},
+      descriptores: [
+        // Un DTO de otra versión: el tipo no lo admite (por eso el cast), pero puede llegar.
+        { campo: "picking", etiqueta: "Parámetros del picking", tipo: "panel", panel: "picking", campos: [] },
+        { campo: "enviarSiVacio", etiqueta: "Enviar aunque no haya nada que informar", tipo: "booleano" },
+      ],
+      variables: [],
+    } as unknown as InformeDTO;
+    render(<ParametrosInforme informe={informe} valores={{}} onCambiar={() => {}} errores={{}} />);
+    const aviso = screen.getByRole("status");
+    expect(aviso.textContent).toBe(
+      "«Parámetros del picking»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.",
+    );
+    expect(screen.getByRole("switch", { name: "Enviar aunque no haya nada que informar" })).toBeTruthy();
+    expect(previsualizar).not.toHaveBeenCalled();
+  });
+});
+
+describe("m4 (revisión 475) — el relleno de R35 no se manda como edición", () => {
+  it("con `onNormalizar`, las zonas que faltan van por él y NO por `onCambiar`", async () => {
+    const onCambiar = vi.fn();
+    const onNormalizar = vi.fn();
+    render(
+      <ParamsTransito
+        etiqueta="Parámetros del informe de tránsito"
+        valores={partida()}
+        onCambiar={onCambiar}
+        onNormalizar={onNormalizar}
+        errores={{}}
+        retardoMs={0}
+      />,
+    );
+    await screen.findByTestId("zona-z-gam");
+    await waitFor(() => expect(onNormalizar).toHaveBeenCalledWith("zonas", ZONAS_PARTIDA));
+    expect(onCambiar).not.toHaveBeenCalled();
+  });
+});

@@ -64,6 +64,12 @@ export interface ParamsTransitoProps {
   /** TODOS los parámetros del informe (hito, zonas, estados, enviarSiVacio). */
   valores: Record<string, unknown>;
   onCambiar: (campo: string, valor: unknown) => void;
+  /**
+   * m4 (revisión 475): el relleno de R35 al montar (zonas sin entrada → su partida) va por aquí, no
+   * por `onCambiar`: no es una edición del maestro y no debe dejar el formulario «con cambios». Sin
+   * él, va por `onCambiar`.
+   */
+  onNormalizar?: (campo: string, valor: unknown) => void;
   /** Errores del servidor al guardar, ya filtrados a `parametros.hito|zonas|estados…`. */
   errores: Record<string, string[]>;
   /** Espera tras el último cambio antes de pedir el conteo (design §8.2: 400 ms). */
@@ -123,7 +129,7 @@ function soloDelPanel(errores: Record<string, string[]>): Record<string, string[
  * - Conteo (R38): con valores válidos, tras `retardoMs` sin cambios se pregunta al servidor (solo
  *   lectura); con valores inválidos se dicen los errores por campo y NO se muestra conteo.
  */
-export function ParamsTransito({ etiqueta, valores, onCambiar, errores, retardoMs = 400 }: ParamsTransitoProps) {
+export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, errores, retardoMs = 400 }: ParamsTransitoProps) {
   const base = useId();
   const cuerpoId = `${base}-cuerpo`;
   const [plegado, setPlegado] = useState(false);
@@ -162,7 +168,7 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, errores, retardoM
         const rellenar = reales.length > 0 && JSON.stringify(llenas) !== JSON.stringify(actuales.zonas);
         setResultado({ clave: JSON.stringify(rellenar ? { ...actuales, zonas: llenas } : actuales), vista: vistaDe(r) });
         setZonas(reales);
-        if (rellenar) onCambiar("zonas", llenas);
+        if (rellenar) (onNormalizar ?? onCambiar)("zonas", llenas);
       },
       () => {
         if (vivo) setErrorCarga(true);

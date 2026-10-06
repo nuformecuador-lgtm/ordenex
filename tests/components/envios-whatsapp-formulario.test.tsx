@@ -38,6 +38,12 @@ vi.mock("@/lib/actions/envios-whatsapp", () => ({
   probarEnvioWhatsapp: (...x: unknown[]) => a.probarEnvioWhatsapp(...x),
 }));
 
+// m4 (revisión 475): el panel de tránsito pide sus zonas reales a esta action al montar.
+const previsualizarTransito = vi.fn();
+vi.mock("@/lib/actions/informe-transito", () => ({
+  previsualizarInformeTransito: (...x: unknown[]) => previsualizarTransito(...x),
+}));
+
 import {
   EnvioForm,
   type PlantillaDeInformeOpcion,
@@ -463,5 +469,115 @@ describe("R18/R21 — encender y borrar desde la edición", () => {
     await user.click(within(dialogo).getByRole("button", { name: "Borrar" }));
     await waitFor(() => expect(a.borrarEnvio).toHaveBeenCalledWith("e1"));
     expect(router.push).toHaveBeenCalledWith("/configuracion/envios-whatsapp");
+  });
+});
+
+describe("m4 (revisión 475) — completar la partida de las zonas no es un cambio del maestro", () => {
+  const PARAMS_TRANSITO = {
+    hito: "entrada_bodega_central",
+    // Guardado antes de que existiera «FGAM Zona Sur»: le falta su entrada.
+    zonas: [
+      { zonaId: "z-gam", plazoDias: 10, avisoDias: 2 },
+      { zonaId: "z-coco", plazoDias: 20, avisoDias: 5 },
+    ],
+    estados: [{ estado: "en_bodega_central", incluido: true, paradoSiMasDeDias: 2 }],
+    enviarSiVacio: false,
+  };
+  const INFORME_TRANSITO: InformeDTO = {
+    clave: "transito",
+    nombre: "Informe de tránsito",
+    descripcion: "",
+    generaDocumento: true,
+    aptoParaAdminTienda: false,
+    soloPorEvento: false,
+    eventos: [],
+    parametrosPorDefecto: { ...PARAMS_TRANSITO, zonas: [] },
+    descriptores: [
+      { campo: "transito", etiqueta: "Parámetros del informe de tránsito", tipo: "panel", panel: "transito", campos: ["hito", "zonas", "estados"] },
+    ],
+    variables: [NOMBRE_DEST],
+  };
+  const PLANTILLA_TRANSITO: PlantillaDeInformeOpcion = {
+    id: "p_tr",
+    nombre: "transito_pdf",
+    cuerpo: "Hola {{destinatario_nombre}}",
+    informeClave: "transito",
+    llevaDocumento: true,
+  };
+  const ENVIO_TRANSITO: EnvioDetalleDTO = {
+    ...ENVIO,
+    id: "e_tr",
+    nombre: "Tránsito diario",
+    informeClave: "transito",
+    informeNombre: "Informe de tránsito",
+    plantillaId: "p_tr",
+    plantillaNombre: "transito_pdf",
+    activo: true,
+    parametros: PARAMS_TRANSITO,
+  };
+
+  beforeEach(() => {
+    previsualizarTransito.mockResolvedValue({
+      status: "ok",
+      zonas: [
+        { id: "z-gam", nombre: "GAM", esCentral: true },
+        { id: "z-coco", nombre: "FGAM El Coco", esCentral: false },
+        { id: "z-sur", nombre: "FGAM Zona Sur", esCentral: false },
+      ],
+      totalEnAlerta: 0,
+      parados: 0,
+      sinHito: 0,
+    });
+  });
+
+  it("abrir un envío ENCENDIDO con una zona sin entrada: sin cambios sin guardar y «Probar ahora» habilitado", async () => {
+    const user = userEvent.setup();
+    a.probarEnvioWhatsapp.mockResolvedValue({ status: "demasiado_pronto", segundosRestantes: 5 });
+    montar(
+      <EnvioForm
+        envio={ENVIO_TRANSITO}
+        informes={[INFORME_TRANSITO]}
+        eventos={EVENTOS}
+        plantillas={[PLANTILLA_TRANSITO]}
+        personas={PERSONAS}
+      />,
+    );
+    // La zona sin entrada se pinta con su partida (R35): el relleno ya ocurrió.
+    const sur = await screen.findByTestId("zona-z-sur");
+    expect((within(sur).getByLabelText("Plazo máximo de FGAM Zona Sur") as HTMLInputElement).value).toBe("20");
+    const probar = screen.getByRole("button", { name: "Probar ahora (solo a mí)" });
+    expect(probar).toBeEnabled();
+    expect(screen.queryByText(/^Guarda los cambios antes de probar/)).not.toBeInTheDocument();
+    // Probar no guarda: no había cambios.
+    await user.click(probar);
+    await waitFor(() => expect(a.probarEnvioWhatsapp).toHaveBeenCalledWith("e_tr"));
+    expect(a.actualizarEnvio).not.toHaveBeenCalled();
+    // Una edición REAL del maestro sí cuenta como cambio.
+    const aviso = screen.getByLabelText("Avisar antes en FGAM Zona Sur");
+    await user.clear(aviso);
+    await user.type(aviso, "3");
+    expect(screen.getByRole("button", { name: "Probar ahora (solo a mí)" })).toBeDisabled();
+  });
+
+  it("al guardar después, la zona completada SÍ viaja (R35: se guardan todas)", async () => {
+    const user = userEvent.setup();
+    montar(
+      <EnvioForm
+        envio={{ ...ENVIO_TRANSITO, activo: false }}
+        informes={[INFORME_TRANSITO]}
+        eventos={EVENTOS}
+        plantillas={[PLANTILLA_TRANSITO]}
+        personas={PERSONAS}
+      />,
+    );
+    await screen.findByTestId("zona-z-sur");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(a.actualizarEnvio).toHaveBeenCalledTimes(1));
+    const enviado = a.actualizarEnvio.mock.calls[0]?.[1] as { parametros: { zonas: unknown } };
+    expect(enviado.parametros.zonas).toEqual([
+      { zonaId: "z-gam", plazoDias: 10, avisoDias: 2 },
+      { zonaId: "z-coco", plazoDias: 20, avisoDias: 5 },
+      { zonaId: "z-sur", plazoDias: 20, avisoDias: 5 },
+    ]);
   });
 });

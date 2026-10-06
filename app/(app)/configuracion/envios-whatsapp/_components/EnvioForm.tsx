@@ -154,6 +154,19 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
   // Es ESTADO, no ref: también decide qué se pinta (m1), y un ref leído al renderizar no repinta.
   const [guardado, setGuardado] = useState<string | null>(() => (envio ? JSON.stringify(input) : null));
   const hayCambios = guardado !== JSON.stringify(input);
+  /**
+   * m4 (revisión 475): un panel completa un valor de partida que faltaba (p. ej. una zona nueva en
+   * el informe de tránsito). Se aplica igual a lo editado Y a lo guardado: no es un cambio del
+   * maestro, así que no deja el formulario «con cambios» ni bloquea «Probar ahora» (m1 de la 474).
+   */
+  function normalizarParametro(campo: string, valor: unknown) {
+    setParametros((p) => ({ ...p, [campo]: valor }));
+    setGuardado((g) => {
+      if (g === null) return g;
+      const previo = JSON.parse(g) as GuardarEnvioInput;
+      return JSON.stringify({ ...previo, parametros: { ...previo.parametros, [campo]: valor } });
+    });
+  }
   // m1: en un envío encendido, guardar = ponerlo en vivo. «Probar» no lo hace a escondidas.
   const probarPideGuardar = activo && envioId !== null && hayCambios;
 
@@ -446,6 +459,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
               valores={parametros}
               errores={errores}
               onCambiar={(campo, valor) => setParametros((p) => ({ ...p, [campo]: valor }))}
+              onNormalizar={normalizarParametro}
             />
           ) : null}
         </Seccion>
