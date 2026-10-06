@@ -37,10 +37,17 @@ const EXTENSIONES = new Set([".ts", ".tsx"]);
  *   · `lib/repositories/OrdenRepository.ts` -> `SORT_COLUMN`, que traduce la clave publica
  *     `num_remision` a esta columna. Es su UNICO uso, y es de ORDEN, no de lectura ni de
  *     escritura: la columna no se selecciona en ningun sitio.
+ *   · `lib/repositories/PickingRepository.ts` -> ficha 476 (R26): `ORDER BY o."clave_remision"` del
+ *     informe de picking, para dar las remisiones en el orden natural de la 423. Tambien de ORDEN:
+ *     no la selecciona ni la escribe (decision del design 476 §4.3).
  *
  * Cualquier archivo nuevo en esta lista es una decision que hay que tomar a mano.
  */
-const PERMITIDOS = new Set(["lib/db/prisma-client.ts", "lib/repositories/OrdenRepository.ts"]);
+const PERMITIDOS = new Set([
+  "lib/db/prisma-client.ts",
+  "lib/repositories/OrdenRepository.ts",
+  "lib/repositories/PickingRepository.ts",
+]);
 
 function archivosDeCodigo(): string[] {
   const salida: string[] = [];
@@ -92,7 +99,7 @@ describe("nadie ESCRIBE `claveRemision` (R17)", () => {
     expect(MENCIONES.length).toBeGreaterThan(0);
   });
 
-  it("solo la nombran EN CODIGO los dos archivos de la lista blanca", () => {
+  it("solo la nombran EN CODIGO los archivos de la lista blanca", () => {
     const archivos = [...new Set(MENCIONES.map((m) => m.archivo))].sort();
     const intrusos = archivos.filter((a) => !PERMITIDOS.has(a));
     expect(
@@ -102,7 +109,7 @@ describe("nadie ESCRIBE `claveRemision` (R17)", () => {
     ).toEqual([]);
   });
 
-  it("los dos permisos se USAN de verdad (una lista blanca con entradas de mas miente)", () => {
+  it("los permisos se USAN de verdad (una lista blanca con entradas de mas miente)", () => {
     for (const permitido of PERMITIDOS) {
       expect(
         MENCIONES.filter((m) => m.archivo === permitido).length,

@@ -45,7 +45,7 @@ export type DescriptorParametro =
  * registrado para ese nombre: sin `if (clave === "...")` en la pantalla. Una ficha que añade un
  * panel (476: picking) suma su nombre a esta union y su rama al renderizador.
  */
-export type PanelParametros = "transito";
+export type PanelParametros = "transito" | "picking";
 
 export interface DescriptorPanel {
   /**
@@ -63,6 +63,14 @@ export interface DescriptorPanel {
 
 export type ResultadoInforme =
   | { tipo: "vacio"; motivo: string } // R31
+  /**
+   * Ficha 476 (design §3.1, R7) — la configuracion guardada ya no sirve (p. ej. la tienda del
+   * picking perdio el fulfillment). TERMINAL: la ejecucion queda `error` con este motivo visible en
+   * el historial y no se manda nada. NO es «vacio» («Sin novedades» ocultaria un envio roto) ni una
+   * excepcion (una excepcion deja la ejecucion en `generando` y la cola la reintenta sin motivo
+   * visible). Un fallo de LECTURA sigue siendo una excepcion: ese si es reintentable.
+   */
+  | { tipo: "error"; motivo: string }
   | {
       tipo: "contenido";
       /** Una entrada por variable declarada. */

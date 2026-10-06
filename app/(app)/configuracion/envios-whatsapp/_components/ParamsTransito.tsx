@@ -56,6 +56,8 @@ type Vista =
   | { tipo: "ok"; total: number; parados: number; sinHito: number }
   | { tipo: "invalido"; fieldErrors: Record<string, string[]> }
   | { tipo: "error" }
+  // m3 (revisión 476): sesión caducada ≠ sin permiso; se puede reintentar tras volver a entrar.
+  | { tipo: "sesion_expirada" }
   | { tipo: "sin_permiso" };
 
 export interface ParamsTransitoProps {
@@ -81,6 +83,7 @@ const CAMPOS_DEL_PANEL = ["hito", "zonas", "estados"];
 function vistaDe(r: PrevisualizarTransitoResult): Vista {
   if (r.status === "ok") return { tipo: "ok", total: r.totalEnAlerta, parados: r.parados, sinHito: r.sinHito };
   if (r.status === "validation_error") return { tipo: "invalido", fieldErrors: r.fieldErrors };
+  if (r.status === "unauthenticated") return { tipo: "sesion_expirada" };
   return { tipo: "sin_permiso" };
 }
 
@@ -135,6 +138,8 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
   const [plegado, setPlegado] = useState(false);
   const [zonas, setZonas] = useState<ZonaPanel[] | null>(null);
   const [errorCarga, setErrorCarga] = useState(false);
+  // m3: la carga de zonas encontró la sesión caducada; no se dan por «sin zonas».
+  const [sesionCaducada, setSesionCaducada] = useState(false);
   const [intentoCarga, setIntentoCarga] = useState(0);
   // El último conteo recibido, atado a los valores con los que se pidió: si cambian, deja de valer.
   const [resultado, setResultado] = useState<{ clave: string; vista: Vista } | null>(null);
@@ -160,6 +165,10 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
     previsualizarInformeTransito(valoresRef.current).then(
       (r) => {
         if (!vivo) return;
+        if (r.status === "unauthenticated") {
+          setSesionCaducada(true);
+          return;
+        }
         const reales = r.status === "ok" || r.status === "validation_error" ? r.zonas : [];
         // R35: una entrada por cada zona mostrada. Rellenar no cambia el conteo (es la misma partida
         // que el servidor aplica a una zona sin entrada), así que el resultado vale para lo relleno.
@@ -205,7 +214,9 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
 
   const vista: Vista = errorCarga
     ? { tipo: "error" }
-    : !cargado
+    : sesionCaducada
+      ? { tipo: "sesion_expirada" }
+      : !cargado
       ? { tipo: "cargando" }
       : !validacion.success
         ? { tipo: "invalido", fieldErrors: {} }
@@ -215,7 +226,13 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
 
   function reintentar() {
     setErrorCarga(false);
+    setSesionCaducada(false);
     setIntentoCarga((n) => n + 1);
+  }
+
+  /** Tras volver a entrar: el conteo caducado se descarta y el efecto de R38 lo vuelve a pedir. */
+  function reintentarConteo() {
+    setResultado(null);
   }
 
   // Errores por campo: la validación viva manda; los del servidor, hasta el siguiente cambio.
@@ -455,6 +472,15 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
                 {T.reintentar}
               </Button>
             </div>
+          ) : sesionCaducada ? (
+            <div className="flex flex-col items-start gap-2 py-3">
+              <p role="alert" className="text-sm text-destructive">
+                {T.sesionExpirada}
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={reintentar}>
+                {T.reintentar}
+              </Button>
+            </div>
           ) : zonas === null ? (
             <p role="status" className="py-3 text-sm text-muted-foreground">
               {T.cargandoZonas}
@@ -476,12 +502,15 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
           <RadioGroup
             aria-label={T.hitoTitulo}
             aria-invalid={hitoErr ? true : undefined}
+            aria-describedby={hitoErr ? `${base}-hito-error ${base}-hito-ayuda` : `${base}-hito-ayuda`}
             value={hito}
             options={OPCIONES_HITO}
             onValueChange={(v) => cambiar("hito", v)}
           />
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{T.ayudaHito}</p>
-          {hitoErr ? <FieldError messages={hitoErr} /> : null}
+          <p id={`${base}-hito-ayuda`} className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            {T.ayudaHito}
+          </p>
+          {hitoErr ? <FieldError id={`${base}-hito-error`} messages={hitoErr} /> : null}
         </div>
 
         {/* Estados + umbral de parado (R34/R37) */}
@@ -510,8 +539,14 @@ export function ParamsTransito({ etiqueta, valores, onCambiar, onNormalizar, err
         {/* Conteo (R38) + volver a la partida (R36) */}
         <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div role="status" aria-live="polite" className="text-xs leading-relaxed text-muted-foreground">
-            <Conteo vista={vista} />
+            {/* Sesión caducada al cargar: ya lo dice el aviso de las zonas, no se repite aquí. */}
+            {vista.tipo === "sesion_expirada" && !cargado ? null : <Conteo vista={vista} />}
           </div>
+          {vista.tipo === "sesion_expirada" && cargado ? (
+            <Button type="button" variant="outline" size="sm" className="self-start sm:self-auto" onClick={reintentarConteo}>
+              {T.reintentar}
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" size="sm" className="self-start sm:self-auto" onClick={volverAPartida} disabled={zonas === null}>
             {T.volverPartida}
           </Button>
@@ -530,6 +565,8 @@ function Conteo({ vista }: { vista: Vista }) {
       return <span>{T.conErrores}</span>;
     case "error":
       return <span className="text-destructive">{T.errorVistaPrevia}</span>;
+    case "sesion_expirada":
+      return <span className="text-destructive">{T.sesionExpirada}</span>;
     case "sin_permiso":
       return <span>{T.sinPermiso}</span>;
     case "ok":

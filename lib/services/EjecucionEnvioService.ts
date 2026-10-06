@@ -187,6 +187,8 @@ export class EjecucionEnvioService implements IEjecucionEnvioService {
           : {}),
       });
       if (r.tipo === "vacio") return this.terminar(e.id, "vacia", r.motivo);
+      // 476 (design §3.1, R7): el informe declara que la configuracion ya no sirve -> terminal.
+      if (r.tipo === "error") return this.terminar(e.id, "error", r.motivo);
 
       const valores: Record<string, string> = {};
       for (const clave of plantilla.variables) {

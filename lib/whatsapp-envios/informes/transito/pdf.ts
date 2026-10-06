@@ -16,7 +16,7 @@ import { cubreCodePoint, registrarFuente } from "@/lib/pdf/etiquetas-fuente-regi
 import { formatMontoString } from "@/lib/config/moneda";
 import { sumarMontos } from "@/lib/utils/kpis-financieros";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
-import { fechaCRLegible, horaCRLegible } from "@/lib/whatsapp-envios/informes/formato";
+import { fechaCRLegible, fechaLargaCR, horaCRLegible } from "@/lib/whatsapp-envios/informes/formato";
 import { nombreDeEstado } from "@/lib/types/order-status";
 import { HITO_EN_PALABRAS } from "@/lib/whatsapp-envios/informes/transito/parametros";
 import type {
@@ -40,19 +40,6 @@ const GRIS: [number, number, number] = [74, 83, 104];
 const ROJO: [number, number, number] = [185, 28, 28];
 const AMBAR: [number, number, number] = [146, 64, 14];
 const LINEA: [number, number, number] = [227, 232, 242];
-
-const DIAS_SEMANA = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-const MESES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
-
-/** «Lunes 5 de octubre de 2026», del dia calendario de Costa Rica. */
-export function fechaLargaCR(instante: Date): string {
-  const [anio, mes, dia] = fechaCalendarioCR(instante).split("-").map((n) => Number.parseInt(n, 10));
-  const semana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
-  return `${DIAS_SEMANA[semana]} ${dia} de ${MESES[mes - 1]} de ${anio}`;
-}
 
 /** Nombre del archivo (R33): `transito-YYYY-MM-DD.pdf` con la fecha CR. */
 export function nombreArchivoTransito(ahora: Date): string {

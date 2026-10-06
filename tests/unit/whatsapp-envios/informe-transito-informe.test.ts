@@ -177,4 +177,20 @@ describe("475/R22 — un fallo de lectura se propaga con la operacion, nunca vac
       .catch((e: unknown) => e as Error);
     expect((err as Error & { cause?: Error }).cause?.message).toBe("conexion caida");
   });
+
+  it("476/m1: el message lleva el motivo saneado (clase y codigo), nunca el message de la causa", async () => {
+    const prisma = Object.assign(new Error("Invalid `prisma.orden.findMany()` invocation: secreto"), {
+      name: "PrismaClientKnownRequestError",
+      code: "P2028",
+    });
+    const r = repo([]).r;
+    r.repo.zonas = async () => {
+      throw prisma;
+    };
+    const err = await crearInformeTransito(r)
+      .generar(ctx())
+      .catch((e: unknown) => e as Error);
+    expect((err as Error).message).toBe("informe transito: zonas falló (PrismaClientKnownRequestError P2028)");
+    expect((err as Error).message).not.toContain("secreto");
+  });
 });

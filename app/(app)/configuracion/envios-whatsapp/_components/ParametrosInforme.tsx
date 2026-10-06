@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FieldError } from "@/components/shared/FieldError";
 import type { InformeDTO } from "@/lib/types/envios-whatsapp";
 
+import { ParamsPicking } from "./ParamsPicking";
 import { ParamsTransito } from "./ParamsTransito";
 
 type Descriptor = InformeDTO["descriptores"][number];
@@ -37,7 +38,7 @@ export interface ParametrosInformeProps {
  * Un informe sin descriptores («Aviso de la app») no pinta el panel.
  *
  * Ficha 475 (design §8.1): un descriptor `panel` pinta el componente registrado para su nombre
- * (`transito` → `ParamsTransito`) con TODOS los parámetros y los errores de sus `campos`. Ese panel
+ * (`transito` → `ParamsTransito`; 476: `picking` → `ParamsPicking`) con TODOS los parámetros y los errores de sus `campos`. Ese panel
  * trae el título de su maqueta, así que el genérico no se repite encima.
  */
 export function ParametrosInforme({ informe, valores, onCambiar, onNormalizar, errores }: ParametrosInformeProps) {
@@ -96,6 +97,18 @@ function PanelDeInforme({
       return (
         <ParamsTransito
           etiqueta={d.etiqueta}
+          valores={valores}
+          onCambiar={onCambiar}
+          onNormalizar={onNormalizar}
+          errores={errores}
+        />
+      );
+    case "picking":
+      // 476 (R3) — selector de UNA tienda con fulfillment + días para marcar atrasada.
+      return (
+        <ParamsPicking
+          etiqueta={d.etiqueta}
+          ayuda={d.ayuda}
           valores={valores}
           onCambiar={onCambiar}
           onNormalizar={onNormalizar}

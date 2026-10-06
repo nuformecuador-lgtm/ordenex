@@ -10,6 +10,11 @@ import { cn } from "@/lib/utils";
 export interface RadioGroupOption {
   value: string;
   label: string;
+  /**
+   * Texto secundario alineado a la derecha de la fila (p. ej. conteos). Forma parte del nombre
+   * accesible de la opción, porque vive dentro de su `<label>`.
+   */
+  detalle?: React.ReactNode;
 }
 
 export interface RadioGroupProps {
@@ -25,6 +30,8 @@ export interface RadioGroupProps {
   "aria-label"?: string;
   /** Marca el grupo como inválido (mismo contrato que los campos del panel). */
   "aria-invalid"?: boolean;
+  /** Ids (separados por espacio) de los textos que describen el grupo: su error y su ayuda. */
+  "aria-describedby"?: string;
   /** Clases extra para el contenedor del grupo. */
   className?: string;
 }
@@ -57,6 +64,7 @@ export function RadioGroup({
       disabled={disabled}
       aria-label={rest["aria-label"]}
       aria-invalid={rest["aria-invalid"] ? true : undefined}
+      aria-describedby={rest["aria-describedby"] || undefined}
       className={cn("flex flex-col gap-2", className)}
     >
       {options.map((option) => (
@@ -75,7 +83,16 @@ export function RadioGroup({
               className="size-1.5 rounded-full bg-primary-foreground"
             />
           </RadioPrimitive.Root>
-          {option.label}
+          {option.detalle === undefined ? (
+            option.label
+          ) : (
+            <>
+              <span className="min-w-0 flex-1">{option.label}</span>
+              <span data-slot="radio-group-item-detalle" className="shrink-0 text-right text-xs text-muted-foreground">
+                {option.detalle}
+              </span>
+            </>
+          )}
         </label>
       ))}
     </RadioGroupPrimitive>

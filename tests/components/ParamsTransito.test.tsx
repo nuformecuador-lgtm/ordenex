@@ -344,6 +344,38 @@ describe("R38 — conteo de hoy con valores válidos; errores por campo y sin co
     expect(screen.queryByTestId("conteo-transito")).toBeNull();
   });
 
+  it("m3 (revisión 476) — sesión caducada al cargar: lo dice (no «solo un maestro» ni «sin zonas») y deja reintentar", async () => {
+    previsualizar.mockReset();
+    previsualizar.mockResolvedValueOnce({ status: "unauthenticated" }).mockResolvedValue(ok(2, 0, 0));
+    const user = userEvent.setup();
+    render(<Harness inicial={partida()} />);
+    expect(await screen.findByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeTruthy();
+    expect(screen.queryByText("Solo un maestro puede ver cuántos paquetes entrarían hoy.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByTestId("zona-z-gam")).toBeTruthy();
+    expect(screen.queryByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeNull();
+  });
+
+  it("m3 (revisión 476) — sesión caducada al contar: lo dice y «Reintentar» vuelve a contar", async () => {
+    previsualizar.mockReset();
+    previsualizar.mockResolvedValueOnce(ok(15, 8, 0)).mockResolvedValueOnce({ status: "unauthenticated" }).mockResolvedValue(ok(3, 0, 0));
+    const user = userEvent.setup();
+    await montar();
+    await screen.findByTestId("conteo-transito");
+    await user.click(screen.getByText("Desde que se genera la guía"));
+    expect(await screen.findByText("Tu sesión expiró. Vuelve a iniciar sesión.")).toBeTruthy();
+    expect(screen.queryByText("Solo un maestro puede ver cuántos paquetes entrarían hoy.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => expect(screen.getByTestId("conteo-transito").textContent).toContain("3 paquetes"));
+  });
+
+  it("m4 (revisión 476) — el error del hito forma parte de la descripción accesible del grupo", async () => {
+    await montar({ ...partida(), zonas: ZONAS_PARTIDA }, { "parametros.hito": ["hito: elige desde cuándo se cuentan los días."] });
+    expect(screen.getByRole("radiogroup", { name: "Desde cuándo se cuentan los días" })).toHaveAccessibleDescription(
+      expect.stringContaining("Elige desde cuándo se cuentan los días."),
+    );
+  });
+
   it("si no se pueden cargar las zonas, lo dice y deja reintentar", async () => {
     previsualizar.mockReset();
     previsualizar.mockRejectedValueOnce(new Error("db caída")).mockResolvedValue(ok(2, 0, 0));
@@ -407,8 +439,8 @@ describe("design §8.1 — el renderizador de la 474 pinta el panel del descript
 describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () => {
   it("un descriptor `panel` desconocido se dice en claro y el resto de parámetros sigue", () => {
     const informe = {
-      clave: "picking",
-      nombre: "Informe de picking",
+      clave: "futuro",
+      nombre: "Informe futuro",
       descripcion: "",
       generaDocumento: true,
       aptoParaAdminTienda: false,
@@ -416,8 +448,9 @@ describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () =>
       eventos: [],
       parametrosPorDefecto: {},
       descriptores: [
-        // Un DTO de otra versión: el tipo no lo admite (por eso el cast), pero puede llegar.
-        { campo: "picking", etiqueta: "Parámetros del picking", tipo: "panel", panel: "picking", campos: [] },
+        // Un DTO de otra versión: el tipo no lo admite (por eso el cast), pero puede llegar. (476: antes
+        // era «picking», que ya tiene rama; el caso sigue siendo un panel que esta versión NO conoce.)
+        { campo: "futuro", etiqueta: "Parámetros del informe futuro", tipo: "panel", panel: "futuro", campos: [] },
         { campo: "enviarSiVacio", etiqueta: "Enviar aunque no haya nada que informar", tipo: "booleano" },
       ],
       variables: [],
@@ -425,7 +458,7 @@ describe("m1 (revisión 475) — un panel sin rama no se pinta en blanco", () =>
     render(<ParametrosInforme informe={informe} valores={{}} onCambiar={() => {}} errores={{}} />);
     const aviso = screen.getByRole("status");
     expect(aviso.textContent).toBe(
-      "«Parámetros del picking»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.",
+      "«Parámetros del informe futuro»: este informe no tiene panel de parámetros todavía. Se usan sus valores de partida.",
     );
     expect(screen.getByRole("switch", { name: "Enviar aunque no haya nada que informar" })).toBeTruthy();
     expect(previsualizar).not.toHaveBeenCalled();

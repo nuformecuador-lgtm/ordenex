@@ -10,8 +10,8 @@ const FORMATO = /^[a-z0-9_]+$/;
 describe("474/R46 — catalogo de informes", () => {
   const informes = [...INFORMES_WHATSAPP.values()];
 
-  it("los dos informes de esta ficha y el de transito (475)", () => {
-    expect([...INFORMES_WHATSAPP.keys()].sort()).toEqual(["aviso_interno", "prueba_envio", "transito"]);
+  it("los dos informes de esta ficha, el de transito (475) y el de picking (476)", () => {
+    expect([...INFORMES_WHATSAPP.keys()].sort()).toEqual(["aviso_interno", "picking", "prueba_envio", "transito"]);
   });
 
   it("la clave del mapa es la clave del informe, sin duplicados y con formato [a-z0-9_]+", () => {
@@ -27,7 +27,15 @@ describe("474/R46 — catalogo de informes", () => {
     for (const i of informes) {
       expect(i.nombre.trim()).not.toBe("");
       expect(i.descripcion.trim()).not.toBe("");
-      expect(i.parametros.safeParse(i.parametrosPorDefecto).success).toBe(true);
+      // 476 (design §4.2): el picking NO tiene tienda «por defecto» razonable; su valor de partida
+      // `tiendaId: ""` obliga a elegirla (R2). Es la UNICA excepcion, y solo en ese campo.
+      const r = i.parametros.safeParse(i.parametrosPorDefecto);
+      if (i.clave === "picking") {
+        expect(r.success).toBe(false);
+        expect(r.error?.issues.map((x) => x.path.join("."))).toEqual(["tiendaId"]);
+      } else {
+        expect(r.success).toBe(true);
+      }
       expect(Array.isArray(i.descriptores)).toBe(true);
       for (const d of i.descriptores) {
         // 475 (design §8.1): un descriptor `panel` edita los campos que declara en `campos`; su
