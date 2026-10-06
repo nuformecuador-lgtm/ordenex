@@ -5666,12 +5666,12 @@
       "zone": "fullstack",
       "sdd": true,
       "branch": null,
-      "status": "pending",
+      "status": "spec_ready",
       "complexity": "media",
       "depends_on": [
         474
       ],
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia)."
     },
     {
       "id": 471,
