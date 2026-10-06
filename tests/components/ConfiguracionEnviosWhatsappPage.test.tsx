@@ -32,9 +32,9 @@ vi.mock("@/lib/actions/envios-whatsapp", () => ({
   listarEventosDisponibles: (...a: unknown[]) => acciones.listarEventosDisponibles(...a),
   previsualizarDestinatarios: (...a: unknown[]) => acciones.previsualizarDestinatarios(...a),
 }));
-const listarPlantillasCompletoMock = vi.fn();
+const listarPlantillasMock = vi.fn();
 vi.mock("@/lib/actions/plantillas", () => ({
-  listarPlantillasCompleto: (...a: unknown[]) => listarPlantillasCompletoMock(...a),
+  listarPlantillas: (...a: unknown[]) => listarPlantillasMock(...a),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -108,7 +108,7 @@ beforeEach(() => {
     status: "ok",
     preview: { destinatarios: [], total: 0, avisos: [], excedeTope: false, tope: 50 },
   });
-  listarPlantillasCompletoMock.mockResolvedValue({ status: "ok", items: [], total: 0 });
+  listarPlantillasMock.mockResolvedValue({ status: "ok", items: [], page: 1, pageSize: 100, total: 0 });
 });
 
 afterEach(() => cleanup());
@@ -127,7 +127,7 @@ describe("R1 — solo el maestro entra en Envíos automáticos", () => {
       }
       expect(moduloProps).toHaveLength(0);
       for (const f of Object.values(acciones)) expect(f).not.toHaveBeenCalled();
-      expect(listarPlantillasCompletoMock).not.toHaveBeenCalled();
+      expect(listarPlantillasMock).not.toHaveBeenCalled();
     });
   }
 
@@ -143,18 +143,34 @@ describe("R1 — solo el maestro entra en Envíos automáticos", () => {
   it("el formulario de alta recibe solo plantillas DE INFORME aprobadas (R12)", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
     const base = { cuerpo: "Hola", variables: [], variablesNombres: {}, welcomeMessage: false, plantillaTienda: false, createdAt: new Date() };
-    listarPlantillasCompletoMock.mockResolvedValue({
-      status: "ok",
-      total: 4,
-      items: [
-        { ...base, id: "ok", nombre: "aprobada", estado: "activo", templateId: "t1", informeClave: "prueba_envio", llevaDocumento: true },
-        { ...base, id: "orden", nombre: "de_orden", estado: "activo", templateId: "t2", informeClave: null },
-        { ...base, id: "sin_meta", nombre: "sin_meta", estado: "activo", templateId: null, informeClave: "prueba_envio" },
-        { ...base, id: "pend", nombre: "pendiente", estado: "pending", templateId: "t3", informeClave: "prueba_envio" },
-      ],
-    });
+    // Dos páginas: la aprobada está en la SEGUNDA, así que recorrer solo la primera la perdería.
+    listarPlantillasMock
+      .mockResolvedValueOnce({
+        status: "ok",
+        total: 4,
+        page: 1,
+        pageSize: 100,
+        items: [
+          { ...base, id: "orden", nombre: "de_orden", estado: "activo", templateId: "t2", informeClave: null },
+          { ...base, id: "sin_meta", nombre: "sin_meta", estado: "activo", templateId: null, informeClave: "prueba_envio" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        total: 4,
+        page: 2,
+        pageSize: 100,
+        items: [
+          { ...base, id: "pend", nombre: "pendiente", estado: "pending", templateId: "t3", informeClave: "prueba_envio" },
+          { ...base, id: "ok", nombre: "aprobada", estado: "activo", templateId: "t1", informeClave: "prueba_envio", llevaDocumento: true },
+        ],
+      });
     const p = await paginas();
     render(await p.nuevo());
+    expect(listarPlantillasMock.mock.calls.map((c) => c[0])).toEqual([
+      { page: 1, pageSize: 100 },
+      { page: 2, pageSize: 100 },
+    ]);
     const props = moduloProps[0] as { envio: unknown; plantillas: { id: string; llevaDocumento: boolean }[] };
     expect(props.envio).toBeNull();
     expect(props.plantillas).toEqual([

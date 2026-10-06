@@ -140,8 +140,9 @@ describe("R3/R4/R53 — crear una plantilla DE INFORME", () => {
     await user.type(screen.getByLabelText("Cuerpo"), "Buenos días ");
     await user.click(screen.getByRole("option", { name: /Nombre del destinatario/ }));
     await waitFor(() => expect(screen.getByTestId("plantilla-preview")).toHaveValue("Buenos días Daniel"));
-    // No pregunta al servidor: `previewPlantilla` rellena con datos de ORDEN.
-    expect(m.previewPlantilla).not.toHaveBeenCalled();
+    // No pregunta al servidor por el cuerpo de informe: `previewPlantilla` rellena con datos de
+    // ORDEN. (Sí puede haberse llamado con el cuerpo VACÍO del arranque, cuando aún era de orden.)
+    expect(m.previewPlantilla).not.toHaveBeenCalledWith(expect.stringContaining("Buenos"));
   });
 
   it("R4: una clave que no es del informe se marca como desconocida", async () => {

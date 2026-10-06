@@ -3,7 +3,8 @@ import {
   listarInformesWhatsapp,
   previsualizarDestinatarios,
 } from "@/lib/actions/envios-whatsapp";
-import { listarPlantillasCompleto } from "@/lib/actions/plantillas";
+import { listarPlantillas } from "@/lib/actions/plantillas";
+import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
 import {
   ROLES_DESTINATARIO,
   type DestinatarioPreviewDTO,
@@ -12,6 +13,27 @@ import {
 } from "@/lib/types/envios-whatsapp";
 
 import type { PlantillaDeInformeOpcion } from "./EnvioForm";
+
+/** Tamaño de página del recorrido: el tope del listado de plantillas (`PLANTILLAS_MAX_PAGE_SIZE`). */
+const PAGINA = 100;
+/** Cinturón: nunca más de estas páginas (10.000 plantillas), aunque el total mintiera. */
+const MAX_PAGINAS = 100;
+
+/**
+ * Todas las plantillas vigentes, página a página con el MISMO listado que pinta Plantillas.
+ * `listarPlantillasCompleto` no se usa a propósito: es la acción de una DESCARGA registrada y la
+ * guardia `descargas-por-registro` prohíbe que una pantalla la llame directa.
+ */
+async function todasLasPlantillas(): Promise<PlantillaListItemDTO[]> {
+  const items: PlantillaListItemDTO[] = [];
+  for (let page = 1; page <= MAX_PAGINAS; page++) {
+    const r = await listarPlantillas({ page, pageSize: PAGINA });
+    if (r.status !== "ok") break;
+    items.push(...r.items);
+    if (r.items.length === 0 || items.length >= r.total) break;
+  }
+  return items;
+}
 
 export interface DatosFormularioEnvio {
   informes: InformeDTO[];
@@ -33,24 +55,21 @@ export interface DatosFormularioEnvio {
  *   aparte: son exactamente las personas que un envío puede alcanzar (activas, rol permitido).
  */
 export async function cargarDatosFormulario(): Promise<DatosFormularioEnvio> {
-  const [inf, ev, pl, pre] = await Promise.all([
+  const [inf, ev, todas, pre] = await Promise.all([
     listarInformesWhatsapp(),
     listarEventosDisponibles(),
-    listarPlantillasCompleto({}),
+    todasLasPlantillas(),
     previsualizarDestinatarios({ roles: [...ROLES_DESTINATARIO], usuarioIds: [] }),
   ]);
-  const plantillas: PlantillaDeInformeOpcion[] =
-    pl.status === "ok"
-      ? pl.items
-          .filter((p) => p.informeClave && p.estado === "activo" && p.templateId !== null)
-          .map((p) => ({
-            id: p.id,
-            nombre: p.nombre,
-            cuerpo: p.cuerpo,
-            informeClave: p.informeClave as string,
-            llevaDocumento: p.llevaDocumento === true,
-          }))
-      : [];
+  const plantillas: PlantillaDeInformeOpcion[] = todas
+    .filter((p) => p.informeClave && p.estado === "activo" && p.templateId !== null)
+    .map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      cuerpo: p.cuerpo,
+      informeClave: p.informeClave as string,
+      llevaDocumento: p.llevaDocumento === true,
+    }));
   return {
     informes: inf.status === "ok" ? inf.informes : [],
     eventos: ev.status === "ok" ? ev.eventos : [],
