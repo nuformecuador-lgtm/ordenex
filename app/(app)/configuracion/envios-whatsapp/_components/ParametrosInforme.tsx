@@ -102,6 +102,14 @@ function PanelDeInforme({
           errores={errores}
         />
       );
+    case "picking":
+      // 476 — RESERVA puesta por backend_dev para que el `never` de abajo compile con el panel nuevo.
+      // La rama real (selector de tienda con `listarTiendasPicking`) la pone frontend_dev (F5).
+      return (
+        <p role="status" data-panel="picking" className="text-sm text-muted-foreground">
+          «{d.etiqueta}»: el selector de tienda todavía no está disponible.
+        </p>
+      );
     default: {
       // m1 (revisión 475): un panel nuevo en `PanelParametros` sin su rama aquí NO compila (`never`)
       // y, si llegara igual (un DTO de otra versión), se dice en claro en vez de no pintar nada.
