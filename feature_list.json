@@ -5666,12 +5666,12 @@
       "zone": "fullstack",
       "sdd": true,
       "branch": "feature/476-informe-picking-whatsapp",
-      "status": "in_progress",
+      "status": "done",
       "complexity": "media",
       "depends_on": [
         474
       ],
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia). || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx)."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia). || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx). || HECHA en dev (PR #852). Sin desplegar. Pendiente de release: T5.2 verlo y un envio por tienda."
     },
     {
       "id": 471,

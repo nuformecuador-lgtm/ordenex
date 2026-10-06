@@ -514,6 +514,10 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
   `filasEnAlerta` en producción con los parámetros de partida; T6.3 — ver el panel y un PDF real
   contra `design-whatsapp/ParamsTransito` y `PdfTransito1/2` (escritorio y 390 px), con «Probar ahora».
   Comparar sus cifras con el PDF del sistema externo del mismo día antes de que Daniel lo apague.
+- **476** (informe de picking): sin migración. Al desplegar: T5.2 — ver el panel y un PDF real contra
+  `design-whatsapp/ParamsPicking` y `PdfPicking` (escritorio y 390 px); crear UN envío por tienda
+  (Sicommer, Gameos, Nuform) y «Probar ahora» con cada uno; comparar con el picking del sistema externo
+  del mismo día antes de que Daniel lo apague.
 - **Mensajes de validación en español** (PR #850): `instrumentation.ts` nuevo en la raíz; tras
   desplegar, comprobar que una action con un campo vacío responde en español (lo carga `register()`).
 

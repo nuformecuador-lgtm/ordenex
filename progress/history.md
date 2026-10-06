@@ -5745,3 +5745,9 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 ## Validaciones en español (2026-10-05)
 - Mapa de errores de zod en español claro (servidor por `instrumentation.ts`, cliente por `<ZodEnEspanol />`, tests por `tests/setup`), mensajes propios en Envíos y Plantillas. Gate completo verde (33554). PR #850.
 - `init.sh`: `tests/setup/` e `instrumentation.ts` pasan a exigir el completo.
+
+## 476 — Informe de picking por WhatsApp (2026-10-06)
+- Informe del catálogo de la 474: foto de «En preparación» de UNA tienda con fulfillment y activa, por producto con remisiones y marca de atrasadas; PDF A4 por tienda; panel con selector de tienda y conteos. Decisiones D1–D6 aprobadas; tiendas inactivas fuera (leader).
+- Rama `{tipo:"error"}` en el motor; `detalleDeCausa` saneado en picking y tránsito. Bug P2028 (caché del repo) hallado contra Postgres y corregido en ambos informes.
+- R1–R30; mapa en `progress/impl_476.md`; todas las mutaciones muertas. Revisión APROBADA; m2–m5 arreglados. PR #852.
+- Pendiente de release: T5.2 (verlo) en `docs/release.md`.

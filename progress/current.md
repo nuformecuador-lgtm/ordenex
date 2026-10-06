@@ -1,3 +1,10 @@
+# ESTADO 2026-10-06 — 473, 474, 475, 476 y validaciones en español HECHAS en `dev`, SIN DESPLEGAR; in_progress = 0
+
+- En `dev` (sin desplegar): 473 (#847), 474 (#848 + botón #849), validaciones en español (#850), 475 (#851), 476 (#852). 472 ya resuelta por la 470. Lo que hay que hacer al desplegar está en `docs/release.md` › «473 y 474…» (Daniel apaga su sistema ANTES de encender envíos; NEXT_PUBLIC_APP_URL; Meta real T11.4; EXPLAIN de tránsito; verlo todo; un envío por tienda).
+- Arnés cambiado (pedido del humano): `--rapido` siempre, se amplía con integration/db en dinero/datos, repite aislados los rojos; completo SOLO antes de prod (o si se toca init.sh, tests/setup, instrumentation.ts o config de build).
+- Preview: entrar con `maestro.qa@ordenex.test` / `Preview474!Qa` (reseteada por Carlos con SQL). `.mcp.json` tiene `supabase-preview` (ref uyqzqxczfhfndlhpsmxq); requiere reiniciar la sesión para cargarlo.
+- Pendiente: 471 (texto del periodo cortado en la caja) registrada, sin empezar. Google Maps (403/REQUEST_DENIED): Carlos lo deja para después.
+
 # ESTADO 2026-10-05 — 470 VALIDADA EN PROD; siguiente: WhatsApp interno
 
 - **470 T7.2 OK**: Carlos bajó en prod `libro-de-movimientos-2026-10-05.xlsx` por la vía de almacén (objeto de 777 KB en `descargas`, bucket `public=false`). «Detalle por guía» trae 24.806 filas (el tope viejo era 5.000; antes fallaba con 14.153); los totales de las dos hojas cuadran (49.850.534,60 / 46.771.418,96 / 13.815.087,55). `get_runtime_errors` dio timeout dos veces: queda sin mirar. T7.4 (Órdenes sin filtros) aún sin descarga en prod.
