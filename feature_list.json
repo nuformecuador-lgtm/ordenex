@@ -5657,7 +5657,7 @@
       "depends_on": [
         474
       ],
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Parametros: plazo y aviso por zona (zona_id, no texto), hito de inicio, estados incluidos, umbral de parado por estado, enviar si vacio. Valores de partida GAM 8/10, FGAM 15/20. || SPEC escrito (40 R), sin migracion; pendiente aprobacion: zona nueva 20/5, 4 estados de devolucion incluidos, incidente con umbral 1 dia."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Parametros: plazo y aviso por zona (zona_id, no texto), hito de inicio, estados incluidos, umbral de parado por estado, enviar si vacio. Valores de partida GAM 8/10, FGAM 15/20. || SPEC escrito (40 R), sin migracion; pendiente aprobacion: zona nueva 20/5, 4 estados de devolucion incluidos, incidente con umbral 1 dia. || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx)."
     },
     {
       "id": 476,
@@ -5671,7 +5671,7 @@
       "depends_on": [
         474
       ],
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia)."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia). || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx)."
     },
     {
       "id": 471,
