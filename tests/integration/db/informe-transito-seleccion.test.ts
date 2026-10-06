@@ -36,8 +36,8 @@ describeSiHayBase("475/R9-R10 — seleccion de ordenes en alerta", () => {
         deletedAt: mas(T, -1),
       });
       const noIncluida = await crearOrden(tx, base, { clave: "noinc", zonaId: zona, estado: "en_preparacion", createdAt: antes });
-      const entregada = await crearOrden(tx, base, { clave: "entregada", zonaId: zona, estado: "entregado", createdAt: antes });
-      const devuelta = await crearOrden(tx, base, { clave: "devuelta", zonaId: zona, estado: "devuelta_a_tienda", createdAt: antes });
+      const cierreEntrega = await crearOrden(tx, base, { clave: "cierreEntrega", zonaId: zona, estado: "entregado", createdAt: antes });
+      const cierreTienda = await crearOrden(tx, base, { clave: "cierreTienda", zonaId: zona, estado: "devuelta_a_tienda", createdAt: antes });
       const bajo = await crearOrden(tx, base, { clave: "bajo", zonaId: zona, estado: "en_reparto", createdAt: mas(T, 1) });
 
       // La consulta PIDE los dos de cierre logistico (R10: se excluyen igual).
@@ -50,7 +50,7 @@ describeSiHayBase("475/R9-R10 — seleccion de ordenes en alerta", () => {
       return {
         ids,
         dentro: dentro.id,
-        fuera: { borrada: borrada.id, noIncluida: noIncluida.id, entregada: entregada.id, devuelta: devuelta.id, bajo: bajo.id },
+        fuera: { borrada: borrada.id, noIncluida: noIncluida.id, cierreEntrega: cierreEntrega.id, cierreTienda: cierreTienda.id, bajo: bajo.id },
         fila: filas.find((f) => f.ordenId === dentro.id),
         numGuia: dentro.numGuia,
         base,
@@ -85,8 +85,8 @@ describeSiHayBase("475/R9-R10 — seleccion de ordenes en alerta", () => {
       const casos = {
         borrada: { estado: "en_reparto", deletedAt: mas(T, -1) },
         noIncluida: { estado: "novedad" },
-        entregada: { estado: "entregado" },
-        devuelta: { estado: "devuelta_a_tienda" },
+        cierreEntrega: { estado: "entregado" },
+        cierreTienda: { estado: "devuelta_a_tienda" },
       } as const;
       const out: Record<string, number> = {};
       for (const [clave, c] of Object.entries(casos)) {
@@ -101,6 +101,6 @@ describeSiHayBase("475/R9-R10 — seleccion de ordenes en alerta", () => {
       }
       return out;
     });
-    expect(r).toEqual({ borrada: 0, noIncluida: 0, entregada: 0, devuelta: 0 });
+    expect(r).toEqual({ borrada: 0, noIncluida: 0, cierreEntrega: 0, cierreTienda: 0 });
   });
 });
