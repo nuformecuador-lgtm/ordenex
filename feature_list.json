@@ -5678,11 +5678,11 @@
       "title": "el periodo de la caja corta el texto",
       "description": "El selector de periodo de la caja (w-56) corta la etiqueta; debe verse completa.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "depends_on": null,
-      "status_note": "Aprobada por el humano el 2026-10-05.",
+      "status_note": "Aprobada por el humano el 2026-10-05. || HECHA en dev (PR #853): DateRangeFilter compartido con w-auto min-w-56 max-w-full. Sin verificacion visual.",
       "branch": null
     },
     {
