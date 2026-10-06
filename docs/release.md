@@ -492,6 +492,25 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 >
 > **Plan de pruebas por rol en preview:** `progress/plan_pruebas_release.md`.
 
+### 473 y 474 (en `dev` desde el 2026-10-05) — lo que hay que hacer al desplegarlas
+
+- **473** (Corregir la recepción de dinero de una satélite): sin migración. Tras desplegar, que un
+  admin pruebe «Corregir» en una consolidación «Recibido incompleto» (hoy no hay ninguna en prod:
+  las 85 están exactas; la comprobación queda para el primer caso real).
+- **474** (envíos automáticos por WhatsApp): 3 migraciones (`20261005120000/120100/120200`).
+  1. **ANTES de encender ningún envío: Daniel apaga su sistema externo** (tránsito a las 05:00 y
+     picking a las 05:55 CR). Los envíos nacen apagados, pero si se encienden con el externo vivo,
+     José y María José reciben todo dos veces.
+  2. Comprobar que `NEXT_PUBLIC_APP_URL` (o `NEXT_PUBLIC_SITE_URL`) existe en **Production**: sin
+     ella los avisos por evento salen con error visible en el historial.
+  3. **T11.4 — recorrido contra Meta REAL** (nunca probado desde el repo): `/configuracion/plantillas`
+     no muestra el aviso de «ID de la app de Meta» (si lo muestra, copiar el ID del panel de Meta a
+     `WHATSAPP_APP_ID`); crear una plantilla de informe «con documento», enviarla a aprobación (sube el
+     PDF de ejemplo por la API reanudable) y, aprobada, «Probar ahora» con el informe de prueba.
+  4. **T10.4 — verlo con sesión de maestro** (en preview lo revisa Carlos el 2026-10-05).
+  5. Después: el job diario de mantenimiento (`whatsapp_envio_mantenimiento`) aparece en `jobs` y
+     corre; `get_runtime_errors` sin errores de `envios-whatsapp`.
+
 ### Qué lleva esta release
 
 Medido el 2026-09-26 sobre `origin/dev` = `2849185a` (la 458 completa: A #828, B #829, arreglo

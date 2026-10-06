@@ -5730,3 +5730,9 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
 - Método atómico `corregirConciliacion` + service + action; una fila de historial (reusa `cierre_bodega_conciliado`, D1) con monto anterior y nuevo; mueve `resuelto_at` (D2). El conflicto cierra el diálogo y refresca.
 - R1–R17; mapa en `progress/impl_473.md`. Revisión APROBADA (`progress/review_473.md`), 4 mutaciones en rojo. PR #847.
 - Gate post-merge (`progress/gate_dev_tras_847.log`): 2 rojos por deadlock 40P01 de la base compartida, verdes aislados 2/2, ajenos al diff. Menores abiertos: M3 (modo corrección derivado distinto en botón y diálogo; peor caso conflict sin escritura).
+
+## 474 — Envíos automáticos por WhatsApp (2026-10-05)
+- Motor de envíos programados de plantillas al personal: por rol o usuario, a hora fija o por aviso interno (puente `conEnviosWhatsapp` en `repoReal()`, 10 eventos disponibles), PDF adjunto de un catálogo de informes (cabecera DOCUMENT), historial con PDF 30 días, nacen apagados. Solo maestro.
+- 3 migraciones; idempotencia en base; app id de Meta resuelto con el token (D2). R1–R53; mapa en `progress/impl_474.md`.
+- Revisión APROBADA (`progress/review_474.md`); arreglados m1, m2 (PDF en Safari) y m4 (adminTienda excluido al ejecutar). PR #848.
+- Gate con la regla nueva (`--rapido` ampliado): 785 archivos, 2 intermitentes repetidos aislados en verde. Pendiente de release: T10.4 (verlo) y T11.4 (Meta real) en `docs/release.md`.

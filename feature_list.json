@@ -5640,10 +5640,10 @@
       "zone": "fullstack",
       "sdd": true,
       "branch": "feature/474-envios-automaticos-whatsapp",
-      "status": "in_progress",
+      "status": "done",
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 (WhatsApp interno). Referencia del sistema externo SOLO como logica, no copiar (un destinatario fijo, sin candado, zona por texto). Incluye: plantilla con cabecera DOCUMENT (hoy solo BODY), variables por dato, idempotencia dia CR+destinatario+envio, aviso de telefonos invalidos, Probar ahora, nacen apagados (el sistema externo sigue enviando hasta que Daniel lo apague). Pantalla nueva => /design. || SPEC escrito (47 R) + maqueta en design-whatsapp/; pendiente aprobacion y 4 decisiones (quien configura, WHATSAPP_APP_ID, retencion PDF 30 d, primer evento). || SPEC APROBADO 2026-10-05 (53 R): D1 solo maestro, D2 app id resuelto por /app con el token, D3 PDF 30 d, D4 eventos = puente de avisos internos (NotificacionEvento, 10 disponibles). Enmienda leader: informes no aptos para adminTienda. backend_dev -> frontend_dev en worktree, base local propia."
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 (WhatsApp interno). Referencia del sistema externo SOLO como logica, no copiar (un destinatario fijo, sin candado, zona por texto). Incluye: plantilla con cabecera DOCUMENT (hoy solo BODY), variables por dato, idempotencia dia CR+destinatario+envio, aviso de telefonos invalidos, Probar ahora, nacen apagados (el sistema externo sigue enviando hasta que Daniel lo apague). Pantalla nueva => /design. || SPEC escrito (47 R) + maqueta en design-whatsapp/; pendiente aprobacion y 4 decisiones (quien configura, WHATSAPP_APP_ID, retencion PDF 30 d, primer evento). || SPEC APROBADO 2026-10-05 (53 R): D1 solo maestro, D2 app id resuelto por /app con el token, D3 PDF 30 d, D4 eventos = puente de avisos internos (NotificacionEvento, 10 disponibles). Enmienda leader: informes no aptos para adminTienda. backend_dev -> frontend_dev en worktree, base local propia. || HECHA en dev (PR #848, e3ce9a28). Sin desplegar. Pendientes de release en docs/release.md: Daniel apaga el externo antes de encender, NEXT_PUBLIC_APP_URL, T11.4 Meta real, T10.4 verlo."
     },
     {
       "id": 475,
