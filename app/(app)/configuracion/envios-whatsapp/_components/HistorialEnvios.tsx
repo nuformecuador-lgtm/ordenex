@@ -110,7 +110,7 @@ export function HistorialEnvios({ inicial, envios, envioId: envioInicial }: Hist
         </span>
       </div>
 
-      {error ? (
+      {error && items.length === 0 ? (
         <p role="alert" className="text-sm text-danger-strong">
           No se pudo cargar el historial.
         </p>

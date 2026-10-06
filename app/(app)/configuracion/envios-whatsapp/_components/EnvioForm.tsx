@@ -476,7 +476,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
             <div className="flex flex-col gap-3">
               <fieldset>
                 <legend className="mb-1.5 text-sm font-medium">Días</legend>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1 sm:gap-1.5">
                   {DIAS_SEMANA.map((d) => {
                     const on = dias.includes(d.dia);
                     return (
@@ -487,7 +487,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
                         aria-label={d.largo}
                         onClick={() => alternarDia(d.dia)}
                         className={cn(
-                          "flex h-11 min-w-11 items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:h-8 sm:min-w-12",
+                          "flex h-11 min-w-10 items-center justify-center rounded-lg border px-2 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:h-8 sm:min-w-12",
                           on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background text-foreground",
                         )}
                       >
@@ -508,7 +508,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
                 <Input
                   id="envio-hora"
                   type="time"
-                  className="w-32"
+                  className="w-40"
                   value={hora}
                   aria-invalid={errores.hora ? true : undefined}
                   aria-describedby={errores.hora ? "envio-hora-error" : undefined}
@@ -578,7 +578,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
         {faltaDocumento ? (
           <p className="text-center text-xs text-muted-foreground sm:text-left">Cambia la plantilla para seguir.</p>
         ) : (
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="hidden text-xs leading-relaxed text-muted-foreground sm:block">
             «Probar ahora» te lo manda solo a ti, con los datos de este momento, y queda en el historial como prueba. No
             enciende el envío. Si hay cambios sin guardar, se guardan antes.
           </p>

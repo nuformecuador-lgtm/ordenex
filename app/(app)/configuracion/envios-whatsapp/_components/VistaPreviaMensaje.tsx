@@ -95,8 +95,8 @@ export function VistaPreviaMensaje({ cuerpo, variables, conDocumento, lector }: 
                   <tbody>
                     {previa.datos.map((d) => (
                       <tr key={d.clave}>
-                        <td className="py-1 pr-2 font-mono text-muted-foreground">{`{{${d.posicion}}}`}</td>
-                        <td className="py-1 pr-2">
+                        <td className="w-12 py-1 pr-2 font-mono text-muted-foreground">{`{{${d.posicion}}}`}</td>
+                        <td className="w-full py-1 pr-2">
                           {d.conocida ? d.nombre : <span className="text-danger-strong">{`{{${d.clave}}}`} no es un dato de este informe</span>}
                         </td>
                         <td className="py-1 text-right">{d.conocida ? d.valor : "—"}</td>
