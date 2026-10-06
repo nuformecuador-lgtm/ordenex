@@ -29,6 +29,14 @@ export interface PlantillaPublica {
   plantillaTienda: boolean;
   templateId: string | null; // enlace a Meta; NULL = no propagada / no sincronizada
   templateIdioma: string | null; // idioma del template en Meta (necesario para enviar)
+  /**
+   * Ficha 474 (R3): `null` = plantilla de ORDEN (lo de siempre). No nulo = plantilla de INFORME,
+   * asociada a ese informe del catalogo `INFORMES_WHATSAPP`. El repositorio SIEMPRE lo rellena;
+   * es opcional solo para que los dobles anteriores a la 474 sigan compilando (ausente = de orden).
+   */
+  informeClave?: string | null;
+  /** Ficha 474 (R5/R6): la plantilla lleva cabecera DOCUMENT en Meta. Ausente = `false`. */
+  llevaDocumento?: boolean;
   createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +56,10 @@ export interface PlantillaListItem {
   /** `true` en una PLANTILLA DE TIENDA: el listado le OCULTA "Enviar para aprobacion". */
   plantillaTienda: boolean;
   templateId: string | null; // el admin ve si la plantilla ya esta enlazada con Meta
+  /** Ficha 474 (R3): `null`/ausente = de orden; si no, la clave del informe. */
+  informeClave?: string | null;
+  /** Ficha 474 (R5): lleva cabecera documento. Ausente = `false`. */
+  llevaDocumento?: boolean;
   createdAt: Date;
 }
 
@@ -90,6 +102,24 @@ export interface PlantillaEnviable {
   variables: string[];
   templateId: string;
   templateIdioma: string;
+}
+
+/** Ficha 474 — la plantilla enviable de un informe, con su marca de documento (R33). */
+export interface PlantillaEnviableDeInforme extends PlantillaEnviable {
+  informeClave: string;
+  llevaDocumento: boolean;
+}
+
+/**
+ * Ficha 474 (R12/R34) — el lector del MOTOR de envios. Interfaz aparte (no un metodo mas de
+ * `IPlantillaMensajeRepository`) para no obligar a todos los dobles existentes a implementarlo.
+ */
+export interface ILectorPlantillaDeInforme {
+  /**
+   * Plantilla enviable DE ESE INFORME: vigente, `activo`, con templateId y
+   * `informe_clave = informeClave`. `null` si no cumple alguna de las cuatro.
+   */
+  findEnviableDeInformeById(id: string, informeClave: string): Promise<PlantillaEnviableDeInforme | null>;
 }
 
 /**
@@ -165,6 +195,10 @@ export interface CreatePlantillaData {
    * `false` para el resto.
    */
   plantillaTienda?: boolean;
+  /** Ficha 474 (R3): clave del informe; ausente = `null` (plantilla de orden). */
+  informeClave?: string | null;
+  /** Ficha 474 (R5): ausente = `false`. */
+  llevaDocumento?: boolean;
 }
 
 /** R20/R22: solo nombre y/o cuerpo; `variables` recalculadas por el service si cambia el cuerpo. */
@@ -176,6 +210,10 @@ export interface UpdatePlantillaData {
   variablesNombres?: Record<string, string>;
   /** PLANTILLA DE TIENDA: se puede alternar al editar; ausente = no se toca. */
   plantillaTienda?: boolean;
+  /** Ficha 474 (R3/R7): solo mientras la plantilla no haya salido hacia Meta (lo decide el service). */
+  informeClave?: string | null;
+  /** Ficha 474 (R5/R7): idem. */
+  llevaDocumento?: boolean;
 }
 
 /**
@@ -253,7 +291,11 @@ export interface IPlantillaMensajeRepository {
   ): Promise<SincronizarTemplateOutcome>;
   /** Envio del mensajero: plantillas vigentes, `activo` y enlazadas con Meta (templateId no nulo). */
   listarEnviables(): Promise<PlantillaEnviable[]>;
-  /** Una plantilla enviable por id (vigente, `activo`, con templateId); `null` si no aplica. */
+  /**
+   * Una plantilla enviable por id (vigente, `activo`, con templateId); `null` si no aplica.
+   * Ficha 474 (R8): EXCLUYE las plantillas de informe (`informe_clave IS NOT NULL`), igual que
+   * `listarEnviables` y `listarUsablesParaTexto`: el chat, el wa.me y la bienvenida no las ven.
+   */
   findEnviableById(id: string): Promise<PlantillaEnviable | null>;
 
   /**

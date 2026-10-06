@@ -26,7 +26,7 @@ Verifica:
    lo verifica (no un test vacío). Si falta uno, es bloqueante.
 2. **Tasks:** todas en `tasks.md` marcadas `[x]`.
 3. **Checkpoints:** recorre `CHECKPOINTS.md` punto por punto.
-4. **Verificación ejecutable:** corre `./init.sh` y confirma verde. Corre los tests
+4. **Verificación ejecutable:** corre `./init.sh --rapido` (nunca el completo) y confirma verde. Corre los tests
    tú mismo; no confíes solo en la bitácora del implementer.
 5. **Calidad y seguridad:** RLS en tablas nuevas, idempotencia/firma en webhooks,
    sin hardcode de contexto, sin secretos, capas separadas.

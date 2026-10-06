@@ -63,6 +63,13 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
       "webhook_evento",
       "whatsapp_bienvenida", // mensaje de bienvenida al recoger
       "whatsapp_chat_envio", // feature 109
+      // FICHA 474: los cinco tipos de los envios automaticos por WhatsApp (solo el mantenimiento
+      // es recurrente).
+      "whatsapp_envio_ejecucion",
+      "whatsapp_envio_evento",
+      "whatsapp_envio_mantenimiento",
+      "whatsapp_envio_programado",
+      "whatsapp_envio_reintento",
       "whatsapp_template_sync", // integracion WhatsApp
     ]);
   });
@@ -74,7 +81,9 @@ describe("R32 — el drenador resuelve el handler de geocodificacion y no lo re-
     // Feature 124: el rollup diario es el SEGUNDO tipo recurrente (00:30 CR). El conteo sigue
     // siendo cerrado a proposito: es lo unico que caza que un tipo por EVENTO se cuele aqui.
     expect(recurrencias.has("analitica_rollup_diario")).toBe(true);
-    expect(recurrencias.size).toBe(2);
+    // Ficha 474: el TERCERO, el mantenimiento diario de los envios por WhatsApp (03:30 CR).
+    expect(recurrencias.has("whatsapp_envio_mantenimiento")).toBe(true);
+    expect(recurrencias.size).toBe(3);
   });
 
   it("al drenar, el handler se ejecuta, el job se completa y NO se re-encola", async () => {

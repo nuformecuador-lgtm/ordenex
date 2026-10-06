@@ -341,6 +341,9 @@ export async function leerBodega(tx: TxDeTest, s: Servicios459, actor: Actor, zo
     revertirConciliacion: async () => {
       throw new Error("la fotografia 458 no revierte conciliaciones");
     },
+    corregirConciliacion: async () => {
+      throw new Error("la fotografia 458 no corrige conciliaciones");
+    },
   });
   void tx;
   const r = await servicio.listarSaldosSatelitesCompleto({}, actor);

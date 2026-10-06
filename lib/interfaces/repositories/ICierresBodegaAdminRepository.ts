@@ -60,6 +60,20 @@ export interface RevertirConciliacionInput {
 }
 
 /**
+ * ⭑ FICHA 473 (R1-R8) — CORREGIR el monto de una consolidacion YA conciliada. Mismos campos que la
+ * marca: el monto sustituye al registrado, la nota sustituye a la anterior (o la vacia) y el actor
+ * pasa a ser el autor de la conciliacion. Un tipo con nombre propio porque es OTRA transicion.
+ */
+export interface CorregirConciliacionInput {
+  id: string;
+  /** STRING de escala 2, ya validado en el borde (`montoPositivoSchema`, > 0). */
+  montoRecibido: string;
+  nota: string | null;
+  /** Quien corrige (`esAccesoTotal`). Va a `conciliado_por` Y al espejo `resuelto_por`. */
+  actorUsuarioId: string;
+}
+
+/**
  * ⭑ FICHA 431 — mismo trio de desenlaces que `ResolverCierreBodegaResult`, y a proposito: la
  * guarda por estado vive en el `WHERE` y `count !== 1` distingue «ya estaba asi» (R11) de «no
  * existe». Es un alias con nombre propio porque describe OTRA transicion, no la misma.
@@ -194,4 +208,17 @@ export interface ICierresBodegaAdminRepository {
    * `cierre_bodega` recuerda cuanto se habia dado por recibido.
    */
   revertirConciliacion(input: RevertirConciliacionInput): Promise<MarcaConciliacionResult>;
+  /**
+   * ⭑ FICHA 473 (R1-R8) — CORRIGE el monto recibido de una consolidacion que SIGUE conciliada, en una
+   * sola transaccion y sin pasar por «Pendiente de conciliar».
+   *
+   * Guarda en el `WHERE`: `estado='aprobado'` Y `conciliado_at IS NOT NULL` (R6) Y el monto leido en
+   * la misma transaccion (compare-and-swap, R8). Reescribe monto, nota, autor/instante de la
+   * conciliacion y el espejo `resuelto_*` (D3: la analitica la cuenta en el periodo de la correccion).
+   *
+   * ⚠️ METODO PROPIO Y NO UN BOOLEANO EN `marcarConciliado` (la guardia del censo mide POR METODO).
+   * Reusa el tipo `cierre_bodega_conciliado` (D1); su fila se distingue de una marca porque lleva
+   * `valor_anterior`/`valor_nuevo`. La nota NO entra al historial. NO escribe en libros de dinero.
+   */
+  corregirConciliacion(input: CorregirConciliacionInput): Promise<MarcaConciliacionResult>;
 }

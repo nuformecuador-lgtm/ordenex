@@ -34,6 +34,7 @@ import {
   type EditarPlantillaFormHandle,
 } from "./EditarPlantillaForm";
 import { FormSheet } from "./FormSheet";
+import type { InformeParaPlantilla } from "./PlantillaInformeFields";
 import { SincronizarPlantillasButton } from "./SincronizarPlantillasButton";
 import { descargarDatos } from "@/components/shared/descarga-datos";
 
@@ -54,6 +55,19 @@ export interface PlantillasPageData {
 export interface PlantillasModuleProps {
   /** Listado pre-cargado en el servidor; alimenta el fallback de SWR. */
   initialData: PlantillasPageData;
+  /**
+   * Ficha 474 (T10.1): catálogo de informes, leído en el servidor con `listarInformesWhatsapp()`
+   * (no se importa el catálogo en el cliente: arrastra jspdf). Vacío = sin «Tipo de plantilla».
+   */
+  informes?: readonly InformeParaPlantilla[];
+}
+
+const SIN_INFORMES: readonly InformeParaPlantilla[] = [];
+
+/** Ficha 474 (R10): la plantilla la usan envíos encendidos; se nombran para saber cuáles apagar. */
+function mensajeEnUso(accion: string, envios: readonly string[]): string {
+  const lista = envios.map((n) => `«${n}»`).join(", ");
+  return `No se puede ${accion}: la usan envíos automáticos encendidos (${lista}). Apágalos antes.`;
 }
 
 async function plantillasFetcher(
@@ -72,7 +86,7 @@ async function plantillasFetcher(
  * (destino `inactivo`, R24). Cablea las Server Actions; SWR con `fallbackData` del
  * servidor.
  */
-export function PlantillasModule({ initialData }: PlantillasModuleProps) {
+export function PlantillasModule({ initialData, informes = SIN_INFORMES }: PlantillasModuleProps) {
   const toast = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialData.pageSize);
@@ -188,6 +202,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
       } else if (res.status === "no_configurado") {
         toast.error("WhatsApp no está configurado: no hay a dónde enviarla.");
         return;
+      } else if (res.status === "documento_no_disponible") {
+        // Ficha 474 (R9): plantilla con documento y la app de Meta sin identificar. El estado NO
+        // cambió; el texto del servidor dice por qué y qué pieza falta.
+        toast.error(res.mensaje);
+        setEnviarAprobacion(null);
+        return;
       } else if (res.status === "not_found") {
         toast.error("La plantilla ya no existe.");
       } else {
@@ -223,8 +243,11 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     } else if (res.status === "no_aplica") {
       // Igual que arriba, pero por el otro motivo: la fila es una plantilla para envío de la
       // tienda y esas no pintan el botón. Solo se llega con el listado viejo en pantalla.
+      // Ficha 474 (R8): tambien llega aqui una plantilla DE INFORME.
       toast.error(
-        "Una plantilla para envío de la tienda no puede ser el mensaje de bienvenida.",
+        row.informeClave
+          ? "Una plantilla de informe no puede ser el mensaje de bienvenida."
+          : "Una plantilla para envío de la tienda no puede ser el mensaje de bienvenida.",
       );
       await mutate();
     } else {
@@ -240,6 +263,9 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     });
     if (res.status === "ok") {
       await mutate();
+      setDesactivar(null);
+    } else if (res.status === "en_uso") {
+      toast.error(mensajeEnUso("desactivar", res.envios));
       setDesactivar(null);
     } else if (res.status === "not_found") {
       toast.error("La plantilla ya no existe.");
@@ -258,6 +284,9 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     if (res.status === "ok") {
       toast.success("Plantilla eliminada.");
       await mutate();
+      setEliminar(null);
+    } else if (res.status === "en_uso") {
+      toast.error(mensajeEnUso("eliminar", res.envios));
       setEliminar(null);
     } else if (res.status === "not_found") {
       // Ya no existe (borrada por otra sesión): igual sale del listado tras revalidar.
@@ -344,7 +373,7 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         cancelLabel="Cancelar"
         onConfirm={onConfirmCrear}
       >
-        <CrearPlantillaForm ref={crearRef} />
+        <CrearPlantillaForm ref={crearRef} informes={informes} />
       </FormSheet>
 
       <FormSheet
@@ -358,7 +387,7 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         onConfirm={onGuardarEditar}
       >
         {editar ? (
-          <EditarPlantillaForm ref={editarRef} plantilla={editar} />
+          <EditarPlantillaForm ref={editarRef} plantilla={editar} informes={informes} />
         ) : null}
       </FormSheet>
 

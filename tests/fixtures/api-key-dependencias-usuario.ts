@@ -318,4 +318,34 @@ export const CLASIFICACION_FK_USUARIO: Record<string, ClasificacionFk> = {
       "es ademas un gesto de PANTALLA —el control vive en la barra de filtros—, y una cuenta " +
       `dedicada no entra por el formulario de login. ${SOLO_OPERADOR}`,
   },
+  // ── FICHA 474 (2026-10-05): los envios automaticos por WhatsApp ───────────────────────────────
+  // Las cinco son SetNull o Cascade y ninguna puede apuntar a una cuenta dedicada: toda escritura
+  // pasa por `WhatsappEnvioService`/`EjecucionEnvioService`, que exigen rol `maestro` (R1) desde una
+  // Server Action con sesion, y los destinatarios solo pueden tener los cinco roles de
+  // `ROLES_DESTINATARIO` (R16), entre los que `apiKey` NO esta.
+  "WhatsappEnvio.creador": {
+    categoria: "no_alcanzable",
+    motivo: `Lo fija \`crearEnvio\` con el actor de la sesion, y el service exige \`maestro\` (R1). ${SOLO_OPERADOR}`,
+  },
+  "WhatsappEnvio.actualizador": {
+    categoria: "no_alcanzable",
+    motivo: `Lo fijan las actions de edicion/encendido/borrado con el actor de la sesion; solo \`maestro\` (R1). ${SOLO_OPERADOR}`,
+  },
+  "WhatsappEnvioDestinatario.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "R16: el service rechaza guardar un destinatario cuyo rol no este en `ROLES_DESTINATARIO` " +
+      "(maestro, admin, adminSatelite, adminTienda, mensajero). `apiKey` no esta: una cuenta dedicada " +
+      "no puede figurar como destinataria.",
+  },
+  "WhatsappEnvioEjecucion.solicitante": {
+    categoria: "no_alcanzable",
+    motivo: `Solo la escribe «Probar ahora» con el actor de la sesion, que debe ser \`maestro\` (R1/R39). ${SOLO_OPERADOR}`,
+  },
+  "WhatsappEnvioEntrega.usuario": {
+    categoria: "no_alcanzable",
+    motivo:
+      "Las entregas se crean para los destinatarios RESUELTOS (solo roles de `ROLES_DESTINATARIO`, " +
+      "R28) o para el maestro que prueba (R39). Ninguna via produce una entrega a una cuenta `apiKey`.",
+  },
 };

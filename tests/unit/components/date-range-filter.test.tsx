@@ -419,3 +419,23 @@ describe("DateRangeFilter — limpieza y deshabilitado (R21, R15)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+// Feature 471 — en la caja (/wallet, libro) el periodo elegido se cortaba: el disparador
+// tenia ancho FIJO `w-56`. jsdom no mide, asi que se fija el contrato de clases: ancho
+// minimo (no fijo), que crece con la etiqueta y solo se recorta contra la fila.
+describe("DateRangeFilter — la etiqueta del periodo se lee entera (471)", () => {
+  it("471: el disparador tiene ancho MINIMO, no fijo: crece con el texto del periodo", async () => {
+    const user = userEvent.setup();
+    renderControl({ shortcuts: [] });
+    await clicDia(user, 1);
+    await clicDia(user, 30, 1);
+
+    const disparador = screen.getByRole("button", { name: "Periodo" });
+    expect(disparador.textContent).toContain("Periodo:");
+    expect(disparador).not.toHaveClass("w-56");
+    expect(disparador).toHaveClass("w-auto");
+    expect(disparador).toHaveClass("min-w-56");
+    // A 390 px no desborda la fila: el tope es el ancho disponible.
+    expect(disparador).toHaveClass("max-w-full");
+  });
+});

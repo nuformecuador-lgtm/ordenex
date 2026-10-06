@@ -3,6 +3,7 @@ import { etiquetaDeEntidad } from "@/lib/types/historial-accion-etiquetas";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   CierreBodegaDetalleCierreRow,
+  CorregirConciliacionInput,
   ICierresBodegaAdminRepository,
   MarcaConciliacionResult,
   MarcarConciliadoInput,
@@ -632,5 +633,86 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
 
     const existe = await this.prisma.cierreBodega.count({ where: { id } });
     return existe > 0 ? "conflict" : "fuera_de_alcance"; // R12 vs no existe
+  }
+
+  /**
+   * ⭑ FICHA 473 (R1-R8, R12) — CORREGIR el monto recibido de una consolidacion YA conciliada.
+   *
+   * Mismo molde que `marcarConciliado`/`revertirConciliacion`: `$transaction` propia, guarda en el
+   * `WHERE`, `appendAccion(tx, …)` DENTRO del callback y el trio de desenlaces.
+   *
+   * ⚠️ SIN CORTE PREVIO por `montoRecibido === null`: rechazar una pendiente o una rechazada es
+   * trabajo del `WHERE`. Un `if` antes lo haria redundante e inmune a las mutaciones (quitar los
+   * predicados de estado sobreviviria).
+   *
+   * ⚠️ `montoRecibido: previo.montoRecibido` en el `WHERE` es un compare-and-swap (R8): en READ
+   * COMMITTED, una correccion concurrente que leyo el mismo `previo` re-evalua el `WHERE` tras el
+   * bloqueo de fila, ve el monto ya cambiado y obtiene `count 0` → `conflict`. Sin el, su fila de
+   * historial llevaria un `valor_anterior` falso.
+   *
+   * D3: reescribe `conciliado_at`/`resuelto_at` igual que el rodeo Desmarcar + Marcar que sustituye.
+   * NO ESCRIBE EN NINGUN LIBRO DE DINERO (R12).
+   */
+  async corregirConciliacion(input: CorregirConciliacionInput): Promise<MarcaConciliacionResult> {
+    const { id, montoRecibido, nota, actorUsuarioId } = input;
+    // Money-safe: STRING de escala 2 → `Prisma.Decimal` en el borde de la escritura.
+    const monto = new Prisma.Decimal(montoRecibido);
+    const ahora = new Date();
+
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      // El monto ANTERIOR, leido en la misma transaccion: va al historial y al compare-and-swap.
+      const previo = await tx.cierreBodega.findUnique({
+        where: { id },
+        select: {
+          montoRecibido: true,
+          solicitadoAt: true,
+          zona: { select: { nombre: true } },
+        },
+      });
+      if (previo === null) return null;
+
+      // R6/R8: SOLO si sigue conciliada (los DOS predicados) y su monto es el leido arriba.
+      const res = await tx.cierreBodega.updateMany({
+        where: {
+          id,
+          estado: ESTADO_APROBADO,
+          conciliadoAt: { not: null },
+          montoRecibido: previo.montoRecibido,
+        },
+        data: {
+          montoRecibido: monto,
+          conciliadoNota: nota,
+          conciliadoPor: actorUsuarioId,
+          conciliadoAt: ahora,
+          resueltoAt: ahora, // espejo (D3)
+          resueltoPor: actorUsuarioId, // espejo (D3)
+        },
+      });
+      if (res.count !== 1) return null;
+
+      const actor = await resolverActorCongelado(tx, actorUsuarioId);
+      await appendAccion(tx, [
+        {
+          accion: "cierre_bodega_conciliado",
+          entidadTipo: "cierre_bodega",
+          entidadId: id,
+          entidadEtiqueta: etiquetaDeEntidad("cierre_bodega", {
+            zonaNombre: previo.zona.nombre,
+            fecha: previo.solicitadoAt,
+          }),
+          // El monto NUEVO; el par anterior/nuevo distingue esta fila de una marca (D1).
+          monto,
+          valorAnterior: previo.montoRecibido?.toFixed(2) ?? null,
+          valorNuevo: monto.toFixed(2),
+          // La NOTA no entra (R4; R5 de la 362): es texto libre tecleado por una persona.
+          ...actor,
+        },
+      ]);
+      return "updated" as const;
+    });
+    if (resultado === "updated") return "updated";
+
+    const existe = await this.prisma.cierreBodega.count({ where: { id } });
+    return existe > 0 ? "conflict" : "fuera_de_alcance"; // R6/R8 vs R7
   }
 }

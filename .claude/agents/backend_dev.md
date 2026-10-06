@@ -84,5 +84,5 @@ el archivo `down.sql` que revierta todo lo que `migration.sql` hace.
 Al terminar, escribe tu bitacora en `progress/impl_<feature>.md` con:
 - Archivos creados/modificados
 - Mapa `R<n> → test`
-- Salida real de `pnpm run typecheck`, `pnpm run lint`, `pnpm test`
+- Salida real de `pnpm run typecheck`, `pnpm run lint` y de los tests de TUS archivos (`pnpm exec vitest related --run <archivos>`). Nunca la suite completa.
 - Veredicto de una linea

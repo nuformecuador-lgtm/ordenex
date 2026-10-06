@@ -5715,3 +5715,39 @@ Campana, push (admin/adminSatelite) a las 07:00 CR, marca en /cierres-admin y fr
   rescató y se completó con tests.
 - Deuda menor: m3 `incidentesDeOrdenes` sin filtro de tienda (sin efecto hoy); m4 la integración no caza
   `identificar` sin tienda (lo caza el unitario); m5 la página del detalle no vuelve a 1 al cambiar término.
+
+## 2026-10-03 — 470: descargas sin tope de filas
+- Las 33 descargas de servidor pasan por `prepararDescargaAction` (registro cerrado, misma sesión y permisos);
+  si los datos pasan de 2 MB viajan comprimidos por el bucket privado `descargas` con URL firmada de 300 s y el
+  navegador arma el mismo archivo. Las 9 de cliente solo pierden el tope. Único límite: Excel (1.048.575/hoja).
+  Cron `purga-descargas` cada 15 min (borra > 60 min). Arreglado el test de `OrdenesDescarga` de 00:00–01:00.
+- R1–R24; mapa en `progress/impl_470.md`. Revisión APROBADA (`progress/review_470.md`). PR #845, release #846.
+- Medido (T5): servidor 200k filas 3 s; navegador 200k filas ~2,2 GB de heap → si algún día hace falta, armar el
+  xlsx en el servidor (Q1). Menores: novedades y KPIs pierden el corte sin pasar por el almacén (K4).
+
+## 473 — Corregir la recepción de dinero de una satélite (2026-10-05)
+- «Corregir» reusaba la acción de marcar (WHERE solicitado + conciliadoAt nulo) y respondía conflict siempre sin escribir; caso real FGAM Zona Sur 2026-10-01 corregido a mano.
+- Método atómico `corregirConciliacion` + service + action; una fila de historial (reusa `cierre_bodega_conciliado`, D1) con monto anterior y nuevo; mueve `resuelto_at` (D2). El conflicto cierra el diálogo y refresca.
+- R1–R17; mapa en `progress/impl_473.md`. Revisión APROBADA (`progress/review_473.md`), 4 mutaciones en rojo. PR #847.
+- Gate post-merge (`progress/gate_dev_tras_847.log`): 2 rojos por deadlock 40P01 de la base compartida, verdes aislados 2/2, ajenos al diff. Menores abiertos: M3 (modo corrección derivado distinto en botón y diálogo; peor caso conflict sin escritura).
+
+## 474 — Envíos automáticos por WhatsApp (2026-10-05)
+- Motor de envíos programados de plantillas al personal: por rol o usuario, a hora fija o por aviso interno (puente `conEnviosWhatsapp` en `repoReal()`, 10 eventos disponibles), PDF adjunto de un catálogo de informes (cabecera DOCUMENT), historial con PDF 30 días, nacen apagados. Solo maestro.
+- 3 migraciones; idempotencia en base; app id de Meta resuelto con el token (D2). R1–R53; mapa en `progress/impl_474.md`.
+- Revisión APROBADA (`progress/review_474.md`); arreglados m1, m2 (PDF en Safari) y m4 (adminTienda excluido al ejecutar). PR #848.
+- Gate con la regla nueva (`--rapido` ampliado): 785 archivos, 2 intermitentes repetidos aislados en verde. Pendiente de release: T10.4 (verlo) y T11.4 (Meta real) en `docs/release.md`.
+
+## 475 — Informe de tránsito por WhatsApp (2026-10-05)
+- Informe del catálogo de la 474: paquetes sin cierre logístico que vencen o están por vencer, por zona_id, hito desde orden_historial_estado (entrada a bodega central por defecto), estados y umbral de «parado» configurables; PDF A4 + variables; panel con vista previa. Decisiones: zona nueva 20/5, 4 devoluciones en tránsito incluidas, incidente con umbral 1.
+- R1–R40; mapa en `progress/impl_475.md`. M1–M14 + F1–F3 muertas (SQL medido contra Postgres por el leader). Revisión APROBADA; m1/m3/m4 arreglados. PR #851.
+- Pendiente de release: T7.2 (EXPLAIN en prod) y T6.3 (verlo) en `docs/release.md`.
+
+## Validaciones en español (2026-10-05)
+- Mapa de errores de zod en español claro (servidor por `instrumentation.ts`, cliente por `<ZodEnEspanol />`, tests por `tests/setup`), mensajes propios en Envíos y Plantillas. Gate completo verde (33554). PR #850.
+- `init.sh`: `tests/setup/` e `instrumentation.ts` pasan a exigir el completo.
+
+## 476 — Informe de picking por WhatsApp (2026-10-06)
+- Informe del catálogo de la 474: foto de «En preparación» de UNA tienda con fulfillment y activa, por producto con remisiones y marca de atrasadas; PDF A4 por tienda; panel con selector de tienda y conteos. Decisiones D1–D6 aprobadas; tiendas inactivas fuera (leader).
+- Rama `{tipo:"error"}` en el motor; `detalleDeCausa` saneado en picking y tránsito. Bug P2028 (caché del repo) hallado contra Postgres y corregido en ambos informes.
+- R1–R30; mapa en `progress/impl_476.md`; todas las mutaciones muertas. Revisión APROBADA; m2–m5 arreglados. PR #852.
+- Pendiente de release: T5.2 (verlo) en `docs/release.md`.

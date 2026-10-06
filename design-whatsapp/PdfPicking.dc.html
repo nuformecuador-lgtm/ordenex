@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; }
+    .hoja { width: 794px; height: 1123px; background: #fff; color: #12233f; padding: 40px 44px; display: flex; flex-direction: column; position: relative; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    table.p { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .p th { text-align: left; font-weight: 600; font-size: 9.5px; color: #4a5368; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1.5px solid #12233f; white-space: nowrap; }
+    .p td { padding: 9px 8px; border-bottom: 1px solid #e3e8f2; vertical-align: top; }
+    .p td.r, .p th.r { text-align: right; }
+    .u { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+    .g { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 1px 5px; margin: 0 3px 3px 0; border: 1px solid #e3e8f2; border-radius: 4px; white-space: nowrap; }
+    .g.x2 b { font-weight: 700; }
+    .g.atr { border-color: #f59e0b; background: #fef3c7; color: #92400e; font-weight: 500; }
+    .box { width: 18px; height: 18px; border: 1.5px solid #12233f; border-radius: 3px; display: inline-block; }
+    .pie { position: absolute; left: 44px; right: 44px; bottom: 24px; display: flex; justify-content: space-between; font-size: 9px; color: #4a5368; border-top: 1px solid #e3e8f2; padding-top: 6px; }
+  </style>
+</helmet>
+
+<div class="hoja">
+  <!-- encabezado -->
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px solid #f26419;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div style="width: 18px; height: 18px; border-radius: 5px; background: #f26419;"></div>
+        <span style="font-size: 13px; font-weight: 600;">Ordenex</span>
+        <span style="font-size: 11px; color: #4a5368;">· Picking</span>
+      </div>
+      <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.02em;">Gameos</div>
+      <div style="font-size: 11px; color: #4a5368; margin-top: 2px;">Lo que está En preparación, agrupado por producto</div>
+    </div>
+    <div style="text-align: right; font-size: 11px; line-height: 1.6;">
+      <div style="font-weight: 600;">Lunes 5 de octubre de 2026</div>
+      <div style="color: #4a5368;">06:30 · hora de Costa Rica</div>
+      <div style="display: flex; gap: 14px; justify-content: flex-end; margin-top: 8px;">
+        <div><div style="font-size: 22px; font-weight: 600;">25</div><div style="font-size: 9.5px; color:#4a5368;">ÓRDENES</div></div>
+        <div><div style="font-size: 22px; font-weight: 600;">41</div><div style="font-size: 9.5px; color:#4a5368;">UNIDADES</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- atrasadas -->
+  <div style="margin-top: 14px; border: 1.5px solid #f59e0b; background: #fef3c7; color: #92400e; border-radius: 8px; padding: 8px 12px; font-size: 11px; line-height: 1.5;">
+    <strong>2 órdenes llevan más de 2 días en preparación — prepáralas primero:</strong>
+    guía <span class="mono">48296</span> (4 días) · guía <span class="mono">48299</span> (3 días). Van marcadas así en la tabla: <span class="g atr" style="margin:0;">48296 · 4 d</span>
+  </div>
+
+  <!-- tabla -->
+  <table class="p" style="margin-top: 14px;">
+    <thead>
+      <tr><th>Producto</th><th class="r">Unidades</th><th>Guías que lo llevan</th><th class="r">Listo</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Control inalámbrico PS5 negro</strong></td><td class="r u">9</td>
+        <td><span class="g x2">48301 <b>×2</b></span><span class="g">48305</span><span class="g">48309</span><span class="g">48311</span><span class="g">48312</span><span class="g">48318</span><span class="g">48320</span><span class="g">48322</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Audífonos gamer RGB con micrófono</strong></td><td class="r u">7</td>
+        <td><span class="g">48302</span><span class="g">48306</span><span class="g x2">48309 <b>×2</b></span><span class="g">48314</span><span class="g">48316</span><span class="g">48321</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Base de carga doble para controles</strong></td><td class="r u">6</td>
+        <td><span class="g">48301</span><span class="g">48303</span><span class="g">48305</span><span class="g">48311</span><span class="g">48317</span><span class="g">48323</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Tarjeta de regalo PlayStation ₡25.000</strong></td><td class="r u">5</td>
+        <td><span class="g">48304</span><span class="g">48307</span><span class="g">48310</span><span class="g">48313</span><span class="g">48319</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Mouse inalámbrico 7 botones</strong></td><td class="r u">4</td>
+        <td><span class="g">48306</span><span class="g">48308</span><span class="g">48315</span><span class="g">48316</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Teclado mecánico compacto</strong></td><td class="r u">3</td>
+        <td><span class="g">48303</span><span class="g">48308</span><span class="g">48314</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Silla gamer reclinable</strong></td><td class="r u">2</td>
+        <td><span class="g atr">48296 · 4 d</span><span class="g atr">48299 · 3 d</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Alfombrilla de escritorio XL</strong></td><td class="r u">2</td>
+        <td><span class="g atr">48296 · 4 d</span><span class="g">48321</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Soporte para audífonos</strong></td><td class="r u">2</td>
+        <td><span class="g">48307</span><span class="g">48313</span></td><td class="r"><span class="box"></span></td></tr>
+      <tr><td><strong>Cable HDMI 2.1 de 2 m</strong></td><td class="r u">1</td>
+        <td><span class="g atr">48299 · 3 d</span></td><td class="r"><span class="box"></span></td></tr>
+    </tbody>
+    <tfoot>
+      <tr><td style="border-bottom:0; border-top: 1.5px solid #12233f; font-weight: 600;">Total · 10 productos</td><td class="r u" style="border-bottom:0; border-top: 1.5px solid #12233f;">41</td><td style="border-bottom:0; border-top: 1.5px solid #12233f; font-size: 11px; color: #4a5368;">en 25 órdenes</td><td style="border-bottom:0; border-top: 1.5px solid #12233f;"></td></tr>
+    </tfoot>
+  </table>
+
+  <p style="margin: 16px 0 0; font-size: 9.5px; color: #4a5368; line-height: 1.5;">
+    Ordenado de más a menos unidades. «×2» = esa guía lleva dos unidades del producto. Es la foto de las 06:30: lo que entre después sale en el siguiente envío.
+  </p>
+
+  <div class="pie"><span>Ordenex · Picking Gameos · 5 oct 2026 06:30 · Nuform y Sicommer van en su propio PDF</span><span>Página 1 de 1</span></div>
+</div>
+</x-dc>
+</body>
+</html>

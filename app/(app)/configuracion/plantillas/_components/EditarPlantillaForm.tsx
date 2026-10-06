@@ -13,8 +13,12 @@ import { actualizarPlantilla } from "@/lib/actions/plantillas";
 
 import { PlantillaTiendaField } from "./PlantillaTiendaField";
 import { VariablesInsert } from "./VariablesInsert";
+import { PlantillaInformeFields, type InformeParaPlantilla } from "./PlantillaInformeFields";
 
 type FieldErrors = Record<string, string[]>;
+
+/** Referencia estable para cuando el módulo no recibe informes (tests anteriores a la 474). */
+const SIN_INFORMES: readonly InformeParaPlantilla[] = [];
 
 /** Clases del textarea del cuerpo, alineadas al `Input` del sistema de diseño. */
 const TEXTAREA_CLASS =
@@ -35,6 +39,17 @@ export interface EditarPlantillaFormHandle {
 export interface EditarPlantillaFormProps {
   /** Plantilla a editar (precarga los campos). */
   plantilla: PlantillaListItemDTO;
+  /** Ficha 474: el catálogo de informes (de `listarInformesWhatsapp()`). */
+  informes?: readonly InformeParaPlantilla[];
+}
+
+/**
+ * Ficha 474 (R7): una plantilla que ya salió hacia Meta —tiene template enlazado o su estado no es
+ * «guardada sin aprobación»— no cambia de informe ni de documento. Espejo del service, que es quien
+ * manda; aquí solo evita ofrecer un cambio que se va a rechazar.
+ */
+export function tipoBloqueado(p: Pick<PlantillaListItemDTO, "templateId" | "estado">): boolean {
+  return p.templateId !== null || p.estado !== "saved_not_aprobation";
 }
 
 /**
@@ -43,19 +58,32 @@ export interface EditarPlantillaFormProps {
  * Action `actualizarPlantilla`. El error de llave malformada (R16) llega como
  * `fieldErrors.cuerpo`; el conflicto de nombre (R10, excluyendo la propia) se
  * pinta en el campo `nombre`.
+ *
+ * Ficha 474 (T10.1): tipo y documento (R3, R6, R7). Con el tipo bloqueado (R7) esos dos campos NO
+ * viajan —omitidos = «no se tocan» en el contrato—, así que guardar el texto nunca los cambia.
  */
 export const EditarPlantillaForm = forwardRef<
   EditarPlantillaFormHandle,
   EditarPlantillaFormProps
->(function EditarPlantillaForm({ plantilla }, ref) {
+>(function EditarPlantillaForm({ plantilla, informes = SIN_INFORMES }, ref) {
   const [nombre, setNombre] = useState(plantilla.nombre);
   const [cuerpo, setCuerpo] = useState(plantilla.cuerpo);
   const [plantillaTienda, setPlantillaTienda] = useState(plantilla.plantillaTienda);
+  const [informeClave, setInformeClave] = useState<string | null>(plantilla.informeClave ?? null);
+  const [llevaDocumento, setLlevaDocumento] = useState(plantilla.llevaDocumento === true);
   const [errors, setErrors] = useState<FieldErrors>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bloqueado = tipoBloqueado(plantilla);
+  const informe = informes.find((i) => i.clave === informeClave);
 
   async function submit(): Promise<ActualizarPlantillaResult> {
-    const parsed = actualizarPlantillaSchema.safeParse({ nombre, cuerpo, plantillaTienda });
+    const tipo = bloqueado || informes.length === 0 ? {} : { informeClave, llevaDocumento: informeClave ? llevaDocumento : false };
+    const parsed = actualizarPlantillaSchema.safeParse({
+      nombre,
+      cuerpo,
+      plantillaTienda: informeClave ? false : plantillaTienda,
+      ...tipo,
+    });
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
       setErrors(fieldErrors);
@@ -74,13 +102,26 @@ export const EditarPlantillaForm = forwardRef<
     return res;
   }
 
-  useImperativeHandle(ref, () => ({ submit, esPlantillaTienda: () => plantillaTienda }));
+  useImperativeHandle(ref, () => ({ submit, esPlantillaTienda: () => plantillaTienda && !informeClave }));
 
   return (
     <div className="flex flex-col gap-4">
       <FormField id="plantilla-nombre-edit" label="Nombre" error={errors.nombre}>
         <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
       </FormField>
+
+      {informes.length > 0 && !plantillaTienda ? (
+        <PlantillaInformeFields
+          idBase="plantilla-informe-edit"
+          informes={informes}
+          informeClave={informeClave}
+          onInformeClave={setInformeClave}
+          llevaDocumento={llevaDocumento}
+          onLlevaDocumento={setLlevaDocumento}
+          bloqueado={bloqueado}
+          errores={{ informeClave: errors.informeClave, llevaDocumento: errors.llevaDocumento }}
+        />
+      ) : null}
 
       <FormField id="plantilla-cuerpo-edit" label="Cuerpo" error={errors.cuerpo}>
         <textarea
@@ -92,18 +133,21 @@ export const EditarPlantillaForm = forwardRef<
         />
       </FormField>
 
-      <PlantillaTiendaField
-        id="plantilla-tienda-edit"
-        checked={plantillaTienda}
-        onCheckedChange={setPlantillaTienda}
-        disabled={plantilla.plantillaTienda}
-      />
+      {informeClave === null ? (
+        <PlantillaTiendaField
+          id="plantilla-tienda-edit"
+          checked={plantillaTienda}
+          onCheckedChange={setPlantillaTienda}
+          disabled={plantilla.plantillaTienda}
+        />
+      ) : null}
 
       <VariablesInsert
         textareaRef={textareaRef}
         value={cuerpo}
         onInsert={(next) => setCuerpo(next)}
         variablesNombres={plantilla.variablesNombres}
+        variablesInforme={informe?.variables}
       />
     </div>
   );

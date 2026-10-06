@@ -1,0 +1,253 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; }
+    a { color: #d4530d; } a:hover { color: #b8450a; }
+    * { box-sizing: border-box; }
+    .side-item { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #aab6d2; }
+    .side-sub { padding: 6px 12px 6px 30px; border-radius: 8px; font-size: 13px; color: #aab6d2; }
+    .side-sub.on { background: #14294a; color: #fff; font-weight: 500; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid transparent; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .btn.primary { background: #f26419; color: #fff; }
+    .btn.outline { border-color: #e3e8f2; background: #f7f8fc; color: #12233f; }
+    .btn.ghost { background: transparent; color: #4a5368; }
+    .btn.sm { height: 28px; font-size: 13px; padding: 0 8px; }
+    .lbl { font-size: 14px; font-weight: 500; color: #12233f; display: block; margin-bottom: 6px; }
+    .inp { height: 32px; width: 100%; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; padding: 0 10px; font-family: inherit; font-size: 14px; color: #12233f; display: flex; align-items: center; gap: 8px; }
+    .sel::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid #4a5368; border-bottom: 1.5px solid #4a5368; transform: rotate(45deg) translate(-2px,-2px); }
+    .hint { font-size: 12px; color: #4a5368; margin-top: 6px; line-height: 1.5; }
+    .bdg { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .bdg.ok { background: #d1fae5; color: #047857; }
+    .bdg.neu { background: #eef1f8; color: #17233b; }
+    .bdg.acc { background: #fff0e8; color: #d4530d; }
+    .sw { display: inline-flex; align-items: center; width: 36px; height: 20px; padding: 0 2px; border-radius: 999px; background: #e3e8f2; flex: 0 0 auto; }
+    .sw::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #f7f8fc; box-shadow: 0 1px 2px rgba(18,35,63,.2); }
+    .sw.on { background: #f26419; justify-content: flex-end; }
+    .cb { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .cb.on { background: #f26419; border-color: #f26419; }
+    .cb.on::after { content: ""; width: 8px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px,-1px); }
+    .rd { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+    .rd.on { border-color: #f26419; }
+    .rd.on::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #f26419; }
+    .card { background: #fff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 20px; }
+    .sec { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+    .secp { font-size: 13px; color: #4a5368; margin: 0 0 14px; line-height: 1.5; }
+    .seg { display: flex; border: 1px solid #e3e8f2; border-radius: 10px; overflow: hidden; }
+    .seg span { flex: 1; text-align: center; height: 32px; line-height: 32px; font-size: 14px; color: #4a5368; border-right: 1px solid #e3e8f2; background: #fff; }
+    .seg span:last-child { border-right: 0; }
+    .seg span.on { background: #fff0e8; color: #d4530d; font-weight: 500; }
+    .chk { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 28px; }
+    .chk .n { margin-left: auto; font-size: 12px; color: #4a5368; }
+    .day { width: 40px; height: 32px; border-radius: 10px; border: 1px solid #e3e8f2; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: #4a5368; }
+    .day.on { background: #f26419; border-color: #f26419; color: #fff; font-weight: 500; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border-radius: 26px; background: #eef1f8; color: #17233b; font-size: 13px; }
+    .chip i { font-style: normal; color: #4a5368; width: 18px; text-align: center; }
+    .var { background: #fff0e8; color: #d4530d; padding: 1px 4px; border-radius: 4px; font-weight: 600; }
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1280px; min-height: 1640px; background: #f7f8fc; color: #12233f;">
+  <aside style="width: 220px; flex: 0 0 220px; background: #0d2444; padding: 16px 12px; display: flex; flex-direction: column; gap: 2px;">
+    <div style="display: flex; align-items: center; gap: 9px; padding: 4px 12px 18px;">
+      <div style="width: 24px; height: 24px; border-radius: 7px; background: #f26419;"></div>
+      <span style="color: #fff; font-size: 16px; font-weight: 600;">Ordenex</span>
+    </div>
+    <div class="side-item">Inicio</div>
+    <div class="side-item">Órdenes</div>
+    <div class="side-item" style="color:#fff;">Configuración</div>
+    <div class="side-sub">Usuarios</div>
+    <div class="side-sub">Plantillas</div>
+    <div class="side-sub on">Envíos automáticos</div>
+    <div class="side-sub">Geografía</div>
+  </aside>
+
+  <main style="flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0;">
+    <header style="display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid #e3e8f2;">
+      <div>
+        <div style="font-size: 13px; color: #4a5368; margin-bottom: 2px;"><a href="#">Envíos automáticos</a> › Nuevo</div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Nuevo envío</h1>
+      </div>
+      <span class="bdg neu" style="margin-top: 8px;">Se guarda apagado</span>
+    </header>
+
+    <div style="padding: 24px; display: flex; gap: 20px; align-items: flex-start;">
+
+      <!-- ============ FORMULARIO ============ -->
+      <div style="flex: 0 0 620px; display: flex; flex-direction: column; gap: 16px;">
+
+        <!-- 1. Qué se manda -->
+        <section class="card">
+          <h2 class="sec">Qué se manda</h2>
+          <p class="secp">La plantilla es el texto aprobado por WhatsApp; el informe es el PDF que va pegado.</p>
+
+          <div style="margin-bottom: 16px;">
+            <label class="lbl">Nombre del envío</label>
+            <div class="inp">Paquetes por vencer</div>
+            <div class="hint">Solo lo ves tú en esta lista; no aparece en el mensaje.</div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <label class="lbl">Plantilla</label>
+            <div class="inp sel"><span class="mono" style="font-size:13px;">aviso_transito</span><span class="bdg ok">Aprobada</span><span style="font-size:12px;color:#4a5368;">· lleva documento</span></div>
+            <div class="hint">Solo aparecen las plantillas aprobadas por WhatsApp.</div>
+          </div>
+
+          <div>
+            <label class="lbl">Informe adjunto</label>
+            <div class="seg"><span>Ninguno</span><span class="on">Tránsito</span><span>Picking</span></div>
+
+            <!-- panel de parámetros (plegado; abierto en la tabla «Parámetros · Tránsito») -->
+            <div style="margin-top: 12px; border: 1px solid #e3e8f2; border-radius: 10px; background: #f1f4fb; padding: 12px 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="font-size: 14px; font-weight: 500;">Parámetros del informe de tránsito</div>
+                <span class="btn outline sm">Editar parámetros</span>
+              </div>
+              <ul style="margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: #4a5368; line-height: 1.7;">
+                <li>GAM: plazo 10 días, aviso 2 días antes · Fuera de la GAM: 20 días, aviso 5 días antes</li>
+                <li>Se cuenta desde la entrada a bodega central</li>
+                <li>11 estados incluidos · umbral de «parado» en 7 de ellos</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. A quién -->
+        <section class="card">
+          <h2 class="sec">A quién</h2>
+          <p class="secp">Por rol, para que una persona nueva lo reciba sin tocar esto; o persona por persona.</p>
+
+          <label class="lbl">Roles</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; margin-bottom: 16px;">
+            <div class="chk"><span class="cb"></span>Maestro <span class="n">2</span></div>
+            <div class="chk"><span class="cb on"></span>Admin <span class="n">3</span></div>
+            <div class="chk"><span class="cb"></span>Admin de satélite <span class="n">8</span></div>
+            <div class="chk"><span class="cb"></span>Admin de tienda <span class="n">14</span></div>
+            <div class="chk"><span class="cb"></span>Mensajero <span class="n">18</span></div>
+          </div>
+
+          <label class="lbl">Además, estas personas</label>
+          <div class="inp" style="color:#4a5368;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            Buscar por nombre o teléfono
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+            <span class="chip">Daniel Mora <i>×</i></span>
+            <span class="chip">Laura Quesada <i>×</i></span>
+          </div>
+
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f1f4fb; font-size: 13px;">
+            Lo recibirán <strong>5 personas</strong> <span style="color:#4a5368;">(3 por el rol admin + 2 elegidas)</span>
+          </div>
+
+          <!-- aviso de teléfonos inválidos -->
+          <div style="margin-top: 12px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px 14px;">
+            <div style="font-size: 13px; font-weight: 600; color: #92400e; margin-bottom: 6px;">2 personas no lo van a recibir: su teléfono no sirve para WhatsApp</div>
+            <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #92400e; line-height: 1.7;">
+              <li><strong>Esteban Rojas</strong> (admin) — no tiene teléfono</li>
+              <li><strong>Karla Méndez</strong> (admin) — 8890 12, le faltan dígitos</li>
+            </ul>
+            <div style="font-size: 12px; color: #92400e; margin-top: 6px;">Se puede guardar igual. Corrígelo en <a href="#" style="color:#92400e; font-weight:600;">Usuarios</a> y lo recibirán desde el siguiente envío.</div>
+          </div>
+        </section>
+
+        <!-- 3. Cuándo -->
+        <section class="card">
+          <h2 class="sec">Cuándo</h2>
+          <p class="secp">Hora de Costa Rica.</p>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <div class="chk" style="margin-bottom: 10px;"><span class="rd on"></span><strong style="font-weight:500;">A una hora fija</strong></div>
+              <div style="padding-left: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+                <span class="day on">Lun</span><span class="day on">Mar</span><span class="day on">Mié</span><span class="day on">Jue</span><span class="day on">Vie</span><span class="day on">Sáb</span><span class="day">Dom</span>
+                <span style="width: 12px;"></span>
+                <span style="font-size: 13px; color: #4a5368;">a las</span>
+                <div class="inp" style="width: 96px;"><span class="mono" style="font-size:14px;">05:00</span></div>
+              </div>
+            </div>
+            <div>
+              <div class="chk" style="margin-bottom: 8px; color:#4a5368;"><span class="rd"></span>Cuando pase algo</div>
+              <div style="padding-left: 24px;">
+                <div class="inp sel" style="width: 320px; color: #4a5368; background: #f7f8fc;">Al vencer un paquete</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #f1f4fb; display: flex; gap: 12px; align-items: flex-start;">
+            <span class="sw" style="margin-top: 2px;"></span>
+            <div>
+              <div style="font-size: 14px; font-weight: 500;">Enviar aunque no haya nada que informar</div>
+              <div class="hint" style="margin-top: 2px;">Apagado: si ese día no hay paquetes en alerta, no se manda nada y el historial lo anota como «Sin novedades».</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Acciones -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="btn primary">Guardar</span>
+          <span class="btn outline">Probar ahora (solo a mí)</span>
+          <span class="btn ghost">Cancelar</span>
+        </div>
+        <p style="margin: -6px 0 0; font-size: 12px; color: #4a5368; line-height: 1.5;">
+          «Probar ahora» te lo manda solo a ti, con los datos de este momento, y queda en el historial como prueba. No enciende el envío.
+        </p>
+      </div>
+
+      <!-- ============ VISTA PREVIA ============ -->
+      <div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="bdg acc">Vista previa</span>
+          <span style="font-size: 13px; color: #4a5368;">Lo que va a leer Daniel Mora</span>
+        </div>
+
+        <div class="card" style="padding: 16px;">
+          <div style="background: #f1f4fb; border-radius: 10px; padding: 10px; font-size: 13px; line-height: 1.6;">
+            <!-- cabecera de documento -->
+            <div style="display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #e3e8f2; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+              <div style="width: 32px; height: 38px; border-radius: 4px; background: #fee2e2; color: #b91c1c; font-size: 10px; font-weight: 700; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;">PDF</div>
+              <div style="min-width: 0;">
+                <div style="font-weight: 500; font-size: 13px;">transito-2026-10-05.pdf</div>
+                <div style="font-size: 12px; color: #4a5368;">2 páginas</div>
+              </div>
+            </div>
+            <div style="padding: 0 4px;">
+              Buenos días <span class="var">Daniel</span>.<br>
+              Informe de tránsito del <span class="var">lunes 5 de octubre</span>:<br>
+              · <span class="var">7</span> paquetes vencidos<br>
+              · <span class="var">8</span> por vencer en los próximos días<br>
+              · <span class="var">8</span> parados en el mismo estado<br>
+              Por cobrar en esos paquetes: <span class="var">₡322.900</span>.<br>
+              El detalle por zona va en el PDF.
+            </div>
+            <div style="text-align: right; font-size: 11px; color: #4a5368; margin-top: 4px;">05:00</div>
+          </div>
+        </div>
+
+        <div class="card" style="padding: 14px 16px;">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">De dónde sale cada dato</div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{1}}</td><td style="padding: 4px 8px;">Nombre del destinatario</td><td style="text-align:right;">Daniel</td></tr>
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{2}}</td><td style="padding: 4px 8px;">Fecha del informe</td><td style="text-align:right;">lunes 5 de octubre</td></tr>
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{3}}</td><td style="padding: 4px 8px;">Vencidos</td><td style="text-align:right;">7</td></tr>
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{4}}</td><td style="padding: 4px 8px;">En alerta (por vencer)</td><td style="text-align:right;">8</td></tr>
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{5}}</td><td style="padding: 4px 8px;">Parados</td><td style="text-align:right;">8</td></tr>
+            <tr><td class="mono" style="padding: 4px 0; color:#4a5368;">{{6}}</td><td style="padding: 4px 8px;">Por cobrar</td><td style="text-align:right;">₡322.900</td></tr>
+          </table>
+          <p class="hint" style="margin-top: 10px;">Los números son de ejemplo, calculados con los datos de ahora. Al enviar se vuelven a calcular.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

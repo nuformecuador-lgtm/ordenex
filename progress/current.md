@@ -1,3 +1,22 @@
+# ESTADO 2026-10-06 — 473, 474, 475, 476 y validaciones en español HECHAS en `dev`, SIN DESPLEGAR; in_progress = 0
+
+- En `dev` (sin desplegar): 473 (#847), 474 (#848 + botón #849), validaciones en español (#850), 475 (#851), 476 (#852). 472 ya resuelta por la 470. Lo que hay que hacer al desplegar está en `docs/release.md` › «473 y 474…» (Daniel apaga su sistema ANTES de encender envíos; NEXT_PUBLIC_APP_URL; Meta real T11.4; EXPLAIN de tránsito; verlo todo; un envío por tienda).
+- Arnés cambiado (pedido del humano): `--rapido` siempre, se amplía con integration/db en dinero/datos, repite aislados los rojos; completo SOLO antes de prod (o si se toca init.sh, tests/setup, instrumentation.ts o config de build).
+- Preview: entrar con `maestro.qa@ordenex.test` / `Preview474!Qa` (reseteada por Carlos con SQL). `.mcp.json` tiene `supabase-preview` (ref uyqzqxczfhfndlhpsmxq); requiere reiniciar la sesión para cargarlo.
+- Pendiente: 471 (texto del periodo cortado en la caja) registrada, sin empezar. Google Maps (403/REQUEST_DENIED): Carlos lo deja para después.
+
+# ESTADO 2026-10-05 — 470 VALIDADA EN PROD; siguiente: WhatsApp interno
+
+- **470 T7.2 OK**: Carlos bajó en prod `libro-de-movimientos-2026-10-05.xlsx` por la vía de almacén (objeto de 777 KB en `descargas`, bucket `public=false`). «Detalle por guía» trae 24.806 filas (el tope viejo era 5.000; antes fallaba con 14.153); los totales de las dos hojas cuadran (49.850.534,60 / 46.771.418,96 / 13.815.087,55). `get_runtime_errors` dio timeout dos veces: queda sin mirar. T7.4 (Órdenes sin filtros) aún sin descarga en prod.
+- **468 T16 OK**: 0 celdas «sin repartir» en ese Excel (que abarca todo el historial).
+- Corrección de caja: hecha por Carlos. WhatsApp de las 54 conversaciones: descartado por Carlos.
+- Google Maps: 403 / REQUEST_DENIED en optimización y geocodificación (rutas sin ordenar, direcciones sin ubicar); Carlos lo deja así por ahora.
+- WhatsApp interno: arrancando. Teléfonos de personal inválidos medidos hoy: 10 de 41 activos (sin contar tiendas ni apiKey).
+
+# ESTADO 2026-10-03 — 470 DESPLEGADA (PR #846, 11:12 CR); in_progress = 0
+
+- Pendiente de la 470: que Carlos repita en prod la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros. WhatsApp (54 conversaciones sin mensaje): siguiente sesión. T16 de la 468 (contar «Diferencia sin repartir» en el Excel de la caja de todo el historial): ahora posible con la 470.
+
 # ESTADO 2026-10-02 (noche) — RELEASE 463–469 DESPLEGADA (PR #844, 22:37 CR)
 
 **AUTORIZACIÓN (2026-10-02 noche):** Carlos se fue y dejó dicho, sobre la ficha 470 (descargas sin tope): «regístrala con todas las tablas de la app y saca esto lo más rápido que podás a producción… cuando vuelva creo que ya habrás terminado y lo habrás subido a producción». Cubre: spec aprobado de antemano, implementar, revisar, mergear y DESPLEGAR a `prod` la 470. Nada más. Y después: «cuando termines y saques esto a producción, después apaga el pc» (apagar solo tras desplegar y dejar todo pusheado).

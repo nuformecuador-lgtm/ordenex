@@ -175,7 +175,7 @@ Feature con `depends_on` no arranca hasta que su dependencia este `done`.
 | --- | --- |
 | `frontend_dev` / `backend_dev` | `pnpm typecheck`, `pnpm lint`, y **solo** sus archivos nuevos + los que su cambio pueda romper (`pnpm exec vitest related --run <archivos>`) |
 | `reviewer` | lo que necesite para verificar sus hallazgos, incluida la suite si sospecha una regresion |
-| **leader** | `./init.sh --rapido` al cerrar cada tanda · `./init.sh` **completo** al cerrar la feature y antes del PR |
+| **leader** | `./init.sh --rapido` al cerrar cada tanda, antes del PR y tras mergear (se amplía solo con `tests/integration/db` si hay dinero o datos) · `./init.sh` **completo** SOLO antes de una release a `prod` |
 
 **Por que, y no es teorico.** En la sesion del 2026-08-02 (feature 172) **cinco subagentes
 murieron por cortes de stream de la API**, y los cinco cayeron en la fase de verificacion larga:

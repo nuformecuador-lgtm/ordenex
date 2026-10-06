@@ -46,6 +46,14 @@ import {
 import { crearAnaliticaInvalidacionCacheHandler } from "@/lib/services/jobs/analitica-invalidacion-cache-handler";
 import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { buildPushWebService, crearPushWebHandler } from "@/lib/services/jobs/push-web-handler";
+import { crearWhatsappEnvioProgramadoHandler } from "@/lib/services/jobs/whatsapp-envio-programado-handler";
+import { crearWhatsappEnvioEventoHandler } from "@/lib/services/jobs/whatsapp-envio-evento-handler";
+import { crearWhatsappEnvioEjecucionHandler } from "@/lib/services/jobs/whatsapp-envio-ejecucion-handler";
+import { crearWhatsappEnvioReintentoHandler } from "@/lib/services/jobs/whatsapp-envio-reintento-handler";
+import {
+  crearWhatsappEnvioMantenimientoHandler,
+  recurrenciaWhatsappEnvioMantenimiento,
+} from "@/lib/services/jobs/whatsapp-envio-mantenimiento-handler";
 
 export interface ProcesarJobsDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -143,6 +151,20 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // configurar falla ESTE job —que termina dejando constancia del nombre de la variable ausente—,
   // no el drenado de los otros nueve tipos, que comparten este cron.
   handlers.set("push_web", crearPushWebHandler(buildPushWebService(now)));
+  // FICHA 474 (design §4, R22): los cinco tipos de los envios automaticos por WhatsApp. Sus deps
+  // (repos, almacen y la credencial de Meta) se construyen PEREZOSAMENTE dentro de cada handler:
+  // un env ausente falla ESE job con su motivo en `last_error`, no el drenado de los demas tipos.
+  //   - `whatsapp_envio_programado`: una ocurrencia a hora fija; la cadena se re-encola SOLA desde
+  //     el propio handler (no es recurrente de la cola: lleva payload propio).
+  //   - `whatsapp_envio_evento`: un aviso interno puenteado (lo encola el decorador de `repoReal()`).
+  //   - `whatsapp_envio_ejecucion`: ejecuta una ejecucion de evento ya creada.
+  //   - `whatsapp_envio_reintento`: una entrega con fallo transitorio de Meta.
+  //   - `whatsapp_envio_mantenimiento`: RECURRENTE (ver `buildRecurrencias`).
+  handlers.set("whatsapp_envio_programado", crearWhatsappEnvioProgramadoHandler());
+  handlers.set("whatsapp_envio_evento", crearWhatsappEnvioEventoHandler());
+  handlers.set("whatsapp_envio_ejecucion", crearWhatsappEnvioEjecucionHandler());
+  handlers.set("whatsapp_envio_reintento", crearWhatsappEnvioReintentoHandler());
+  handlers.set("whatsapp_envio_mantenimiento", crearWhatsappEnvioMantenimientoHandler());
   return handlers;
 }
 
@@ -161,6 +183,10 @@ export function buildRecurrencias(): Map<JobTipo, RecurrenciaSpec> {
   // la siguiente a las 00:30 CR con el `dedupe_key` de la fecha que agregara, asi que la
   // cola se auto-perpetua y un fallo terminal de una ocurrencia no detiene la serie.
   recurrencias.set("analitica_rollup_diario", recurrenciaAnaliticaRollupDiario);
+  // FICHA 474 (R25/R44): el mantenimiento diario de los envios por WhatsApp (03:30 CR). Lo dispara
+  // el RELOJ; su primera fila la siembra la migracion `20261005120200`. Los otros cuatro tipos de la
+  // 474 NO van aqui: re-agendarlos con payload `{}` no significaria nada.
+  recurrencias.set("whatsapp_envio_mantenimiento", recurrenciaWhatsappEnvioMantenimiento);
   return recurrencias;
 }
 

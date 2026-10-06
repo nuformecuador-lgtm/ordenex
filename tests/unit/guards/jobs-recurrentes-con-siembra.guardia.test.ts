@@ -106,6 +106,7 @@ describe("313 · frente 1 — todo job recurrente tiene su siembra registrada", 
     expect([...TIPOS_RECURRENTES].sort()).toEqual([
       "analitica_rollup_diario",
       "liberar_reprogramadas",
+      "whatsapp_envio_mantenimiento", // ficha 474: el mantenimiento diario de los envios por WhatsApp
     ]);
   });
 
@@ -393,6 +394,10 @@ describe("313 · frente 4 — el build de Vercel corre el paso, y alguien mide e
       [
         "tests/integration/db/job-tipo-analitica-rollup-migration.test.ts",
         "seedJobAnaliticaRollupDiario",
+      ],
+      [
+        "tests/integration/db/siembra-whatsapp-envio-mantenimiento-idempotente.test.ts",
+        "seedJobWhatsappEnvioMantenimiento",
       ],
     ];
     for (const [ruta, sembrador] of pruebas) {

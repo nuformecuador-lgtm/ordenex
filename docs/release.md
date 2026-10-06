@@ -205,6 +205,15 @@ sino «por qué seguimos esperando».
 
 ---
 
+## Release del 2026-10-03 — la 470, descargas sin tope de filas
+
+- **PR #846** (`dev` → `prod`, merge commit), `prod` = `ebc375ce`, build `dpl_CVwSKejGK2o4aV48MkbGmt3HNmf3` READY a las 11:12 CR, alias `ordenex.co` con `aliasError: null`. Autorización del humano: «sácalo lo más rápido que podás a producción».
+- **Sin migraciones.** Bucket `descargas` en producción: privado (`public = false`), creado por el recorrido T6.1 la noche anterior. `DESCARGA_MAX_FILAS` no existe en Vercel (T7.1).
+- **Gate sobre `27d437e5` (= `origin/dev`):** INIT_EXIT=0, 33.130 tests, 26 skipped preexistentes, sin flakes (`progress/gate_release_470.log`).
+- **La noche se perdió 9 h** porque un subagente pidió un permiso a la 01:18 con el humano ausente (memoria «Si el humano se va: autonomía total»).
+- **T7.3 verificada:** primera corrida del cron `GET /api/cron/purga-descargas 200` a las 16:15 UTC; los 2 objetos temporales del recorrido borrados (`storage.objects` en `descargas` = 0). 0 errores de runtime tras desplegar.
+- **Pendiente:** T7.2/T7.4 repetir en producción, con sesión real, la descarga de la caja con detalle (14.153 filas) y la de órdenes sin filtros (el leader no tiene credencial de producción).
+
 ## Release del 2026-10-02 — 463 a 469 (wallet: barra, búsqueda por guía, Excel kardex; devolución a origen; cobertura)
 
 - **PR #844** (`dev` → `prod`, merge commit), `prod` = `fafb00bb`, build `dpl_7canKeGmgHvCyJVW42wrTxxPBcU3` READY a las 22:37 CR, alias `ordenex.co` con `aliasError: null`. Orden del humano: «despliega».
@@ -482,6 +491,35 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > en el paso que toca.
 >
 > **Plan de pruebas por rol en preview:** `progress/plan_pruebas_release.md`.
+
+### 473 y 474 (en `dev` desde el 2026-10-05) — lo que hay que hacer al desplegarlas
+
+- **473** (Corregir la recepción de dinero de una satélite): sin migración. Tras desplegar, que un
+  admin pruebe «Corregir» en una consolidación «Recibido incompleto» (hoy no hay ninguna en prod:
+  las 85 están exactas; la comprobación queda para el primer caso real).
+- **474** (envíos automáticos por WhatsApp): 3 migraciones (`20261005120000/120100/120200`).
+  1. **ANTES de encender ningún envío: Daniel apaga su sistema externo** (tránsito a las 05:00 y
+     picking a las 05:55 CR). Los envíos nacen apagados, pero si se encienden con el externo vivo,
+     José y María José reciben todo dos veces.
+  2. Comprobar que `NEXT_PUBLIC_APP_URL` (o `NEXT_PUBLIC_SITE_URL`) existe en **Production**: sin
+     ella los avisos por evento salen con error visible en el historial.
+  3. **T11.4 — recorrido contra Meta REAL** (nunca probado desde el repo): `/configuracion/plantillas`
+     no muestra el aviso de «ID de la app de Meta» (si lo muestra, copiar el ID del panel de Meta a
+     `WHATSAPP_APP_ID`); crear una plantilla de informe «con documento», enviarla a aprobación (sube el
+     PDF de ejemplo por la API reanudable) y, aprobada, «Probar ahora» con el informe de prueba.
+  4. **T10.4 — verlo con sesión de maestro** (en preview lo revisa Carlos el 2026-10-05).
+  5. Después: el job diario de mantenimiento (`whatsapp_envio_mantenimiento`) aparece en `jobs` y
+     corre; `get_runtime_errors` sin errores de `envios-whatsapp`.
+- **475** (informe de tránsito): sin migración. Al desplegar: T7.2 — `EXPLAIN` (solo lectura) de
+  `filasEnAlerta` en producción con los parámetros de partida; T6.3 — ver el panel y un PDF real
+  contra `design-whatsapp/ParamsTransito` y `PdfTransito1/2` (escritorio y 390 px), con «Probar ahora».
+  Comparar sus cifras con el PDF del sistema externo del mismo día antes de que Daniel lo apague.
+- **476** (informe de picking): sin migración. Al desplegar: T5.2 — ver el panel y un PDF real contra
+  `design-whatsapp/ParamsPicking` y `PdfPicking` (escritorio y 390 px); crear UN envío por tienda
+  (Sicommer, Gameos, Nuform) y «Probar ahora» con cada uno; comparar con el picking del sistema externo
+  del mismo día antes de que Daniel lo apague.
+- **Mensajes de validación en español** (PR #850): `instrumentation.ts` nuevo en la raíz; tras
+  desplegar, comprobar que una action con un campo vacío responde en español (lo carga `register()`).
 
 ### Qué lleva esta release
 

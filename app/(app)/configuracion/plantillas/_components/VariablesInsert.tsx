@@ -10,6 +10,10 @@ import {
   extraerVariables,
 } from "@/lib/utils/plantilla-mensaje";
 import type { PreviewPlantillaResult } from "@/lib/types/plantilla-mensaje";
+import {
+  componerVistaPrevia,
+  type VariableDeInforme,
+} from "@/lib/utils/vista-previa-informe";
 
 import { CampoVariablePicker } from "./CampoVariablePicker";
 
@@ -59,6 +63,14 @@ export interface VariablesInsertProps {
    * y `clavesSinCampo` para distinguir «retirada del catálogo» de «nunca fue válida».
    */
   variablesNombres?: Record<string, string>;
+  /**
+   * Ficha 474 (R4, R53) — PLANTILLA DE INFORME: las variables de ese informe más la común
+   * `destinatario_nombre`, tal como las sirve `listarInformesWhatsapp()`. Con ellas el selector
+   * ofrece SOLO esas claves, la vista previa usa SUS ejemplos (en local: no hay orden que leer) y
+   * cualquier otra clave del cuerpo se marca como desconocida. `undefined` = plantilla de orden, el
+   * comportamiento de siempre sin ningún cambio.
+   */
+  variablesInforme?: readonly VariableDeInforme[];
 }
 
 /**
@@ -85,6 +97,7 @@ export function VariablesInsert({
   onInsert,
   previewAction = previewPlantilla,
   variablesNombres = SIN_NOMBRES,
+  variablesInforme,
 }: VariablesInsertProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -114,6 +127,9 @@ export function VariablesInsert({
     // cuerpo en el textarea?». Con A en vuelo y B todavia dentro de su ventana de debounce
     // nadie habia lanzado B aun, asi que A se daba por vigente y pintaba durante hasta
     // 300 ms un cuerpo que el maestro ya habia cambiado.
+    // Ficha 474: una plantilla de informe NO pregunta al servidor —`previewPlantilla` rellena con
+    // datos de ORDEN—; su vista previa se compone abajo con los ejemplos del informe.
+    if (variablesInforme !== undefined) return;
     let vigente = true;
     const timer = setTimeout(() => {
       void previewAction(value).then((res) => {
@@ -139,13 +155,22 @@ export function VariablesInsert({
       vigente = false;
       clearTimeout(timer);
     };
-  }, [value, previewAction]);
+  }, [value, previewAction, variablesInforme]);
 
+  const deInforme = variablesInforme !== undefined;
+  const nombresInforme = new Map((variablesInforme ?? []).map((v) => [v.clave, v.nombre]));
   const camposUsados = extraerVariables(value).map((clave) => ({
     clave,
-    etiqueta: etiquetaDeVariable(clave, variablesNombres).texto,
+    etiqueta: deInforme
+      ? (nombresInforme.get(clave) ?? clave)
+      : etiquetaDeVariable(clave, variablesNombres).texto,
   }));
-  const avisos = clavesSinCampo(value, variablesNombres);
+  const avisos = deInforme
+    ? extraerVariables(value)
+        .filter((clave) => !nombresInforme.has(clave))
+        .map((clave) => ({ clave, etiqueta: clave, retirada: false }))
+    : clavesSinCampo(value, variablesNombres);
+  const textoPreview = deInforme ? componerVistaPrevia(value, variablesInforme).texto : (preview ?? "");
 
   return (
     <div className="flex flex-col gap-3">
@@ -172,7 +197,7 @@ export function VariablesInsert({
         <Textarea
           data-testid="plantilla-preview"
           aria-labelledby={previewLabelId}
-          value={preview ?? ""}
+          value={textoPreview}
           placeholder="Hola..."
           readOnly
           tabIndex={-1}
@@ -182,7 +207,11 @@ export function VariablesInsert({
         />
       </div>
 
-      <CampoVariablePicker onSeleccionar={insertarClave} />
+      {deInforme ? (
+        <CampoVariablePicker onSeleccionar={insertarClave} campos={variablesInforme} />
+      ) : (
+        <CampoVariablePicker onSeleccionar={insertarClave} />
+      )}
 
       {camposUsados.length > 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -206,9 +235,11 @@ export function VariablesInsert({
         <div className="flex flex-col gap-1">
           {avisos.map(({ clave, etiqueta, retirada }) => (
             <p key={clave} role="alert" className="text-sm text-destructive">
-              {retirada
-                ? `{{${clave}}} («${etiqueta}») ya no existe en el catálogo y llegará vacío al cliente`
-                : `{{${clave}}} no es un campo válido y llegará vacío al cliente`}
+              {deInforme
+                ? `{{${clave}}} no es un dato de este informe: no se podrá rellenar`
+                : retirada
+                  ? `{{${clave}}} («${etiqueta}») ya no existe en el catálogo y llegará vacío al cliente`
+                  : `{{${clave}}} no es un campo válido y llegará vacío al cliente`}
             </p>
           ))}
         </div>

@@ -50,12 +50,18 @@ function mensajeDe(error: unknown): string {
 export async function aplicarUpsertTemplate(
   port: IWhatsappTemplatePort,
   repo: Pick<IPlantillaMensajeRepository, "setTemplate">,
-  plantilla: Pick<PlantillaPublica, "id" | "nombre" | "cuerpo" | "variables" | "templateId">,
+  plantilla: Pick<
+    PlantillaPublica,
+    "id" | "nombre" | "cuerpo" | "variables" | "templateId" | "informeClave" | "llevaDocumento"
+  >,
 ): Promise<void> {
   const input = {
     nombre: plantilla.nombre,
     cuerpo: plantilla.cuerpo,
     variables: plantilla.variables,
+    // Ficha 474 (R4/R5): ejemplos del informe y cabecera documento, si la plantilla los tiene.
+    informeClave: plantilla.informeClave ?? null,
+    llevaDocumento: plantilla.llevaDocumento ?? false,
   };
   if (plantilla.templateId === null) {
     const enlace = await port.crearTemplate(input);

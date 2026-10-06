@@ -5614,12 +5614,88 @@
       "title": "descargas sin tope de filas",
       "description": "Las descargas grandes se arman en el servidor y se bajan con un enlace temporal privado; sin el tope de 5000 filas, en todas las tablas de la app.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "alta",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB. || SPEC escrito (24 R) y aprobado de antemano; desviacion A1 aceptada por el leader (datos por bucket privado 'descargas' + URL firmada 5 min, el xlsx lo sigue armando el navegador). backend_dev -> frontend_dev en worktree.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-02 noche: el Excel de la caja con detalle daba 'tendria 14153 filas y la descarga admite hasta 5000'; 'necesito poder descargar lo que sea'. Alcance: TODAS las tablas de la app. AUTORIZACION: 'sacalo lo mas rapido que podas a produccion... cuando vuelva lo habras subido a produccion' = spec aprobado de antemano, implementar, revisar y desplegar sin esperarle. Causa medida: tope unico descargaConfig.MAX_FILAS (34 usos) porque las filas viajan al navegador y Vercel corta respuestas > 4,5 MB. || SPEC escrito (24 R) y aprobado de antemano; desviacion A1 aceptada por el leader (datos por bucket privado 'descargas' + URL firmada 5 min, el xlsx lo sigue armando el navegador). backend_dev -> frontend_dev en worktree. || HECHA y DESPLEGADA a prod el 2026-10-03 11:12 CR (PR #845 a dev, release PR #846, ebc375ce, dpl_CVwSKejGK2o4aV48MkbGmt3HNmf3). Gate de release verde 33130. Bucket descargas privado. T7.2 VALIDADA 2026-10-05: Excel de la caja bajado por almacen, Detalle por guia 24.806 filas, totales cuadran; 468 T16 = 0 sin repartir. T7.4 VALIDADA 2026-10-05: ordenes sin filtros = 4.902 filas = 4.902 vivas en prod (4.782 guias distintas + 120 sin guia). Purga verificada en prod. CERRADA sin pendientes.",
       "branch": "feature/470-descargas-sin-tope"
+    },
+    {
+      "id": 473,
+      "title": "Corregir la recepcion de dinero de una satelite",
+      "description": "«Corregir» en una recepcion «Recibido incompleto» cambia el monto recibido en un solo paso y deja una fila de historial.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana. || SPEC APROBADO por el humano el 2026-10-05 con D1 (reusar cierre_bodega_conciliado, sin migracion) y D2 (la correccion mueve conciliadoAt/resuelto_at). backend_dev -> frontend_dev en worktree. || HECHA en dev (PR #847, 1124cc71). Gate post-merge: 2 flakes 40P01 verdes aislados. Sin desplegar.",
+      "branch": "feature/473-corregir-recepcion-satelite"
+    },
+    {
+      "id": 474,
+      "title": "envios automaticos por WhatsApp",
+      "description": "Pantalla para programar envios de plantillas por WhatsApp a roles o usuarios, a hora fija o por evento, con PDF adjunto opcional e historial.",
+      "zone": "fullstack",
+      "sdd": true,
+      "branch": "feature/474-envios-automaticos-whatsapp",
+      "status": "done",
+      "complexity": "alta",
+      "depends_on": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 (WhatsApp interno). Referencia del sistema externo SOLO como logica, no copiar (un destinatario fijo, sin candado, zona por texto). Incluye: plantilla con cabecera DOCUMENT (hoy solo BODY), variables por dato, idempotencia dia CR+destinatario+envio, aviso de telefonos invalidos, Probar ahora, nacen apagados (el sistema externo sigue enviando hasta que Daniel lo apague). Pantalla nueva => /design. || SPEC escrito (47 R) + maqueta en design-whatsapp/; pendiente aprobacion y 4 decisiones (quien configura, WHATSAPP_APP_ID, retencion PDF 30 d, primer evento). || SPEC APROBADO 2026-10-05 (53 R): D1 solo maestro, D2 app id resuelto por /app con el token, D3 PDF 30 d, D4 eventos = puente de avisos internos (NotificacionEvento, 10 disponibles). Enmienda leader: informes no aptos para adminTienda. backend_dev -> frontend_dev en worktree, base local propia. || HECHA en dev (PR #848, e3ce9a28). Sin desplegar. Pendientes de release en docs/release.md: Daniel apaga el externo antes de encender, NEXT_PUBLIC_APP_URL, T11.4 Meta real, T10.4 verlo."
+    },
+    {
+      "id": 475,
+      "title": "informe de transito por WhatsApp",
+      "description": "PDF y variables de los paquetes sin cierre logistico que superan o estan por superar su plazo, con todos los umbrales parametrizables.",
+      "zone": "fullstack",
+      "sdd": true,
+      "branch": "feature/475-informe-transito-whatsapp",
+      "status": "done",
+      "complexity": "media",
+      "depends_on": [
+        474
+      ],
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Parametros: plazo y aviso por zona (zona_id, no texto), hito de inicio, estados incluidos, umbral de parado por estado, enviar si vacio. Valores de partida GAM 8/10, FGAM 15/20. || SPEC escrito (40 R), sin migracion; pendiente aprobacion: zona nueva 20/5, 4 estados de devolucion incluidos, incidente con umbral 1 dia. || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx). || backend_dev -> frontend_dev en worktree desde dev con la 474. || HECHA en dev (PR #851, fa92569f). Sin desplegar. Pendientes de release: T7.2 EXPLAIN en prod, T6.3 verlo."
+    },
+    {
+      "id": 476,
+      "title": "informe de picking por WhatsApp",
+      "description": "PDF por tienda con lo que hay En preparacion de las tiendas con fulfillment, agrupado por producto con sus guias.",
+      "zone": "fullstack",
+      "sdd": true,
+      "branch": "feature/476-informe-picking-whatsapp",
+      "status": "done",
+      "complexity": "media",
+      "depends_on": [
+        474
+      ],
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05. Sin lotes: foto del estado en_preparacion (120 ordenes FF medidas hoy); cantidad y nombre parseados de orden.producto (N * nombre); marca las de mas de N dias. || SPEC escrito (30 R), sin migracion; pendiente aprobacion: D1 un envio por tienda, D3 no apto adminTienda, columna Remisiones (en preparacion no hay guia). || SPEC APROBADO por el humano el 2026-10-05 con sus decisiones. Arranca tras merge de la 474; 475 antes que 476 (comparten catalogo.ts y ParametrosInforme.tsx). || HECHA en dev (PR #852). Sin desplegar. Pendiente de release: T5.2 verlo y un envio por tienda."
+    },
+    {
+      "id": 471,
+      "title": "el periodo de la caja corta el texto",
+      "description": "El selector de periodo de la caja (w-56) corta la etiqueta; debe verse completa.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "depends_on": null,
+      "status_note": "Aprobada por el humano el 2026-10-05. || HECHA en dev (PR #853): DateRangeFilter compartido con w-auto min-w-56 max-w-full. Sin verificacion visual.",
+      "branch": null
+    },
+    {
+      "id": 472,
+      "title": "tests de descarga de ordenes fallan de 00:00 a 01:00",
+      "description": "Los tests OrdenesDescarga* usan la hora local en vez de la de Costa Rica y fallan en esa franja; fijar la zona horaria.",
+      "zone": "frontend",
+      "status": "done",
+      "sdd": false,
+      "complexity": "baja",
+      "depends_on": null,
+      "status_note": "Aprobada por el humano el 2026-10-05. Solo tests. (c3, m1/m2 de la 464: DESCARTADA, sin registro escrito y la 468 retiro ese Excel.) || YA RESUELTA por la 470 (aeca9298, 2026-10-03): hoyISO usa fechaCalendarioCR y un caso fija el reloj en 00:00-01:00. Nada que hacer.",
+      "branch": null
     }
   ]
 }

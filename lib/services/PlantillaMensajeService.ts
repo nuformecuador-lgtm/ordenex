@@ -26,6 +26,13 @@ import type {
 import { descargaConfig } from "@/lib/config/descarga";
 import { previewConEjemplos, validarCuerpo } from "@/lib/utils/plantilla-mensaje";
 import type { PlantillaWhatsappPropagator } from "@/lib/services/whatsapp/plantilla-whatsapp-sync";
+import type { IWhatsappEnvioRepository } from "@/lib/interfaces/repositories/IWhatsappEnvioRepository";
+import {
+  mensajeAppIdNoResuelto,
+  type IResolutorAppIdMeta,
+  type ResultadoAppId,
+} from "@/lib/clients/whatsapp-app-id";
+import { informePorClave } from "@/lib/whatsapp-envios/informes/catalogo";
 
 // R5: SOLO `maestro` tiene lectura Y escritura del modulo. Cualquier otro rol (incluido
 // uno no reconocido) -> forbidden. Patron `UsuarioService.ALLOWED_ROLES`.
@@ -37,6 +44,43 @@ const CUERPO_MALFORMADO = "El cuerpo tiene una llave doble malformada";
 const TIENDA_IRREVERSIBLE =
   "Una plantilla de tienda no puede dejar de serlo: nunca se registro en WhatsApp";
 
+// Ficha 474 (R3/R6/R7) — mensajes de validacion de las plantillas de informe.
+const INFORME_DESCONOCIDO = "Ese informe no existe";
+const TIENDA_NO_INFORME = "Una plantilla de tienda no puede ser de informe";
+const DOCUMENTO_SIN_INFORME = "Solo una plantilla de informe puede llevar documento adjunto";
+const INFORME_SIN_DOCUMENTO = "Ese informe no genera documento";
+const YA_SALIO_A_META =
+  "No se puede cambiar: la plantilla ya se envió a Meta. Crea una plantilla nueva.";
+
+/**
+ * Ficha 474 — dependencias OPCIONALES de las plantillas de informe. Opcionales para no romper las
+ * suites que construyen el service solo con el repo; el composition root (`buildPlantillaService`)
+ * DEBE pasarlas, y un test estatico lo vigila (memoria «el composition root que no inyecta»).
+ */
+export interface PlantillaInformeDeps {
+  /** R10: nombres de los envios encendidos que usan la plantilla. */
+  envios?: Pick<IWhatsappEnvioRepository, "nombresEncendidosConPlantilla">;
+  /** R9/R48: identifica la app de Meta antes de mandar a aprobacion una plantilla con documento. */
+  resolutorAppId?: IResolutorAppIdMeta;
+}
+
+/** R6: la combinacion final (informe, documento, tienda) es valida. `null` si lo es. */
+function erroresDeInforme(
+  informeClave: string | null,
+  llevaDocumento: boolean,
+  plantillaTienda: boolean,
+): Record<string, string[]> | null {
+  if (informeClave !== null) {
+    const informe = informePorClave(informeClave);
+    if (informe === null) return { informeClave: [INFORME_DESCONOCIDO] };
+    if (plantillaTienda) return { informeClave: [TIENDA_NO_INFORME] };
+    if (llevaDocumento && !informe.generaDocumento) return { llevaDocumento: [INFORME_SIN_DOCUMENTO] };
+    return null;
+  }
+  if (llevaDocumento) return { llevaDocumento: [DOCUMENTO_SIN_INFORME] };
+  return null;
+}
+
 export class PlantillaMensajeService implements IPlantillaMensajeService {
   // Integracion WhatsApp: propagador OPCIONAL. Sin el, el CRUD local se comporta igual que
   // antes (no toca Meta) — asi las suites existentes que construyen el service con solo el
@@ -44,6 +88,7 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
   constructor(
     private readonly repo: IPlantillaMensajeRepository,
     private readonly whatsapp?: PlantillaWhatsappPropagator,
+    private readonly informe: PlantillaInformeDeps = {},
   ) {}
 
   async crear(input: CrearPlantillaInput, actor: Actor): Promise<CrearPlantillaServiceResult> {
@@ -55,8 +100,16 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
       return { status: "validation_error", fieldErrors: { cuerpo: [CUERPO_MALFORMADO] } };
     }
 
+    // Ficha 474 (R3/R6): plantilla de informe y documento adjunto.
+    const informeClave = input.informeClave ?? null;
+    const llevaDocumento = input.llevaDocumento ?? false;
+    const errInforme = erroresDeInforme(informeClave, llevaDocumento, input.plantillaTienda);
+    if (errInforme !== null) return { status: "validation_error", fieldErrors: errInforme };
+
     try {
       const plantilla = await this.repo.create({
+        ...(informeClave !== null ? { informeClave } : {}),
+        ...(llevaDocumento ? { llevaDocumento } : {}),
         nombre: input.nombre,
         cuerpo: input.cuerpo,
         variables: validado.variables, // R15
@@ -154,9 +207,35 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
       };
     }
 
+    // Ficha 474 (R7): el informe asociado y la marca de documento son INMUTABLES en cuanto la
+    // plantilla salio hacia Meta (tiene template o ya no es un borrador): su estructura en Meta
+    // (cabecera, variables) ya esta fijada alli.
+    const informeActual = actual.informeClave ?? null;
+    const documentoActual = actual.llevaDocumento ?? false;
+    const cambiaInforme =
+      input.informeClave !== undefined && (input.informeClave ?? null) !== informeActual;
+    const cambiaDocumento =
+      input.llevaDocumento !== undefined && input.llevaDocumento !== documentoActual;
+    const salioAMeta = actual.templateId !== null || actual.estado !== "saved_not_aprobation";
+    if (salioAMeta && (cambiaInforme || cambiaDocumento)) {
+      const fieldErrors: Record<string, string[]> = {};
+      if (cambiaInforme) fieldErrors.informeClave = [YA_SALIO_A_META];
+      if (cambiaDocumento) fieldErrors.llevaDocumento = [YA_SALIO_A_META];
+      return { status: "validation_error", fieldErrors };
+    }
+    // R6 sobre la combinacion FINAL (lo que la plantilla sera al guardar).
+    const informeFinal =
+      input.informeClave !== undefined ? (input.informeClave ?? null) : informeActual;
+    const documentoFinal = input.llevaDocumento ?? documentoActual;
+    const tiendaFinal = input.plantillaTienda ?? actual.plantillaTienda;
+    const errInforme = erroresDeInforme(informeFinal, documentoFinal, tiendaFinal);
+    if (errInforme !== null) return { status: "validation_error", fieldErrors: errInforme };
+
     const data: UpdatePlantillaData = {};
     if (input.nombre !== undefined) data.nombre = input.nombre;
     if (input.plantillaTienda !== undefined) data.plantillaTienda = input.plantillaTienda;
+    if (cambiaInforme) data.informeClave = informeFinal;
+    if (cambiaDocumento) data.llevaDocumento = documentoFinal;
 
     // R22: si el cuerpo cambia, valida su forma (R16) y recalcula variables (R15).
     if (input.cuerpo !== undefined) {
@@ -230,6 +309,10 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
   ): Promise<CambiarEstadoPlantillaServiceResult> {
     if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
 
+    // Ficha 474 (R10): no se desactiva una plantilla que usa un envio ENCENDIDO.
+    const enUso = await this.enviosEncendidos(id);
+    if (enUso.length > 0) return { status: "en_uso", envios: enUso };
+
     // R24: DESACTIVAR es la unica transicion del front; el schema ya acota a `inactivo`.
     const plantilla = await this.repo.updateEstado(id, input.estado);
     if (!plantilla) return { status: "not_found" }; // R26
@@ -243,6 +326,10 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     // soft-delete la fila deja de ser visible para el propagador/job.
     const actual = await this.repo.findById(id);
     if (!actual) return { status: "not_found" }; // R29
+
+    // Ficha 474 (R10): no se elimina una plantilla que usa un envio ENCENDIDO.
+    const enUso = await this.enviosEncendidos(id);
+    if (enUso.length > 0) return { status: "en_uso", envios: enUso };
 
     const ok = await this.repo.softDelete(id, actor.usuarioId); // R27 + 362/R9: QUIEN
     if (!ok) return { status: "not_found" }; // R29 (carrera)
@@ -277,6 +364,23 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     // solo ocultando el boton, porque la accion es irreversible: una vez creado el template
     // alla, no se retira de revision.
     if (actual.plantillaTienda) return { status: "no_aplica" };
+
+    // Ficha 474 (R9/R48): una plantilla CON DOCUMENTO necesita el ID de la app de Meta para subir
+    // el documento de ejemplo. Si no se puede obtener (o falta la credencial), se dice en lenguaje
+    // claro y NO se toca el estado. Va antes que `no_configurado`: aqui la falta de credencial
+    // tiene un texto propio que nombra la variable.
+    if (actual.llevaDocumento === true) {
+      const r: ResultadoAppId = this.informe.resolutorAppId
+        ? await this.informe.resolutorAppId.resolver()
+        : { ok: false, motivo: "sin_credencial" };
+      if (!r.ok) {
+        return {
+          status: "documento_no_disponible",
+          mensaje: mensajeAppIdNoResuelto(r),
+          ...(r.codigo !== undefined ? { codigo: r.codigo } : {}),
+        };
+      }
+    }
 
     // Sin credenciales de WhatsApp el CRUD local funciona igual, pero no hay a quien enviar:
     // se dice, en vez de fingir un envio y dejar la fila mintiendo en `pending`.
@@ -324,6 +428,8 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     // comprobacion va ANTES que la del estado a proposito: `activo` es precisamente el estado
     // en el que nacen, asi que sin esto pasarian el filtro justo por serlo.
     if (actual.plantillaTienda) return { status: "no_aplica" };
+    // Ficha 474 (R8): una plantilla de INFORME no puede ser la bienvenida (no habla de una orden).
+    if ((actual.informeClave ?? null) !== null) return { status: "no_aplica" };
     if (actual.estado !== "activo") {
       return { status: "estado_invalido", estado: actual.estado };
     }
@@ -332,6 +438,12 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     // Carrera perdida (la borraron entre el `findById` y el SET): no existe, como antes.
     if (!plantilla) return { status: "not_found" };
     return { status: "ok", plantilla };
+  }
+
+  /** Ficha 474 (R10): sin el lector inyectado no hay envios que consultar (suites antiguas). */
+  private async enviosEncendidos(plantillaId: string): Promise<string[]> {
+    if (this.informe.envios === undefined) return [];
+    return this.informe.envios.nombresEncendidosConPlantilla(plantillaId);
   }
 
   async preview(cuerpo: string, actor: Actor): Promise<PreviewPlantillaServiceResult> {

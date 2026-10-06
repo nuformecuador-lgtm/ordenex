@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; }
+    .hoja { width: 794px; height: 1123px; background: #fff; color: #12233f; padding: 40px 44px; display: flex; flex-direction: column; position: relative; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    table.p { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .p th { text-align: left; font-weight: 600; font-size: 9.5px; color: #4a5368; text-transform: uppercase; letter-spacing: .04em; padding: 5px 6px; border-bottom: 1.5px solid #12233f; white-space: nowrap; }
+    .p td { padding: 6px; border-bottom: 1px solid #e3e8f2; vertical-align: top; }
+    .p td.r, .p th.r { text-align: right; }
+    .p tr.venc td { color: #b91c1c; }
+    .p tr.venc td:first-child { box-shadow: inset 3px 0 0 #ef4444; }
+    .tag { display: inline-block; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; padding: 1px 5px; border-radius: 3px; vertical-align: 1px; }
+    .tag.v { background: #fee2e2; color: #b91c1c; }
+    .tag.p { background: #fef3c7; color: #92400e; }
+    .zona { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 4px; }
+    .zona h3 { margin: 0; font-size: 13px; font-weight: 600; }
+    .zona span { font-size: 10px; color: #4a5368; }
+    .pie { position: absolute; left: 44px; right: 44px; bottom: 24px; display: flex; justify-content: space-between; font-size: 9px; color: #4a5368; border-top: 1px solid #e3e8f2; padding-top: 6px; }
+    col.c1 { width: 72px; } col.c2 { width: 50px; } col.c3 { width: 46px; } col.c4 { width: 190px; } col.c7 { width: 66px; }
+  </style>
+</helmet>
+
+<div class="hoja">
+  <div style="display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; border-bottom: 3px solid #f26419;">
+    <div style="font-size: 15px; font-weight: 600;">Informe de tránsito · fuera de la GAM</div>
+    <div style="font-size: 10px; color: #4a5368;">Plazo 20 días · alerta desde el día 15 · 10 paquetes · ₡231.600 por cobrar</div>
+  </div>
+
+  <div class="zona"><h3>FGAM Zona Sur</h3><span>3 paquetes · ₡73.400</span></div>
+  <table class="p">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col><col class="c7"></colgroup>
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">GM-10288</td><td class="mono">47690</td><td class="r"><strong>24</strong>/20</td><td>En bodega satélite <span class="tag v">VENCIDO</span> <span class="tag p">PARADO</span></td><td>Luis Diego Arias</td><td>Pérez Zeledón · San Isidro de El General</td><td class="r">₡36.000</td></tr>
+      <tr><td class="mono">SC-7702</td><td class="mono">47801</td><td class="r"><strong>17</strong>/20</td><td>Novedad <span class="tag p">PARADO</span></td><td>Marcela Ugalde</td><td>Corredores · Corredor</td><td class="r">₡22.500</td></tr>
+      <tr><td class="mono">GM-10340</td><td class="mono">47822</td><td class="r"><strong>15</strong>/20</td><td>En ruta a bodega satélite</td><td>Óscar Navarro</td><td>Golfito · Golfito</td><td class="r">₡14.900</td></tr>
+    </tbody>
+  </table>
+
+  <div class="zona"><h3>FGAM Limon Arriba</h3><span>2 paquetes · ₡47.400</span></div>
+  <table class="p">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col><col class="c7"></colgroup>
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">GM-10302</td><td class="mono">47710</td><td class="r"><strong>23</strong>/20</td><td>En bodega satélite <span class="tag v">VENCIDO</span> <span class="tag p">PARADO</span></td><td>Kevin Mora</td><td>Pococí · Guápiles</td><td class="r">₡27.500</td></tr>
+      <tr><td class="mono">NF-2198</td><td class="mono">47755</td><td class="r"><strong>16</strong>/20</td><td>En reparto</td><td>Yorleny Campos</td><td>Siquirres · Pacuarito</td><td class="r">₡19.900</td></tr>
+    </tbody>
+  </table>
+
+  <div class="zona"><h3>FGAM San Carlos</h3><span>2 paquetes · ₡37.900</span></div>
+  <table class="p">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col><col class="c7"></colgroup>
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">GM-10361</td><td class="mono">47866</td><td class="r"><strong>22</strong>/20</td><td>Novedad interna <span class="tag v">VENCIDO</span> <span class="tag p">PARADO</span></td><td>Daniela Quirós</td><td>San Carlos · Aguas Zarcas</td><td class="r">₡21.000</td></tr>
+      <tr><td class="mono">SC-7744</td><td class="mono">47880</td><td class="r"><strong>16</strong>/20</td><td>En bodega satélite <span class="tag p">PARADO</span></td><td>Pablo Vindas</td><td>San Carlos · Florencia</td><td class="r">₡16.900</td></tr>
+    </tbody>
+  </table>
+
+  <div class="zona"><h3>FGAM Guanacaste (Tempisque)</h3><span>2 paquetes · ₡47.400</span></div>
+  <table class="p">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col><col class="c7"></colgroup>
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">NF-2170</td><td class="mono">47650</td><td class="r"><strong>21</strong>/20</td><td>Reprogramado <span class="tag v">VENCIDO</span> <span class="tag p">PARADO</span></td><td>Silvia Rodríguez</td><td>Nicoya · Nicoya</td><td class="r">₡29.900</td></tr>
+      <tr><td class="mono">GM-10355</td><td class="mono">47840</td><td class="r"><strong>15</strong>/20</td><td>En reparto</td><td>Esteban Picado</td><td>Santa Cruz · Tamarindo</td><td class="r">₡17.500</td></tr>
+    </tbody>
+  </table>
+
+  <div class="zona"><h3>FGAM Puntarenas</h3><span>1 paquete · ₡25.500</span></div>
+  <table class="p">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col><col class="c7"></colgroup>
+    <thead><tr><th>Remisión</th><th>Guía</th><th class="r">Días</th><th>Estado</th><th>Cliente</th><th>Cantón / Distrito</th><th class="r">Por cobrar</th></tr></thead>
+    <tbody>
+      <tr class="venc"><td class="mono">GM-10370</td><td class="mono">47901</td><td class="r"><strong>21</strong>/20</td><td>En reparto <span class="tag v">VENCIDO</span></td><td>Gabriela Soto</td><td>Puntarenas · Chacarita</td><td class="r">₡25.500</td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top: 18px; background: #f1f4fb; border-radius: 6px; padding: 8px 12px; font-size: 10px; color: #4a5368;">
+    <strong style="color:#12233f;">Sin paquetes en alerta:</strong> FGAM El Coco · FGAM Limon Abajo · FGAM San Ramon
+  </div>
+
+  <div style="margin-top: 14px; font-size: 9.5px; color: #4a5368; line-height: 1.5;">
+    Parámetros de este informe: GAM plazo 10 días y aviso 2 días antes; fuera de la GAM plazo 20 días y aviso 5 días antes. Parado: más de 2 días en bodega central, en ruta a bodega satélite o en bodega satélite; más de 3 días reprogramado; más de 1 día en novedad, novedad interna o incidente.
+  </div>
+
+  <div class="pie"><span>Ordenex · Informe de tránsito · 5 oct 2026 05:00</span><span>Página 2 de 2</span></div>
+</div>
+</x-dc>
+</body>
+</html>

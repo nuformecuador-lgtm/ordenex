@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; }
+    a { color: #d4530d; } a:hover { color: #b8450a; }
+    * { box-sizing: border-box; }
+    .side-item { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: #aab6d2; }
+    .side-item.on { background: #14294a; color: #ffffff; }
+    .side-sub { padding: 6px 12px 6px 30px; border-radius: 8px; font-size: 13px; color: #aab6d2; }
+    .side-sub.on { background: #14294a; color: #fff; font-weight: 500; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid transparent; font-family: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .btn.primary { background: #f26419; color: #fff; }
+    .btn.outline { border-color: #e3e8f2; background: #f7f8fc; color: #12233f; }
+    .btn.ghost { background: transparent; color: #4a5368; }
+    .btn.sm { height: 28px; font-size: 13px; padding: 0 8px; }
+    .bdg { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 26px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .bdg.ok { background: #d1fae5; color: #047857; }
+    .bdg.warn { background: #fef3c7; color: #92400e; }
+    .bdg.bad { background: #fee2e2; color: #b91c1c; }
+    .bdg.info { background: #eff6ff; color: #1d4ed8; }
+    .bdg.neu { background: #eef1f8; color: #17233b; }
+    .bdg.out { border: 1px solid #e3e8f2; color: #12233f; }
+    .sw { display: inline-flex; align-items: center; width: 36px; height: 20px; padding: 0 2px; border-radius: 999px; background: #e3e8f2; flex: 0 0 auto; }
+    .sw::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #f7f8fc; box-shadow: 0 1px 2px rgba(18,35,63,.2); }
+    .sw.on { background: #f26419; justify-content: flex-end; }
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .t th { height: 40px; padding: 0 8px; text-align: left; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #e3e8f2; }
+    .t td { padding: 10px 8px; vertical-align: middle; border-bottom: 1px solid #e3e8f2; }
+    .t tr:last-child td { border-bottom: 0; }
+    .sub { font-size: 12px; color: #4a5368; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1280px; height: 820px; background: #f7f8fc; color: #12233f;">
+  <aside style="width: 220px; flex: 0 0 220px; background: #0d2444; padding: 16px 12px; display: flex; flex-direction: column; gap: 2px;">
+    <div style="display: flex; align-items: center; gap: 9px; padding: 4px 12px 18px;">
+      <div style="width: 24px; height: 24px; border-radius: 7px; background: #f26419;"></div>
+      <span style="color: #fff; font-size: 16px; font-weight: 600;">Ordenex</span>
+    </div>
+    <div class="side-item">Inicio</div>
+    <div class="side-item">Analítica</div>
+    <div class="side-item">Monitoreo</div>
+    <div class="side-item">Órdenes</div>
+    <div class="side-item">Wallet</div>
+    <div class="side-item" style="color:#fff;">Configuración</div>
+    <div class="side-sub">Usuarios</div>
+    <div class="side-sub">Tarifas</div>
+    <div class="side-sub">API</div>
+    <div class="side-sub">Plantillas</div>
+    <div class="side-sub on">Envíos automáticos</div>
+    <div class="side-sub">Vehículos</div>
+    <div class="side-sub">Geografía</div>
+    <div class="side-sub">SINPE por bodega</div>
+    <div class="side-item">Incidentes</div>
+    <div class="side-item">Histórico</div>
+  </aside>
+
+  <main style="flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0;">
+    <header style="display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid #e3e8f2;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Envíos automáticos</h1>
+        <p style="margin: 4px 0 0; font-size: 14px; color: #4a5368;">Mensajes de WhatsApp que Ordenex manda solo, a una hora fija o cuando pasa algo</p>
+      </div>
+      <span class="btn primary">+ Nuevo envío</span>
+    </header>
+
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4a5368;">
+        <span>5 envíos</span><span>·</span>
+        <span><strong style="color:#12233f;">3</strong> encendidos</span><span>·</span>
+        <span>Hora de Costa Rica</span>
+      </div>
+
+      <div style="background: #fff; border: 1px solid #e3e8f2; border-radius: 10px; padding: 4px 8px;">
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Envío</th>
+              <th>Informe adjunto</th>
+              <th>Destinatarios</th>
+              <th>Cuándo</th>
+              <th>Último envío</th>
+              <th>Encendido</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="font-weight: 500;">Paquetes por vencer</div>
+                <div class="sub">Plantilla <span class="mono" style="font-size:12px;">aviso_transito</span></div>
+              </td>
+              <td><span class="bdg out">PDF · Tránsito</span></td>
+              <td>Rol admin · 2 usuarios<div class="sub">5 personas</div></td>
+              <td>Lun–Sáb 05:00</td>
+              <td>
+                <div>Hoy 05:00</div>
+                <span class="bdg ok">4 de 5 enviados</span> <span class="bdg bad">1 rechazado</span>
+              </td>
+              <td><span class="sw on"></span></td>
+              <td style="text-align:right;"><span class="btn ghost sm">Historial</span><span class="btn outline sm">Editar</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="font-weight: 500;">Picking del día</div>
+                <div class="sub">Plantilla <span class="mono" style="font-size:12px;">aviso_picking</span></div>
+              </td>
+              <td><span class="bdg out">PDF · Picking</span></td>
+              <td>Rol admin<div class="sub">3 personas</div></td>
+              <td>Lun–Sáb 06:30</td>
+              <td>
+                <div>Hoy 06:30</div>
+                <span class="bdg ok">3 de 3 entregados</span>
+              </td>
+              <td><span class="sw on"></span></td>
+              <td style="text-align:right;"><span class="btn ghost sm">Historial</span><span class="btn outline sm">Editar</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="font-weight: 500;">Aviso al vencer un paquete</div>
+                <div class="sub">Plantilla <span class="mono" style="font-size:12px;">paquete_vencido</span></div>
+              </td>
+              <td><span class="sub">Ninguno</span></td>
+              <td>Rol maestro<div class="sub">2 personas</div></td>
+              <td>Al vencer un paquete</td>
+              <td>
+                <div>Ayer 16:12</div>
+                <span class="bdg ok">Enviado</span>
+              </td>
+              <td><span class="sw on"></span></td>
+              <td style="text-align:right;"><span class="btn ghost sm">Historial</span><span class="btn outline sm">Editar</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="font-weight: 500;">Tránsito de fuera de la GAM</div>
+                <div class="sub">Plantilla <span class="mono" style="font-size:12px;">aviso_transito</span></div>
+              </td>
+              <td><span class="bdg out">PDF · Tránsito</span></td>
+              <td>Rol admin de satélite<div class="sub">8 personas</div></td>
+              <td>Lun–Vie 07:00</td>
+              <td>
+                <div>Sáb 07:00</div>
+                <span class="bdg neu">Sin novedades</span>
+              </td>
+              <td><span class="sw"></span></td>
+              <td style="text-align:right;"><span class="btn ghost sm">Historial</span><span class="btn outline sm">Editar</span></td>
+            </tr>
+            <tr>
+              <td>
+                <div style="font-weight: 500;">Resumen semanal de tránsito</div>
+                <div class="sub">Plantilla <span class="mono" style="font-size:12px;">aviso_transito</span></div>
+              </td>
+              <td><span class="bdg out">PDF · Tránsito</span></td>
+              <td>3 usuarios<div class="sub">3 personas</div></td>
+              <td>Lun 07:00</td>
+              <td><span class="sub">Nunca se ha enviado</span></td>
+              <td><span class="sw"></span></td>
+              <td style="text-align:right;"><span class="btn ghost sm">Historial</span><span class="btn outline sm">Editar</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin: 0; font-size: 12px; color: #4a5368; line-height: 1.5;">
+        Un envío nuevo se guarda <strong style="color:#12233f;">apagado</strong>. Pruébalo con «Probar ahora» y enciéndelo aquí cuando el mensaje sea el correcto.
+      </p>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>
