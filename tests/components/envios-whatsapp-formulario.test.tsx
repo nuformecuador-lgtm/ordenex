@@ -202,13 +202,39 @@ describe("R11/R13/R15 — crear un envío", () => {
     const user = userEvent.setup();
     a.crearEnvio.mockResolvedValue({
       status: "validation_error",
-      fieldErrors: { "parametros.simularVacio": ["Tiene que ser sí o no"], nombre: ["El nombre es obligatorio"] },
+      fieldErrors: { "parametros.simularVacio": ["Tiene que ser sí o no"], nombre: ["Escribe un nombre para el envío"] },
     });
     formulario();
     expect(screen.getByRole("switch", { name: "Simular vacío" })).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "Guardar" }));
     expect(await screen.findByText("Tiene que ser sí o no")).toBeInTheDocument();
-    expect(screen.getByText("El nombre es obligatorio")).toBeInTheDocument();
+    expect(screen.getByText("Escribe un nombre para el envío")).toBeInTheDocument();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("los rechazos del schema REAL salen junto a su campo, en español y con su mensaje propio", async () => {
+    // El servidor se sustituye por el schema de verdad + el mismo aplanado que hace
+    // `normalizeError`: lo que se afirma es el texto que el usuario lee al lado de cada campo.
+    const { guardarEnvioSchema } = await import("@/lib/types/envios-whatsapp");
+    const { z } = await import("zod");
+    a.crearEnvio.mockImplementation(async (input: unknown) => {
+      const r = guardarEnvioSchema.safeParse(input);
+      if (r.success) throw new Error("el formulario vacío no debería pasar el schema");
+      return { status: "validation_error", fieldErrors: z.flattenError(r.error).fieldErrors };
+    });
+    const user = userEvent.setup();
+    formulario();
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Nombre del envío")).toHaveAccessibleDescription(
+        expect.stringContaining("Escribe un nombre para el envío"),
+      ),
+    );
+    expect(screen.getByRole("combobox", { name: "Plantilla" })).toHaveAccessibleDescription(
+      expect.stringContaining("Elige una plantilla"),
+    );
+    expect(document.body.textContent).not.toMatch(/Too small|expected string|Invalid input/);
     expect(router.push).not.toHaveBeenCalled();
   });
 

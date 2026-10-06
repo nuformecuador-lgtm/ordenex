@@ -21,12 +21,36 @@ const HORA_RE = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 export const ROLES_DESTINATARIO = ["maestro", "admin", "adminSatelite", "adminTienda", "mensajero"] as const;
 export type RolDestinatario = (typeof ROLES_DESTINATARIO)[number];
 
-const rolSchema = z.enum(["maestro", "admin", "mensajero", "adminTienda", "adminSatelite", "apiKey"]);
+/**
+ * Mensajes PROPIOS por campo, en el lenguaje de la pantalla. Los usan el schema (borde de las
+ * actions) y el service (reglas que dependen de la base), para que el mismo fallo diga lo mismo
+ * venga de donde venga. Lo que no tiene uno propio cae en el genérico de `lib/validacion/zod-es`.
+ */
+export const MENSAJES_ENVIO = {
+  nombre: "Escribe un nombre para el envío",
+  nombreLargo: "El nombre no puede tener más de 120 caracteres",
+  informe: "Elige un informe",
+  plantilla: "Elige una plantilla",
+  disparo: "Elige cuándo se manda",
+  dia: "Elige días de lunes a domingo",
+  dias: "Elige al menos un día",
+  hora: "Escribe la hora en formato 24 h, por ejemplo 05:00",
+  evento: "Elige un evento",
+  rol: "Ese rol no puede recibir envíos",
+  roles: "Hay demasiados roles elegidos",
+  persona: "Elige una persona de la lista",
+  personas: "Puedes elegir como máximo 200 personas",
+  destinatarios: "Elige al menos un destinatario",
+} as const;
+
+const rolSchema = z.enum(["maestro", "admin", "mensajero", "adminTienda", "adminSatelite", "apiKey"], {
+  error: MENSAJES_ENVIO.rol,
+});
 
 export const seleccionDestinatariosSchema = z
   .object({
-    roles: z.array(rolSchema).max(10).default([]),
-    usuarioIds: z.array(z.string().min(1)).max(200).default([]),
+    roles: z.array(rolSchema).max(10, MENSAJES_ENVIO.roles).default([]),
+    usuarioIds: z.array(z.string().min(1, MENSAJES_ENVIO.persona)).max(200, MENSAJES_ENVIO.personas).default([]),
   })
   .strict();
 export type SeleccionDestinatariosInput = z.infer<typeof seleccionDestinatariosSchema>;
@@ -37,18 +61,21 @@ export type SeleccionDestinatariosInput = z.infer<typeof seleccionDestinatariosS
  */
 export const guardarEnvioSchema = z
   .object({
-    nombre: z.string().trim().min(1).max(120),
-    informeClave: z.string().regex(/^[a-z0-9_]+$/),
-    plantillaId: z.string().min(1),
+    nombre: z.string(MENSAJES_ENVIO.nombre).trim().min(1, MENSAJES_ENVIO.nombre).max(120, MENSAJES_ENVIO.nombreLargo),
+    informeClave: z.string(MENSAJES_ENVIO.informe).regex(/^[a-z0-9_]+$/, MENSAJES_ENVIO.informe),
+    plantillaId: z.string(MENSAJES_ENVIO.plantilla).min(1, MENSAJES_ENVIO.plantilla),
     /** Se valida contra el esquema del informe en el service (R13). */
     parametros: z.record(z.string(), z.unknown()).default({}),
-    disparo: z.enum(["hora_fija", "evento"]),
+    disparo: z.enum(["hora_fija", "evento"], { error: MENSAJES_ENVIO.disparo }),
     /** ISO 1 = lunes … 7 = domingo. Solo `hora_fija`. */
-    diasSemana: z.array(z.number().int().min(1).max(7)).max(7).default([]),
+    diasSemana: z
+      .array(z.number(MENSAJES_ENVIO.dia).int(MENSAJES_ENVIO.dia).min(1, MENSAJES_ENVIO.dia).max(7, MENSAJES_ENVIO.dia))
+      .max(7, MENSAJES_ENVIO.dia)
+      .default([]),
     /** `HH:mm` de Costa Rica. Solo `hora_fija`. */
-    hora: z.string().regex(HORA_RE).nullable().default(null),
+    hora: z.string(MENSAJES_ENVIO.hora).regex(HORA_RE, MENSAJES_ENVIO.hora).nullable().default(null),
     /** Un evento disponible (`listarEventosDisponibles`). Solo `evento`. */
-    eventoClave: z.string().min(1).nullable().default(null),
+    eventoClave: z.string(MENSAJES_ENVIO.evento).min(1, MENSAJES_ENVIO.evento).nullable().default(null),
     destinatarios: seleccionDestinatariosSchema,
   })
   .strict();

@@ -207,7 +207,9 @@ run_if() {
 #
 # Siguen exigiendo el completo solo los cambios cuyo radio es LITERALMENTE todo el repo: el propio
 # gate, el quitador de comentarios con el que leen las guardias y la configuracion de build/tests.
-RUTAS_GLOBALES='^init\.sh$|^tests/fixtures/sin-comentarios\.ts$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
+# Tambien `tests/setup/` (lo carga CADA test: cambiarlo cambia lo que ve toda la suite) e
+# `instrumentation.ts` (corre antes de cualquier peticion del servidor). Añadidos el 2026-10-05.
+RUTAS_GLOBALES='^init\.sh$|^tests/fixtures/sin-comentarios\.ts$|^tests/setup/|^instrumentation\.ts$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
 RUTAS_DE_DATOS='^db/migrations/|^db/schema\.prisma$|^lib/types/'
 NOMBRES_DE_DINERO='^(lib|app|components)/.*(cierre|tarifa|pago|wallet|liquidacion|ingreso|egreso|caja|comision|flete|moneda|cobro|factura|premio)'
 AMPLIADO=""
