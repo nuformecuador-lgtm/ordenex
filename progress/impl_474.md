@@ -400,3 +400,8 @@ nueva del rápido ampliado, y no se mergeó `dev` en la rama):
 ## Arreglo m4 de la review (rama fix/474-m4)
 
 - **m4 (R16 al ejecutar):** `EjecucionEnvioService.ejecutar` excluye a los `adminTienda` resueltos si el informe no es `aptoParaAdminTienda`; cada excluido queda como entrega `rechazo_permanente` con `MOTIVOS.adminTienda`, y si no queda nadie la ejecución termina `sin_destinatarios` con `MOTIVOS.todosAdminTienda`. Tests: unit `ejecucion-envio-service` (3 casos; mutación «filtro anulado» → 2 rojos) e int `whatsapp-envio-ejecucion-admintienda` (usuario que pasa a `adminTienda` tras guardar; requiere `DATABASE_URL`, no corrida aquí).
+## Arreglos menores de la revisión (rama `fix/474-m12`, 2026-10-05)
+
+- **m2** (`HistorialEnvios.tsx`): la pestaña del PDF se abre EN el clic, antes del `await` (patrón de `VerComprobanteMiMovimiento`), y recibe la URL al resolver; si el navegador no la deja abrir, se dice y queda el enlace «Abrir el PDF» a un clic; si el servidor falla o caducó, se cierra y avisa. Mutación (mover `window.open` tras el `await`) → muere 1 test.
+- **m1** (`EnvioForm.tsx`): en un envío ENCENDIDO con cambios sin guardar, «Probar ahora» queda deshabilitado con «Guarda los cambios antes de probar…» (`aria-describedby`) y no guarda; apagado, igual que antes. Lo guardado pasa de ref a estado porque ahora decide el render (`react-hooks/refs`). Mutación (`probarPideGuardar = false && …`) → muere 1 test.
+- Gate: `vitest related --run` sobre los 4 archivos → 3 archivos / 34 tests verdes; eslint de los 4 limpio; `tsc --noEmit` sin errores.

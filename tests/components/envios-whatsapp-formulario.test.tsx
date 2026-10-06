@@ -399,6 +399,27 @@ describe("R39–R41 — «Probar ahora», solo a quien pulsa", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("m1 (revisión 474): ENCENDIDO con cambios sin guardar, «Probar» NO guarda: se deshabilita y pide guardar", async () => {
+    const user = userEvent.setup();
+    a.probarEnvioWhatsapp.mockResolvedValue({ status: "demasiado_pronto", segundosRestantes: 12 });
+    formulario({ ...ENVIO, activo: true });
+    const probar = screen.getByRole("button", { name: "Probar ahora (solo a mí)" });
+    // Sin cambios, se puede probar (lo guardado ya es lo que está en vivo).
+    expect(probar).toBeEnabled();
+    await user.type(screen.getByLabelText("Nombre del envío"), " 2");
+    expect(probar).toBeDisabled();
+    const aviso = screen.getByText(/^Guarda los cambios antes de probar/);
+    expect(probar).toHaveAttribute("aria-describedby", aviso.id);
+    await user.click(probar);
+    expect(a.actualizarEnvio).not.toHaveBeenCalled();
+    expect(a.probarEnvioWhatsapp).not.toHaveBeenCalled();
+    // Al guardar (decisión explícita), vuelve a poder probarse.
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(a.actualizarEnvio).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(probar).toBeEnabled());
+    expect(screen.queryByText(/^Guarda los cambios antes de probar/)).not.toBeInTheDocument();
+  });
+
   it("R40: teléfono de quien pulsa inválido: lo dice", async () => {
     const user = userEvent.setup();
     a.probarEnvioWhatsapp.mockResolvedValue({ status: "telefono_invalido", mensaje: "Tu teléfono no sirve para WhatsApp." });

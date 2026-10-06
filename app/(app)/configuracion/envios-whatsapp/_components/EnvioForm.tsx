@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -92,7 +92,9 @@ function defaultsDe(informe: InformeDTO | undefined): Record<string, unknown> {
  *    lo lleva, el aviso sale en el acto y NO deja guardar ni probar (anotación «plantilla-documento»
  *    del canvas): si no, el envío saldría cada mañana sin el PDF.
  *  - **«Probar ahora» solo a quien pulsa** (R39–R41), con lo guardado: si hay cambios, se guardan
- *    antes; el resultado llega en la misma respuesta y se dice aquí.
+ *    antes; el resultado llega en la misma respuesta y se dice aquí. EXCEPTO en un envío ENCENDIDO
+ *    (m1 de la revisión 474): ahí guardar es ponerlo en vivo, así que «Probar» no guarda por su
+ *    cuenta; se deshabilita y pide guardar antes, y salir en vivo lo decide el botón «Guardar».
  *  - Los avisos de teléfono NO impiden guardar (R17).
  */
 export function EnvioForm({ envio, informes, eventos, plantillas, personas }: EnvioFormProps) {
@@ -149,8 +151,11 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
     [nombre, informeClave, plantillaId, parametros, disparo, dias, hora, eventoClave, roles, usuarioIds],
   );
   // Lo último guardado: si el formulario no ha cambiado, «Probar ahora» no vuelve a guardar.
-  const guardadoRef = useRef<string | null>(envio ? JSON.stringify(input) : null);
-  const hayCambios = guardadoRef.current !== JSON.stringify(input);
+  // Es ESTADO, no ref: también decide qué se pinta (m1), y un ref leído al renderizar no repinta.
+  const [guardado, setGuardado] = useState<string | null>(() => (envio ? JSON.stringify(input) : null));
+  const hayCambios = guardado !== JSON.stringify(input);
+  // m1: en un envío encendido, guardar = ponerlo en vivo. «Probar» no lo hace a escondidas.
+  const probarPideGuardar = activo && envioId !== null && hayCambios;
 
   // R17: la lista RESUELTA de la selección, calculada por el servidor (no escribe nada).
   // La respuesta se guarda CON la selección que la pidió: mientras la selección actual no tenga la
@@ -212,7 +217,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
     const r: GuardarEnvioResult = envioId === null ? await crearEnvio(input) : await actualizarEnvio(envioId, input);
     if (r.status === "ok") {
       setErrores({});
-      guardadoRef.current = JSON.stringify(input);
+      setGuardado(JSON.stringify(input));
       setEnvioId(r.envio.id);
       return r.envio.id;
     }
@@ -246,7 +251,7 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
   }
 
   async function onProbar() {
-    if (ocupado || faltaDocumento) return;
+    if (ocupado || faltaDocumento || probarPideGuardar) return;
     setOcupado("probar");
     setResultadoPrueba(null);
     try {
@@ -556,7 +561,14 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
             {ocupado === "guardar" ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
             Guardar
           </Button>
-          <Button type="button" variant="outline" disabled={bloqueado} className="w-full sm:w-auto" onClick={() => void onProbar()}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={bloqueado || probarPideGuardar}
+            aria-describedby={probarPideGuardar ? "probar-pide-guardar" : undefined}
+            className="w-full sm:w-auto"
+            onClick={() => void onProbar()}
+          >
             {ocupado === "probar" ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
             Probar ahora (solo a mí)
           </Button>
@@ -577,10 +589,14 @@ export function EnvioForm({ envio, informes, eventos, plantillas, personas }: En
         </div>
         {faltaDocumento ? (
           <p className="text-center text-xs text-muted-foreground sm:text-left">Cambia la plantilla para seguir.</p>
+        ) : probarPideGuardar ? (
+          <p id="probar-pide-guardar" className="text-center text-xs text-muted-foreground sm:text-left">
+            Guarda los cambios antes de probar: este envío está encendido y, al guardar, quedan en vivo.
+          </p>
         ) : (
           <p className="hidden text-xs leading-relaxed text-muted-foreground sm:block">
             «Probar ahora» te lo manda solo a ti, con los datos de este momento, y queda en el historial como prueba. No
-            enciende el envío. Si hay cambios sin guardar, se guardan antes.
+            enciende el envío. Si está apagado y hay cambios sin guardar, se guardan antes.
           </p>
         )}
         {resultadoPrueba ? (

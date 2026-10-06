@@ -119,14 +119,52 @@ describe("R42 — historial de ejecuciones", () => {
 });
 
 describe("R43/R44 — el PDF", () => {
-  it("R43: pide el enlace firmado al pulsar y lo abre", async () => {
+  /** Una pestaña falsa: lo que el componente le hace queda a la vista. */
+  function pestanaFalsa() {
+    return { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+  }
+
+  it("R43 + m2: abre la pestaña EN el clic (antes de esperar al servidor) y le pone el enlace firmado al llegar", async () => {
     const user = userEvent.setup();
-    const abrir = vi.spyOn(window, "open").mockReturnValue(null);
-    a.firmarPdfEjecucion.mockResolvedValue({ status: "ok", url: "https://almacen.example/firmado?t=1" });
+    const pestana = pestanaFalsa();
+    const abrir = vi.spyOn(window, "open").mockReturnValue(pestana as unknown as Window);
+    let resolver: (v: unknown) => void = () => {};
+    a.firmarPdfEjecucion.mockReturnValue(new Promise((r) => (resolver = r)));
     montar();
     await user.click(screen.getByRole("button", { name: "prueba-2026-10-05.pdf" }));
-    await waitFor(() => expect(a.firmarPdfEjecucion).toHaveBeenCalledWith("a"));
-    expect(abrir).toHaveBeenCalledWith("https://almacen.example/firmado?t=1", "_blank", "noopener,noreferrer");
+    // Con el servidor aún sin responder, la pestaña YA está abierta: tras un `await` Safari/iOS la bloquea.
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(abrir).toHaveBeenCalledWith("", "_blank");
+    expect(a.firmarPdfEjecucion).toHaveBeenCalledWith("a");
+    resolver({ status: "ok", url: "https://almacen.example/firmado?t=1" });
+    await waitFor(() => expect(pestana.location.href).toBe("https://almacen.example/firmado?t=1"));
+    expect(pestana.opener).toBeNull();
+    expect(abrir).toHaveBeenCalledTimes(1);
+    abrir.mockRestore();
+  });
+
+  it("m2: si el navegador no deja abrir la pestaña, lo dice y deja el enlace a un clic (no es un fallo mudo)", async () => {
+    const user = userEvent.setup();
+    const abrir = vi.spyOn(window, "open").mockReturnValue(null);
+    a.firmarPdfEjecucion.mockResolvedValue({ status: "ok", url: "https://almacen.example/firmado?t=2" });
+    montar();
+    await user.click(screen.getByRole("button", { name: "prueba-2026-10-05.pdf" }));
+    const enlace = await screen.findByRole("link", { name: "Abrir el PDF" });
+    expect(enlace).toHaveAttribute("href", "https://almacen.example/firmado?t=2");
+    expect(screen.getByText(/El navegador no abrió una pestaña nueva/)).toBeInTheDocument();
+    abrir.mockRestore();
+  });
+
+  it("m2: si el servidor falla, cierra la pestaña en blanco y avisa", async () => {
+    const user = userEvent.setup();
+    const pestana = pestanaFalsa();
+    const abrir = vi.spyOn(window, "open").mockReturnValue(pestana as unknown as Window);
+    a.firmarPdfEjecucion.mockResolvedValue({ status: "forbidden" });
+    montar();
+    await user.click(screen.getByRole("button", { name: "prueba-2026-10-05.pdf" }));
+    expect((await screen.findAllByText("No se pudo abrir el PDF.")).length).toBeGreaterThan(0);
+    expect(pestana.close).toHaveBeenCalledTimes(1);
+    expect(pestana.location.href).toBe("");
     abrir.mockRestore();
   });
 
@@ -140,9 +178,14 @@ describe("R43/R44 — el PDF", () => {
 
   it("R44: si caduca entre la carga y el clic, lo dice y quita el botón", async () => {
     const user = userEvent.setup();
+    const pestana = pestanaFalsa();
+    const abrir = vi.spyOn(window, "open").mockReturnValue(pestana as unknown as Window);
     a.firmarPdfEjecucion.mockResolvedValue({ status: "caducado" });
     montar();
     await user.click(screen.getByRole("button", { name: "prueba-2026-10-05.pdf" }));
     expect(await screen.findAllByText("PDF caducado")).toHaveLength(2);
+    // La pestaña abierta en el clic no se queda en blanco.
+    expect(pestana.close).toHaveBeenCalledTimes(1);
+    abrir.mockRestore();
   });
 });

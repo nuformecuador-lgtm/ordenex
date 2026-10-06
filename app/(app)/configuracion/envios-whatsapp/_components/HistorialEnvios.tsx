@@ -268,6 +268,7 @@ function PdfEjecucion({ ejecucion: e }: { ejecucion: EjecucionItemDTO }) {
   const toast = useToast();
   const [pidiendo, setPidiendo] = useState(false);
   const [caducado, setCaducado] = useState(e.pdf?.caducado ?? false);
+  const [enlace, setEnlace] = useState<string | null>(null);
   if (e.pdf === null) return null;
   if (caducado) {
     return (
@@ -278,11 +279,32 @@ function PdfEjecucion({ ejecucion: e }: { ejecucion: EjecucionItemDTO }) {
   }
   const nombre = e.pdf.nombre;
   async function abrir() {
+    // m2 (revisión 474), patrón de `VerComprobanteMiMovimiento`: la pestaña se abre ANTES de esperar
+    // al servidor, en el mismo clic; tras un `await` Safari/iOS la bloquea y el clic no haría nada.
+    const pestana = window.open("", "_blank");
     setPidiendo(true);
+    setEnlace(null);
     try {
-      const r = await firmarPdfEjecucion(e.id);
-      if (r.status === "ok") window.open(r.url, "_blank", "noopener,noreferrer");
-      else if (r.status === "caducado") {
+      let r: Awaited<ReturnType<typeof firmarPdfEjecucion>>;
+      try {
+        r = await firmarPdfEjecucion(e.id);
+      } catch {
+        pestana?.close();
+        toast.error("No se pudo abrir el PDF.");
+        return;
+      }
+      if (r.status === "ok") {
+        if (pestana) {
+          pestana.opener = null;
+          pestana.location.href = r.url;
+        } else {
+          // El navegador no dejó abrir la pestaña: el enlace queda aquí, a un clic, y se dice.
+          setEnlace(r.url);
+        }
+        return;
+      }
+      pestana?.close();
+      if (r.status === "caducado") {
         setCaducado(true);
         toast.info("Ese PDF ya caducó: se guardan 30 días.");
       } else toast.error("No se pudo abrir el PDF.");
@@ -291,9 +313,19 @@ function PdfEjecucion({ ejecucion: e }: { ejecucion: EjecucionItemDTO }) {
     }
   }
   return (
-    <Button type="button" variant="link" size="sm" disabled={pidiendo} onClick={() => void abrir()}>
-      <FileText aria-hidden="true" />
-      {nombre}
-    </Button>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Button type="button" variant="link" size="sm" disabled={pidiendo} onClick={() => void abrir()}>
+        <FileText aria-hidden="true" />
+        {nombre}
+      </Button>
+      {enlace === null ? null : (
+        <span role="status" className="text-xs text-muted-foreground">
+          El navegador no abrió una pestaña nueva.{" "}
+          <a href={enlace} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
+            Abrir el PDF
+          </a>
+        </span>
+      )}
+    </span>
   );
 }
