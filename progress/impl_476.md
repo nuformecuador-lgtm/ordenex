@@ -253,3 +253,86 @@ falta que el leader corra las 2 integraciones contra Postgres y mida M1–M7.
 
 Veredicto (ronda leader): bug P2028 arreglado (repo sin memo + motivo saneado en `last_error`), inactivas
 fuera del selector y en `error`, integración 10/10 sin saltos y 11/11 mutaciones contra Postgres muertas.
+---
+
+# FRONTEND (F5, frontend_dev, rama `fe/476`)
+
+Partida: `origin/feature/476-informe-picking-whatsapp` (`c8170741`) + `origin/dev` mergeado («Already up to date»).
+Grafo: no hizo falta; los símbolos venían nombrados en el contrato y se leyeron en los archivos reales.
+
+## Archivos
+
+- `app/(app)/configuracion/envios-whatsapp/_components/ParamsPicking.tsx` (nuevo): el panel `picking`.
+- `app/(app)/configuracion/envios-whatsapp/_components/picking-textos.ts` (nuevo): textos y mensajes puros.
+- `app/(app)/configuracion/envios-whatsapp/_components/ParametrosInforme.tsx`: la reserva `case "picking"` pasa a
+  `ParamsPicking` (con `ayuda`, `onNormalizar` y los errores de sus `campos`).
+- `components/ui/radio-group.tsx`: `RadioGroupOption.detalle?` opcional (texto a la derecha de la fila, dentro de su
+  `<label>`, así entra en el nombre accesible); sin él, el render es idéntico al de antes.
+- `lib/actions/informe-picking.ts`: QUITADA la anotación `@sin-superficie` (ya la monta el panel).
+- `tests/components/ParamsPicking.test.tsx` (nuevo): 15 tests.
+
+## Comportamiento
+
+- UNA tienda (D1): `RadioGroup` de una sola elección con las tiendas de `listarTiendasPicking`, en el orden recibido.
+- Junto a cada tienda: «N órdenes · M atrasadas» (M en píldora ámbar si > 0). Al cambiar N válido re-pide tras 400 ms;
+  mientras, cada fila dice «calculando…» (los conteos del N anterior NO se dan por buenos). Una respuesta de un N
+  anterior se DESCARTA (número de petición + `vivo`).
+- N inválido: «Escribe un número entero de días entre 1 y 30.» junto al número; no se pide nada y las filas solo
+  muestran las órdenes (las atrasadas dependen de N).
+- Sin tiendas: «No hay tiendas con fulfillment. Cuando una tienda tenga fulfillment activo, aparecerá aquí.»
+- `forbidden`/`unauthenticated`: «Solo un maestro puede ver las tiendas del picking.» (no re-pide en bucle).
+- Error de carga: aviso + «Reintentar».
+- Tienda guardada que ya no está en la lista: aviso rojo y ninguna marcada (el valor no se toca por su cuenta).
+- Errores de «Guardar» (`parametros.tiendaId`, `parametros.diasAtraso`) junto a su campo, hasta que se toca el panel.
+- m4: si falta `diasAtraso` en lo guardado, se completa con 2 por `onNormalizar`, no por `onCambiar`.
+- 390 px: el número va a `h-11` (44 px, objetivo táctil de `FormularioMovil`) y `h-8` desde `sm`; la frase del número
+  hace `flex-wrap`; el conteo de cada fila es `shrink-0` y el nombre se encoge.
+
+## Mapa R → test (pantalla, `tests/components/ParamsPicking.test.tsx`)
+
+| R | Test |
+|---|---|
+| R3 solo las tiendas de la acción, por nombre, con órdenes y atrasadas | «pide la lista con el N del formulario y pinta UNA opción por tienda, en el orden recibido» |
+| R3 una sola tienda (D1) | «elegir una tienda manda SOLO su id (una sola elección)» |
+| R3 atrasadas según el N del formulario | «al cambiar N vuelve a pedir y recalcula…», «descarta una respuesta que llega TARDE…», «mientras llega la lista del N nuevo…» |
+| R3 vacío / error / tienda caída | describe «R3 — estados de la lista» |
+| R4 (pantalla) no maestro | «sin permiso (no maestro): lo dice en claro y no vuelve a pedir» |
+| R2 (pantalla) errores por campo | describe «R2 de pantalla — errores junto a su campo» (3 tests) |
+| m4 (475) partida sin «cambios» | describe «m4 (revisión 475)…» (2 tests) |
+| Panel registrado en `ParametrosInforme` | «el descriptor `picking` monta el panel real» |
+
+## Mutaciones medidas (aplicada → `diff` comprobado → rojo → revertida → verde)
+
+| # | Mutación en `ParamsPicking.tsx` | Resultado |
+|---|---|---|
+| F1 | «no re-pedir al cambiar N»: `yaPedido` sin `&& lista.dias === n` | ROJA: 3 tests (recalcula / tarde / calculando) |
+| F2 | «no descartar respuestas tardías»: quitar `if (!vivo \|\| id !== ultimaPeticion.current) return;` del éxito | ROJA: 1 test («descarta una respuesta que llega TARDE…») |
+
+Revertidas ambas: 15/15 verdes.
+
+## Diferencias con la maqueta (`ParamsPicking.dc.html`, `FormularioMovil.dc.html`)
+
+1. **Radio en vez de casillas** (D1 aprobada): una tienda por envío; título «Tienda», no «Tiendas».
+2. **«0 atrasadas» se muestra** (la maqueta lo omite en Sicommer): R3 pide órdenes Y atrasadas de cada tienda, y así se
+   ve que el recálculo al cambiar N ocurrió. La píldora ámbar queda solo para M > 0.
+3. **Intro**: «Cada tienda va en su propio envío, con su propio PDF» en vez de «Cada tienda recibe su propio PDF» (D1).
+4. **Ayuda del número**: «junto a su remisión» en vez de «junto a su guía» (D2: en preparación no hay guía).
+5. **Ayuda de la tienda**: la del descriptor del backend + «Una tienda sin nada en preparación no genera PDF ese día.»
+6. **Móvil**: la maqueta pone «25 en preparación» sin atrasadas; aquí el mismo «N órdenes · M atrasadas» que en escritorio.
+7. Estados que la maqueta no pinta (cargando, vacío, error, sin permiso, tienda caída, «calculando…»): añadidos.
+
+## Verificación (salida real)
+
+- `tsc --noEmit` → exit 0 (`progress/typecheck_476_frontend.log`).
+- `eslint` sobre los 6 archivos tocados → exit 0, sin avisos.
+- `vitest run tests/components/ParamsPicking.test.tsx` → 15/15.
+- `vitest related --run` (archivos tocados + guardia `superficie-de-uso`) → `progress/related_476_frontend.log`:
+  `Test Files 278 passed | 1 skipped (279)`, `Tests 4179 passed | 19 skipped`, `INIT_EXIT=0` (amplio porque
+  `radio-group.tsx` lo usan 8 pantallas; los saltados son los INERTES ya conocidos de `AnaliticaPage`). La guardia
+  `superficie-de-uso` verde con la anotación quitada.
+- **T5.2 (capturas en navegador) NO hecha**: este worktree no tiene `.env`/base ni dev server propio (memoria «dos dev
+  servers se pisan»). Queda para el leader: escritorio y 390 px del panel con tres tiendas.
+- Sin `node_modules` en el worktree y sin poder crear el junction (el aislamiento del agente rechaza `mklink`/`New-Item`):
+  vitest, tsc y eslint corrieron con los binarios de `../../../node_modules`, que Node resuelve subiendo directorios.
+
+Veredicto frontend: panel del picking montado, 15 tests y 2 mutaciones rojas; falta la verificación visual (T5.2).

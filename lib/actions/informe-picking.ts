@@ -28,9 +28,7 @@ const entradaSchema = z.object({ diasAtraso: diasAtrasoSchema }).strict();
 
 /**
  * R3 — tiendas `adminTienda` con fulfillment, por nombre, con sus ordenes en preparacion y las que
- * llevan mas de `diasAtraso` dias.
- *
- * @sin-superficie 476: la monta el panel `picking` de ParametrosInforme, que hace frontend_dev (F5) en esta misma ficha; quitar esta anotacion al montarlo.
+ * llevan mas de `diasAtraso` dias. La usa el panel `ParamsPicking` del formulario de envios.
  */
 export async function listarTiendasPicking(
   input: unknown,
