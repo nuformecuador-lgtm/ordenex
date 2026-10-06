@@ -13,10 +13,22 @@ import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 // R8/R9/R11: crear con nombre y cuerpo no vacios. El cliente NO envia `variables`: el
 // service las DERIVA del cuerpo (R15). La validacion de llaves malformadas (R16) es de
 // dominio y se hace en el service con `validarCuerpo` (validation_error sobre `cuerpo`).
+
+/**
+ * Mensajes PROPIOS por campo. Los formularios de Plantillas validan en cliente con estos mismos
+ * schemas, así que el texto que ve el usuario junto al campo es éste. Lo demás cae en el genérico
+ * en español de `lib/validacion/zod-es`.
+ */
+export const MENSAJES_PLANTILLA = {
+  nombre: "Escribe un nombre para la plantilla",
+  cuerpo: "Escribe el texto del mensaje",
+  informe: "Elige un informe",
+} as const;
+
 export const crearPlantillaSchema = z
   .object({
-    nombre: z.string().min(1),
-    cuerpo: z.string().min(1),
+    nombre: z.string(MENSAJES_PLANTILLA.nombre).min(1, MENSAJES_PLANTILLA.nombre),
+    cuerpo: z.string(MENSAJES_PLANTILLA.cuerpo).min(1, MENSAJES_PLANTILLA.cuerpo),
     /**
      * PLANTILLA DE TIENDA. OPCIONAL con default `false`: es la unica entrada del cliente que
      * el service acepta ademas de nombre y cuerpo, y omitirla tiene que significar "una
@@ -31,7 +43,7 @@ export const crearPlantillaSchema = z
      * service (aqui solo la forma). SIN `.default()` a proposito: en la edicion, omitirlo tiene que
      * significar «no se toca», no «vuelve a ser de orden».
      */
-    informeClave: z.string().regex(/^[a-z0-9_]+$/).nullable().optional(),
+    informeClave: z.string(MENSAJES_PLANTILLA.informe).regex(/^[a-z0-9_]+$/, MENSAJES_PLANTILLA.informe).nullable().optional(),
     /** Ficha 474 (R5/R6) — lleva cabecera documento. Omitido = `false` al crear, «no se toca» al editar. */
     llevaDocumento: z.boolean().optional(),
   })
@@ -77,7 +89,7 @@ export const listarPlantillasCompletoSchema = listarPlantillasSchema
 export type ListarPlantillasCompletoInput = z.infer<typeof listarPlantillasCompletoSchema>;
 
 // R18: vista previa de un cuerpo arbitrario (no requiere que la plantilla exista).
-export const previewPlantillaSchema = z.string().min(1);
+export const previewPlantillaSchema = z.string(MENSAJES_PLANTILLA.cuerpo).min(1, MENSAJES_PLANTILLA.cuerpo);
 
 // DTO de fila del listado; se alinea al item del repositorio.
 export type PlantillaListItemDTO = PlantillaListItem;

@@ -78,10 +78,11 @@ export interface UsuarioFormHandle {
    *
    * ⚠️ Es «del servidor» de verdad, no un texto que se parezca: solo se llena en la rama que
    * llegó a llamar a la acción. La validación de cliente corre ANTES y devuelve sin tocar el
-   * servidor, y sus mensajes de `nombre` los redacta zod en inglés («Too small: expected string
-   * to have >=1 characters») — reenviar ESO al toast sería cambiar un mensaje pobre por uno
-   * peor. Distinguirlo aquí, donde se sabe cuál de las dos ramas corrió, es lo que impide que el
-   * anfitrión tenga que adivinarlo por el texto.
+   * servidor, y sus mensajes de `nombre` son los genéricos de zod («Este campo es obligatorio»,
+   * en español desde `lib/validacion/zod-es`; antes salían en inglés). Ya se pintan junto al
+   * campo, y no dicen nada del motivo de impresión: reenviarlos al toast sería repetir lo que el
+   * campo ya dice en vez del genérico. Distinguirlo aquí, donde se sabe cuál de las dos ramas
+   * corrió, es lo que impide que el anfitrión tenga que adivinarlo por el texto.
    *
    * Sale del MISMO `res` que `submit()` devuelve, y se fija antes de devolverlo.
    */
