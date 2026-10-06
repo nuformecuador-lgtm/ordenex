@@ -25,6 +25,12 @@ vi.mock("@/lib/actions/plantillas", () => ({
   listarPlantillas: (...a: unknown[]) => listarPlantillasMock(...a),
 }));
 
+// Ficha 474 (T10.1): la página lee además el catálogo de informes por su action (no por import).
+const listarInformesWhatsappMock = vi.fn(async () => ({ status: "ok", informes: [] }));
+vi.mock("@/lib/actions/envios-whatsapp", () => ({
+  listarInformesWhatsapp: () => listarInformesWhatsappMock(),
+}));
+
 const moduleCalls: PlantillasPageData[] = [];
 vi.mock("@/app/(app)/configuracion/plantillas/_components/PlantillasModule", () => ({
   PlantillasModule: (props: { initialData: PlantillasPageData }) => {

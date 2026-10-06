@@ -20,6 +20,8 @@ import { crearEncolarReintentoChatEnvio } from "@/lib/services/jobs/whatsapp-cha
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { consoleLogger, volcarStatusesFallidos } from "@/lib/services/whatsapp/chat-logger";
 import { getPrismaClient } from "@/lib/db/prisma-client";
+import { EntregaEstadoService, type IEntregaEstadoService } from "@/lib/services/EntregaEstadoService";
+import { WhatsappEjecucionRepository } from "@/lib/repositories/WhatsappEjecucionRepository";
 
 // El runtime de Node es OBLIGATORIO: `node:crypto` (HMAC) y Prisma no corren en edge.
 export const runtime = "nodejs";
@@ -34,6 +36,16 @@ export interface WebhookDeps {
   buildService?: () => ChatWhatsappService;
   /** Logger del volcado de diagnostico (inyectable en tests). Default `console.warn`. */
   logger?: ChatLogger;
+  /**
+   * Ficha 474 (R38): aplica los estados de Meta a las ENTREGAS de los envios automaticos, DESPUES
+   * de la ingesta del chat. Inyectable en tests; por defecto el real.
+   */
+  buildEntregaEstado?: () => IEntregaEstadoService;
+}
+
+/** Ficha 474 (R38): service real de estados de entregas. */
+function buildEntregaEstadoService(): IEntregaEstadoService {
+  return new EntregaEstadoService(new WhatsappEjecucionRepository(getPrismaClient()));
 }
 
 /** Construye el service de ingesta con las deps reales (repos + encolador del reintento). */
@@ -130,6 +142,17 @@ export async function handlePost(req: Request, deps: WebhookDeps = {}): Promise<
 
   const service = deps.buildService ? deps.buildService() : buildIngestaService();
   const resumen = await service.ingerirEventos(eventos);
+
+  // Ficha 474 (R38): estados de las entregas de los envios automaticos. DESPUES de la ingesta y
+  // aislado: un fallo aqui (incluido construir el service) NO cambia el 200 ni la ingesta del chat.
+  // `aplicar` ya no lanza; el try cubre la construccion. Sin PII en el log.
+  if (eventos.statuses.length > 0) {
+    try {
+      await (deps.buildEntregaEstado ?? buildEntregaEstadoService)().aplicar(eventos.statuses);
+    } catch (error) {
+      console.warn(`[envios-whatsapp] estados de entregas no aplicados: ${error instanceof Error ? error.name : "error"}`);
+    }
+  }
 
   // R9: 200 con conteos agregados (sin PII). Meta no reintenta.
   return NextResponse.json({ ok: true, ...resumen }, { status: 200 });

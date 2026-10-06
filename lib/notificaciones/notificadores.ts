@@ -28,6 +28,9 @@ import { PushNotificacionReader } from "@/lib/repositories/PushNotificacionReade
 import { PushSuscripcionRepository } from "@/lib/repositories/PushSuscripcionRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { pushConfigurado } from "@/lib/config/push";
+// FICHA 474: el puente con los envios automaticos por WhatsApp. Solo lo usa `repoReal()`.
+import { conEnviosWhatsapp } from "@/lib/notificaciones/notificacion-repo-con-envios-whatsapp";
+import { WhatsappEnvioRepository } from "@/lib/repositories/WhatsappEnvioRepository";
 import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
@@ -201,12 +204,20 @@ export const notificadorNoOp: PostulacionNotificador &
  */
 function repoReal(): INotificacionRepository {
   const prisma = getPrismaClient();
-  return conPushWeb(new NotificacionRepository(prisma), {
-    lector: new PushNotificacionReader(prisma),
-    canal: new PushSuscripcionRepository(prisma),
-    cola: new JobRepository(prisma),
-    hayCanal: pushConfigurado,
-  });
+  // FICHA 474 (design §4.2) — el puente con los envios por WhatsApp se cablea AQUI, por FUERA de
+  // `conPushWeb`, por la misma razon que el push: todos los `notificar<X>Real` pasan por esta
+  // funcion y un productor nuevo lo hereda. Lo vigilan
+  // `tests/unit/guards/envios-whatsapp-cableado.guardia.test.ts` (estatica) y
+  // `tests/integration/db/whatsapp-envio-puente-aviso.test.ts` (emite por el binding real).
+  return conEnviosWhatsapp(
+    conPushWeb(new NotificacionRepository(prisma), {
+      lector: new PushNotificacionReader(prisma),
+      canal: new PushSuscripcionRepository(prisma),
+      cola: new JobRepository(prisma),
+      hayCanal: pushConfigurado,
+    }),
+    { envios: new WhatsappEnvioRepository(prisma), cola: new JobRepository(prisma) },
+  );
 }
 
 // ---------------------------------------------------------------------------

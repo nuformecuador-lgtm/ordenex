@@ -283,8 +283,12 @@ describe("pwa · los atajos del manifiesto", () => {
     // etiqueta («visible para todos los roles»), y si hubieran subido seis contando `apiKey`,
     // una cuenta de maquina habria ganado menu (y con el un aterrizaje post-login, ver
     // `ROLES_AYUDA`).
+    // ⭑ FICHA 474 — `maestro` 22 -> 23 y NADIE más: el subítem «Envíos automáticos»
+    // (`/configuracion/envios-whatsapp`) hereda el `maestro`-only de «Configuración», que es
+    // exactamente quien deja entrar la página (R1). Si se hubiera movido otro rol, el menú y la
+    // página discreparían. La CONCLUSIÓN no cambia: lo ve UN rol de cinco, CERO atajos.
     expect(Object.fromEntries([...porRol].map(([rol, d]) => [rol, d.size]))).toEqual({
-      maestro: 22,
+      maestro: 23,
       admin: 14,
       adminSatelite: 8,
       mensajero: 7,

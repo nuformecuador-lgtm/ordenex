@@ -46,11 +46,13 @@ export type ActualizarPlantillaServiceResult =
 
 export type CambiarEstadoPlantillaServiceResult =
   | { status: "ok"; plantilla: PlantillaPublica }
+  | { status: "en_uso"; envios: string[] } // ficha 474/R10: la usan envios ENCENDIDOS
   | { status: "forbidden" }
   | { status: "not_found" }; // R26
 
 export type EliminarPlantillaServiceResult =
   | { status: "ok" }
+  | { status: "en_uso"; envios: string[] } // ficha 474/R10
   | { status: "forbidden" }
   | { status: "not_found" }; // R29
 
@@ -72,6 +74,11 @@ export type EnviarAprobacionPlantillaServiceResult =
    * es impedir la accion, y esta es irreversible (crea un template en Meta que no se retira).
    */
   | { status: "no_aplica" }
+  /**
+   * Ficha 474 (R9): plantilla con documento y no se pudo identificar la app de Meta, o falta la
+   * credencial. `mensaje` en lenguaje claro (design §3), sin secretos. El estado NO cambia.
+   */
+  | { status: "documento_no_disponible"; mensaje: string; codigo?: number }
   | { status: "forbidden" }
   | { status: "not_found" };
 

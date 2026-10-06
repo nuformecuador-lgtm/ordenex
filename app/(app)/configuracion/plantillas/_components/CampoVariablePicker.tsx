@@ -40,7 +40,10 @@ import {
  * alias (feature 282, R4) y campos con `ocultoEnSelector` (feature 288). Asi la UI y los tests
  * afirman sobre LA MISMA lista, y ampliar/reducir la oferta es tocar el catalogo, no el picker.
  */
-const CAMPOS_POR_DEFECTO: CampoPlantilla[] = CAMPOS_PLANTILLA_OFRECIDOS;
+const CAMPOS_POR_DEFECTO: readonly CampoOfrecido[] = CAMPOS_PLANTILLA_OFRECIDOS;
+
+/** Lo que el selector usa de un campo. Ficha 474: tambien lo cumple una variable de INFORME. */
+type CampoOfrecido = Pick<CampoPlantilla, "clave" | "nombre" | "descripcion" | "sensible">;
 
 /** minúsculas + sin diacríticos, para que "GUIA" y "guía" filtren el mismo conjunto (R3). */
 function normalizar(texto: string): string {
@@ -58,7 +61,7 @@ export interface CampoVariablePickerProps {
   /** Se dispara con la CLAVE del catálogo elegida. El anfitrión decide dónde insertarla. */
   onSeleccionar: (clave: string) => void;
   /** Catálogo inyectable para test; por defecto los campos OFRECIDOS (sin alias ni ocultos). */
-  campos?: CampoPlantilla[];
+  campos?: readonly CampoOfrecido[];
 }
 
 export function CampoVariablePicker({
@@ -83,7 +86,7 @@ export function CampoVariablePicker({
   const activoClamp = opciones.length === 0 ? -1 : Math.min(activo, opciones.length - 1);
   const activeDescendant = activoClamp >= 0 ? idDeOpcion(opciones[activoClamp].clave) : undefined;
 
-  function elegir(campo: CampoPlantilla) {
+  function elegir(campo: CampoOfrecido) {
     onSeleccionar(campo.clave);
     // R8, media derogación: se vacía el filtro y se resetea la activa a la primera —esa es
     // la intención de "la siguiente búsqueda parte de cero"—. La otra mitad del requisito

@@ -10,6 +10,10 @@ export interface TemplatePlantillaInput {
   nombre: string;
   cuerpo: string;
   variables: string[];
+  /** Ficha 474 (R4): clave del informe; ausente/null = plantilla de orden (ejemplos de siempre). */
+  informeClave?: string | null;
+  /** Ficha 474 (R5): con `true`, el template lleva cabecera DOCUMENT. */
+  llevaDocumento?: boolean;
 }
 
 export interface IWhatsappTemplatePort {

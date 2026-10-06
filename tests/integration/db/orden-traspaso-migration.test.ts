@@ -183,6 +183,13 @@ describe("427/T2 — el UP y el DOWN, leidos del archivo", () => {
       // laterales con los CHECK de los libros ampliados. Ninguna toca `orden_traspaso_mensajero`.
       "20260928120000_wallet_458_enums",
       "20260928120100_wallet_458_tablas",
+      // Ficha 474 (2026-10-05): los cinco valores de `job_tipo` de los envios automaticos por
+      // WhatsApp (solos, por el 55P04), sus cuatro tablas con dos columnas nuevas en
+      // `plantilla_mensaje`, y la siembra del job de mantenimiento (solo INSERT en `jobs`). Ninguna
+      // toca `orden_traspaso_mensajero`.
+      "20261005120000_job_tipo_whatsapp_envios",
+      "20261005120100_whatsapp_envios",
+      "20261005120200_seed_whatsapp_envio_mantenimiento",
     ]);
   });
 });

@@ -71,7 +71,10 @@ describe("410/R51 · `repoReal()` devuelve el repositorio DECORADO", () => {
     // reprodujo con una mutacion que dejaba el import intacto y quitaba solo el argumento.
     const cuerpo = cuerpoDeRepoReal();
     expect(cuerpo).toContain("conPushWeb(");
-    expect(cuerpo).toMatch(/return\s+conPushWeb\(/);
+    // FICHA 474: el puente con los envios por WhatsApp (`conEnviosWhatsapp`) envuelve POR FUERA al
+    // de push en el mismo `return`. Lo que este caso exige no cambia: que lo devuelto PASE por
+    // `conPushWeb(`, sea directamente o como argumento del decorador de la 474.
+    expect(cuerpo).toMatch(/return\s+(?:conEnviosWhatsapp\(\s*)?conPushWeb\(/);
     // Y el repositorio de verdad va DENTRO de la llamada, no al lado.
     expect(cuerpo).toMatch(/conPushWeb\(\s*new NotificacionRepository\(/);
   });

@@ -1,5 +1,5 @@
 import type { PlantillaEstado } from "@prisma/client";
-import { Check, MessageSquareHeart, Store } from "lucide-react";
+import { Check, FileText, MessageSquareHeart, Store } from "lucide-react";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +94,8 @@ export const TOOLTIP_BIENVENIDA_ACTUAL = `Esta es la plantilla de bienvenida. ${
  * pedido humano del 2026-08-27 lo retira.
  */
 export function muestraBotonBienvenida(row: PlantillaListItemDTO): boolean {
-  return !row.plantillaTienda && row.estado === "activo";
+  // Ficha 474 (R8): una plantilla DE INFORME no puede ser la bienvenida; no se pinta el boton.
+  return !row.plantillaTienda && !row.informeClave && row.estado === "activo";
 }
 
 /**
@@ -163,6 +164,14 @@ export function buildPlantillasColumns(
             <Badge variant="secondary">
               <Store className="size-3" aria-hidden="true" />
               Tienda
+            </Badge>
+          ) : null}
+          {/* Ficha 474 (R3): una plantilla DE INFORME la usan los envíos automáticos; la insignia
+              explica por qué no tiene botón de bienvenida (R8). */}
+          {row.informeClave ? (
+            <Badge variant="info">
+              <FileText className="size-3" aria-hidden="true" />
+              {row.llevaDocumento ? "Informe · con PDF" : "Informe"}
             </Badge>
           ) : null}
         </span>

@@ -550,6 +550,11 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       // Feature 107: CRUD de plantillas de mensaje. Hereda la visibilidad
       // maestro-only del ítem padre (R1/R2).
       { label: "Plantillas", href: "/configuracion/plantillas" },
+      // Ficha 474 (R2): «Envíos automáticos» JUSTO DESPUÉS de «Plantillas», como la maqueta
+      // aprobada (`design-whatsapp/Main.dc.html`). Design §7 lo permite si no mueve el primer
+      // hijo: `primerDestino` solo mira el PRIMERO («Usuarios»), y este entra el quinto. Hereda la
+      // visibilidad `maestro`-only del padre, igual que la página (R1).
+      { label: "Envíos automáticos", href: "/configuracion/envios-whatsapp" },
       // CRUD del catálogo de tipos de vehículo. Misma visibilidad maestro-only
       // del ítem padre: quien ve el catálogo es quien lo administra.
       { label: "Vehículos", href: "/configuracion/vehiculos" },
