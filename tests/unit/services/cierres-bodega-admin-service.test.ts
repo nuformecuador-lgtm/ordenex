@@ -169,6 +169,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // typecheck deja de proteger a los demas.
     marcarConciliado: vi.fn(async () => "updated" as const),
     revertirConciliacion: vi.fn(async () => "updated" as const),
+    // ⭑ FICHA 473: la correccion completa el contrato; sus casos viven en el test de servicio de
+    // conciliacion y en `corregir-conciliacion.int.test.ts`.
+    corregirConciliacion: vi.fn(async () => "updated" as const),
     ...overrides,
   };
 }

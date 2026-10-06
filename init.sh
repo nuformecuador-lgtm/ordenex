@@ -189,10 +189,30 @@ run_if() {
 # 64 archivos, medidas el 2026-08-25- y lo que la 283 vino a cerrar. El grafo de imports tampoco
 # ayuda aqui: `vitest --changed` SI seleccionaria las suites que lo importan, pero el radio real
 # del cambio no es «quien lo importa» sino «quien mide con el», que es todo el arbol.
-RUTAS_SENSIBLES='^db/migrations/|^db/schema\.prisma$|^lib/types/|^init\.sh$|^tests/fixtures/sin-comentarios\.ts$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
+# -------------------------------------------------------------------------------------------------
+# 2026-10-05 — DINERO Y DATOS YA NO PIDEN EL COMPLETO: AMPLIAN LA RED (pedido del humano)
+# -------------------------------------------------------------------------------------------------
+# Medido en la ficha 473 (5 archivos, uno con «cierre» en el nombre): backend y frontend corrieron
+# el completo cada uno (19 y ~20 min) y el post-merge otro (28 min) = ~67 min, cuando lo relacionado
+# eran ~280 tests y el revisor los corrio en minutos. Cada completo ademas arrastro los flakes de la
+# base compartida (2 deadlocks 40P01 ese dia) que luego hubo que descartar a mano.
+#
+# El argumento (b) de arriba sigue en pie, pero el remedio era desproporcionado: lo que el grafo de
+# imports NO ve de un cambio de dinero o de datos es la CAPA DE DATOS (una migracion no la importa
+# nadie; un WHERE de dinero solo lo muerde un test contra Postgres -ver la memoria «probar el WHERE
+# donde vive»-). Los ~2.000 archivos de pantallas ajenas no aportan nada ahi. Por eso esos cambios
+# corren ahora lo relacionado + guardias + TODO `tests/integration/db` (418 archivos contra Postgres).
+# Y como esa red es justo la de Postgres, sin DATABASE_URL el modo ampliado FALLA en vez de dar un
+# verde que no mide nada.
+#
+# Siguen exigiendo el completo solo los cambios cuyo radio es LITERALMENTE todo el repo: el propio
+# gate, el quitador de comentarios con el que leen las guardias y la configuracion de build/tests.
+RUTAS_GLOBALES='^init\.sh$|^tests/fixtures/sin-comentarios\.ts$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
+RUTAS_DE_DATOS='^db/migrations/|^db/schema\.prisma$|^lib/types/'
 NOMBRES_DE_DINERO='^(lib|app|components)/.*(cierre|tarifa|pago|wallet|liquidacion|ingreso|egreso|caja|comision|flete|moneda|cobro|factura|premio)'
+AMPLIADO=""
 
-exigir_completo_si_toca_lo_sensible() {
+clasificar_cambio() {
   git rev-parse --git-dir >/dev/null 2>&1 || { warn "no es un repo git: no se puede clasificar el cambio"; return 0; }
   local base
   base="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
@@ -208,22 +228,32 @@ exigir_completo_si_toca_lo_sensible() {
   cambiados="$( { git diff --name-only "$base" -- . ; git ls-files --others --exclude-standard ; } | sort -u )"
   [ -n "$cambiados" ] || { warn "sin cambios frente a origin/dev: nada que clasificar"; return 0; }
 
-  local sensibles
-  sensibles="$(printf '%s
-' "$cambiados" | grep -Ei "$RUTAS_SENSIBLES|$NOMBRES_DE_DINERO" || true)"
-
-  if [ -n "$sensibles" ]; then
-    echo "${YELLOW}Tu cambio toca cimientos, y para eso el modo rapido no alcanza:${NC}"
+  local globales
+  globales="$(printf '%s
+' "$cambiados" | grep -E "$RUTAS_GLOBALES" || true)"
+  if [ -n "$globales" ]; then
+    echo "${YELLOW}Tu cambio toca algo cuyo radio es TODO el repo:${NC}"
     printf '%s
-' "$sensibles" | sed 's/^/    /'
+' "$globales" | sed 's/^/    /'
     echo ""
-    echo "  El modo rapido corre 'vitest --changed', que selecciona por grafo de IMPORTS."
-    echo "  Una migracion no la importa nadie, y un tipo compartido lo importa medio repo:"
-    echo "  en los dos casos 'los tests relacionados' no es la respuesta correcta."
+    echo "  El propio gate, el quitador de comentarios de las guardias o la config de build/tests:"
+    echo "  cualquier seleccion parcial mediria con una vara que acaba de cambiar."
     fail "esto exige el gate completo. Corre: ./init.sh"
   fi
 
-  ok "el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta"
+  local sensibles
+  sensibles="$(printf '%s
+' "$cambiados" | grep -Ei "$RUTAS_DE_DATOS|$NOMBRES_DE_DINERO" || true)"
+  if [ -n "$sensibles" ]; then
+    echo "${YELLOW}Tu cambio toca dinero o la capa de datos:${NC}"
+    printf '%s
+' "$sensibles" | sed 's/^/    /'
+    AMPLIADO="1"
+    ok "modo rapido AMPLIADO: relacionados + guardias + toda la integracion contra Postgres"
+    return 0
+  fi
+
+  ok "el cambio no toca dinero, datos ni config: el modo rapido basta"
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -276,12 +306,15 @@ anunciar_tests_contra_postgres() {
 if [ -f package.json ]; then
   # La clasificacion va ANTES que typecheck y lint a proposito: si el cambio exige el gate
   # completo, decirlo despues de un minuto de espera seria cobrarte la espera dos veces.
-  [ "$MODO" = "rapido" ] && exigir_completo_si_toca_lo_sensible
+  [ "$MODO" = "rapido" ] && clasificar_cambio
   run_if typecheck
   run_if lint
   # Antes de la corrida, no despues: si falta la base, lo que NO se va a medir se dice con su
   # nombre y su cifra mientras todavia se puede arreglar (ficha 323).
   anunciar_tests_contra_postgres
+  if [ -n "$AMPLIADO" ] && [ -n "$SIN_BASE_DE_DATOS" ]; then
+    fail "el modo ampliado existe para medir contra Postgres y no hay DATABASE_URL: exportala y repite"
+  fi
   # -----------------------------------------------------------------------------------------
   # EL VEREDICTO DE LOS TESTS LO DA EL BASELINE, Y EN LOS DOS MODOS (ficha 318, 2026-08-28)
   # -----------------------------------------------------------------------------------------
@@ -311,7 +344,7 @@ if [ -f package.json ]; then
   # SE BORRAN LOS REPORTES ANTES DE CORRER. Si una corrida se cae sin escribir el suyo, el de
   # la corrida ANTERIOR sigue en disco y la comparacion dictaminaria sobre una foto vieja. Un
   # gate que da un veredicto sobre datos de ayer es peor que uno que falla.
-  rm -f .vitest/rojos.json .vitest/rojos-cambiados.json .vitest/rojos-guardias.json
+  rm -f .vitest/rojos*.json
 
   if [ "$MODO" = "rapido" ]; then
     # LAS DOS CORRIDAS VAN SIEMPRE, cada una con su `|| true`, y NO se usa `pnpm run
@@ -335,10 +368,49 @@ if [ -f package.json ]; then
     echo "-> pnpm run test:guardias (con reporte JSON)"
     pnpm run test:guardias --reporter=default --reporter=json --outputFile.json=.vitest/rojos-guardias.json || true
     REPORTES=".vitest/rojos-cambiados.json .vitest/rojos-guardias.json"
+    if [ -n "$AMPLIADO" ]; then
+      # Directo con `pnpm exec` y no con un script nuevo de package.json: tocar package.json hace
+      # que `--changed` seleccione la suite entera (medido, ver arriba).
+      echo "-> vitest run tests/integration/db (modo ampliado, con reporte JSON)"
+      pnpm exec vitest run tests/integration/db --reporter=default --reporter=json --outputFile.json=.vitest/rojos-integracion.json || true
+      REPORTES="$REPORTES .vitest/rojos-integracion.json"
+    fi
   else
     echo "-> pnpm run test:json"
     pnpm run test:json || true
     REPORTES=".vitest/rojos.json"
+  fi
+
+  # UN ROJO SE REPITE AISLADO (2026-10-05, pedido del humano). En paralelo, la base local compartida
+  # da rojos que no son del cambio -deadlocks 40P01, conteos de tabla entera mientras otro test
+  # escribe-: medido ese mismo dia, 3 de 418 archivos de `tests/integration/db` rojos en paralelo y
+  # 3 de 3 verdes aislados en 3 s. Se repiten SOLO los archivos rojos, sin paralelismo, y su
+  # reporte SUSTITUYE al original en la comparacion: lo que sigue rojo aislado es rojo de verdad;
+  # lo que pasa se anuncia como intermitente, con su nombre, y no tumba el gate. Solo en modo
+  # rapido: el completo de la release se lee entero y a mano.
+  if [ "$MODO" = "rapido" ]; then
+    REPORTES_FINALES=""
+    for REP in $REPORTES; do
+      ROJOS="$(node scripts/archivos-rojos-de-reporte.mjs "$REP")"
+      if [ -n "$ROJOS" ]; then
+        REINTENTO="${REP%.json}-aislado.json"
+        rm -f "$REINTENTO"
+        echo "-> repitiendo AISLADOS los rojos de $REP:"
+        printf '%s
+' "$ROJOS" | sed 's/^/    /'
+        # shellcheck disable=SC2086
+        pnpm exec vitest run --no-file-parallelism $ROJOS --reporter=default --reporter=json --outputFile.json="$REINTENTO" || true
+        AUN_ROJOS="$(node scripts/archivos-rojos-de-reporte.mjs "$REINTENTO")"
+        for F in $ROJOS; do
+          printf '%s
+' "$AUN_ROJOS" | grep -qxF "$F" || warn "intermitente (rojo en paralelo, verde aislado): $F"
+        done
+        REPORTES_FINALES="$REPORTES_FINALES $REINTENTO"
+      else
+        REPORTES_FINALES="$REPORTES_FINALES $REP"
+      fi
+    done
+    REPORTES="$REPORTES_FINALES"
   fi
 
   # Los reportes se pasan JUNTOS a una sola llamada: el modo rapido son dos corridas parciales
@@ -349,7 +421,11 @@ if [ -f package.json ]; then
   ok "tests: $COMPARACION"
 
   if [ "$MODO" = "rapido" ]; then
-    warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
+    if [ -n "$AMPLIADO" ]; then
+      warn "modo rapido AMPLIADO: relacionados + guardias + tests/integration/db."
+    else
+      warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
+    fi
     warn "El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas."
   fi
 fi

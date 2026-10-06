@@ -1,0 +1,2090 @@
+== Arnes SDD :: init (modo: rapido) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias: 58 declaradas, todas presentes[0m
+[0;32m✓ feature_list.json: sin ids duplicados (471 fichas), cupo por zona respetado (in_progress=1) y specs en su sitio[0m
+[1;33mTu cambio toca dinero o la capa de datos:[0m
+    lib/__prueba_arnes_cierre.ts
+[0;32m✓ modo rapido AMPLIADO: relacionados + guardias + toda la integracion contra Postgres[0m
+-> pnpm run typecheck
+
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+[0;32m✓ typecheck paso[0m
+-> pnpm run lint
+
+> ordenex@0.1.0 lint R:\job\singularis\projects\ordenex
+> eslint
+
+
+R:\job\singularis\projects\ordenex\app\(app)\_components\Sidebar.tsx
+  308:9  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+R:\job\singularis\projects\ordenex\app\(app)\analitica\_components\AnaliticaShell.tsx
+   2:10  warning  'ChartColumn' is defined but never used  @typescript-eslint/no-unused-vars
+   5:10  warning  'EmptyState' is defined but never used   @typescript-eslint/no-unused-vars
+  61:3   warning  'filtros' is defined but never used      @typescript-eslint/no-unused-vars
+  62:3   warning  'operativo' is defined but never used    @typescript-eslint/no-unused-vars
+  63:3   warning  'financiero' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\cierres-admin\_components\CierresAdminModule.tsx
+  70:10  warning  'money' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\configuracion\tarifas\_components\CobroVehiculoTarifas.tsx
+  230:6  warning  React Hook useEffect has a missing dependency: 'onChange'. Either include it or remove the dependency array. If 'onChange' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\GestionarOrdenPanel.tsx
+  76:10  warning  'EnviarPlantillaWhatsappButton' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\UbicacionMapaInner.tsx
+  31:7  warning  'CENTRO_FALLBACK' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\novedades\_components\novedad-a-orden-card.ts
+  107:10  warning  '_causa' is defined but never used            @typescript-eslint/no-unused-vars
+  108:20  warning  '_mensajeroNombre' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\recoleccion\_components\RecoleccionModule.tsx
+  3:23  warning  'useMemo' is defined but never used          @typescript-eslint/no-unused-vars
+  7:10  warning  'ContactoButtons' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\actions\_shared\registro-descargas.ts
+  63:30  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\cache\cache-nula.ts
+  25:19  warning  '_origen' is defined but never used  @typescript-eslint/no-unused-vars
+  25:48  warning  '_tags' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\interfaces\repositories\IOrdenRepository.ts
+  11:15  warning  'OrdenHistorialOrigenTipo' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\repositories\WebhookSuscripcionRepository.ts
+  172:5  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\repositories\ZonaRepository.ts
+  10:10  warning  'normalizeName' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\AnalyticsGraficaReparto.test.tsx
+  49:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\AnalyticsPesoBajoUnPunto.test.tsx
+  80:7  warning  'SERIE' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\CierreMensajeroDetalleCascadas.test.tsx
+  16:15  warning  'CierreEstado' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\DineroIdentidadesEnPantalla.test.tsx
+  535:1  warning  Unused eslint-disable directive (no problems were reported from 'import/first')
+
+R:\job\singularis\projects\ordenex\tests\components\RepartoModule.test.tsx
+  154:10  warning  'ordenCardsEnReparto' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\WebhookAccionCell.test.tsx
+  7:3  warning  'within' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\descarga\DescargarGestionesDialog.test.tsx
+  137:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+  150:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\db\detalle-movimiento-cierre-postgres.test.ts
+  411:3  warning  'pageSize' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\db\geografia-alta.test.ts
+  95:32  warning  's' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\db\wallet-461-idempotencia-clave.test.ts
+  29:7  warning  'cat' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\repositories\deshacer-asignacion.historial.test.ts
+  40:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\cobertura.composition-root.test.ts
+  15:42  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  24:40  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\corregir-datos-cliente.action.test.ts
+  21:33  warning  '_input' is defined but never used    @typescript-eslint/no-unused-vars
+  21:68  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+  25:41  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+  25:59  warning  '_actor' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\deshacer-asignacion.action.test.ts
+   17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+   17:66  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+  122:35  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  122:68  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\eliminar-orden.action.test.ts
+  17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:61  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\geografia.composition-root.test.ts
+  23:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\preparar-descarga.test.ts
+  21:34  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  22:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\rastreo-publico-action.test.ts
+  28:34  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  28:52  warning  '_factor' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\recuperar-orden.action.test.ts
+  17:34  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  17:63  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\traspasar-mensajero.test.ts
+  35:20  warning  '_args' is defined but never used   @typescript-eslint/no-unused-vars
+  65:12  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  65:45  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\_fake-prisma-dinero.ts
+  571:33  warning  '_id' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\alcance-bordes.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\cache-invalidacion-backfill.test.ts
+  64:37  warning  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\ciclo-vida.test.ts
+  298:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\cohorte-carga-action.test.ts
+  45:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-cargadas-action.test.ts
+  23:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-devoluciones.test.ts
+  320:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-entregas-action.test.ts
+  16:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-hoy-gestion-action.test.ts
+  21:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-por-status-servicio.test.ts
+  157:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-productos-action.test.ts
+  35:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\operativa-sumabilidad.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\productos-dinero-alcance.test.ts
+  7:3  warning  'resolverAlcanceProductos' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\auth\google-adc-token.test.ts
+  25:38  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\analytics-topes.test.ts
+  25:7  warning  'serie' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\etiquetas-pdf.test.ts
+   31:3   warning  'MAQUETA_BASE' is defined but never used     @typescript-eslint/no-unused-vars
+   32:14  warning  'PT_A_MM_MAQUETA' is defined but never used  @typescript-eslint/no-unused-vars
+  174:10  warning  'lineasDe' is defined but never used         @typescript-eslint/no-unused-vars
+  306:10  warning  'textosConY' is defined but never used       @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\recuperar-orden.ui.test.tsx
+  273:5  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+R:\job\singularis\projects\ordenex\tests\unit\guards\dinero-centimos-cuando-existen.guardia.test.ts
+  239:10  warning  'salidasQueCasan' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\guards\quitador-comentarios.guardia.test.ts
+  123:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+  244:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\pdf\etiquetas-pdf-lote.test.ts
+  132:10  warning  'textosConY' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\api-key-repository.test.ts
+  180:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierre-aporte-repository.test.ts
+  54:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  55:30  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  56:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-admin-gestiones-where.test.ts
+  45:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  48:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  50:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-bodega-admin-marca.test.ts
+  65:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  77:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-bodega-gestiones-where.test.ts
+  32:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  34:27  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  36:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-filtros-where.test.ts
+  41:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  42:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-gestiones-descarga-dto.test.ts
+  122:29  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\colas-paginadas-where.test.ts
+  44:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  45:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cuentas-por-pagar-paginado-where.test.ts
+  42:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\desglose-mensajero-cierre-derivado.test.ts
+  53:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\gasto-fijo-plantilla-eliminar.test.ts
+  50:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\gestion-orden-repository.test.ts
+  8:10  warning  'estatusDestinoDeResultado' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\historicos-paginados-where.test.ts
+  42:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\orden-repository.listado-filtros-257.test.ts
+  36:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  37:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\orden-repository.novedades.test.ts
+  173:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\premio-ranking-lecturas.test.ts
+   23:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  115:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  210:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  211:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  212:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  301:36  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\ranking-snapshot-repository.test.ts
+   52:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   59:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   62:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   68:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  224:54  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\satelite-paginado-where.test.ts
+  103:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\tarifa-repository.test.ts
+  316:23  warning  '_omitida' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\scripts\backfill-marcador-config-geocode-cli.test.ts
+  6:8  warning  'InformeBackfillMarcador' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\WebhookEventoOrdenService.test.ts
+  77:33  warning  '_u' is defined but never used  @typescript-eslint/no-unused-vars
+  77:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+  77:57  warning  '_h' is defined but never used  @typescript-eslint/no-unused-vars
+  78:43  warning  '_o' is defined but never used  @typescript-eslint/no-unused-vars
+  78:55  warning  '_a' is defined but never used  @typescript-eslint/no-unused-vars
+  79:46  warning  '_o' is defined but never used  @typescript-eslint/no-unused-vars
+  79:58  warning  '_a' is defined but never used  @typescript-eslint/no-unused-vars
+  82:42  warning  '_o' is defined but never used  @typescript-eslint/no-unused-vars
+  85:39  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\_dobles-analitica-financiera.ts
+  201:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  201:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+  249:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  249:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\api-pdf-etiqueta-service.test.ts
+   84:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   84:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   87:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:47  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+   89:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+   91:14  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   91:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:47  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+   93:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+  102:45  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  102:66  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+  106:37  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  106:58  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\busqueda-por-guia-469-servicios.test.ts
+  101:41  warning  '_z' is defined but never used  @typescript-eslint/no-unused-vars
+  101:53  warning  '_v' is defined but never used  @typescript-eslint/no-unused-vars
+  151:38  warning  '_f' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\caja-premio-ranking-feed.test.ts
+  26:12  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  26:26  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+  88:43  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+  88:57  warning  '_movs' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\chat-whatsapp-sinpe-del-servidor.test.ts
+  47:40  warning  '_entrada' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\cierre-dia-pasados-paginado.test.ts
+  72:24  warning  '_mensajeroId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\cierres-admin-filtro-estado.test.ts
+  54:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  54:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  54:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  60:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  60:31  warning  '_rango' is defined but never used    @typescript-eslint/no-unused-vars
+  60:52  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  66:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  66:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+  69:12  warning  '_alcance' is defined but never used  @typescript-eslint/no-unused-vars
+  69:31  warning  '_filtros' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-bodega-satelite.test.ts
+  113:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  114:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  115:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-geo-retirada.test.ts
+  95:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  96:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  97:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-service.test.ts
+  119:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  120:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  121:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corregir-datos-cliente-texto-etiqueta.test.ts
+  100:7  warning  '_ordenId' is defined but never used            @typescript-eslint/no-unused-vars
+  101:7  warning  '_data' is defined but never used               @typescript-eslint/no-unused-vars
+  102:7  warning  '_estadosBloqueados' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corte-diario-seleccion.test.ts
+  128:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\deshacer-asignacion-service.test.ts
+  75:7   warning  '_origenes' is defined but never used   @typescript-eslint/no-unused-vars
+  76:7   warning  '_historial' is defined but never used  @typescript-eslint/no-unused-vars
+  77:7   warning  '_zonaId' is defined but never used     @typescript-eslint/no-unused-vars
+  90:12  warning  '_items' is defined but never used      @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\geocodificacion-service.test.ts
+  346:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\habilitar-novedad-service.test.ts
+  63:14  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\premio-ranking-devengo-service.test.ts
+  135:40  warning  '_m' is defined but never used     @typescript-eslint/no-unused-vars
+  135:52  warning  '_dias' is defined but never used  @typescript-eslint/no-unused-vars
+  135:67  warning  '_tx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rastreo-publico-service.test.ts
+  48:38  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  49:43  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+  52:47  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rescate-ayuda-service.test.ts
+  71:42  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\solicitud-ayuda-service.test.ts
+  67:14  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  70:14  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\tope-intentos-dto-derivado.test.ts
+  1:36  warning  'afterEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\traspaso-mensajero-service.test.ts
+  508:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  509:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  565:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  566:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  580:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  583:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  600:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  601:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  622:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  625:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  635:35  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+  636:33  warning  '_ctx' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\wallet-detalle-movimiento.test.ts
+  79:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  81:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  85:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  86:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\wallet-tienda-detalle-movimiento.test.ts
+  79:37  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:45  warning  '_id' is defined but never used        @typescript-eslint/no-unused-vars
+  80:58  warning  '_tiendaId' is defined but never used  @typescript-eslint/no-unused-vars
+  83:48  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  87:47  warning  '_f' is defined but never used         @typescript-eslint/no-unused-vars
+  88:48  warning  '_cierreId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\webhook-estado-service.test.ts
+  160:43  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  160:59  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  161:46  warning  '_owner' is defined but never used  @typescript-eslint/no-unused-vars
+  161:62  warning  '_ahora' is defined but never used  @typescript-eslint/no-unused-vars
+  178:39  warning  '_ctx' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\types\descripcion-estado.test.ts
+  103:24  warning  '_quitado' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\utils\capturar-ubicacion.test.ts
+  37:9  warning  '_err' is defined but never used       @typescript-eslint/no-unused-vars
+  38:9  warning  '_opciones' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 226 problems (0 errors, 226 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
+[0;32m✓ lint paso[0m
+[0;32m✓ DATABASE_URL resuelta: los 330 archivos de tests contra Postgres SI se ejecutan[0m
+-> pnpm run test:cambiados (con reporte JSON)
+
+> ordenex@0.1.0 test:cambiados R:\job\singularis\projects\ordenex
+> vitest run --changed origin/dev --passWithNoTests "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-cambiados.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+No test files found, exiting with code 0
+
+include: tests/**/*.test.ts, tests/**/*.test.tsx
+exclude:  **/node_modules/**, **/.git/**
+
+JSON report written to R:/job/singularis/projects/ordenex/.vitest/rojos-cambiados.json
+-> pnpm run test:guardias (con reporte JSON)
+
+> ordenex@0.1.0 test:guardias R:\job\singularis\projects\ordenex
+> vitest run guard "--reporter=default" "--reporter=json" "--outputFile.json=.vitest/rojos-guardias.json"
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+ ✓ tests/unit/guards/no-embalaje.test.ts (1 test) 752ms
+     ✓ no queda ninguna referencia a 'embalaje' fuera del whitelist  750ms
+ ✓ tests/unit/guards/dependencias-declaradas-presentes.guardia.test.ts (15 tests) 2193ms
+     ✓ R2/R6 — con una dependencia ausente el paso CORTA en rojo y NO da el visto bueno  537ms
+     ✓ R4 — con el arbol completo el paso pasa y da el visto bueno con la cifra  475ms
+ ✓ tests/integration/db/zona-central-guarda-y-rastro.test.ts (17 tests) 1523ms
+ ✓ tests/unit/guards/catalogo-postgres-acota-esquema.guardia.test.ts (7 tests) 2498ms
+     ✓ el barrido encuentra archivos y consultas: si midiera cero, el verde no valdria nada  1314ms
+     ✓ ⭑ NINGUNA consulta del arbol lee un catalogo sin decir de que esquema habla  1177ms
+ ✓ tests/guards/tarifa-status-retirado.guard.test.ts (8 tests) 2808ms
+     ✓ ningun archivo de lib/, app/ ni db/schema.prisma los nombra fuera de un comentario  421ms
+     ✓ ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePorTienda`  1215ms
+     ✓ `db/migrations/` queda FUERA del censo, y la cita historica sigue ahi intacta  1122ms
+ ✓ tests/unit/guards/revision-sinpe-no-bloquea.guardia.test.ts (7 tests) 1673ms
+     ✓ el censo encuentra el resolvedor (anti-vacuidad: si no, no vigila nada)  479ms
+     ✓ ⭑ NINGUN archivo que nombre la revision decide un `redirect`/`notFound`/403 con ella  418ms
+     ✓ ⭑ CONTRAPRUEBA — un `redirect` inyectado en el resolvedor pone la guardia roja  757ms
+ ✓ tests/unit/guards/descargas-por-registro.guardia.test.ts (9 tests) 4889ms
+     ✓ ninguna pantalla usa directamente la acción de una descarga registrada (salvo las excepciones)  3534ms
+     ✓ cada clave del registro se descarga por `descargarDatos("<clave>"` en alguna pantalla  1343ms
+ ✓ tests/unit/analytics/backfill-guards.test.ts (21 tests) 1573ms
+     ✓ el censo cubre todo lo que importa los modulos de la 125  414ms
+     ✓ ni el backfill declara superficie, ni nadie con superficie lo importa  408ms
+     ✓ la constante vive en un solo archivo y su procedencia existe de verdad  358ms
+     ✓ el unico archivo de la 124 que la 125 amplia es el de configuracion, y solo suma  348ms
+ ✓ tests/integration/db/analytics-daily-guards.test.ts (26 tests) 1917ms
+     ✓ no hay repositorio, servicio ni interfaz con el nombre de la TABLA  709ms
+ ✓ tests/unit/descarga/adaptador-conjunto.guardia.test.ts (11 tests) 1961ms
+     ✓ las tres relecturas que llegaron a cero consumidores siguen en cero  366ms
+     ✓ CONTROL POSITIVO: las lecturas DEDICADAS que las sustituyeron sí se llaman  1000ms
+ ✓ tests/unit/guards/sin-estados-retirados.guardia.test.ts (6 tests) 4456ms
+     ✓ fuera de comentarios y de los mapas de retirados, no aparecen (salvo la lista cerrada)  4403ms
+ ✓ tests/unit/analytics/modulo-puro.guardia.test.ts (30 tests) 1648ms
+     ✓ importa los diez modulos sin DATABASE_URL y ninguno lanza  624ms
+     ✓ metrics.ts es el unico archivo del repo que declara metricas  451ms
+     ✓ el cubo sin_asignar se escribe una sola vez, en lib/analytics (R30)  374ms
+ ✓ tests/unit/guards/anclaje-vs-intentos.guardia.test.ts (19 tests) 1524ms
+     ✓ `whereIntentosVigentes` se declara UNA sola vez, y en el modulo del conteo  507ms
+     ✓ el filtro por la familia del ANCLAJE vive en UN solo modulo de lectura  500ms
+     ✓ no existe ningun helper COMPARTIDO de «cierre aprobado»  454ms
+ ✓ tests/unit/descarga/columnas-asercion-de-orden.guardia.test.ts (3 tests) 1763ms
+     ✓ AUTOCOMPROBACIÓN: el detector encuentra los casos conocidos y rechaza el que no cuenta  957ms
+     ✓ ninguna constante COLUMNAS_DESCARGA_* del árbol se queda sin aserción de orden  803ms
+ ✓ tests/unit/guards/caja-173-alcance.guardia.test.ts (37 tests) 1433ms
+     ✓ ni una sola fuente del producto nombra un arqueo o un corte de caja  302ms
+ ✓ tests/unit/guards/sinpe-en-toda-superficie.guardia.test.ts (9 tests) 1194ms
+     ✓ ⭑ la cadena `negocioDesdeEnv` no aparece en ningun archivo censado  431ms
+     ✓ ⭑ CONTRAPRUEBA — el mismo detector encuentra `negocioConSinpe`, que SI existe  358ms
+     ✓ ⭑ nadie fuera de los sitios declarados escribe `sinpeNumero:` en un objeto literal  392ms
+ ✓ tests/unit/guards/factura-contraste.guardia.test.ts (50 tests) 1240ms
+     ✓ ningún otro archivo de `tests/` tiene una segunda copia de la fórmula de contraste  644ms
+     ✓ ninguna verificación de `tests/` se apoya en el detector de `.claude/skills`  540ms
+ ✓ tests/unit/guards/premio-ranking-alcance.guardia.test.ts (14 tests) 1368ms
+     ✓ el unico modulo que escribe en `walletMovimiento` sigue siendo su repositorio  313ms
+ ✓ tests/unit/guards/ayuda-columna-retirada.guardia.test.ts (14 tests) 1346ms
+     ✓ ningun modulo de codigo la usa (censo sobre fuente sin comentarios)  1221ms
+ ✓ tests/unit/guards/sinpe-sin-variables-de-entorno.guardia.test.ts (6 tests) 1048ms
+     ✓ ⭑ CONTRAPRUEBA — un infractor INYECTADO en memoria pone la guardia roja  506ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > con trabajo declarado el aviso espera, y aparece cuando el usuario termina
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/filtros-url-r25.test.ts (3 tests) 7265ms
+ ✓ tests/unit/guards/gestion-aprobada-retirada.guardia.test.ts (8 tests) 1264ms
+     ✓ ningun modulo de codigo la menciona (censo sobre fuente sin comentarios)  1158ms
+stderr | tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts > pwa · el aviso de version nueva > G2: si el usuario empieza algo entre el aviso y el clic, no se pide el relevo
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts (22 tests) 1688ms
+     ✓ con la rama de entrega abierta y el monto tecleado, hay trabajo en curso  454ms
+ ✓ tests/unit/guards/regla-241-caducada.guardia.test.ts (7 tests) 1322ms
+ ✓ tests/unit/guards/monto-cobrar-entero.guardia.test.ts (13 tests) 1173ms
+     ✓ todo schema zod que declare `monto_cobrar` esta censado  378ms
+     ✓ todo fuente que arma un `CreateOrdenData` con monto esta censado  319ms
+     ✓ el barrido SI encuentra las puertas y los constructores censados  333ms
+ ✓ tests/unit/guards/marcador-fallo-config-declaracion-unica.guardia.test.ts (14 tests) 870ms
+     ✓ en `lib/`, `app/` y `scripts/` el literal aparece SOLO en su modulo  344ms
+     ✓ y en `tests/` solo lo escribe a mano el test de R14  516ms
+ ✓ tests/unit/guards/gestion-pendiente-unica-fuente.guardia.test.ts (4 tests) 775ms
+     ✓ ⭑ `gestion_registrada` no se lee en ningun `where` fuera de `gestion-pendiente.ts`  380ms
+     ✓ ⭑ `ayuda_solicitada` no se lee en ningun `where` fuera de `ayuda-abierta.ts`  344ms
+ ✓ tests/unit/guards/asistente-sin-datos.guardia.test.ts (13 tests) 971ms
+     ✓ CONTROL DE NO-VACUIDAD: se encuentran los archivos que llaman al borde  505ms
+     ✓ ⭑⭑ todas las invocaciones llevan `service:` (o `fetchImpl:`)  437ms
+ ✓ tests/unit/guards/gasto-fijo-decision-rol.guardia.test.ts (16 tests) 867ms
+     ✓ ⭑ el predicado estrecho no aparece en NINGUN otro modulo de produccion  432ms
+     ✓ ⭑ el arbol sigue teniendo MUCHOS consumidores de `esAccesoTotal`: la paridad no se movio  413ms
+ ✓ tests/unit/tablero-dia/buckets-estatus.guardia.test.ts (29 tests) 633ms
+     ✓ ningun otro archivo del arbol declara buckets junto a values de estatus  619ms
+ ✓ tests/unit/guards/correccion-fecha-reprogramacion.guardia.test.ts (16 tests) 683ms
+     ✓ ⭑ NADIE MAS en `lib/**` correlaciona gestiones `reprogramada` por su cuenta  378ms
+ ✓ tests/unit/analytics/export-csv-frontera.guardia.test.ts (17 tests) 825ms
+     ✓ ningun modulo "use server" invoca construirDescarga  347ms
+ ✓ tests/unit/guards/dinero-centimos-cuando-existen.guardia.test.ts (28 tests) 760ms
+ ✓ tests/unit/guards/sinteticas-sin-evento-registro.guardia.test.ts (4 tests) 776ms
+     ✓ autocomprobacion: se ven EXACTAMENTE las dos escrituras de hoy (ni una de mas, ni una de menos)  393ms
+     ✓ ⭑ toda escritura del evento vive en una de las dos vias de CALLE  372ms
+ ✓ tests/unit/guards/impresion-flujo.guardia.test.ts (58 tests) 721ms
+     ✓ ningun otro archivo de `tests/` define una segunda copia del parser  684ms
+ ✓ tests/unit/analytics/catalogo-produccion.guardia.test.ts (5 tests) 545ms
+     ✓ nadie fuera del catalogo decide datos por `estadoProduccion`, `universo` ni `derivadaDe`  517ms
+ ✓ tests/unit/analytics/financiera-fuente.guardia.test.ts (13 tests) 717ms
+     ✓ el censo mira los CATORCE modulos declarados, todos: no pasa por conjunto vacio ni recortado  422ms
+ ✓ tests/unit/guards/geografia-renombrado-punto-unico.guardia.test.ts (12 tests) 671ms
+     ✓ hay al menos TRES escrituras sobre las tres tablas en `lib/` (el flag, `zona_especial` y el nombre)  357ms
+ ✓ tests/unit/guards/censo-simpe.test.ts (1 test) 600ms
+     ✓ no hay coincidencias case-sensitive de 'SIMPE' en app/, lib/, tests/, e2e/  597ms
+ ✓ tests/unit/analytics/cache-tags.guardia.test.ts (3 tests) 617ms
+     ✓ solo el catalogo de la 135 (y su test) contienen las cadenas de `ANALITICA_TAGS`  605ms
+ ✓ tests/unit/descarga/cobertura-tablas.guardia.test.ts (4 tests) 546ms
+     ✓ una tabla compartida declara TODAS las pantallas que la montan  302ms
+ ✓ tests/unit/guards/push-cableado-unico.guardia.test.ts (22 tests) 860ms
+     ✓ ⭑ el repositorio que sale de `notificadores.ts` es un `NotificacionRepositoryConPush`  831ms
+ ✓ tests/unit/analytics/cache-financiera.guardia.test.ts (3 tests) 496ms
+     ✓ el dominio `financiera` no se cachea  486ms
+ ✓ tests/unit/analytics/rollup-guards.test.ts (21 tests) 623ms
+ ✓ tests/unit/descarga/contadores-cabecera.guardia.test.ts (5 tests) 624ms
+ ✓ tests/unit/guards/geografia-sin-borrado-fisico.guardia.test.ts (8 tests) 622ms
+     ✓ cero hallazgos en todo el arbol  328ms
+ ✓ tests/unit/analytics/operativa-frontera.guardia.test.ts (11 tests) 563ms
+ ✓ tests/integration/db/zona-guardado-conserva-inactivos.test.ts (2 tests) 839ms
+     ✓ las filas de `zona_distrito` son EXACTAMENTE las mismas antes y después del guardado  315ms
+ ✓ tests/unit/guards/ranking-snapshot-cron.guardia.test.ts (10 tests) 562ms
+     ✓ el UNICO escritor del historico es RankingSnapshotRepository  379ms
+ ✓ tests/unit/guards/historial-accion-punto-unico.guardia.test.ts (7 tests) 499ms
+     ✓ ningun OTRO archivo del arbol escribe en la tabla  487ms
+ ✓ tests/unit/guards/pagos-proyeccion.guardia.test.ts (10 tests) 522ms
+ ✓ tests/unit/analytics/alcance-fuente-unica.guardia.test.ts (13 tests) 476ms
+     ✓ ningun archivo del repo fuera de metrics.ts declara una tabla de alcance por rol  420ms
+ ✓ tests/unit/guards/geografia-predicado-unico.guardia.test.ts (10 tests) 415ms
+     ✓ ningun otro archivo de `lib/` escribe `activo: true` ni `activo: false`  323ms
+ ✓ tests/unit/guards/busqueda-texto-solo-lectura.test.ts (9 tests) 453ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  439ms
+ ✓ tests/unit/guards/sin-mensajero-sugerido.test.ts (3 tests) 401ms
+     ✓ el codigo de produccion no contiene ningun identificador de la sugerencia  396ms
+ ✓ tests/unit/components/analytics-paquete-guard.test.ts (15 tests) 475ms
+ ✓ tests/unit/guards/p2003-detector-unico.guardia.test.ts (8 tests) 424ms
+     ✓ ningun OTRO archivo del arbol lo nombra  410ms
+ ✓ tests/unit/guards/egreso-indemnizacion-emisores.test.ts (9 tests) 423ms
+ ✓ tests/unit/tablero-dia/color-contador.guardia.test.tsx (15 tests) 214ms
+ ✓ tests/unit/guards/clave-remision-solo-lectura.guardia.test.ts (12 tests) 446ms
+     ✓ ninguna mencion esta dentro de un `data:` de create/update/createMany  433ms
+ ✓ tests/unit/analytics/export-financiero-frontera.guardia.test.ts (32 tests) 468ms
+ ✓ tests/unit/analytics/alcance-bordes.guardia.test.ts (11 tests) 314ms
+ ✓ tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts (11 tests) 174ms
+ ✓ tests/unit/guards/umbral-origen-declarado.guardia.test.ts (7 tests) 344ms
+     ✓ ningun otro modulo de lib/, app/ o components/ lo define ni lo repite  329ms
+ ✓ tests/unit/guards/prisma-client-sin-adaptador.guardia.test.ts (5 tests) 318ms
+ ✓ tests/unit/guards/api-keys-tabla-una-linea.guardia.test.tsx (6 tests) 464ms
+ ✓ tests/unit/guards/pagos-frontera.guardia.test.ts (16 tests) 248ms
+ ✓ tests/unit/descarga/columnas-sensibles.guardia.test.ts (5 tests) 375ms
+ ✓ tests/unit/guards/flete-por-rechazo-censo.guardia.test.ts (4 tests) 311ms
+ ✓ tests/unit/guards/tope-indemnizacion-emisores.test.ts (7 tests) 225ms
+ ✓ tests/unit/guards/censo-catalogo-estados-v2.test.ts (8 tests) 272ms
+ ✓ tests/unit/guards/wallet-sin-uuid.guardia.test.tsx (13 tests) 1560ms
+     ✓ /wallet/tiendas/[tiendaId] · estado de cuenta con el panel «Ver» abierto  372ms
+ ✓ tests/unit/guards/contrasena-generada-superficie.guardia.test.ts (14 tests) 301ms
+ ✓ tests/unit/guards/wallet-etiqueta-cuenta.guardia.test.ts (5 tests) 296ms
+ ✓ tests/unit/analytics/alcance-obligatorio.guardia.test.ts (20 tests) 208ms
+ ✓ tests/unit/guards/impresion-sin-dark.guardia.test.ts (14 tests) 310ms
+ ✓ tests/unit/guards/censo-order-status-rename.test.ts (14 tests) 1827ms
+     ✓ no hay coincidencias case-sensitive de los 7 values retirados en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  931ms
+     ✓ no hay ninguna aparicion del literal exacto en app/, lib/, components/, hooks/, scripts/, tests/, e2e/  882ms
+ ✓ tests/unit/guards/caja-textos-459.guardia.test.ts (9 tests) 490ms
+     ✓ en ninguna combinación de signo, modo y filtro  418ms
+ ✓ tests/unit/guards/nota-privada-retirada.guardia.test.ts (9 tests) 356ms
+ ✓ tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts (7 tests) 225ms
+ ✓ tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts (15 tests) 263ms
+ ✓ tests/unit/guards/contrasena-maqueta-unica.guardia.test.ts (4 tests) 263ms
+ ✓ tests/unit/guards/tablero-doble-vs-servicio.guardia.test.ts (25 tests) 209ms
+ ✓ tests/unit/guards/lib-no-importa-app.guardia.test.ts (3 tests) 195ms
+ ✓ tests/unit/guards/costo-orden-forma-unica.guardia.test.ts (11 tests) 363ms
+     ✓ el escaneo de `lib/` se ejecuto de verdad: encontro archivos y encontro los dos tipos  335ms
+ ✓ tests/unit/guards/test-citado-desaparecido.guardia.test.ts (13 tests) 181ms
+ ✓ tests/unit/guards/filtros-url-r25-propiedad.test.tsx (1 test) 350ms
+     ✓ R25 — mutar los query params tras el montaje no entra por la siembra: gana la foto de entrada  346ms
+ ✓ tests/unit/guards/cascada-central-en-las-dos-pantallas.guardia.test.ts (11 tests) 114ms
+ ✓ tests/unit/guards/gestiones-detalle-lista-blanca.guardia.test.ts (10 tests) 202ms
+ ✓ tests/unit/analytics/cache-config.guardia.test.ts (6 tests) 164ms
+ ✓ tests/unit/guards/wallet-origen-total.guardia.test.ts (6 tests) 155ms
+ ✓ tests/unit/guards/push-alta-punto-unico.guardia.test.ts (24 tests) 172ms
+ ✓ tests/unit/guards/historial-accion-escrituras-cubiertas.guardia.test.ts (72 tests) 116ms
+ ✓ tests/unit/analytics/tablero-operativo-frontera.guardia.test.ts (21 tests) 164ms
+ ✓ tests/unit/guards/pagos-captura.guardia.test.ts (31 tests) 125ms
+ ✓ tests/unit/guards/wallet-sin-campo-id.guardia.test.ts (3 tests) 103ms
+ ✓ tests/unit/guards/wallet-barra-unica-467.guardia.test.ts (12 tests) 97ms
+ ✓ tests/unit/guards/push-intencion-de-baja.guardia.test.ts (39 tests) 222ms
+ ✓ tests/unit/guards/vistas-superficies-declaradas.guardia.test.tsx (8 tests) 387ms
+     ✓ la barra SIN la prop no pinta ningún control de vistas ni pide ninguna lista  306ms
+ ✓ tests/unit/guards/plantilla-gasto-fijo-borrado.guardia.test.ts (37 tests) 82ms
+ ✓ tests/unit/guards/quitador-comentarios.guardia.test.ts (47 tests) 195ms
+ ✓ tests/unit/analytics/cache-aislamiento.guardia.test.ts (4 tests) 149ms
+ ✓ tests/unit/guards/rastreo-sin-estatus-crudo.guardia.test.ts (10 tests) 83ms
+ ✓ tests/unit/guards/tablero-financiero.guardia.test.ts (29 tests) 35ms
+ ✓ tests/unit/guards/rutas-336-retiradas.guardia.test.ts (16 tests) 132ms
+ ✓ tests/unit/guards/decision5-revertida.guardia.test.ts (19 tests) 56ms
+ ✓ tests/unit/repositories/criterio-unico.guardia.test.ts (22 tests) 94ms
+ ✓ tests/unit/guards/wallet-conceptos-sin-seed.guardia.test.ts (4 tests) 79ms
+ ✓ tests/unit/guards/historial-accion-forma-tabla.guardia.test.ts (12 tests) 118ms
+ ✓ tests/unit/analytics/dinero-producto-no-sumable.guardia.test.ts (11 tests) 614ms
+     ✓ con tres importes en pantalla, su suma NO está en el DOM  432ms
+ ✓ tests/unit/guards/liquidacion-money-safe.test.ts (7 tests) 91ms
+ ✓ tests/unit/guards/historial-accion-sin-datos-cliente.guardia.test.ts (28 tests) 71ms
+ ✓ tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts (7 tests) 70ms
+ ✓ tests/unit/tablero-dia/primitivas.guardia.test.ts (33 tests) 72ms
+ ✓ tests/unit/guards/nombres-wallet-461.guardia.test.ts (37 tests) 96ms
+ ✓ tests/unit/guards/historial-acciones-solo-lectura.guardia.test.ts (19 tests) 34ms
+ ✓ tests/unit/analytics/definiciones-catalogo.guardia.test.ts (12 tests) 91ms
+ ✓ tests/unit/guards/liquidacion-reparto-bloqueos.guardia.test.ts (25 tests) 78ms
+ ✓ tests/unit/guards/carga-del-mensajero.guardia.test.ts (18 tests) 84ms
+ ✓ tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts (11 tests) 201ms
+ ✓ tests/unit/guards/corregir-datos-sin-rastro.guardia.test.ts (22 tests) 92ms
+ ✓ tests/unit/domain/order-status-transiciones.guardia.test.ts (161 tests) 72ms
+ ✓ tests/unit/guards/379-maestro-sin-bloqueo.guardia.test.ts (11 tests) 22ms
+ ✓ tests/unit/analytics/tablero-agregado-frontera.guardia.test.ts (7 tests) 47ms
+ ✓ tests/unit/guards/cierre-detalle-superficies.guardia.test.ts (4 tests) 25ms
+ ✓ tests/unit/guards/wallet-fecha-cr-459.guardia.test.ts (2 tests) 80ms
+ ✓ tests/unit/repositories/registrar-cambio-estado.guardia.test.ts (83 tests) 61ms
+ ✓ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests) 151ms
+ ✓ tests/unit/guards/orden-nota-frontera.guardia.test.ts (10 tests) 18ms
+ ✓ tests/unit/guards/gasto-fijo-cobro-money-safe.guardia.test.ts (12 tests) 34ms
+ ✓ tests/unit/guards/liquidacion-alcance.test.ts (4 tests) 50ms
+ ✓ tests/unit/guards/impresion-tokens.guardia.test.ts (47 tests) 35ms
+ ✓ tests/unit/analytics/agregado-alcance.guardia.test.ts (13 tests) 47ms
+ ✓ tests/unit/guards/contraste-tokens.guardia.test.ts (51 tests) 50ms
+ ✓ tests/unit/guards/d5-revertida.guardia.test.ts (19 tests) 47ms
+ ✓ tests/unit/tablero-dia/cache-sin-invalidacion.guardia.test.ts (6 tests) 64ms
+ ✓ tests/unit/guards/rastreo-dto-lista-blanca.guardia.test.ts (6 tests) 48ms
+ ✓ tests/unit/guards/rechazo-nombre-466.guardia.test.ts (13 tests) 53ms
+ ✓ tests/unit/guards/nombres-estado-retirados.guardia.test.ts (9 tests) 103ms
+ ✓ tests/unit/analytics/financiera-borde.guardia.test.ts (32 tests) 54ms
+ ✓ tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts (8 tests) 41ms
+ ✓ tests/unit/tablero-dia/frontera.guardia.test.ts (34 tests) 46ms
+ ✓ tests/unit/guards/landing-sin-maqueta.guardia.test.ts (23 tests) 37ms
+ ✓ tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts (19 tests) 46ms
+ ✓ tests/unit/guards/vista-filtro-formato-propio.guardia.test.ts (4 tests) 51ms
+ ✓ tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts (44 tests) 38ms
+ ✓ tests/unit/guards/rastreo-frontera.guardia.test.ts (29 tests) 23ms
+ ✓ tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts (17 tests) 39ms
+ ✓ tests/unit/guards/mi-wallet-335.guardia.test.ts (18 tests) 40ms
+ ✓ tests/unit/analytics/financiera-forma-importe.guardia.test.ts (4 tests) 46ms
+ ✓ tests/unit/repositories/gestion-ubicacion-solo-escritura.guardia.test.ts (3 tests) 40ms
+ ✓ tests/unit/guards/jobs-handler-por-tipo.guardia.test.ts (5 tests) 61ms
+ ✓ tests/unit/analytics/ranges-reuso.guardia.test.ts (6 tests) 39ms
+ ✓ tests/unit/guards/incidente-admin-aislamiento.test.ts (24 tests) 37ms
+ ✓ tests/unit/guards/pwa-relevo-y-purga.guardia.test.ts (25 tests) 33ms
+ ✓ tests/unit/analytics/metrics-dinero.guardia.test.ts (10 tests) 33ms
+ ✓ tests/unit/guards/cierre-bodega-vocabulario.guardia.test.ts (33 tests) 40ms
+ ✓ tests/unit/guards/asistente-sin-frontmatter.guardia.test.ts (7 tests) 36ms
+ ✓ tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts (14 tests) 38ms
+ ✓ tests/unit/guards/api-key-dependencias-usuario.guardia.test.ts (12 tests) 40ms
+ ✓ tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts (19 tests) 35ms
+ ✓ tests/unit/analytics/financiera-alcance.guardia.test.ts (12 tests) 30ms
+ ✓ tests/unit/analytics/alcance-columnas.guardia.test.ts (9 tests) 31ms
+ ✓ tests/unit/services/tablero-dia-cache-aislamiento.guardia.test.ts (5 tests) 30ms
+ ✓ tests/unit/analytics/financiera-repositorios.guardia.test.ts (25 tests) 32ms
+ ✓ tests/unit/guards/historial-accion-money-safe.guardia.test.ts (18 tests) 29ms
+ ✓ tests/unit/analytics/financiera-unidad-de-vistas.guardia.test.ts (13 tests) 28ms
+ ✓ tests/unit/guards/api-sin-redirect-sin-sesion.guardia.test.ts (5 tests) 28ms
+ ✓ tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts (8 tests) 29ms
+ ✓ tests/unit/guards/pagos-aritmetica-decimal.guardia.test.ts (15 tests) 27ms
+ ✓ tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts (8 tests) 30ms
+ ✓ tests/unit/analytics/metrics-caja-naturaleza.guardia.test.ts (21 tests) 31ms
+ ✓ tests/unit/analytics/alcance-dinero.guardia.test.ts (13 tests) 53ms
+ ✓ tests/unit/guards/ranking-ventana-dia.guardia.test.ts (12 tests) 22ms
+ ✓ tests/unit/guards/reprogramadas-retenidas-solo-lectura.guardia.test.ts (13 tests) 20ms
+ ✓ tests/unit/db/orden-clave-remision.guardia.test.ts (16 tests) 25ms
+ ✓ tests/unit/guards/etiquetas-maqueta-unica.guardia.test.ts (10 tests) 28ms
+ ✓ tests/unit/guards/openapi-canal-rutas-reales.guardia.test.ts (16 tests) 21ms
+ ✓ tests/unit/analytics/financiera-desglose-ids.guardia.test.ts (11 tests) 26ms
+ ✓ tests/unit/analytics/aislamiento.guardia.test.ts (8 tests) 16ms
+ ✓ tests/unit/guards/pwa-push.guardia.test.ts (20 tests) 26ms
+ ✓ tests/unit/analytics/operativa-solo-lectura.guardia.test.ts (7 tests) 25ms
+ ✓ tests/unit/guards/entregas-sin-recoleccion.test.ts (21 tests) 27ms
+ ✓ tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts (19 tests) 23ms
+ ✓ tests/unit/guards/caja-derivaciones.guardia.test.ts (9 tests) 21ms
+ ✓ tests/unit/guards/geocode-salud-sin-prosa.guardia.test.ts (25 tests) 27ms
+ ✓ tests/unit/guards/asistente-panel-hermano.guardia.test.ts (12 tests) 25ms
+ ✓ tests/unit/guards/premisa-saltos-caducada.guardia.test.ts (10 tests) 25ms
+ ✓ tests/unit/guards/deriva-primer-intento.guardia.test.ts (22 tests) 23ms
+ ✓ tests/unit/analytics/financiera-correspondencia.guardia.test.ts (12 tests) 32ms
+ ✓ tests/unit/guards/filtros-cierres-alcance.guardia.test.ts (7 tests) 24ms
+ ✓ tests/unit/guards/tema-encendido.guardia.test.ts (17 tests) 28ms
+stdout | tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts > FICHA 450 · guardia: una consulta a la vez sobre un cliente de transaccion > anti-vacio del censo (T5.2) — la guardia se sabe LLENA > encuentra las funciones con parametro de cliente de transaccion que se sabe que existen
+[450] censo: 1137 archivos · 77 funciones con parametro de transaccion · 73 cuerpos de `$transaction`
+
+stdout | tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts > FICHA 450 · guardia: una consulta a la vez sobre un cliente de transaccion > BRAZO C (R11) — relaciones HERMANAS sobre un cliente de transaccion > el censo NO esta vacio: el detector sigue viendo la forma en el arbol
+[450] brazo C: 6 lecturas con >=2 relaciones hermanas sobre un cliente de transaccion, en 4 archivos · maximo de hermanas: 2
+
+ ✓ tests/unit/guards/consultas-concurrentes-en-transaccion.guardia.test.ts (23 tests) 23ms
+ ✓ tests/unit/guards/geocodificacion-motivo-por-orden-mismo-modulo.guardia.test.ts (20 tests) 25ms
+ ✓ tests/unit/analytics/operativa-fuente.guardia.test.ts (5 tests) 20ms
+ ✓ tests/unit/guards/ancla-de-carga.guardia.test.ts (7 tests) 20ms
+ ✓ tests/unit/guards/abono-tienda-alcance.guardia.test.ts (10 tests) 36ms
+ ✓ tests/unit/guards/zona-reconciliacion-no-retarifa.guardia.test.ts (6 tests) 26ms
+ ✓ tests/unit/guards/incidente-exhaustividad.test.ts (8 tests) 19ms
+ ✓ tests/unit/guards/no-encontrado-no-delata.guardia.test.ts (20 tests) 24ms
+ ✓ tests/unit/analytics/cohorte-frontera.guardia.test.ts (12 tests) 20ms
+ ✓ tests/unit/guards/use-server-exports-async.guardia.test.ts (3 tests) 29ms
+ ✓ tests/unit/guards/orden-remision-alcance.guardia.test.ts (9 tests) 26ms
+ ✓ tests/unit/guards/buttonvariants-pasa-por-cn.guardia.test.ts (16 tests) 24ms
+ ✓ tests/unit/guards/jobs-recurrentes-con-siembra.guardia.test.ts (21 tests) 23ms
+ ✓ tests/unit/api/openapi-nombres-455.guardia.test.ts (6 tests) 19ms
+ ✓ tests/unit/analytics/financiera-180-trazabilidad.guardia.test.ts (7 tests) 20ms
+ ✓ tests/unit/analytics/operativa-sumabilidad.guardia.test.ts (5 tests) 25ms
+ ✓ tests/unit/guards/cierres-descarga-detallada-frontera.guardia.test.ts (5 tests) 22ms
+ ✓ tests/unit/guards/tablero-lineas-trazabilidad.guardia.test.ts (7 tests) 20ms
+ ✓ tests/unit/guards/recoleccion-no-contamina.test.ts (5 tests) 16ms
+ ✓ tests/unit/guards/mensajero-forma-unica.guardia.test.ts (6 tests) 24ms
+ ✓ tests/unit/tablero-dia/d10-revertida.guardia.test.ts (12 tests) 15ms
+ ✓ tests/unit/guards/ayuda-md-viajan-a-produccion.guardia.test.ts (10 tests) 19ms
+ ✓ tests/unit/guards/wallet-textos-458.guardia.test.ts (11 tests) 17ms
+ ✓ tests/unit/guards/autorizacion-texto-no-miente.guardia.test.ts (18 tests) 18ms
+ ✓ tests/unit/guards/xlsx-monto-unico.guardia.test.ts (2 tests) 18ms
+ ✓ tests/unit/tablero-dia/reversion-r49.guardia.test.ts (12 tests) 17ms
+ ✓ tests/unit/analytics/fulfillment-fuera-de-la-formula.guardia.test.ts (10 tests) 18ms
+ ✓ tests/unit/guards/red-de-errores.guardia.test.ts (13 tests) 18ms
+ ✓ tests/unit/guards/asistente-sin-persistencia.guardia.test.ts (7 tests) 15ms
+ ✓ tests/unit/guards/eliminar-por-estado.guardia.test.ts (23 tests) 24ms
+ ✓ tests/unit/guards/historial-correccion-dia.guardia.test.ts (24 tests) 18ms
+ ✓ tests/unit/analytics/catalogo-universo.guardia.test.ts (16 tests) 18ms
+ ✓ tests/unit/analytics/export-financiero-alcance.guardia.test.ts (12 tests) 25ms
+ ✓ tests/unit/guards/pago-mensajero-money-safe.guardia.test.ts (8 tests) 14ms
+ ✓ tests/unit/analytics/financiera-trazabilidad.guardia.test.ts (5 tests) 15ms
+ ✓ tests/unit/guards/caja-clasificacion-459.guardia.test.ts (17 tests) 17ms
+ ✓ tests/unit/guards/notifications-bell-tokens.guardia.test.ts (7 tests) 19ms
+ ✓ tests/unit/guards/historico-roles-una-sola-fuente.guardia.test.ts (10 tests) 14ms
+ ✓ tests/unit/guards/cron-hora-cr.guardia.test.ts (10 tests) 14ms
+ ✓ tests/unit/guards/historial-acciones-roles-una-sola-fuente.guardia.test.ts (13 tests) 15ms
+ ✓ tests/unit/guards/novedad-acciones-una-tabla.guardia.test.ts (8 tests) 12ms
+ ✓ tests/unit/guards/rastreo-hitos-exhaustivo.guardia.test.ts (6 tests) 14ms
+ ✓ tests/unit/guards/estado-con-info.guardia.test.ts (17 tests) 45ms
+ ✓ tests/unit/guards/rastreo-modal-tema.guardia.test.ts (6 tests) 14ms
+ ✓ tests/unit/guards/atajo-aviso-ruta-visible.guardia.test.ts (10 tests) 15ms
+ ✓ tests/unit/guards/tope-intentos-invariante.guardia.test.ts (9 tests) 13ms
+ ✓ tests/unit/guards/reclasificacion-459-lista.guardia.test.ts (5 tests) 12ms
+ ✓ tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts (10 tests) 11ms
+ ✓ tests/unit/guards/credenciales-sin-consola-cruda.guardia.test.ts (7 tests) 12ms
+ ✓ tests/unit/guards/origenes-admitidos-en-cierre.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/guards/estados-reparto-mensajero-unica-fuente.guardia.test.ts (6 tests) 14ms
+ ✓ tests/unit/scripts/migrate-deploy-guardas.test.ts (15 tests) 11ms
+ ✓ tests/unit/guards/ayuda-render-sin-filtracion.guardia.test.ts (8 tests) 12ms
+ ✓ tests/unit/guards/geografia-terminales-una-sola-fuente.guardia.test.ts (8 tests) 12ms
+ ✓ tests/unit/guards/encabezado-acciones-dentro-del-ancho.guardia.test.ts (12 tests) 12ms
+ ✓ tests/unit/analytics/cubo-temporal-tope.guardia.test.ts (6 tests) 11ms
+ ✓ tests/unit/guards/analitica-barra-filtros-sin-solape.guardia.test.ts (10 tests) 14ms
+ ✓ tests/unit/guards/tope-intentos-pii.guardia.test.ts (5 tests) 12ms
+ ✓ tests/unit/guards/notifications-bell-sin-reloj.guardia.test.ts (4 tests) 12ms
+ ✓ tests/unit/guards/estado-cuenta-chips-total.guardia.test.ts (4 tests) 12ms
+ ✓ tests/unit/guards/notifications-bell-ancho.guardia.test.ts (4 tests) 11ms
+ ✓ tests/unit/guards/ayuda-pantalla-ruta-existe.guardia.test.ts (10 tests) 10ms
+ ✓ tests/unit/guards/satelite-proyeccion-compartida.guardia.test.ts (3 tests) 12ms
+ ✓ tests/unit/descarga/ambito-columnas.guardia.test.ts (4 tests) 12ms
+ ✓ tests/unit/components/calendario-ancho-de-celda.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/analytics/cohorte-terminales.guardia.test.ts (8 tests) 11ms
+ ✓ tests/unit/guards/historico-sin-migracion.guardia.test.ts (10 tests) 12ms
+ ✓ tests/unit/analytics/financiera-produccion.guardia.test.ts (5 tests) 11ms
+ ✓ tests/unit/guards/enlace-contraste-458.guardia.test.ts (8 tests) 10ms
+ ✓ tests/unit/services/tablero-dia-metrica.guardia.test.ts (5 tests) 9ms
+ ✓ tests/unit/guards/html-lang.guardia.test.ts (3 tests) 10ms
+ ✓ tests/unit/guards/dia-reparto-tokens.guardia.test.ts (3 tests) 8ms
+ ✓ tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts (11 tests) 9ms
+ ✓ tests/unit/guards/motivo-automatico-sin-jerga.guardia.test.ts (7 tests) 10ms
+ ✓ tests/unit/guards/wallet-money-safe-458.guardia.test.ts (3 tests) 8ms
+ ✓ tests/unit/analytics/etiquetas-visibles.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/descarga/cierres-descarga-detallada-money.guardia.test.ts (2 tests) 8ms
+ ✓ tests/unit/analytics/cache-clave-alcance.guardia.test.ts (4 tests) 9ms
+ ✓ tests/unit/descarga/cierre-gestiones-cabecera.guardia.test.ts (2 tests) 10ms
+ ✓ tests/unit/guards/fuente-unica-nombre-estado.guardia.test.ts (5 tests) 18ms
+ ✓ tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts (7 tests) 9ms
+
+ Test Files  273 passed (273)
+      Tests  3757 passed (3757)
+   Start at  18:02:13
+   Duration  62.45s (transform 21.45s, setup 11.27s, import 178.66s, tests 92.63s, environment 32.78s)
+
+JSON report written to R:/job/singularis/projects/ordenex/.vitest/rojos-guardias.json
+-> vitest run tests/integration/db (modo ampliado, con reporte JSON)
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+ ✓ tests/integration/db/api-key-eliminar-fk-inesperada.test.ts (3 tests) 2008ms
+     ✓ ⭑ R16: `bloqueada` con `otros_datos`, y NI UNA fila borrada  439ms
+     ✓ la transaccion abortada no deja la sesion rota: se puede seguir trabajando despues  654ms
+ ✓ tests/integration/db/usuario-preferencia.test.ts (14 tests) 3283ms
+     ✓ ⭑ sin fila, `avisosPushDe` devuelve `false`  584ms
+     ✓ ⭑ dar de baja UN dispositivo deja vivo el otro de la misma persona  386ms
+     ✓ ⭑ y borrar la preferencia SOLA no retira ninguna suscripcion  596ms
+ ✓ tests/integration/db/gasto-fijo-cobro-aprobacion.test.ts (12 tests) 3138ms
+     ✓ ⭑ el camino feliz deja LAS CUATRO cosas, y el movimiento lleva la clave y el monto copiado  571ms
+     ✓ ⭑ CONTROL: sin ese movimiento previo, la MISMA aprobación devuelve `yaEstabaEnElLibro: false`  392ms
+     ✓ ⭑ el `WHERE` lleva las DOS condiciones: la plantilla Y el estado  710ms
+(node:22356) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:26896) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/novedades-sin-gestionar-aviso-dedupe.test.ts (5 tests) 2313ms
+     ✓ ⭑ dos corridas el MISMO día dejan UNA fila; el día siguiente, DOS  803ms
+     ✓ ⭑ dos tiendas con novedades el mismo día -> DOS filas, una para cada una  429ms
+     ✓ ⭑ MUTACIÓN R42: quitar el `tiendaId` de la entidad silencia a la SEGUNDA tienda  316ms
+ ✓ tests/integration/db/orden-listado-orden-total.test.ts (11 tests) 5291ms
+     ✓ el corpus queda aislado: la ventana del 2001 solo contiene las 241 filas sembradas  1001ms
+     ✓ con fechas EMPATADAS, paginar no repite ni pierde una sola fila (desc)  464ms
+     ✓ con fechas EMPATADAS, paginar no repite ni pierde una sola fila (asc)  468ms
+     ✓ dentro de un empate de fecha, el orden lo fija el desempate por id (no el de insercion)  416ms
+     ✓ `asc` invierte de verdad el sentido: la mas antigua primero  372ms
+     ✓ la misma pagina pedida dos veces devuelve exactamente los mismos ids  430ms
+     ✓ `prioridad` sigue mandando por delante del orden elegido  340ms
+     ✓ la DESCARGA sale exactamente en el mismo orden que la pantalla  575ms
+     ✓ el listado por el SERVICIO recorre las paginas sin repetir ni perder filas  630ms
+ ✓ tests/integration/db/geografia-catalogo-activo.test.ts (20 tests) 3392ms
+     ✓ el corpus se sembro: 2 provincias, 3 cantones y 5 distritos de prueba  679ms
+       ✓ `listCantonesLite` trae el canton retirado Y el heredado, los dos no disponibles  341ms
+       ✓ ⭑ MUTACION VIGILADA: los tres `list*Lite` devuelven EXACTAMENTE lo que hay en la tabla  580ms
+       ✓ los ids de `list*Lite` son los de un `findMany` SIN `where`  639ms
+(node:7288) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/traspaso-mensajero.int.test.ts (24 tests) 2565ms
+     ✓ R7 en la base: el CHECK rechaza un traspaso a la MISMA persona  617ms
+ ✓ tests/integration/db/pago-mensajero-liquidacion.test.ts (5 tests) 11297ms
+     ✓ las Server Actions del pago por mensajero NO exponen registrarLiquidacionMensajeroAction  10994ms
+(node:10984) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/analytics-daily-migration.test.ts (63 tests) 9079ms
+     ✓ Prisma deriva del datamodel EXACTAMENTE los mismos indices/PK/FK que la union neta de las migraciones  4205ms
+     ✓ FICHA 323 — deriva el DDL aunque el entorno no traiga DATABASE_URL (worktree sin `.env`)  4721ms
+ ✓ tests/integration/db/abono-tienda-457-concurrencia.test.ts (8 tests) 11701ms
+     ✓ R16 (mutacion 5): el segundo pago de la MISMA tienda espera y se evalua sobre la deuda ya rebajada -> excede  3490ms
+     ✓ R16: el segundo pago por EXACTAMENTE lo que queda entra tras esperar y deja el saldo en 0,00  943ms
+     ✓ R16: el pago de Ordenex a la tienda ESPERA al pago de la tienda y al entrar la ve en contra -> sin_saldo  1632ms
+     ✓ R16: el pago de un gasto de la tienda ESPERA al pago de la tienda y se registra sobre el saldo ya subido  1621ms
+     ✓ R25: la MISMA clave enviada dos veces A LA VEZ por toda la deuda -> un solo pago; el segundo espera y responde ya_registrado (no `sin_deuda`)  1113ms
+     ✓ R38 (m2 de la revision): la ANULACION toma el candado de la tienda; un pago de la misma tienda la espera y se evalua sobre la deuda ya devuelta  1881ms
+     ✓ R36: dos anulaciones simultaneas del mismo pago -> una constancia y un solo contra-asiento por libro  573ms
+ ✓ tests/integration/db/salida-a-reparto-sql-real.test.ts (6 tests) 4770ms
+     ✓ /ordenes: los dos grupos son complementarios y disjuntos, con las cinco filas en la MISMA corrida  1145ms
+     ✓ ⭐ la que salio y NADIE gestiono cuenta como CON HISTORIA: el criterio ingenuo la clasificaria mal  373ms
+     ✓ CERO filas de historial es NUEVA (y no «ya salio»): la diferencia entre `none` y `every`  534ms
+     ✓ /ordenes: la DESCARGA devuelve exactamente lo mismo que la pantalla, con y sin filtro  511ms
+     ✓ bodega satelite: los mismos casos, en las TRES consultas del modulo  938ms
+     ✓ los dos dialectos del criterio dicen lo mismo: Prisma (`/ordenes`) y SQL crudo (satelite)  1196ms
+ ✓ tests/integration/db/454/caracterizacion/no-doble-gestion.test.ts (2 tests) 3244ms
+ ✓ tests/integration/db/orden-orden-remision-natural.test.ts (12 tests) 9978ms
+     ✓ el corpus queda aislado: cada ventana del 2001 solo contiene lo sembrado  1159ms
+     ✓ R9 — descendente devuelve el sentido opuesto exacto, con el mismo total  702ms
+     ✓ R2 — pagina 1 trae las MAS BAJAS del conjunto, no las 5 primeras reordenadas  541ms
+     ✓ R7 — `prioridad` sigue mandando por delante del orden por remision  410ms
+     ✓ R8 — con 241 claves EMPATADAS, paginar no repite ni pierde una sola fila (asc)  972ms
+     ✓ R8 — lo mismo en descendente, y la misma pagina pedida dos veces es identica  915ms
+     ✓ R13 — la DESCARGA sale exactamente en el mismo orden que la pantalla  808ms
+     ✓ R2 — por el SERVICIO, el listado paginado da el mismo orden que el repositorio  336ms
+     ✓ R16/T2.4 — el `omit` global NO impide el `orderBy`, y la clave NO viaja en el payload  1101ms
+     ✓ la clave que Postgres calculo es la del design, y el indice PARCIAL existe  1268ms
+     ✓ R15 — el orden por FECHA no cambio: sigue siendo el default y sigue mandando  1458ms
+ ✓ tests/integration/db/wallet-tienda-cobro-migration.test.ts (24 tests) 7460ms
+     ✓ `wallet_tienda_movimiento_categoria` de `public` tiene exactamente las del SEED  510ms
+(node:22992) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/push-canal-restricciones.test.ts (7 tests) 7167ms
+     ✓ ⭑ R17: el MISMO dispositivo dos veces deja UNA fila, con las claves renovadas  1322ms
+     ✓ ⭑ R18: otra persona inicia sesion en el mismo telefono y la suscripcion CAMBIA de dueno  1379ms
+     ✓ ⭑ MUTACION R18: con la unicidad en (usuario, endpoint) habria DOS filas vivas  1333ms
+     ✓ ⭑ CASCADE en las dos tablas, ejercitado contra el motor  1689ms
+     ✓ ⭑ el primero gana, el segundo devuelve `false` y no crea fila  1144ms
+ ✓ tests/integration/db/libro-kardex-468.test.ts (6 tests) 8114ms
+     ✓ T4 R27: el pago al mensajero trae EXACTAMENTE las ordenes con pago > 0 en SU cierre, y suma total_pago_mensajero  978ms
+     ✓ T7 R28: para cada movimiento de los cuatro conceptos nuevos, el lote = el detalle de esa fila en pantalla  1201ms
+     ✓ T6 R12/R14/R15: el saldo de la caja en el kardex es el de la tarjeta con el mismo corte, y cuadra fila a fila  1494ms
+     ✓ T9 R45/R46/R53/R57 — caja: TOTAL GENERAL = Total del periodo, cada movimiento en la hoja 2, hoja 1 identica  1364ms
+     ✓ T9 R45/R46/R48 — tienda (oficina) y /mi-wallet: invariante y solo guias de esa tienda  1553ms
+     ✓ T9 R31/R43/R45 — mensajero (oficina): el devengado por guia, el efectivo sin guia, y la invariante  981ms
+ ✓ tests/integration/db/busqueda-por-guia-469.test.ts (8 tests) 9468ms
+     ✓ T3 R3/R4/R5/R7: guia completa, remision sin mayusculas, tiendaId acota y una remision de dos tiendas da las dos  736ms
+     ✓ T4 R9: la orden esta en el cierre pero no aporta a ese concepto ⇒ cierresDondeAporta no la trae  907ms
+     ✓ T9 R8/R9/R11/R12/R15 — caja: diferencial «sale» ⇔ «su detalle lista la orden», para cada fila repartible  1878ms
+     ✓ T6/T9 R10/R14/R16/R19/R20/R22/R7 — caja: sin el texto, con los de una sola orden, AND con filtros, total exacto y orden  1266ms
+     ✓ T7/T9 R13/R16/R17/R18/R19 — mensajero: el devengado si, el efectivo no; corrido y tarjetas intactos  1466ms
+     ✓ T7/T9 R5/R10/R11/R14/R17/R18/R19/R20 — tienda (oficina) y /mi-wallet  1262ms
+     ✓ T10 R25/R26/R27/R28/R29 — el detalle con la guia destacada  700ms
+     ✓ T14 R30/R31/R32 — la descarga con busqueda por guia: mismas filas que la pantalla y la hoja 2 cuadra  730ms
+(node:27276) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/correccion-dia-reparto-efectos.int.test.ts (11 tests) 8442ms
+     ✓ ⭑ R25: la correccion NO añade NI UNA fila a `orden_historial_estado`  1367ms
+     ✓ ⭑ R25: tampoco cambia el conteo de intentos ni crea ninguna gestion  1338ms
+     ✓ ⭑ R30: corregida a MAÑANA, el corte de esta noche DEJA de alcanzarla  1163ms
+     ✓ ⭑ R30: corregida al DIA EN CURSO, el corte de esta noche VUELVE a alcanzarla  1536ms
+     ✓ ⭑⭑ R31: con la fila ya corregida a HOY, la guarda de la 261 DEJA de dispararse  1010ms
+     ✓ ⭑⭑ R32: la correccion NO TOCA NI UNA FILA de la ruta optimizada del mensajero  469ms
+     ✓ ⭑⭑ R32: los INDICADORES DEL PORTAL del mensajero no se mueven al corregir  853ms
+(node:21816) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:23512) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/pago-por-cuenta-tienda-concurrencia.test.ts (3 tests) 5491ms
+     ✓ R42: el pago de Ordenex a la tienda ESPERA al pago por cuenta y se evalua sobre el saldo ya rebajado  3190ms
+     ✓ R50: dos anulaciones simultaneas del mismo pago -> una anulacion y un solo contra-asiento por libro  494ms
+     ✓ R70: dos saldos iniciales A LA VEZ -> uno solo; el otro, `ya_hay_saldo_inicial`  1638ms
+ ✓ tests/integration/db/454/caracterizacion/corte-concurrencia.test.ts (2 tests) 6270ms
+ ✓ tests/integration/db/gasto-fijo-cobro-idempotencia.test.ts (9 tests) 3456ms
+     ✓ ⭑ la segunda corrida inserta CERO y la corrida termina en éxito  826ms
+     ✓ ⭑ si la escritura de cobros falla EN EL MOTOR, no queda ningún egreso de la corrida  489ms
+     ✓ ⭑ tras rechazar, la corrida del día siguiente del MISMO período no crea nada, y el «no» se conserva  429ms
+     ✓ ⭑ dos `INSERT` con el mismo `origen_id` violan `gasto_fijo_cobro_origen_uq`  436ms
+ ✓ tests/integration/db/cierre-excluye-gestiones-de-escritorio.test.ts (6 tests) 1994ms
+     ✓ `findGestionesPendientes` devuelve la de CALLE y la de AYUDA, y NINGUNA de escritorio  344ms
+ ✓ tests/integration/db/gestiones-detalle-api-405.test.ts (12 tests) 3378ms
+     ✓ R11: las DOS gestiones ANULADAS quedan fuera, y las TRES vigentes salen  337ms
+     ✓ R8: `motivo` es la causa TIPIFICADA, y el TEXTO LIBRE del mensajero no sale jamas  303ms
+ ✓ tests/integration/db/historial-accion-lectura.test.ts (18 tests) 7065ms
+     ✓ ANTI-VACUIDAD: el corpus se sembro y sin filtros salen las SEIS filas  1426ms
+     ✓ ⭑ R29 (1/5) filtro por ACTOR: solo las filas de ese actor  878ms
+     ✓ ⭑ R29 (2/5) filtro por TIPO DE ACCION: union cerrada, y solo esos tipos  444ms
+     ✓ ⭑ R29 (3/5) filtro por CATEGORIA equivale a filtrar por SUS tipos  867ms
+     ✓ los filtros se COMBINAN en `AND`, no en `OR`  348ms
+     ✓ ⭑ R31 (CASO NEGATIVO): el termino NO alcanza el `lote_id` ni el `entidad_id`  313ms
+(node:3128) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/zona-reconciliacion-ordenes.test.ts (28 tests) 15181ms
+     ✓ ⭑ R2/R4/R10: el distrito resuelve UNA zona -> la orden se re-estampa y deja su fila  995ms
+     ✓ R3: un distrito que queda con CERO zonas no mueve ninguna orden  637ms
+     ✓ R3: un distrito que queda en DOS zonas a la vez es ambiguo -> no mueve ninguna orden  323ms
+     ✓ ⭑ R6/R7/R8: una orden YA FACTURADA (con detalle de cierre) NO se reconcilia, y su detalle queda intacto  1132ms
+     ✓ ⭑ R6/R7: una gestion VIGENTE con resultado `entregado` deja la orden fuera  1273ms
+     ✓ ⭑ R6/R7: una gestion VIGENTE con resultado `devolucion_a_origen_por_rechazo` deja la orden fuera  1444ms
+     ✓ ⭑ R6/R7: una gestion VIGENTE con resultado `incidente` deja la orden fuera  1187ms
+     ✓ ⭑ R6: una gestion VIGENTE con resultado `reprogramado` SI se reconcilia (el corte es por resultado)  1537ms
+     ✓ ⭑ R6: una gestion VIGENTE con resultado `novedad` SI se reconcilia (el corte es por resultado)  977ms
+     ✓ ⭑ R6: una gestion ANULADA no excluye, aunque su resultado fuera `entregada`  470ms
+     ✓ R6: una orden BORRADA no se re-estampa  787ms
+     ✓ ⭑ R5: volver a guardar la zona SIN cambiar sus distritos reconcilia la deriva ya existente  319ms
+     ✓ R11: DOS guardados distintos producen lotes DISTINTOS  349ms
+     ✓ ⭑ 377/R2/R6: una orden EN EL ESTANTE de una satelite NO cambia de zona ni deja rastro  314ms
+(node:8272) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:26816) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/filtros-catalogo-sin-inactivos.test.ts (6 tests) 2356ms
+     ✓ T4 — el listado de órdenes NO mira el estado del dueño ni del mensajero: la orden histórica sigue ahí  598ms
+     ✓ T5 — filtrar por la tienda o el mensajero dados de baja sigue devolviendo su orden  494ms
+ ✓ tests/integration/db/liberacion-al-aprobar-cierre-real.test.ts (5 tests) 3723ms
+     ✓ 💰 libera las VENCIDAS de ese cierre y deja intactas las de fecha FUTURA  440ms
+     ✓ la liberada queda como la deja el cron: sin mensajero, prioritaria y con marca  351ms
+     ✓ el 31/08 espera al CALENDARIO, no a otra aprobacion: el mismo cierre, con `hoyCR` = 29/08  339ms
+     ✓ idempotente: una segunda pasada (o el cron a medianoche) no vuelve a mover nada  325ms
+     ✓ aprobar el OTRO cierre suelta la suya, y solo la suya  1605ms
+(node:3536) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/cierre-rechazo-tienda-sql-real.test.ts (8 tests) 6236ms
+     ✓ R1/R18: incorpora el rechazo suelto como VINCULO; calle y ayuda facturan como siempre; la reprogramacion no entra  327ms
+     ✓ R3: un rechazo ya vinculado no lo recoge un cierre posterior, y la base impide que otro cierre se lo lleve  343ms
+     ✓ R5: el mensajero SOLO con rechazos de tienda ahora SI obtiene cierre, y el corte lo selecciona (caso Arnel)  465ms
+     ✓ R17: un mensajero SOLO con reprogramaciones de tienda sigue sin cierre y sin un solo vinculo (D2)  337ms
+     ✓ D2, primer cerrojo: una suelta con historial `rechazo_tienda` pero resultado `reprogramada` NO se incorpora  342ms
+     ✓ D2, segundo cerrojo: una suelta `rechazada` con historial `reprogramacion_tienda` NO se incorpora  1627ms
+     ✓ R2/R15: el detalle lee lo CONGELADO, del rechazo mas viejo al mas reciente, aunque la orden cambie despues  1427ms
+ ✓ tests/integration/db/job-repository-claim-concurrente.int.test.ts (5 tests) 6143ms
+       ✓ ⭑ R5: una fila que otro worker ya reclamo Y COMMITEO no se entrega por segunda vez  372ms
+       ✓ ⭑ una fila re-agendada con backoff por otro worker no se reclama antes de tiempo  326ms
+ ✓ tests/integration/db/corregir-datos-cliente.repo.test.ts (22 tests) 8979ms
+     ✓ ⭑ 327 caso 3+4 (R1/R22): cambian SOLO las columnas corregidas + `zona_id` + `updated_at`, y las COORDENADAS no  514ms
+     ✓ ⭑ 327 caso 5 (R17/R25): corregir la ubicacion no toca `cierre_detail`, ni historial, ni notas  572ms
+     ✓ ⭑ 327 caso 6 (R29): con la ubicacion, `devuelta_a_tienda` sigue siendo `conflict` y CERO columnas cambiadas  471ms
+     ✓ ⭑ 327 caso 6 (R29): con la ubicacion, `incidente` sigue siendo `conflict` y CERO columnas cambiadas  350ms
+     ✓ ⭑ 327 caso 6 (R29): con la ubicacion, `devolucion_a_origen_por_rechazo` sigue siendo `conflict` y CERO columnas cambiadas  443ms
+     ✓ ⭑ 327 caso 6bis (R29): la orden con `deleted_at` tampoco se mueve  352ms
+     ✓ ⭑ 327 caso 7 (R7): el distrito resuelve UNA zona, o ninguna; nunca se inventa una  344ms
+     ✓ ⭑ 327 (R30): `findParaCorreccion` devuelve `null` para la borrada y para la inexistente  3281ms
+(node:2608) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/historial-accion-migration.test.ts (12 tests) 6738ms
+     ✓ ANTI-VACUIDAD: el corpus tiene las filas declaradas, y sin indice HABRIA `Seq Scan`  1836ms
+     ✓ ⭑ (1/3) la PRIMERA PAGINA por fecha resuelve por indice, no por `Seq Scan`  1379ms
+     ✓ ⭑ (2/3) «que hizo Fulano» resuelve por su indice  1680ms
+     ✓ ⭑ (3/3) «que le paso a esta entidad» resuelve por su indice  1370ms
+ ✓ tests/integration/db/orden-remision-borrada-libera-numero.test.ts (9 tests) 8993ms
+     ✓ EL CASO DE PRODUCCION: borrada la orden, su (tienda, remision) se puede volver a usar  424ms
+     ✓ EL ARREGLO NO ABRE LA OTRA PUERTA: dos ordenes VIVAS con la misma remision siguen siendo imposibles  306ms
+     ✓ varias BORRADAS pueden compartir el numero: el predicado las saca a todas de la cuenta  433ms
+     ✓ createManyOrdenes: la remision de una orden borrada ENTRA, y con su fila de `carga`  390ms
+     ✓ createManyOrdenesConGuia: mismo caso, misma respuesta (las dos rutas usan skipDuplicates)  324ms
+     ✓ createManyOrdenes: una remision VIVA repetida no se duplica Y sale en `omitidas`  1630ms
+     ✓ createManyOrdenesConGuia: idem, y la fila saltada NO consume num_guia  1379ms
+     ✓ un lote MIXTO reporta cada fila donde le toca: la nueva entra, la repetida se nombra  1731ms
+     ✓ la orden BORRADA no se cuenta como nueva: ni historial ni `carga_id` nuevos sobre ella  1443ms
+(node:22092) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:16088) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:17256) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/sla-devolucion-reloj.test.ts (5 tests) 3168ms
+ ✓ tests/integration/db/detalle-movimiento-cierre-postgres.test.ts (14 tests) 11930ms
+     ✓ el detalle trae solo las ordenes que aportan a ese concepto (R16/R19)  945ms
+     ✓ la suma de todas las paginas es el importe del movimiento, centimo a centimo (R17)  530ms
+     ✓ una orden con dos gestiones sale una vez con el aporte sumado (R20)  452ms
+     ✓ la orden sin tarifa congelada no aparece y no altera la suma (R23)  367ms
+     ✓ el detalle devuelve una pagina y el total es el del conjunto, no el largo de la pagina (R24/R28)  448ms
+     ✓ recorrer las paginas devuelve cada orden exactamente una vez (R30)  349ms
+     ✓ la tienda no ve ni una orden de otra tienda del mismo cierre (R40)  333ms
+     ✓ el credito COD de la tienda cuadra con su importe (R17 en el otro libro)  1649ms
+     ✓ 458-D R19: la oficina abre la fila de flete de la tienda A y ve SOLO las ordenes de A, con el mensajero  1369ms
+     ✓ 458-D R19: el movimiento de la tienda A pedido como fila de la B responde no encontrado; la tienda no entra  1632ms
+     ✓ 468 R27/R28: la fila de pago devengado del mensajero lista sus ordenes y su Σ es el importe; la de otro mensajero, no encontrada  1681ms
+     ✓ 468 R27: el contra-entrega de la caja lista sus ordenes y su Σ es el Σ monto_recibido del cierre  1562ms
+(node:23512) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/senales-gestion-lectores-sql-real.test.ts (14 tests) 1947ms
+ ✓ tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts (4 tests) 5663ms
+     ✓ R21/R23 · el caso `79cb2c0f`: con un `solicitado` de ayer, el corte SI le crea el segundo cierre  1960ms
+     ✓ R22/R17 · el mensajero YA bloqueado con un `vencido` y nada que cerrar NO recibe un segundo  1257ms
+     ✓ R23/R24 · el barrido a `novedad_interna`, la vinculacion y la idempotencia de la 2.ª corrida  384ms
+     ✓ R17 · dos `vencido` a la vez es ALCANZABLE: la orden reservada (246) sobrevive al corte que bloquea y la noche siguiente trae el SEGUNDO  1486ms
+ ✓ tests/integration/db/abono-tienda-457.test.ts (12 tests) 3924ms
+     ✓ R1/R5/R17/R18/R20/R21/R22: una sola accion escribe documento, credito, entrada e historial con el MISMO string y el MISMO instante  2257ms
+     ✓ R19/R39: sobre las filas REALES, registrar sube «Entro», la cifra y «De las tiendas» en el monto; anular sube «Salio» y las baja; ganancia y capital en 0,00  385ms
+ ✓ tests/integration/db/correccion-resultado-gestion.int.test.ts (14 tests) 8823ms
+     ✓ R6/R7: la gestion queda `rechazada`, con motivo, sin cobro, sin lineas, pago 0.00 e ingreso de bodega por tarifa  551ms
+     ✓ R8: los SEIS totales del cierre quedan coherentes con las gestiones vigentes  1415ms
+     ✓ 💰 R8: las TRES identidades que el humano verifico a mano el 2026-09-08 se cumplen  1686ms
+     ✓ R9: la orden queda en `rechazada` y su historial gana UNA fila con la familia propia  1545ms
+     ✓ 💰 R3: un cierre APROBADO Y CONSOLIDADO no se corrige, y no se le toca ni una fila  367ms
+     ✓ R12: corregir DOS veces la misma gestion: la segunda es `conflict` y no toca nada  1468ms
+ ✓ tests/integration/db/correccion-fecha-reprogramacion.int.test.ts (23 tests) 2543ms
+     ✓ ⭑ a fecha FUTURA: la gestion vigente cambia y la orden SIGUE en `reprogramada`  424ms
+ ✓ tests/integration/db/correccion-dia-reparto.int.test.ts (18 tests) 8374ms
+     ✓ ⭑ R1/R27: la fila queda con el dia nuevo y todo lo demas IDENTICO  1444ms
+     ✓ R6: los TRES estados admitidos se corrigen (`mensajero_recogiendo_en_bodega`, `en_reparto`, `ayuda_tienda`)  1656ms
+     ✓ ⭑ R20/R21/R22: UNA fila de rastro por orden corregida, con las dos fechas, el actor y el motivo  514ms
+     ✓ ⭑ R24: `fecha_anterior` es el dia REAL de cada fila, no un valor comun del lote  403ms
+     ✓ ⭑ R8/R22: si UNA orden pierde la guarda, NI UNA se corrige y NI UNA fila de rastro se escribe  1459ms
+     ✓ ⭑ M-l / M-p (FORMA): el SQL emitido lleva `FOR UPDATE` y el dia entra como texto `::date`  952ms
+ ✓ tests/integration/db/cierre-sin-gestion-tope-sql-real.test.ts (9 tests) 2369ms
+     ✓ 1. la barrida CON `intentos = umbral` acaba en `por_devolver_a_tienda`, no en bodega (R21)  395ms
+ ✓ tests/integration/db/rechazo-tienda-cobro.int.test.ts (10 tests) 2862ms
+       ✓ ⭑ el segundo intento NO pisa los importes del primero  374ms
+       ✓ ⭑ UNA gana, TRES leen `ya_decidido`, y el dinero se escribe UNA sola vez  938ms
+ ✓ tests/integration/db/notificacion-evento-traspaso-migration.test.ts (28 tests) 1643ms
+     ✓ ⭑ la base tiene los tres valores nuevos, ANADIDOS al final (no recreados por detras)  635ms
+     ✓ ⭑ el DOWN con una fila de un evento nuevo ABORTA RUIDOSAMENTE (y no borra nada)  410ms
+ ✓ tests/integration/db/wallet-tienda-cobro.test.ts (13 tests) 2356ms
+ ✓ tests/integration/db/geografia-cascada-reversible.test.ts (10 tests) 1059ms
+ ✓ tests/integration/db/premio-ranking-idempotencia.test.ts (17 tests) 3965ms
+     ✓ R17/R18: registrar DOS VECES la misma fila deja UNA fila en el libro y UNA en la caja  398ms
+     ✓ `listarCierresAdmin` sin `deps.service` llama a `sumarPremiosVivosPorCierre`  1336ms
+ ✓ tests/integration/db/zona-pago-mensajero-rastro.test.ts (18 tests) 1996ms
+(node:20560) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:19832) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/devolucion-rechazadas-seleccion-sql-real.test.ts (5 tests) 1266ms
+ ✓ tests/integration/db/satelite-alcance-por-bodega-real.test.ts (6 tests) 2031ms
+     ✓ (a)(b)(c) las tres filas de la ficha, en una sola pagina del servicio real  820ms
+     ✓ todo lo que la pantalla enseña se puede filtrar: los estados observados salen del contrato  782ms
+(node:25408) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-comprobante-alcance.test.ts (8 tests) 2148ms
+ ✓ tests/integration/db/aporte-capital.test.ts (5 tests) 4047ms
+     ✓ R14/R21/R68/R78: registrar el saldo inicial pone la caja en «saldo»; anularlo la devuelve a «flujo»  3478ms
+(node:23096) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/multi-dia-271.test.ts (3 tests) 2466ms
+ ✓ tests/integration/db/detalle-en-lote-464.test.ts (6 tests) 6398ms
+     ✓ T4: conteo y filas del lote = listarOrdenesQueAportan cierre a cierre (7 criterios x 3 alcances)  1459ms
+     ✓ R14/R21/R22/R36 — caja: la hoja de movimientos es la de siempre y cada detalle = el de su fila  409ms
+     ✓ R21/R22/R34 — tienda en la oficina: cada detalle = el de su fila, y solo ordenes de esa tienda  455ms
+     ✓ R5/R21/R22/R34 — /mi-wallet: cada detalle = el de su fila, sin nombres de Ordenex ni de otra tienda  1726ms
+     ✓ R39/R40 — con el tope por debajo del detalle: limite «detalle» y CERO lecturas de ordenes  1337ms
+(node:19496) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/libro-caja-filtro-a-quien.test.ts (16 tests) 2980ms
+ ✓ tests/integration/db/gasto-fijo-cobro-migration.test.ts (8 tests) 7132ms
+     ✓ ⭑ `gasto_fijo_cobro` tiene ROW LEVEL SECURITY activada en el catalogo  631ms
+     ✓ ⭑ CONTROL: el céntimo MAS PEQUEÑO si entra, y con su precisión intacta  390ms
+     ✓ ⭑ borrar una plantilla con un cobro `pendiente` ABORTA RUIDOSAMENTE  1624ms
+     ✓ ⭑ TRAS CANCELARLO, el MISMO borrado funciona y el cobro cancelado sobrevive  1496ms
+     ✓ ⭑ borrada la plantilla, el cobro APROBADO conserva concepto, monto, periodo y decisión, y su movimiento sigue intacto  2365ms
+ ✓ tests/integration/db/eliminar-orden-pantalla-frontera-tienda.test.ts (5 tests) 1349ms
+     ✓ ⭑ R2: la tienda A pide borrar la orden de la B — cero filas afectadas y la fila sigue viva  478ms
+ ✓ tests/integration/db/gasto-fijo-cobro-aviso-dedupe.test.ts (6 tests) 3132ms
+     ✓ ⭑ la segunda emisión del mismo día no crea nada, y en la tabla queda UNA fila  2510ms
+ ✓ tests/integration/db/postulacion-recurso-migration.test.ts (32 tests) 1580ms
+     ✓ la tabla EXISTE en la base conectada (si no, la base no esta migrada)  550ms
+     ✓ el CHECK RECHAZA de verdad una atencion a medias (esto no lo prueba ninguna regex)  446ms
+ ✓ tests/integration/db/ajuste-caja-anulacion-461.test.ts (5 tests) 8229ms
+     ✓ R69: una correccion que SUMO se anula con un `egreso_ajuste` por su monto, con constancia e historial; la ganancia y la cifra vuelven al centimo y R7 se cumple  1456ms
+     ✓ R69: una correccion que RESTO se anula con un `ingreso_ajuste`; la cifra y la ganancia suben lo que habian bajado  1420ms
+     ✓ R70: el segundo intento es `ya_anulado` sin filas nuevas; el contra-asiento, un sueldo, el reverso de un egreso y un id inexistente son `no_encontrado`; sin acceso total, `forbidden` sin leer  2093ms
+     ✓ R69/R71 por la action: registrar y anular con el composition root real; el libro pinta el documento; `.strict()` rechaza `monto`  2426ms
+stdout | tests/integration/db/emisor-relaciones-anidadas.test.ts > FICHA 450 · el emisor de la tercera consulta > paso 2 del itinerario · `$transaction([…])` en forma de ARRAY > `ConteosPublicosRepository.contar()` (3 consultas) no solapa: 1 en vuelo
+[450] paso 2 · conteos publicos (3 en array):
+  consultas emitidas ......... 5
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/emisor-relaciones-anidadas.test.ts > FICHA 450 · el emisor de la tercera consulta > paso 2 del itinerario · `$transaction([…])` en forma de ARRAY > dos renders de la landing a la vez reparten en dos conexiones, sin solape
+[450] paso 2 · dos `contar()` concurrentes:
+  consultas emitidas ......... 10
+  conexiones usadas .......... 2
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/emisor-relaciones-anidadas.test.ts > FICHA 450 · el emisor de la tercera consulta > EL ANTES · pasos 4 y 5: la expansion de relaciones, que SI reproduce > el mismo `select` sobre el cliente AGRUPADO reparte entre conexiones y no solapa
+[450] paso 4 · snapshot sobre el POOL:
+  consultas emitidas ......... 7
+  conexiones usadas .......... 3
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+ ✓ tests/integration/db/zona-sinpe-migration.test.ts (32 tests) 3261ms
+     ✓ R6 — un INSERT sin SINPE lo rechaza POSTGRES, no el formulario  319ms
+     ✓ ⭑ R8 — un titular vacio, o espacio en blanco de CUALQUIER clase, lo rechaza la base  715ms
+(node:8168) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/notificacion-n1.test.ts (3 tests) 2454ms
+(node:16652) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+stdout | tests/integration/db/emisor-relaciones-anidadas.test.ts > FICHA 450 · el emisor de la tercera consulta > EL ANTES · pasos 4 y 5: la expansion de relaciones, que SI reproduce > EL EMISOR (lo que HABIA): el select de antes, dentro de una tx, pone 5 en vuelo y dispara el aviso
+[450] EMISOR · snapshot dentro de la tx:
+  consultas emitidas ......... 8
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 5
+  solapes anotados ........... 4
+  avisos de pg capturados .... 1
+[450] solapes: 2 en vuelo, 3 en vuelo, 4 en vuelo, 5 en vuelo
+
+stdout | tests/integration/db/emisor-relaciones-anidadas.test.ts > FICHA 450 · el emisor de la tercera consulta > EL DESPUES · el codigo REAL, importado del repositorio > `SNAPSHOT_SELECT` + `leerDescriptivosDeOrdenes` ponen 1 consulta en vuelo, y ninguna se solapa
+[450] DESPUES · snapshot secuenciado dentro de la tx:
+  consultas emitidas ......... 8
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 1
+
+ ✓ tests/integration/db/restablecer-contrasena-sql-real.test.ts (4 tests) 4180ms
+     ✓ R12/R13 — el hash guardado verifica la contrasena MOSTRADA, y la anterior ya no  754ms
+     ✓ R14 — ninguna otra columna del usuario objetivo cambia  1256ms
+     ✓ R16/R17 — el objetivo se queda con CERO sesiones y el otro usuario conserva las suyas  1098ms
+     ✓ R18 — el dispositivo de confianza del objetivo SIGUE existiendo  433ms
+ ✓ tests/integration/db/emisor-relaciones-anidadas.test.ts (6 tests) 3439ms
+       ✓ EL EMISOR (lo que HABIA): el select de antes, dentro de una tx, pone 5 en vuelo y dispara el aviso  1284ms
+       ✓ `SNAPSHOT_SELECT` + `leerDescriptivosDeOrdenes` ponen 1 consulta en vuelo, y ninguna se solapa  426ms
+       ✓ R5/R7: los DOS caminos congelan EXACTAMENTE los mismos valores  426ms
+ ✓ tests/integration/db/cobro-tienda-461-concurrencia.test.ts (2 tests) 2142ms
+     ✓ R68: dos registros SIMULTANEOS con la misma clave -> `ok` + `ya_registrado`; un debito, un cargo, un historial  1921ms
+(node:25388) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/dinero-aprobacion.test.ts (4 tests) 1752ms
+ ✓ tests/integration/db/api-key-eliminar.test.ts (10 tests) 6089ms
+     ✓ ⭑ R2: una key `inactiva` se lleva su fila, su cuenta dedicada y su webhook  1110ms
+     ✓ R2: una key SIN webhook se borra igual (el `deleteMany` de cero filas no es un error)  1078ms
+     ✓ ⭑⭑ R11: la MISMA key, `activa`, sale `bloqueada` y no se borra NADA  459ms
+     ✓ ⭑ R3: eliminar una key deja INTACTA a la otra, con su cuenta y su webhook  515ms
+     ✓ ⭑ R6: tras eliminar, el identificador vuelve a estar LIBRE  408ms
+     ✓ R21: un id que no existe -> `not_found`, sin efectos  1053ms
+ ✓ tests/integration/db/462/notificacion-evento-reprogramadas-migration.test.ts (13 tests) 1702ms
+     ✓ ⭑ tiene los dos valores nuevos, ANADIDOS al final (no recreados por detras)  420ms
+     ✓ ⭑ con una fila del evento nuevo ABORTA RUIDOSAMENTE y la fila SIGUE AHI  389ms
+     ✓ ⭑⭑ CONTROL — sin filas de los valores nuevos, el down corre ENTERO: quita SOLO los dos valores y los DOS indices sobreviven  558ms
+ ✓ tests/integration/db/454/registro-gestion-concurrencia-sql-real.test.ts (2 tests) 2966ms
+ ✓ tests/integration/db/cobro-tienda-461.test.ts (5 tests) 2553ms
+     ✓ R1/R7/R9/R20/R55: UNA action escribe el debito, el CARGO en la caja (mismo monto, mismo instante, con la tienda en la descripcion) y el historial; el libro ofrece el documento del cobro  2020ms
+ ✓ tests/integration/db/462/reprogramadas-retenidas-sql-real.test.ts (25 tests) 1412ms
+(node:21960) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/notificacion-evento-reparto-manana-migration.test.ts (27 tests) 1523ms
+     ✓ ⭑ la base tiene los dos valores nuevos, AÑADIDOS al final (no recreados por detrás)  411ms
+     ✓ ⭑ el DOWN con una fila de un evento nuevo ABORTA RUIDOSAMENTE (y no borra nada)  457ms
+     ✓ ⭑⭑ R38: CONTROL — sin filas de los valores nuevos, ese MISMO down corre ENTERO y los DOS índices SOBREVIVEN  328ms
+ ✓ tests/integration/db/454/caracterizacion/solicitar-cierre.test.ts (4 tests) 1602ms
+(node:23560) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/libro-caja-a-quien.test.ts (7 tests) 2451ms
+ ✓ tests/integration/db/orden-traspaso-migration.test.ts (15 tests) 5149ms
+     ✓ CONTROL de (b): con DOS mensajeros distintos la MISMA insercion pasa  757ms
+     ✓ ⭑⭑ (c) las CUATRO FK son RESTRICT: borrar cualquiera de los tres usuarios FALLA  721ms
+     ✓ CONTROL de (c): un usuario SIN rastro SI se puede borrar  1138ms
+     ✓ ⭑ el motivo admite 300 caracteres (el tope del borde) sin truncarse  1500ms
+(node:23396) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:26312) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:25068) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/estado-cuenta-servidor-458d.test.ts (13 tests) 2345ms
+(node:6336) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/liberacion-reprogramada-cierre-real.test.ts (4 tests) 6127ms
+     ✓ el filtro de fecha NO se movio: entran las 8 con fecha <= hoy y NO la futura (R11)  1129ms
+     ✓ R12 — el `cierre.estado` que sale es el de la gestion VIGENTE, no el de la anulada  1365ms
+     ✓ R12/R14 — la SONDA de visita real distingue la familia, y por la gestion correcta  1316ms
+     ✓ R12/R14/R15 — el SERVICIO, sobre lo que Postgres devuelve, libera exactamente lo que debe  1577ms
+(node:23636) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/pago-por-cuenta-tienda.test.ts (9 tests) 3495ms
+     ✓ R29/R30/R43/R53: una sola accion escribe documento, cargo, salida e historial con el MISMO monto e instante  1351ms
+     ✓ R97: el pago por cuenta NO aparece en la lista de pagos a la tienda  1138ms
+ ✓ tests/integration/db/wallet-anulacion-concurrencia.test.ts (2 tests) 2193ms
+     ✓ R67: un sueldo anulado dos veces a la vez → `ok` + `ya_anulado`, UNA constancia, UN contra-asiento, UN historial  1198ms
+     ✓ R67: un cobro por devolución a origen anulado dos veces a la vez → UNA constancia, DOS reversos y DOS creditos (no cuatro)  377ms
+ ✓ tests/integration/db/caja-caracterizacion-459.test.ts (23 tests) 5149ms
+     ✓ dos siembras en la misma transaccion escriben dos conjuntos IGUALES e independientes  2567ms
+ ✓ tests/integration/db/cierre-rechazo-tienda-aprobacion.test.ts (16 tests) 9584ms
+(node:23768) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:10316) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/caja-invariante-tiendas.test.ts (9 tests) 3654ms
+ ✓ tests/integration/db/liquidacion-pago-tienda-458-concurrencia.test.ts (2 tests) 2836ms
+     ✓ con UNA sola conexion en el pool, el pago a la tienda se registra y el restante es el del saldo leido bajo el candado  1100ms
+     ✓ el tope sigue decidiendose bajo el candado: por encima del saldo responde `excede` con lo disponible, sin escribir  1686ms
+ ✓ tests/integration/db/455/migracion.test.ts (16 tests) 7457ms
+ ✓ tests/integration/db/historial-accion-orden-total.test.ts (8 tests) 13437ms
+     ✓ ANTI-VACUIDAD: el corpus tiene 130 filas del MISMO instante, y cruza 5 cortes de pagina  2226ms
+     ✓ ⭑ R24: recorrer todas las paginas en `desc` no repite NI PIERDE ninguna fila  1743ms
+     ✓ ⭑ R24: lo mismo en `asc` — invertir el orden no puede reintroducir el agujero  2031ms
+     ✓ ⭑ R25: pedir DOS VECES la misma pagina devuelve exactamente lo mismo, en el mismo orden  2232ms
+     ✓ R23: dentro del grupo empatado, el orden relativo es el del `id` ASC en las dos direcciones  659ms
+     ✓ R22: la pagina trae `pageSize` filas y el `total` es el del CONJUNTO ENTERO  3144ms
+     ✓ ⭑ R30: la DESCARGA sale en el MISMO orden que la pantalla, fila a fila  1001ms
+     ✓ R26: el defecto (`desc`) pone lo MAS RECIENTE primero, y `asc` lo invierte  333ms
+(node:7096) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/dos-gestiones-vivas.test.ts (4 tests) 1420ms
+ ✓ tests/integration/db/costo-y-zona-api-415.test.ts (11 tests) 14855ms
+     ✓ R25: una orden con cierre APROBADO trae `costoReal` con los importes congelados  1756ms
+     ✓ R26: una orden con cierre SOLICITADO trae `costoReal: null` — y su fila SI existe  1569ms
+     ✓ R26: una orden con cierre RECHAZADO trae `costoReal: null`, y la fila NO se borro  1996ms
+     ✓ R27: con DOS cierres aprobados gana la fila MAS RECIENTE, y repetir da lo mismo  2353ms
+     ✓ R26: una orden SIN ninguna fila congelada trae `costoReal: null` — es el 28 %  535ms
+     ✓ R33: una fila congelada de OTRA tienda no alimenta el `costoReal` del dueno actual  3172ms
+     ✓ R28: una fila congelada con `tarifa_id IS NULL` trae los cinco `"0.00"`  996ms
+     ✓ R29: una fila con `tarifa_fulfillment IS NULL` trae `fulfillment: "0.00"` y el resto igual  482ms
+     ✓ R8/R24/R31: el LISTADO emite 8 consultas, y NO cambia entre `limit=1` y `limit=50`  953ms
+(node:18016) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/cierre-rechazado.test.ts (5 tests) 1726ms
+ ✓ tests/integration/db/devoluciones-represadas-aviso-dedupe.test.ts (6 tests) 3719ms
+     ✓ ⭑ una corrida deja 2 filas de administración + 1 por zona; repetida el mismo día, ninguna más  734ms
+     ✓ ⭑ con `entidad_id = <día>` a secas, la SEGUNDA zona queda muda  915ms
+     ✓ ⭑ CONTROL sobre el motor: con el ámbito dentro, las dos zonas conviven  1080ms
+     ✓ ⭑ y el rol SÍ está en la clave: `maestro` y `admin` conviven con la MISMA entidad  412ms
+ ✓ tests/integration/db/usuarios-filtro-busqueda.test.ts (11 tests) 11113ms
+     ✓ T-I0 (R1) — sin filtros salen TODAS, y el SUFIJO acota EXACTAMENTE al corpus sembrado  2338ms
+     ✓ T-I1 (R2) — encuentra por NOMBRE y por CORREO, con el fragmento en medio  569ms
+     ✓ T-I2 (R4) — un termino en minusculas encuentra un correo escrito en MAYUSCULAS  3147ms
+     ✓ T-I3 (R13/R17) — el rol recorta las filas Y el TOTAL cuenta solo lo filtrado  1004ms
+     ✓ T-I3b (R12/R13) — la seleccion MULTIPLE devuelve la union de los roles marcados  339ms
+     ✓ T-I3c (R14) — sin roles seleccionados, el listado NO se recorta por rol  355ms
+     ✓ T-I6 (R19) — el listado filtrado conserva columna y sentido de orden, tambien paginado  966ms
+     ✓ T-I7 (R3) — encuentra a quien SIN filtrar no cabria en la pagina que se esta viendo  1217ms
+ ✓ tests/integration/db/saldo-satelites.int.test.ts (17 tests) 6548ms
+     ✓ ⭑ R17/R18: las CUATRO poblaciones en una sola bodega, y el saldo las cuadra  2701ms
+     ✓ ⭑ R17/Q2: el SINPE NO cuenta — dos bodegas con el mismo general y distinto efectivo  437ms
+     ✓ R18: recibido de MAS -> el saldo queda NEGATIVO y no se recorta a cero  462ms
+     ✓ ⭑ R22/R24: el desglose compone el total y deriva `faltaPorRecibir` en el SERVIDOR  957ms
+     ✓ R24: `soloSinConciliar` recorta a la cola, y sin el vienen las dos poblaciones  1236ms
+ ✓ tests/integration/db/push-destinatarios-equivalencia.test.ts (4 tests) 3739ms
+     ✓ ⭑ los cuatro alcances dan EXACTAMENTE el mismo conjunto por las dos vias  1894ms
+     ✓ ⭑ de tres admins, el que leyo y el que descarto quedan fuera; el tercero sigue dentro  1324ms
+(node:13132) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/api-key-eliminar-tienda-destino.test.ts (2 tests) 2967ms
+     ✓ ⭑ R5: se borra la key y su cuenta dedicada; la TIENDA, sus ordenes y su webhook siguen  1310ms
+     ✓ las ordenes de la TIENDA no bloquean el borrado de la key (son de ella, no de la cuenta)  1073ms
+ ✓ tests/integration/db/wallet-cierres-selector.test.ts (8 tests) 3809ms
+     ✓ R11 tienda: solo los cierres con movimientos en ESA tienda, con día CR, mensajero y cuántos  517ms
+     ✓ m4: 33.000 cierres que casan la búsqueda no rompen el selector (tienda y mensajero)  2936ms
+ ✓ tests/integration/db/454/caracterizacion/confirmacion-fisica-238.test.ts (3 tests) 3409ms
+(node:16068) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/geografia-dta-2026-migration.test.ts (18 tests) 2554ms
+ ✓ tests/integration/db/liquidacion-fechas-cr-461.test.ts (2 tests) 2570ms
+     ✓ pago a una tienda: documento a 00:00Z, asientos a 06:00Z, y el rollup lo cuenta el dia del documento  914ms
+     ✓ escenario entero (pagos, reparto y anulaciones a tienda y a mensajero): ningun asiento de origen pago_tienda/pago_mensajero queda a medianoche UTC; todos al inicio del dia CR de su documento  972ms
+(node:27292) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/cohorte-carga-reloj.int.test.ts (4 tests) 3659ms
+     ✓ `segundosAcum` es la suma EXACTA en segundos y `n` su denominador  1457ms
+     ✓ el reloj arranca en `created_at`, no en la primera asignacion  853ms
+     ✓ el cubo `viva` trae el numerador AUSENTE, y no cero  967ms
+     ✓ el repositorio no devuelve promedios: solo numerador y denominador  322ms
+ ✓ tests/integration/db/cierre-bodega-desglose-por-tienda-sql-real.test.ts (4 tests) 2049ms
+     ✓ CONTROL POSITIVO: el corpus existe — DOS cierre_dia, CUATRO gestiones y DOS tiendas congeladas  1113ms
+ ✓ tests/integration/db/geografia-alta.test.ts (9 tests) 3717ms
+       ✓ provincia, canton y distrito: las tres filas existen bajo su padre  1211ms
+       ✓ ⭑ el alta es `ok`: no se bloquea por el estado del padre  741ms
+       ✓ «  San   José  » se guarda como «San José»  959ms
+       ✓ «san jose» choca con «San José» ya existente, y NO crea fila  332ms
+(node:1920) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/cierre-rechazo-tienda-totales.test.ts (6 tests) 1291ms
+ ✓ tests/integration/db/liquidacion-idempotencia.test.ts (39 tests) 2833ms
+ ✓ tests/integration/db/historial-accion-atomicidad.test.ts (22 tests) 1770ms
+(node:22672) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/caja-459-migration.test.ts (6 tests) 2319ms
+     ✓ (a) los catalogos de `public` son EXACTAMENTE los seeds, con los valores de la 459 al final  495ms
+     ✓ (d) P12/R98: el down dinamico quita SOLO los valores de la 459, conserva el ajeno y restaura todo  334ms
+     ✓ (e) R98: el down de la migracion 3, con una fila de pago por cuenta, ABORTA sin borrar nada  1230ms
+ ✓ tests/integration/db/454/caracterizacion/ayuda-ciclo.test.ts (7 tests) 2181ms
+ ✓ tests/integration/db/notificacion-evento-geocodificacion-caida-migration.test.ts (27 tests) 3330ms
+     ✓ ⭑ la base tiene los dos valores nuevos, y AÑADIDOS al final (no recreados por detrás)  609ms
+     ✓ ⭑ R9: dos emisiones el MISMO día CR dejan DOS filas en total, no cuatro  1404ms
+     ✓ ⭑ el DOWN con una fila del evento nuevo ABORTA RUIDOSAMENTE (y no borra nada)  415ms
+(node:25288) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/analytics-daily-job.test.ts (29 tests) 3069ms
+       ✓ el dia sin ordenes escribe CERO filas y no falla (R46), lo que ademas prueba el aislamiento  889ms
+ ✓ tests/integration/db/454/aplicacion-al-aprobar-sql-real.test.ts (7 tests) 3054ms
+     ✓ R7/R8/R10/R14: aplica cada resultado con su familia y su actor; la legada no se toca  925ms
+ ✓ tests/integration/db/reparto-manana-aviso-dedupe.test.ts (8 tests) 2176ms
+     ✓ ⭑⭑ R24: dos emisiones CONCURRENTES sobre CONEXIONES DISTINTAS dejan UNA fila, sin error  493ms
+(node:12988) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/ayuda-evento-sql-real.test.ts (9 tests) 1417ms
+(node:7748) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:21796) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/kardex-cuentas-468.test.ts (1 test) 1479ms
+     ✓ T5 R9/R11/R13/R15/R16: tienda, mensajero y bodega — saldo por fila, cuadre fila a fila y chip  605ms
+ ✓ tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts (18 tests) 1296ms
+ ✓ tests/integration/db/busqueda-comportamiento.test.ts (38 tests) 2663ms
+(node:20336) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-documento-comprobante-458.test.ts (5 tests) 1904ms
+ ✓ tests/integration/db/vista-filtro-migration.test.ts (26 tests) 2254ms
+     ✓ ⭑ R1: la tabla existe, con su forma EXACTA  501ms
+     ✓ ⭑ R11: la MISMA persona no puede repetir nombre en la MISMA superficie  319ms
+     ✓ ⭑ AUTOCOMPROBACION: el detector distingue un TEXT de un ENUM (si no, todo esto seria mudo)  577ms
+(node:17112) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:25900) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-458-migration.test.ts (8 tests) 2329ms
+     ✓ (a) los catalogos son EXACTAMENTE los seeds, con los seis valores de la 458 AL FINAL, valor a valor  438ms
+     ✓ (c) R92/R79: las tres tablas con RLS; anotacion 1:1 y sin blancos; comprobante con UN destino y uno por destino; FK RESTRICT  466ms
+     ✓ (c) R92/R66: `rechazo_tienda_cobro_anulacion` — UNA por cobro, motivo no vacio, RESTRICT sobre el cobro y quien anulo  999ms
+ ✓ tests/integration/db/reparto-manana-repository.test.ts (10 tests) 3668ms
+     ✓ ⭑ R1: 3 para mañana + 2 para hoy + 1 borrada para mañana ⇒ el conteo da 3  706ms
+     ✓ ⭑⭑ R3: a las 23:50 CR del 11, la del 12 ENTRA y la del 11 NO  394ms
+     ✓ ⭑⭑ R3: y las DOS mitades por separado, para que ninguna pueda pasar por casualidad  401ms
+     ✓ ⭑ R4: las órdenes de OTRO mensajero no entran en el conteo de éste  1029ms
+     ✓ ⭑ SIN SEMBRAR NADA, el conteo de un mensajero nuevo da CERO  652ms
+ ✓ tests/integration/db/efectividad-por-rol.int.test.ts (6 tests) 1669ms
+     ✓ ANTI-VACIO · con alcance GLOBAL las tres poblaciones estan ahi (si no, lo de abajo no prueba nada)  977ms
+ ✓ tests/integration/db/libro-caja-documentos-459.test.ts (1 test) 3778ms
+     ✓ R66/R67: el original vigente y el anulado llevan su documento; el contra-asiento no  3736ms
+(node:27364) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/efecto-movimiento-predice.test.ts (5 tests) 2279ms
+(node:27044) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-anulacion-458.test.ts (10 tests) 3144ms
+(node:19116) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/usuario-preferencia-migration.test.ts (19 tests) 2288ms
+     ✓ ⭑ R1: la tabla existe, con su forma EXACTA  667ms
+     ✓ ⭑ quien ya tenia suscripcion queda con la preferencia puesta  489ms
+     ✓ ⭑ CASCADE de verdad, en un esquema desechable con la tabla REAL clonada  327ms
+ ✓ tests/integration/db/454/caracterizacion/corte-no-barre-gestionadas.test.ts (5 tests) 2265ms
+(node:2212) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/libro-caja-revision-458e.test.ts (6 tests) 2541ms
+(node:11088) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/estado-cuenta-busqueda-orden-463.test.ts (11 tests) 3547ms
+ ✓ tests/integration/db/orden-monto-cobrar-entero-migration.test.ts (19 tests) 1425ms
+(node:25496) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/snapshot-correccion.test.ts (3 tests) 2580ms
+ ✓ tests/integration/db/cierre-sin-gestion-sql-real.test.ts (9 tests) 5779ms
+     ✓ R1/R7: devuelve las CUATRO barridas de ESTE cierre y ninguna mas  1144ms
+     ✓ R7: el cierre B (mismo mensajero) trae SOLO lo suyo, y el C SOLO lo suyo  2780ms
+     ✓ R12: el orden es por guia ascendente con los `null` al final, y es el MISMO dos veces  701ms
+ ✓ tests/integration/db/premio-ranking-devengo-migration.test.ts (32 tests) 4251ms
+     ✓ R14: `devengo` + `premio_ranking` (con su `premio_dia`) ENTRA  2381ms
+     ✓ `pago` + `premio_ranking` es RECHAZADO por el CHECK tipo↔categoria (23514)  701ms
+     ✓ CONTRAPRUEBA: las 6 combinaciones LEGITIMAS del libro entran todas  309ms
+ ✓ tests/integration/db/geografia-renombrado.test.ts (15 tests) 1029ms
+(node:18612) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:23936) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/cierre-descarga-intentos-entrega-sql-real.test.ts (4 tests) 1852ms
+     ✓ cada fila trae el conteo VIGENTE de su orden, y ninguna trae el de la tienda  322ms
+     ✓ una gestion ANULADA no cuenta: son los vigentes, no todos los que hubo  396ms
+ ✓ tests/integration/db/cierre-desglose-por-tienda-sql-real.test.ts (4 tests) 1886ms
+     ✓ CONTROL POSITIVO: el corpus existe — tres gestiones y DOS tiendas congeladas distintas  404ms
+ ✓ tests/integration/db/busqueda-usa-indice.test.ts (14 tests) 3119ms
+       ✓ el findMany se resuelve por `orden_busqueda_texto_trgm_idx`, no recorriendo la tabla  813ms
+ ✓ tests/integration/db/tarifa-zona-is-default-migration.test.ts (17 tests) 2687ms
+     ✓ aborta si una tarifa borrada esta congelada en un cierre, y NO la borra  498ms
+     ✓ aborta con un mensaje propio si hay pares (zona, tienda) repetidos  569ms
+(node:26152) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-avisos-y-corte.test.ts (3 tests) 1004ms
+ ✓ tests/integration/db/drop-tarifa-status-migration.test.ts (14 tests) 1452ms
+ ✓ tests/integration/db/geocode-recuperacion.test.ts (12 tests) 2409ms
+     ✓ ⭑ 25 jobs muertos con marcador + una respuesta satisfactoria → vuelven a la cola sin tocar la base a mano  518ms
+     ✓ ⭑ R21: con 25 candidatos y máximo 5, se recuperan EXACTAMENTE 5  307ms
+(node:27184) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/reprogramadas-liberacion.test.ts (3 tests) 1499ms
+(node:7228) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/analitica-anulacion-rechazo-458.test.ts (4 tests) 2029ms
+(node:25900) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/libro-caja-revision-458c.test.ts (8 tests) 1886ms
+ ✓ tests/integration/db/estado-cuenta-concurrencia-458.test.ts (1 test) 1926ms
+     ✓ la lectura responde ok con la foto de ANTES (1 000,00), cuadra, y la siguiente ya ve el cierre (1 450,00)  1827ms
+(node:27572) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/cohorte-carga-equivalencia.int.test.ts (3 tests) 2058ms
+     ✓ dia a dia, la suma de los cubos es el conteo de `contarCargadasPorDia`  1605ms
+ ✓ tests/integration/db/satelite-bodega-alcance-real.test.ts (4 tests) 2893ms
+     ✓ un adminSatelite NO ve las ordenes de otra zona: ni en las filas, ni en el total  2040ms
+     ✓ lo que no es de esta bodega no sale: ni por estado ajeno ni por no haber pasado por ella  426ms
+ ✓ tests/integration/db/deshacer-gestion-conserva-reserva.int.test.ts (8 tests) 2899ms
+     ✓ ⭑ R17: con `fecha_reparto = MAÑANA`, tras deshacer SIGUE siendo mañana  1098ms
+     ✓ ⭑ R16: y `asignado_at` SI se reescribio — el `SET` no es que no toque nada  341ms
+ ✓ tests/integration/db/orden-eliminada-actor-admin.test.ts (5 tests) 1043ms
+(node:26664) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-registro-comprobante-458.test.ts (9 tests) 1967ms
+(node:15816) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/correccion-69.test.ts (6 tests) 1661ms
+ ✓ tests/integration/db/push-cupo-carrera.test.ts (5 tests) 2235ms
+     ✓ autocomprobacion: el repositorio REAL escribe en el esquema desechable  386ms
+     ✓ ⭑ `Promise.all` de dos emisiones sobre DOS CONEXIONES: un cupo, un encolado  620ms
+ ✓ tests/integration/db/geografia-activo-migration.test.ts (14 tests) 1299ms
+(node:17208) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/devolucion-rechazadas-139.test.ts (3 tests) 1302ms
+ ✓ tests/integration/db/cierre-rechazado-aviso-dedupe.test.ts (6 tests) 2250ms
+     ✓ ⭑ R9: dos emisiones CONCURRENTES sobre CONEXIONES DISTINTAS dejan UNA fila, sin error  647ms
+     ✓ ⭑ R10: dos mensajeros rechazados el mismo dia reciben CADA UNO el suyo  476ms
+(node:5020) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/api-lectura.test.ts (9 tests) 1633ms
+(node:23876) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/alcance-satelite-y-sf001.test.ts (3 tests) 2292ms
+(node:26584) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/como-quedo.test.ts (8 tests) 2500ms
+ ✓ tests/integration/db/cohorte-carga-fechas.int.test.ts (4 tests) 1701ms
+     ✓ agrupa cada orden por el dia calendario CR de su `created_at`  1424ms
+ ✓ tests/integration/db/historial-accion-zona-sinpe-migration.test.ts (17 tests) 2149ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los tipos del catalogo  740ms
+ ✓ tests/integration/db/seed-zonas-cruza-por-codigo.test.ts (8 tests) 2041ms
+       ✓ ⭑ el seed lo encuentra por su codigo aunque el .xlsx traiga el nombre viejo  1189ms
+ ✓ tests/integration/db/gestion-desde-ayuda-dia-reserva.int.test.ts (5 tests) 1363ms
+(node:16396) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/analytics-daily-guards.test.ts (26 tests) 3978ms
+     ✓ solo los modulos declarados del escritor y el catalogo de la 135 nombran la tabla  664ms
+     ✓ un SOLO archivo puede ACCEDER a la tabla: el repositorio del escritor  640ms
+     ✓ un solo archivo puede LEER la tabla: el lector declarado de la 126  408ms
+     ✓ no hay un SEGUNDO escritor: la escritura vive en dos metodos del repositorio (R29/R30)  627ms
+     ✓ no hay repositorio, servicio ni interfaz con el nombre de la TABLA  1247ms
+     ✓ no hay ni una agregacion de la columna fuera de una fecha unica  348ms
+ ✓ tests/integration/db/mi-wallet-resumen-458d.test.ts (5 tests) 1350ms
+ ✓ tests/integration/db/454/caracterizacion/cambio-dia.test.ts (2 tests) 1130ms
+ ✓ tests/integration/db/462/aviso-reprogramadas-dedupe.test.ts (3 tests) 829ms
+     ✓ ⭑ una corrida deja 2 filas centrales + 1 por zona; repetida el mismo dia, ninguna mas (R11/R12)  676ms
+ ✓ tests/integration/db/454/retiro-estados-migration.test.ts (13 tests) 1832ms
+(node:14424) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/deshacer.test.ts (5 tests) 1833ms
+ ✓ tests/integration/db/correccion-resultado-gestion-migration.test.ts (17 tests) 2154ms
+     ✓ `orden_historial_origen_tipo` de `public` tiene exactamente los del SEED  628ms
+(node:4036) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/historial-accion-cobro-tienda-migration.test.ts (17 tests) 1559ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los del catalogo  544ms
+ ✓ tests/integration/db/454/rastreo-pendiente-sql-real.test.ts (9 tests) 2734ms
+ ✓ tests/integration/db/cobro-tienda-461-completar-migration.test.ts (6 tests) 3148ms
+     ✓ R31/R32/R33: una linea por cobro legado —mismo monto, MISMO instante, misma persona, con la tienda—; ni para el reclasificado ni para el que ya tiene cargo; y dos pasadas dejan una  740ms
+     ✓ R34: si el recuento final no cuadra con los candidatos, falla y no deja NADA escrito  990ms
+     ✓ R36: el `down` borra EXACTAMENTE las lineas completadas y ninguna otra; con un reverso de anulacion, ABORTA sin borrar  1052ms
+(node:27124) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/rastreo-y-historial-legado.test.ts (4 tests) 1948ms
+ ✓ tests/integration/db/corregir-conciliacion.int.test.ts (10 tests) 2381ms
+     ✓ ⭑ R1: corregir una incompleta cambia el monto y la deja conciliada (aprobado, conciliado_at no nulo)  1646ms
+ ✓ tests/integration/db/454/orden-evento-migration.test.ts (15 tests) 4787ms
+     ✓ un `gestion_*` SIN gestion no es escribible  1987ms
+     ✓ la familia de aplicacion: obligatoria en `gestion_registrada`, solo de calle, y prohibida en el resto  1294ms
+(node:13904) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/intentos-segunda-via-sql-real.test.ts (6 tests) 1424ms
+ ✓ tests/integration/db/correccion-dia-reparto-historial.int.test.ts (9 tests) 1597ms
+     ✓ ⭑ R40: TRES filas del MISMO instante salen desempatadas por `id`, no por como se insertaron  709ms
+ ✓ tests/integration/db/historial-accion-zona-pago-mensajero-migration.test.ts (17 tests) 2098ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los tipos del catalogo  457ms
+     ✓ el rollback FALLA ruidosamente y NO borra ni reescribe esa fila  316ms
+ ✓ tests/integration/db/analytics-daily-backfill.test.ts (6 tests) 1646ms
+       ✓ un rango de tres dias sembrados se recomputa entero y queda estable  1134ms
+ ✓ tests/integration/db/aviso-agregado-repository.test.ts (11 tests) 1455ms
+     ✓ ⭑ (a) el conteo COINCIDE con el del listado de `/novedades` de esa tienda  778ms
+     ✓ ⭑ (e) R45: con umbral 3, la de 2 dias NO entra y la de 4 dias SI  301ms
+(node:25176) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/deshacer-ramas-sql-real.test.ts (6 tests) 1437ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-tablero-dia.test.ts (3 tests) 2164ms
+(node:17372) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/asistente-uso-diario.int.test.ts (11 tests) 1469ms
+ ✓ tests/integration/db/454/correccion-ramas-sql-real.test.ts (6 tests) 1793ms
+(node:17112) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/abono-tienda-457-migration.test.ts (6 tests) 1719ms
+     ✓ (a) los cinco catalogos son EXACTAMENTE los seeds, con los valores de la 457 AL FINAL, valor a valor  613ms
+     ✓ (b) los CHECK admiten los cuatro pares de la 457 y RECHAZAN los invertidos (23514)  574ms
+ ✓ tests/integration/db/corregir-datos-cliente.chat.test.ts (2 tests) 983ms
+     ✓ ⭑ R20/R21: el numero NUEVO resuelve a la orden y el ANTERIOR ya no  306ms
+ ✓ tests/integration/db/zona-sinpe-permisos.test.ts (3 tests) 884ms
+ ✓ tests/integration/db/caja-tesoreria-idempotencia.test.ts (10 tests) 1272ms
+     ✓ R14/R48: aprobar DOS veces el mismo cierre inserta UNA fila de contra-entrega  685ms
+     ✓ R21: emitir DOS veces el egreso del mismo pago inserta UNA fila (misma clave de origen)  318ms
+ ✓ tests/integration/db/cierres-filtro-estado-sql-real.test.ts (7 tests) 1198ms
+ ✓ tests/integration/db/historial-accion-conciliacion-bodega-migration.test.ts (18 tests) 1910ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los tipos del catalogo  586ms
+ ✓ tests/integration/db/notificacion-evento-webhook-suscripcion-migration.test.ts (22 tests) 1284ms
+     ✓ la base tiene los ONCE eventos y los NUEVE entidad_tipo, con el de esta ficha y el posterior AL FINAL  528ms
+(node:5308) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/cierre-bodega-sf001-sql-real.test.ts (4 tests) 1522ms
+(node:27384) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/dinero-aprobacion.test.ts (3 tests) 2252ms
+(node:23968) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/webhook-estado.test.ts (5 tests) 2005ms
+ ✓ tests/integration/db/analitica-operativa-equivalencia.test.ts (2 tests) 1449ms
+     ✓ el intradia de una fecha cerrada reproduce exactamente las filas del rollup  1065ms
+     ✓ y con el dia VACIO los dos caminos coinciden tambien: cero filas y cero filas  381ms
+(node:3724) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/kpi-portal.test.ts (4 tests) 2276ms
+ ✓ tests/integration/db/geografia-registro-migration.test.ts (11 tests) 1270ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los 47 del catalogo  456ms
+ ✓ tests/integration/db/libro-caja-busqueda-orden-463.test.ts (9 tests) 1914ms
+ ✓ tests/integration/db/consolidacion-concurrente.int.test.ts (5 tests) 4419ms
+     ✓ ⭑ R6: DOS consolidaciones `solicitado` en la MISMA zona conviven (el indice unico se fue)  2244ms
+     ✓ ⭑ R6: y una TERCERA tambien — no hay tope escondido en ningun sitio  1429ms
+     ✓ ⭑ R7: la segunda consolidacion sobre la MISMA cola LANZA y NO deja fila  579ms
+ ✓ tests/integration/db/geografia-codigo-dta-migration.test.ts (24 tests) 1445ms
+ ✓ tests/integration/db/liquidacion-reparto-migration.test.ts (24 tests) 1004ms
+(node:17612) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/estado-cuenta-cierre-pagos-172r52.test.ts (6 tests) 1450ms
+ ✓ tests/integration/db/454/caracterizacion/traspaso.test.ts (3 tests) 1425ms
+(node:27012) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:27556) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/corte-excluye-pendientes-sql-real.test.ts (5 tests) 1678ms
+(node:25048) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/historial-accion-zona-central-migration.test.ts (13 tests) 1339ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los tipos del catalogo  599ms
+ ✓ tests/integration/db/455/caracterizacion/intentos-y-tope.test.ts (3 tests) 1901ms
+ ✓ tests/integration/db/cierre-descarga-fechas-sql-real.test.ts (3 tests) 3283ms
+     ✓ emite el dia de reparto de la orden, y lo deja VACIO cuando la columna esta en NULL  819ms
+     ✓ las tres fechas de una fila son TRES dias distintos y ninguna se contamina  879ms
+(node:1212) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/tope-276.test.ts (5 tests) 1331ms
+ ✓ tests/integration/db/cohorte-carga-alcance.int.test.ts (5 tests) 4518ms
+     ✓ con alcance de TIENDA solo salen las de su tienda  1410ms
+     ✓ con alcance de ZONA solo salen las de su zona (el adminSatelite VE la seccion)  983ms
+     ✓ con alcance GLOBAL salen las cuatro  875ms
+     ✓ los tres recortes son DISTINTOS entre si: el alcance esta haciendo algo  349ms
+     ✓ la condicion de ALCANCE sostiene el recorte ella sola, sin la faceta del filtro  738ms
+ ✓ tests/integration/db/orden-clave-remision-no-lanza.test.ts (4 tests) 1964ms
+     ✓ las NUEVE remisiones raras se crean UNA A UNA, sin una sola excepcion  909ms
+     ✓ un LOTE con una fila rara en medio entra COMPLETO (la carga masiva no se cae)  757ms
+(node:21672) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/portal-listas-mapa-ruta.test.ts (3 tests) 1224ms
+ ✓ tests/integration/db/orden-mensajero-meta-drop-nota-migration.test.ts (13 tests) 883ms
+ ✓ tests/integration/db/analitica-operativa-indices.test.ts (6 tests) 1902ms
+     ✓ el indice esta aplicado en la base (si no, no hay nada que medir)  706ms
+     ✓ la consulta intradia de gestiones usa indice  671ms
+     ✓ el caso DISCRIMINA: sin ningun indice aplicable el plan vuelve al Seq Scan  512ms
+ ✓ tests/integration/db/cohorte-carga-desenlaces.int.test.ts (5 tests) 2288ms
+     ✓ los cubos que salen son EXACTAMENTE los cuatro del contrato  1151ms
+     ✓ `rechazada` y `devuelta` cuentan como VIVAS, no como devueltas  323ms
+     ✓ la ultima GESTION vigente no decide el cubo: lo decide la transicion  500ms
+ ✓ tests/integration/db/zona-central-guarda-y-rastro.test.ts (17 tests) 5463ms
+     ✓ ⭑ R1: la marca SOBREVIVE a su ausencia en el payload  1035ms
+     ✓ ⭑ R4: el resto del guardado SI se aplica entero — nombre, distritos y tarifas  355ms
+     ✓ ⭑ R3/R5/R19: `false` EXPLICITO sobre la unica central se RECHAZA, y NADA cambia  732ms
+     ✓ ⭑ R12 en `create`: crear con la marca habiendo otra central escribe DOS filas  525ms
+     ✓ ⭑ R10: la zona central SIN ordenes ni usuarios NO se borra, y no pierde nada  331ms
+     ✓ R10 acotado: una zona NO central y libre se sigue borrando (`ok`)  496ms
+ ✓ tests/integration/db/composicion-detalle-postgres.test.ts (6 tests) 919ms
+     ✓ R18/R33: el detalle de «Pagos a mensajeros» trae SOLO su categoria  645ms
+ ✓ tests/integration/db/cierres-admin-retornables-sql-real.test.ts (5 tests) 1351ms
+     ✓ R2/R3: el SQL real devuelve las tres clases que vuelven y NADA mas  321ms
+ ✓ tests/integration/db/job-repository-reparto-por-tipo.int.test.ts (9 tests) 1342ms
+       ✓ la ventana del test contiene EXACTAMENTE el corpus sembrado (aislamiento medido)  909ms
+ ✓ tests/integration/db/reclasificacion-459-migration.test.ts (6 tests) 1488ms
+     ✓ R83 (esta base): la migracion REAL ya aplicada aqui no escribio nada — ningun id aprobado existe  958ms
+ ✓ tests/integration/db/454/caracterizacion/tablero-dia.test.ts (3 tests) 1187ms
+ ✓ tests/integration/db/habilitacion-api-migration.test.ts (21 tests) 1541ms
+(node:11332) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/webhook-estado.test.ts (3 tests) 1681ms
+ ✓ tests/integration/db/455/caracterizacion/rastreo.test.ts (5 tests) 2408ms
+ ✓ tests/integration/db/wallet-461-fechas-cr-migration.test.ts (2 tests) 1734ms
+     ✓ mueve +6 h SOLO los asientos de pago a medianoche exacta, en los tres libros; los controles no se tocan; dos pasadas dejan lo mismo; el down los devuelve  1670ms
+ ✓ tests/integration/db/recoger-lote-dia-reserva.int.test.ts (7 tests) 1611ms
+     ✓ R1/R8: de las cuatro, transicionan TRES — la reservada para mañana NO  893ms
+ ✓ tests/integration/db/caja-tesoreria-migration.test.ts (31 tests) 936ms
+     ✓ R45: un INSERT incoherente (ingreso con categoria de egreso) devuelve 23514  513ms
+ ✓ tests/integration/db/notificacion-evento-cierre-rechazado-migration.test.ts (26 tests) 1295ms
+     ✓ ⭑ la base tiene los dos valores nuevos, AÑADIDOS al final (no recreados por detrás)  394ms
+     ✓ ⭑ R25: el DOWN con una fila de un evento nuevo ABORTA RUIDOSAMENTE (y no borra nada)  519ms
+(node:1064) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/liberacion-por-cierre.test.ts (3 tests) 1235ms
+(node:15576) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/intentos-conteo.test.ts (2 tests) 1849ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-conteos.test.ts (4 tests) 1404ms
+ ✓ tests/integration/db/historial-accion-q1-ubicacion.test.ts (5 tests) 1157ms
+     ✓ ⭑ (1) corregir la DIRECCION deja EXACTAMENTE UNA fila `orden_ubicacion_corregida`  381ms
+ ✓ tests/integration/db/geografia-registro-accion.test.ts (10 tests) 2809ms
+       ✓ ⭑ R54: la etiqueta es la CADENA de ascendientes  1212ms
+(node:13516) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:25004) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-etiqueta-historial-458.test.ts (2 tests) 905ms
+     ✓ cobro a una tienda: el registro y la anulacion llevan la MISMA etiqueta, y es la de la tabla  747ms
+ ✓ tests/integration/db/geografia-historico-intacto.test.ts (6 tests) 1243ms
+ ✓ tests/integration/db/tarifas-reconciliar-par-zona-tienda-migration.test.ts (8 tests) 920ms
+ ✓ tests/integration/db/eliminar-orden-api-frontera-tienda.test.ts (1 test) 1140ms
+ ✓ tests/integration/db/cierre-rechazado-jornada-sql-real.test.ts (6 tests) 1188ms
+(node:22660) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/wallet-caracterizacion-458.test.ts (13 tests) 1389ms
+ ✓ tests/integration/db/caja-clasificacion-459.test.ts (1 test) 1299ms
+     ✓ R9/R90: Postgres acepta cada concepto SOLO con el tipo que declara la tabla  1250ms
+(node:26360) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/estado-cuenta-saldo-corrido.test.ts (4 tests) 1891ms
+ ✓ tests/integration/db/454/carga-mensajero-pendiente-sql-real.test.ts (5 tests) 1342ms
+ ✓ tests/integration/db/cobertura-repository.test.ts (2 tests) 1104ms
+(node:24968) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/filtro-satelite-por-codigo.test.ts (4 tests) 1019ms
+(node:15576) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/correccion-ayuda-abierta-sql-real.test.ts (4 tests) 999ms
+ ✓ tests/integration/db/455/rastreo-retirado-y-pendiente-sql-real.test.ts (7 tests) 1316ms
+ ✓ tests/integration/db/cierre-bodega-resumen-pendientes.test.ts (6 tests) 1303ms
+     ✓ ⭑ R18: el resumen devuelve EXACTAMENTE la cuenta y la suma de lo que la consolidacion lista  653ms
+     ✓ R19: el importe viaja como STRING de escala 2, sin pasar por coma flotante  497ms
+ ✓ tests/integration/db/gestion-orden-pago-migration.test.ts (31 tests) 1171ms
+ ✓ tests/integration/db/api-key-eliminabilidad.test.ts (9 tests) 925ms
+ ✓ tests/integration/db/cohorte-carga-ultima-terminal.int.test.ts (2 tests) 1061ms
+     ✓ una orden entregada, revertida y devuelta cuenta UNA vez y en `devuelta_a_tienda`  589ms
+     ✓ dos transiciones terminales con el MISMO `created_at` dan un resultado estable  403ms
+ ✓ tests/integration/db/454/gestion-pendiente-sql-real.test.ts (11 tests) 1317ms
+(node:10944) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/caracterizacion/rechazos-tienda-425.test.ts (3 tests) 1094ms
+ ✓ tests/integration/db/cohorte-carga-ventana.int.test.ts (2 tests) 827ms
+     ✓ una orden cargada DENTRO y cerrada DESPUES del `hasta` cuenta igual, y en su cubo terminal  624ms
+(node:22660) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/novedades-y-ayuda.test.ts (4 tests) 918ms
+ ✓ tests/integration/db/geografia-renombrado-migration.test.ts (11 tests) 1602ms
+     ✓ `historial_accion_tipo` de `public` tiene exactamente los 48 del catalogo  764ms
+ ✓ tests/integration/db/webhook-evidencias-url-resuelve-sql-real.test.ts (4 tests) 1043ms
+     ✓ 406/R3: orden CON guia -> el segmento resuelve por `num_guia` a ESA fila  387ms
+ ✓ tests/integration/db/orden-nota-migration.test.ts (16 tests) 1231ms
+ ✓ tests/integration/db/cobro-tienda-461-migration.test.ts (5 tests) 1343ms
+     ✓ (a) los catalogos son EXACTAMENTE los seeds, con los valores de la 461 AL FINAL, valor a valor  523ms
+     ✓ (b) los CHECK admiten los tres pares de la 461 y RECHAZAN los invertidos (23514)  528ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-cron-devoluciones.test.ts (2 tests) 940ms
+(node:13624) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/tarifa-fk-cascade-migration.test.ts (8 tests) 1322ms
+ ✓ tests/integration/db/455/caracterizacion/plantilla-estatus.test.ts (3 tests) 1179ms
+ ✓ tests/integration/db/cierre-bodega-conciliacion.int.test.ts (14 tests) 1254ms
+     ✓ ⭑ (a) `aprobado` SIN datos de marca -> la base lo RECHAZA (R15)  586ms
+     ✓ ⭑ (b) datos de marca SIN `aprobado` -> la base lo RECHAZA (R15)  337ms
+ ✓ tests/integration/db/455/caracterizacion/sql-crudo-analitica.test.ts (5 tests) 1000ms
+ ✓ tests/integration/db/geografia-unicidad.test.ts (8 tests) 1142ms
+ ✓ tests/integration/db/cierre-aprobar-el-mas-viejo-desbloquea.test.ts (1 test) 898ms
+ ✓ tests/integration/db/454/registro-gestion-sin-transicion-sql-real.test.ts (5 tests) 1341ms
+(node:6444) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/estado-cuenta-pago-tienda-172r53.test.ts (4 tests) 1310ms
+ ✓ tests/integration/db/vista-filtro.test.ts (8 tests) 2278ms
+     ✓ ⭑ R2: `eliminar` con el id de OTRA persona borra CERO filas  381ms
+     ✓ ⭑ R14/R11: renombrar a un nombre que ya tiene otra vista suya se rechaza  596ms
+ ✓ tests/integration/db/wallet-filtro-dia-cr-461.test.ts (4 tests) 1048ms
+     ✓ caja: filtrar el dia D devuelve las tres filas de D y ninguna de los bordes; D-1 y D+1 devuelven las suyas  762ms
+ ✓ tests/integration/db/chat-entrante-telefono-cr.test.ts (13 tests) 2534ms
+     ✓ resuelve la orden con el telefono guardado como internacional no CR (573001119999)  383ms
+     ✓ resuelve la orden con el telefono guardado como internacional no CR con + (+573001119999)  595ms
+(node:23880) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/novedades-predicado-sql-real.test.ts (5 tests) 1002ms
+ ✓ tests/integration/db/mi-wallet-cierres-alcance.test.ts (4 tests) 1018ms
+     ✓ control de no-vacuidad: la tienda A tiene al menos un cierre en su lista  356ms
+ ✓ tests/integration/db/notificacion-bloqueo-otro-cierre-avisa.test.ts (1 test) 829ms
+(node:14404) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/abono-tienda-457-repositorio.test.ts (1 test) 955ms
+     ✓ obtenerPorId / obtenerPorClave devuelven SU documento (y null a lo que no existe); P2002 -> clave_repetida / ya_anulado; estadoDeDocumentos; historial sin texto libre  885ms
+ ✓ tests/integration/db/geografia-ordenes-sin-entregar.test.ts (10 tests) 1181ms
+ ✓ tests/integration/db/wallet-461-idempotencia-clave.test.ts (5 tests) 1127ms
+(node:24556) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/454/webhook-evento-sql-real.test.ts (5 tests) 1077ms
+ ✓ tests/integration/db/wallet-fecha-elegida.test.ts (4 tests) 1216ms
+     ✓ R22/R24: un gasto fechado AYER se guarda a las 06:00Z de ayer, y `created_at` es el presente  968ms
+ ✓ tests/integration/db/caja-backfill.test.ts (5 tests) 1245ms
+     ✓ R39: dos ejecuciones seguidas — la SEGUNDA inserta 0 y ningun importe cambia  945ms
+ ✓ tests/integration/db/wallet-461-migration.test.ts (5 tests) 1057ms
+     ✓ (a) el enum del historial es EXACTAMENTE el catalogo, y `wallet_movimiento_manual_anulado` cierra lo de la 461  473ms
+     ✓ (c) R64/R71: `ajuste_caja_anulacion` con RLS, UNIQUE(movimiento_id), CHECK del motivo y FK RESTRICT  394ms
+ ✓ tests/integration/db/455/interruptor-codigos.test.ts (3 tests) 841ms
+ ✓ tests/integration/db/catalogo-consulta-acota-esquema.test.ts (6 tests) 570ms
+ ✓ tests/integration/db/cierre-aprobacion-libera-solo-lo-suyo.test.ts (2 tests) 1053ms
+ ✓ tests/integration/db/wallet-conceptos-con-movimientos.test.ts (5 tests) 1060ms
+     ✓ R13 tienda: solo los conceptos de ESA tienda en el periodo, con su número; en orden del catálogo  911ms
+(node:23612) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ tests/integration/db/455/caracterizacion/filtro-ordenes-por-estado.test.ts (3 tests) 1218ms
+ ✓ tests/integration/db/busqueda-sincronizacion-columna.test.ts (7 tests) 974ms
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > control positivo de la sonda (sin esto, lo demas no vale) > cuenta 2 consultas en vuelo cuando de verdad las hay sobre la misma conexion
+[450] control positivo de la sonda:
+  consultas emitidas ......... 2
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 2
+  solapes anotados ........... 1
+  avisos de pg capturados .... 0
+
+ ✓ tests/integration/db/deshacer-asignacion-zona-satelite.int.test.ts (6 tests) 2155ms
+     ✓ ⭑ orden de zona SATELITE en `en_ruta_bodega_satelite` que vino de la central: se deshace  450ms
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > control positivo de la sonda (sin esto, lo demas no vale) > no marca solape cuando las mismas dos consultas salen en serie
+[450] control positivo negado (en serie):
+  consultas emitidas ......... 2
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+ ✓ tests/integration/db/corregir-ubicacion-geocode.test.ts (11 tests) 1454ms
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R1 · aprobacion del cierre: los dos feeds con el `tx` real > el feed de INGRESO no pone dos consultas en vuelo sobre la conexion de la tx
+[450] R1 · feed de ingreso (42):
+  consultas emitidas ......... 4
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R1 · aprobacion del cierre: los dos feeds con el `tx` real > el feed del LEDGER POR TIENDA tampoco
+[450] R1 · feed del ledger por tienda (43):
+  consultas emitidas ......... 4
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R1 · aprobacion del cierre: los dos feeds con el `tx` real > los DOS feeds seguidos en la MISMA tx, como en `resolverCierre`
+[450] R1 · los dos feeds en la misma tx:
+  consultas emitidas ......... 7
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R1 · aprobacion del cierre: los dos feeds con el `tx` real > no se emitio el aviso de `pg` en el camino de aprobacion
+[450] avisos de pg atribuidos a la aprobacion: 0 (total del proceso: 0)
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R2 · control negativo: los caminos donde el aviso se OBSERVA > `CierreDiaRepository.findCierresByMensajeroPaginado` reparte sus 2 consultas en 2 conexiones
+[450] R2 · CierreDiaRepository:1226:
+  consultas emitidas ......... 2
+  conexiones usadas .......... 2
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R2 · control negativo: los caminos donde el aviso se OBSERVA > el trio de `findEstatusIdByValue` de `CorteDiarioService:164` tampoco solapa
+[450] R2 · CorteDiarioService:164:
+  consultas emitidas ......... 1
+  conexiones usadas .......... 1
+  maximo en vuelo/conexion ... 1
+  solapes anotados ........... 0
+  avisos de pg capturados .... 0
+
+stdout | tests/integration/db/aprobacion-consultas-en-serie.test.ts > FICHA 450 · una consulta a la vez sobre la conexion de la transaccion > R2 · control negativo: los caminos donde el aviso se OBSERVA > no se emitio el aviso de `pg` en los caminos observados
+[450] avisos de pg atribuidos al control negativo: 0 (total del proceso: 0)
+
+ ✓ tests/integration/db/aprobacion-consultas-en-serie.test.ts (9 tests) 1562ms
+ ✓ tests/integration/db/tarifa-zona-borrado-fk-real.test.ts (9 tests) 1086ms
+ ✓ tests/integration/db/notificacion-evento-gasto-fijo-migration.test.ts (20 tests) 882ms
+     ✓ la base tiene el evento y la entidad de esta ficha, con los posteriores AL FINAL  539ms
+ ✓ tests/integration/db/novedades-predicado-sql-real.test.ts (4 tests) 1180ms
+     ✓ el conteo de CADA grupo es SQL válido (la igualdad de estado resuelve por la relación)  779ms
+ ✓ tests/integration/db/satelite-conjunto-sql-real.test.ts (4 tests) 849ms
+     ✓ el conjunto completo se ejecuta contra el esquema real, con y sin filtros de geografía  601ms
+ ✓ tests/integration/db/wallet-orden-estable-458.test.ts (2 tests) 1236ms
+     ✓ R23: libro de la TIENDA — 14 filas del mismo instante en paginas de 4: 0 duplicadas, 0 faltantes, orden total  833ms
+ ✓ tests/integration/db/zona-sinpe-rastro.test.ts (6 tests) 1702ms
+ ✓ tests/integration/db/455/seed.test.ts (4 tests) 898ms
+ ✓ tests/integration/db/usuario-contar-adminsatelites.test.ts (2 tests) 989ms
+     ✓ ⭑ R17: no se cuenta a si mismo, ni a inactivos, ni a otras zonas, ni a otros roles  889ms
+ ✓ tests/integration/db/correccion-fecha-reprogramacion-migration.test.ts (10 tests) 684ms
+     ✓ ⭑ `pg_enum` tiene el valor nuevo, y el catalogo y la base dicen lo mismo  539ms
+ ✓ tests/integration/db/cohorte-carga-indices.int.test.ts (6 tests) 1229ms
+     ✓ los dos indices estan aplicados en esta base (si no, no hay nada que medir)  770ms
+     ✓ el plan entra a `orden_historial_estado` POR INDICE, y no por un Seq Scan  331ms
+ ✓ tests/integration/db/cierre-segundo-vincula-solo-lo-suyo.test.ts (1 test) 856ms
+ ✓ tests/integration/db/454/ayuda-abierta-sql-real.test.ts (14 tests) 898ms
+ ✓ tests/integration/db/notificacion-evento-bloqueo-cierre-migration.test.ts (15 tests) 1016ms
+     ✓ la base tiene los eventos de la 271 y los posteriores AL FINAL y en orden de adicion  494ms
+ ✓ tests/integration/db/zona-sinpe-revision.test.ts (4 tests) 733ms
+ ✓ tests/integration/db/gasto-fijo-plantilla-borrado.test.ts (1 test) 695ms
+     ✓ borrada la plantilla, su egreso sigue en el libro con monto, fecha, origen_id y descripcion intactos  604ms
+ ✓ tests/integration/db/busqueda-normalizacion-paridad.test.ts (17 tests) 807ms
+ ✓ tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts (22 tests) 1008ms
+     ✓ la base tiene el evento de esta ficha y los posteriores AL FINAL  620ms
+ ✓ tests/integration/db/455/snapshot-lectura.test.ts (2 tests) 1036ms
+ ✓ tests/integration/db/conteo-por-status-cohorte.int.test.ts (4 tests) 1225ms
+     ✓ una orden cargada FUERA y gestionada DENTRO no entra (el caso de las 152)  939ms
+ ✓ tests/integration/db/webhook-suscripcion-circuito-migracion.test.ts (17 tests) 912ms
+     ✓ ⭑ las dos columnas EXISTEN, con su tipo, NOT NULL y su default  745ms
+ ✓ tests/integration/db/chat-mensaje-media-migration.test.ts (11 tests) 606ms
+ ✓ tests/integration/db/backfill-marcador-config-geocode.test.ts (6 tests) 832ms
+     ✓ R17: marca las candidatas, y correrlo DOS veces deja el marcador UNA sola vez  674ms
+ ✓ tests/integration/db/distrito-zona-especial-migration.test.ts (7 tests) 921ms
+ ✓ tests/integration/db/push-migration.test.ts (15 tests) 1072ms
+     ✓ ⭑ `push_web` esta en el enum `job_tipo`, y al final  876ms
+ ✓ tests/integration/db/rechazo-tope-intentos-migration.test.ts (17 tests) 649ms
+ ✓ tests/integration/db/confirmacion-fisica-migration.test.ts (19 tests) 649ms
+     ✓ R17/R20: existe, es NULLABLE y no tiene DEFAULT  507ms
+ ✓ tests/integration/db/cierre-rechazo-tienda-migration.test.ts (11 tests) 625ms
+     ✓ la migracion consta como APLICADA y no revertida en `_prisma_migrations`  500ms
+ ✓ tests/integration/db/backfill-conciliacion-retroactiva.int.test.ts (8 tests) 856ms
+ ✓ tests/integration/db/ranking-snapshot-migration.test.ts (49 tests) 2423ms
+ ✓ tests/integration/db/caja-estado-459.test.ts (1 test) 661ms
+     ✓ R15: `MIN(fecha_movimiento)` en dia de Costa Rica, sin filtros  584ms
+ ✓ tests/integration/db/schema-drift-saneamiento.test.ts (16 tests) 205ms
+ ✓ tests/integration/db/busqueda-texto-sql-paridad.test.ts (3 tests) 574ms
+     ✓ produce EXACTAMENTE el mismo texto que `normalizarTerminoBusqueda` en cada caso del corpus  503ms
+ ✓ tests/integration/db/zona-guardado-conserva-inactivos.test.ts (2 tests) 1265ms
+     ✓ las filas de `zona_distrito` son EXACTAMENTE las mismas antes y después del guardado  418ms
+ ✓ tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts (19 tests) 906ms
+     ✓ la base tiene los eventos posteriores al final y en orden de adicion  691ms
+ ✓ tests/integration/db/historial-accion-orden-zona-reconciliada-migration.test.ts (5 tests) 644ms
+     ✓ ⭑ `pg_enum` tiene `orden_zona_reconciliada`, y el catalogo y la base dicen lo mismo  578ms
+ ✓ tests/integration/db/marca-conciliacion.int.test.ts (9 tests) 1099ms
+     ✓ ⭑ R8/R9: marcar escribe LOS CUATRO datos, el espejo, y pasa el CHECK  676ms
+ ✓ tests/integration/db/job-tipo-analitica-rollup-migration.test.ts (11 tests) 808ms
+     ✓ `analitica_rollup_diario` es un valor del enum `job_tipo` en la base  749ms
+ ✓ tests/integration/db/siembra-liberar-reprogramadas-idempotente.test.ts (2 tests) 661ms
+     ✓ dos siembras del mismo dia CR dejan UNA fila, y el reencolado de la recurrencia tampoco anade  645ms
+ ✓ tests/integration/db/wallet-origen-legible.test.ts (1 test) 966ms
+     ✓ maestro: cierre con día CR y mensajero + enlace; flete por devolución a origen con su guía + enlace  959ms
+ ✓ tests/integration/db/462/medir-462-hoy-cr.test.ts (5 tests) 712ms
+     ✓ cada 30 min durante 48 h, con la sesion en UTC: coincide con el dia CR de JS  640ms
+ ✓ tests/integration/db/notificacion-evento-avisos-agregados-migration.test.ts (20 tests) 1270ms
+     ✓ ⭑ la base tiene los cuatro valores nuevos, AÑADIDOS al final (no recreados por detrás)  558ms
+     ✓ ⭑ el DOWN con una fila de un evento nuevo ABORTA RUIDOSAMENTE (y no borra nada)  304ms
+ ✓ tests/integration/db/api-key-eliminada-migration.test.ts (10 tests) 709ms
+     ✓ ⭑ `pg_enum` tiene `api_key_eliminada`, y el catalogo y la base dicen lo mismo  440ms
+ ✓ tests/integration/db/ayuda-tienda-migration.test.ts (28 tests) 155ms
+ ✓ tests/integration/db/anclaje-devolucion-migration.test.ts (17 tests) 60ms
+ ✓ tests/integration/db/gestion-tienda-ayuda-migration.test.ts (13 tests) 79ms
+ ✓ tests/integration/db/plantilla-variables-nombres-migration.test.ts (10 tests) 60ms
+ ✓ tests/integration/db/rechazo-tienda-migration.test.ts (14 tests) 79ms
+ ✓ tests/integration/db/plantilla-template-id-migration.test.ts (8 tests) 65ms
+ ✓ tests/integration/db/orden-incidente-migration.test.ts (24 tests) 37ms
+ ✓ tests/integration/db/no-migration-102.test.ts (7 tests) 37ms
+ ✓ tests/integration/db/incidente-indemnizacion-migration.test.ts (20 tests) 38ms
+ ✓ tests/integration/db/order-status-retiro-en-fulfillment-migration.test.ts (32 tests) 29ms
+ ✓ tests/integration/db/cierre-detail-congelado.test.ts (7 tests) 41ms
+ ✓ tests/integration/db/cierre-dia-migration.test.ts (10 tests) 21ms
+ ✓ tests/integration/db/wallet-idempotencia.test.ts (8 tests) 35ms
+ ✓ tests/integration/db/devolucion-rechazadas-flow.test.ts (9 tests) 46ms
+ ✓ tests/integration/db/job-tipo-whatsapp-template-sync-migration.test.ts (10 tests) 30ms
+ ✓ tests/integration/db/notificacion-migration.test.ts (32 tests) 26ms
+ ✓ tests/integration/db/orden-historial-origen-recoleccion-tienda-incidente-migration.test.ts (16 tests) 29ms
+ ✓ tests/integration/db/saldos-tiendas-busqueda-463.test.ts (5 tests) 756ms
+ ✓ tests/integration/db/carga-migration.test.ts (28 tests) 19ms
+ ✓ tests/integration/db/liquidacion-migration.test.ts (13 tests) 22ms
+ ✓ tests/integration/db/orden-historial-origen-deshacer-asignacion-migration.test.ts (14 tests) 18ms
+ ✓ tests/integration/db/orden-fecha-reparto-migration.test.ts (20 tests) 19ms
+ ✓ tests/integration/db/cierre-sin-gestion-migration.test.ts (27 tests) 19ms
+ ✓ tests/integration/db/orden-historial-origen-tipo-resolver-novedad-migration.test.ts (10 tests) 17ms
+ ✓ tests/integration/db/generacion-gastos-fijos.test.ts (4 tests) 19ms
+ ✓ tests/integration/db/drop-mensajero-sugerido-migration.test.ts (19 tests) 14ms
+ ✓ tests/integration/db/gasto-fijo-periodicidad-migration.test.ts (12 tests) 18ms
+ ✓ tests/integration/db/orden-historial-origen-tipo-sla-devuelta-migration.test.ts (10 tests) 16ms
+ ✓ tests/integration/db/order-status-en-reparto-migration.test.ts (11 tests) 18ms
+ ✓ tests/integration/db/order-status-v2-migration.test.ts (14 tests) 18ms
+ ✓ tests/integration/db/order-status-rename-nomenclatura-migration.test.ts (9 tests) 15ms
+ ✓ tests/integration/db/gestion-orden-causa-devolucion-migration.test.ts (14 tests) 15ms
+ ✓ tests/integration/db/orden-historial-origen-recepcion-bodega-central-migration.test.ts (10 tests) 15ms
+ ✓ tests/integration/db/purga-pdf-indices-migration.test.ts (14 tests) 14ms
+ ✓ tests/integration/db/wallet-egreso.test.ts (4 tests) 15ms
+ ✓ tests/integration/db/orden-busqueda-trgm-migration.test.ts (27 tests) 17ms
+ ✓ tests/integration/db/postulacion-mensajero-migration.test.ts (15 tests) 13ms
+ ✓ tests/integration/db/api-key-tienda-destino-migration.test.ts (12 tests) 12ms
+ ✓ tests/integration/db/orden-indices-filtros-migracion.test.ts (16 tests) 12ms
+ ✓ tests/integration/db/api-key-migration.test.ts (17 tests) 14ms
+ ✓ tests/integration/db/orden-busqueda-producto-migration.test.ts (17 tests) 14ms
+ ✓ tests/integration/db/cierre-detail-migration.test.ts (24 tests) 15ms
+ ✓ tests/integration/db/gestion-orden-anulacion-migration.test.ts (17 tests) 16ms
+ ✓ tests/integration/db/orden-historial-actor-origen-index-migration.test.ts (13 tests) 12ms
+ ✓ tests/integration/db/vehiculos-migration.test.ts (10 tests) 15ms
+ ✓ tests/integration/db/ruta-optimizada-migracion.test.ts (11 tests) 16ms
+ ✓ tests/integration/db/job-tipo-whatsapp-bienvenida-migration.test.ts (9 tests) 14ms
+ ✓ tests/integration/db/gestion-orden-migration.test.ts (14 tests) 14ms
+ ✓ tests/integration/db/cierre-estado-vencido-migration.test.ts (10 tests) 12ms
+ ✓ tests/integration/db/gestion-orden-ubicacion-migration.test.ts (11 tests) 14ms
+ ✓ tests/integration/db/ruta-secuencia-fuente-migracion.test.ts (8 tests) 12ms
+ ✓ tests/integration/db/resolver-novedad-reprograma-sla.test.ts (6 tests) 14ms
+ ✓ tests/integration/db/chat-mensaje-ubicacion-migration.test.ts (10 tests) 13ms
+ ✓ tests/integration/db/orden-historial-origen-tipo-cancelacion-api-migration.test.ts (9 tests) 14ms
+ ✓ tests/integration/db/pago-mensajero-movimiento-migration.test.ts (11 tests) 13ms
+ ✓ tests/integration/db/ruta-optimizada-rollback.test.ts (9 tests) 20ms
+ ✓ tests/integration/db/wallet-tienda-migration.test.ts (11 tests) 13ms
+ ✓ tests/integration/db/order-status-en-bodega-satelite-migration.test.ts (7 tests) 12ms
+ ✓ tests/integration/db/order-status-satelite-migration.test.ts (7 tests) 11ms
+ ✓ tests/integration/db/job-tipo-analitica-invalidacion-migration.test.ts (8 tests) 12ms
+ ✓ tests/integration/db/resolver-novedad-recupera-sla.test.ts (5 tests) 12ms
+ ✓ tests/integration/db/gasto-fijo-plantilla-migration.test.ts (8 tests) 8ms
+ ✓ tests/integration/db/jobs-cola-migration.test.ts (10 tests) 13ms
+ ✓ tests/integration/db/zonas-migration.test.ts (19 tests) 13ms
+ ✓ tests/integration/db/ingreso-bodega-migration.test.ts (7 tests) 11ms
+ ✓ tests/integration/db/cierre-dia-resolucion-migration.test.ts (8 tests) 10ms
+ ✓ tests/integration/db/wallet-migration.test.ts (9 tests) 11ms
+ ✓ tests/integration/db/wallet-egreso-migration.test.ts (10 tests) 12ms
+ ✓ tests/integration/db/resolver-novedad-reprograma-dinero.test.ts (8 tests) 12ms
+ ✓ tests/integration/db/webhook-suscripcion-migracion.test.ts (5 tests) 11ms
+ ✓ tests/integration/db/geocodificacion-migracion.test.ts (7 tests) 10ms
+ ✓ tests/integration/db/carga-masiva-schema.test.ts (14 tests) 10ms
+ ✓ tests/integration/db/permissions-migration.test.ts (11 tests) 10ms
+ ✓ tests/integration/db/orden-historial-migration.test.ts (12 tests) 12ms
+ ✓ tests/integration/db/gestion-orden-evidencia-migration.test.ts (10 tests) 11ms
+ ✓ tests/integration/db/pago-mensajero-migration.test.ts (7 tests) 10ms
+ ✓ tests/integration/db/chat-conversacion-leido-migration.test.ts (7 tests) 10ms
+ ✓ tests/integration/db/usuario-fulfillment-migration.test.ts (6 tests) 8ms
+ ✓ tests/integration/db/wallet-tienda-idempotencia.test.ts (4 tests) 10ms
+ ✓ tests/integration/db/api-key-estado-migration.test.ts (7 tests) 10ms
+ ✓ tests/integration/db/455/caracterizacion/transiciones.test.ts (4 tests) 11ms
+ ✓ tests/integration/db/orden-historial-gestion-fk-restrict-migration.test.ts (7 tests) 10ms
+ ✓ tests/integration/db/order-status-enum-migration.test.ts (4 tests) 9ms
+ ✓ tests/integration/db/orden-liberada-reprogramada-migration.test.ts (5 tests) 9ms
+ ✓ tests/integration/db/pago-mensajero-idempotencia.test.ts (4 tests) 10ms
+ ✓ tests/integration/db/geocodificacion-rollback.test.ts (5 tests) 8ms
+ ✓ tests/integration/db/orden-prioridad-migration.test.ts (7 tests) 9ms
+ ✓ tests/integration/db/metodo-pago-rename-simpe-sinpe-migration.test.ts (5 tests) 8ms
+ ✓ tests/integration/db/provincia-schema-drift.test.ts (5 tests) 6ms
+ ✓ tests/integration/db/webhook-suscripcion-rollback.test.ts (4 tests) 8ms
+ ✓ tests/integration/db/rename-order-status-migration.test.ts (4 tests) 6ms
+ ✓ tests/integration/db/role-seed-migration.test.ts (6 tests) 8ms
+ ✓ tests/integration/db/rol-admin-satelite-migration.test.ts (5 tests) 7ms
+
+ Test Files  418 passed (418)
+      Tests  4083 passed (4083)
+   Start at  18:03:19
+   Duration  234.87s (transform 37.99s, setup 14.13s, import 622.16s, tests 840.75s, environment 5.46s)
+
+JSON report written to R:/job/singularis/projects/ordenex/.vitest/rojos-integracion.json
+[0;32m✓ tests: sin rojos nuevos (0 archivo(s) rojo(s) sobre 688 ejecutado(s), todos en el baseline conocido)[0m
+[1;33m! modo rapido AMPLIADO: relacionados + guardias + tests/integration/db.[0m
+[1;33m! El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas.[0m
+[1;33m! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at[0m
+[0;32m✓ .env presente[0m
+[0;32m== init OK ==[0m
+Siguiente: abre AGENTS.md y sigue el flujo desde ahi.
+INIT_EXIT=0

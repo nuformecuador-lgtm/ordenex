@@ -29,22 +29,23 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
    No hagas circular el contenido completo por el chat.
 4. **Trazabilidad.** Cada requisito `R<n>` debe terminar mapeado a un test concreto.
    El reviewer rechaza si falta alguno.
-5. **Verificación ejecutable, y el arnés decide cuánta.** Nada se da por "hecho" sin pasar el
-   gate, pero el gate tiene dos niveles y **ya no eliges tú**:
-   - **`./init.sh --rapido`** es el gate normal, también **para abrir un PR** (typecheck + lint +
-     los tests que el grafo relaciona con tu cambio + **todas** las guardias, ~1 min).
-   - **`./init.sh`** completo es obligatorio **antes de una release a `prod`, sin excepción**, y
-     **después de cada merge a `dev`** (ahí corre en segundo plano: no te hace esperar, pero si
-     `dev` se rompió se sabe enseguida y con un culpable claro).
-   - **El modo rápido se niega solo** cuando tu diff toca los cimientos —migraciones,
-     `db/schema.prisma`, `lib/types/`, configuración de build o archivos con nombre de dinero— y
-     te manda al completo. Es un `fail`, no un aviso: no depende de que alguien se acuerde.
+5. **Verificación ejecutable: corre lo que tocas, no todo.** Nada se da por "hecho" sin pasar el
+   gate, y el gate decide cuánto se corre (reglas del humano, 2026-10-05):
+   - **`./init.sh --rapido`** es el gate de TODO el trabajo, también para abrir un PR y después de
+     mergear: typecheck + lint + los tests que el grafo relaciona con tu diff + las guardias.
+   - Si el diff toca **dinero o datos** (nombres de dinero, migraciones, `db/schema.prisma`,
+     `lib/types/`), el mismo `--rapido` se **amplía solo** con toda `tests/integration/db` (contra
+     Postgres). No hace falta el completo.
+   - **`./init.sh` completo: SOLO antes de una release a `prod`**, sin excepción. También lo exige
+     `--rapido` si tocas el propio gate, `tests/fixtures/sin-comentarios.ts` o la config de
+     build/tests (su radio es todo el repo).
+   - **Ningún subagente corre el completo, y el leader no se lo pide.** Un rojo se repite AISLADO
+     (solo ese archivo); si pasa, se anota como intermitente y no se vuelve a correr todo.
 
-   Por qué así, medido el 2026-08-20: mover un enlace de la nav costaba **16.346 tests y 5–11 min**
-   cuando lo relacionado eran **21 tests + las guardias, ~33 s**. Pero relajar la regla a secas
-   dejaría un agujero real: `--changed` solo ve **tu** diff, así que **no detecta un `dev` que ya
-   venía rojo** —pasó tres veces en este repo— y por eso existe la corrida completa post-merge.
-   Detalle y límites en `docs/verification.md`. "Compila" no es "funciona".
+   Por qué: en la 473 (5 archivos) se corrió el completo tres veces, ~67 min, cuando lo relacionado
+   eran ~280 tests; y cada completo arrastra los flakes de la base compartida. Precio aceptado: un
+   `dev` que ya venía rojo (`--changed` no lo ve) se descubre en el completo de la release, no antes.
+   Detalle en `docs/verification.md`. "Compila" no es "funciona".
 6. **No inventes.** Si un dato no está en `docs/`, `specs/` o el código, es
    desconocido: pregunta o márcalo como abierto. No lo rellenes con supuestos.
 7. **Buscar código empieza por el grafo, no por `grep`.** El repo está indexado en el MCP

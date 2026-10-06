@@ -34,7 +34,7 @@ Lee: `specs/<feature>/requirements.md`, `design.md`, `tasks.md`,
 
 ## Verificacion
 Al finalizar todas las tasks:
-1. Corre `pnpm run typecheck`, `pnpm run lint`, `pnpm test`.
+1. Corre `pnpm run typecheck`, `pnpm run lint` y los tests relacionados (`pnpm exec vitest related --run <archivos>`). Nunca la suite completa.
 2. Si hay E2E, `pnpm run test:e2e`.
 3. Escribe o actualiza `progress/impl_<feature>.md` consolidando:
    - Archivos creados/modificados (de ambos subagentes)

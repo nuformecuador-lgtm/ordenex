@@ -48,7 +48,7 @@ export class ConciliacionSatelitesService implements IConciliacionSatelitesServi
     private readonly saldos: ISaldosSatelitesRepository,
     private readonly escrituras: Pick<
       ICierresBodegaAdminRepository,
-      "marcarConciliado" | "revertirConciliacion"
+      "marcarConciliado" | "revertirConciliacion" | "corregirConciliacion"
     >,
   ) {}
 
@@ -154,6 +154,31 @@ export class ConciliacionSatelitesService implements IConciliacionSatelitesServi
     if (res === "updated") return { status: "ok", cierreBodegaId: input.cierreBodegaId };
     if (res === "conflict") return { status: "conflict" }; // ya estaba pendiente de conciliar
     return { status: "no_encontrada" };
+  }
+
+  /**
+   * ⭑ FICHA 473 (R1-R9) — CORREGIR el monto de una consolidacion ya conciliada.
+   *
+   * Guard de rol PRIMERO (R9), antes de tocar el repositorio. El monto llega validado por el mismo
+   * schema que marcar; la nota se normaliza a `null` aqui por el mismo motivo que en `marcarRecibida`.
+   * Llama a `corregirConciliacion` y NUNCA a `marcarConciliado`: el `WHERE` de la marca exige una
+   * consolidacion SIN marcar y responderia `conflict` siempre (el defecto de la ficha).
+   */
+  async corregirRecibida(
+    input: MarcarConsolidacionRecibidaInput,
+    actor: Actor,
+  ): Promise<MarcaConciliacionServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R9
+
+    const res = await this.escrituras.corregirConciliacion({
+      id: input.cierreBodegaId,
+      montoRecibido: input.montoRecibido,
+      nota: input.nota ?? null,
+      actorUsuarioId: actor.usuarioId,
+    });
+    if (res === "updated") return { status: "ok", cierreBodegaId: input.cierreBodegaId };
+    if (res === "conflict") return { status: "conflict" }; // R6/R8: ya no conciliada o monto movido
+    return { status: "no_encontrada" }; // R7
   }
 
   /**

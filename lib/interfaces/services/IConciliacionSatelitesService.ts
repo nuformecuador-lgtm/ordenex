@@ -98,6 +98,16 @@ export interface IConciliacionSatelitesService {
     actor: Actor,
   ): Promise<MarcaConciliacionServiceResult>;
   /**
+   * ⭑ FICHA 473 (R1-R9) — CORRIGE el monto recibido de una consolidacion YA conciliada, sin pasar
+   * por «Pendiente de conciliar». Mismo input que marcar (los campos son identicos) y mismo
+   * resultado: `conflict` si ya no esta conciliada o su monto cambio entre lectura y escritura,
+   * `no_encontrada` si no existe, `forbidden` sin acceso total. NO escribe en libros de dinero.
+   */
+  corregirRecibida(
+    input: MarcarConsolidacionRecibidaInput,
+    actor: Actor,
+  ): Promise<MarcaConciliacionServiceResult>;
+  /**
    * R20/R23 — las tres cifras de cabecera, YA CUADRADAS. No recibe input: el conjunto es «todas
    * las bodegas satelite», que es el mismo de la tabla que encabeza.
    */

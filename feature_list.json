@@ -5626,11 +5626,11 @@
       "title": "Corregir la recepcion de dinero de una satelite",
       "description": "«Corregir» en una recepcion «Recibido incompleto» cambia el monto recibido en un solo paso y deja una fila de historial.",
       "zone": "fullstack",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "media",
       "depends_on": null,
-      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana. || SPEC APROBADO por el humano el 2026-10-05 con D1 (reusar cierre_bodega_conciliado, sin migracion) y D2 (la correccion mueve conciliadoAt/resuelto_at). backend_dev -> frontend_dev en worktree.",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-10-05 tras la investigacion (progress/investigacion_corregir_recepcion_satelite.md). Causa: Corregir reusa marcarConsolidacionRecibidaAction y marcarConciliado filtra estado solicitado + conciliadoAt null (CierresBodegaAdminRepository.ts:528) => conflict siempre, sin escribir. Caso real: FGAM Zona Sur 2026-10-01, corregido a mano desmarcando y marcando. Arreglo minimo: accion propia atomica + aviso de conflicto que si refresque. || SPEC escrito (17 R), pendiente de aprobacion humana. || SPEC APROBADO por el humano el 2026-10-05 con D1 (reusar cierre_bodega_conciliado, sin migracion) y D2 (la correccion mueve conciliadoAt/resuelto_at). backend_dev -> frontend_dev en worktree. || HECHA en dev (PR #847, 1124cc71). Gate post-merge: 2 flakes 40P01 verdes aislados. Sin desplegar.",
       "branch": "feature/473-corregir-recepcion-satelite"
     },
     {
@@ -5690,11 +5690,11 @@
       "title": "tests de descarga de ordenes fallan de 00:00 a 01:00",
       "description": "Los tests OrdenesDescarga* usan la hora local en vez de la de Costa Rica y fallan en esa franja; fijar la zona horaria.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "depends_on": null,
-      "status_note": "Aprobada por el humano el 2026-10-05. Solo tests. (c3, m1/m2 de la 464: DESCARTADA, sin registro escrito y la 468 retiro ese Excel.)",
+      "status_note": "Aprobada por el humano el 2026-10-05. Solo tests. (c3, m1/m2 de la 464: DESCARTADA, sin registro escrito y la 468 retiro ese Excel.) || YA RESUELTA por la 470 (aeca9298, 2026-10-03): hoyISO usa fechaCalendarioCR y un caso fija el reloj en 00:00-01:00. Nada que hacer.",
       "branch": null
     }
   ]

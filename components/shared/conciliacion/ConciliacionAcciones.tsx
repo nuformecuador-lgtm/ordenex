@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import {
+  corregirConsolidacionRecibidaAction,
   marcarConsolidacionRecibidaAction,
   revertirConciliacionAction,
 } from "@/lib/actions/conciliacion-satelites";
@@ -99,12 +100,31 @@ export function ConciliacionAcciones({
 
   const estado: EstadoConciliacion = estadoConciliacionDe(marca);
 
-  async function marcar(campos: MarcarRecibidoCampos): Promise<MarcaConciliacionActionResult> {
-    return marcarConsolidacionRecibidaAction({ ...campos, cierreBodegaId });
+  // 473 (R14) — UN ENVÍO POR MODO. «Corregir» sólo existe sobre una «Recibido incompleto», que
+  // YA está conciliada: mandarla a la action de marcar —cuyo `WHERE` exige una SIN marcar— era
+  // un `conflict` garantizado sin escribir nada. Corregir sustituye el monto y la deja conciliada.
+  const esCorreccion = estado === "incompleto";
+
+  async function enviar(campos: MarcarRecibidoCampos): Promise<MarcaConciliacionActionResult> {
+    const input = { ...campos, cierreBodegaId };
+    return esCorreccion
+      ? corregirConsolidacionRecibidaAction(input)
+      : marcarConsolidacionRecibidaAction(input);
   }
 
-  async function trasMarcar(montoRecibido: string) {
-    toast.success(CONCILIACION_RESPUESTA.marcada(montoRecibido));
+  /** R16 — el aviso dice el monto que QUEDÓ registrado, con el verbo de lo que se hizo. */
+  async function trasEnviar(montoRecibido: string) {
+    toast.success(
+      esCorreccion
+        ? CONCILIACION_RESPUESTA.corregida(montoRecibido)
+        : CONCILIACION_RESPUESTA.marcada(montoRecibido),
+    );
+    await onCambio?.();
+  }
+
+  /** R17 — el diálogo ya se cerró; el aviso promete «Actualizando la lista», y se cumple. */
+  async function trasConflicto() {
+    toast.error(CONCILIACION_RESPUESTA.conflicto);
     await onCambio?.();
   }
 
@@ -184,8 +204,9 @@ export function ConciliacionAcciones({
         declarado={declarado}
         montoActual={estado === "pendiente" ? null : marca.montoRecibido}
         notaActual={nota}
-        onMarcar={marcar}
-        onMarcado={trasMarcar}
+        onMarcar={enviar}
+        onMarcado={trasEnviar}
+        onConflicto={trasConflicto}
       />
 
       <Modal

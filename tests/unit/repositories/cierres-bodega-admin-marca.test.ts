@@ -47,6 +47,8 @@ interface FilaHistorial {
   entidadId: string;
   entidadEtiqueta: string;
   monto: Prisma.Decimal | null;
+  valorAnterior?: string | null;
+  valorNuevo?: string | null;
   actorUsuarioId: string | null;
 }
 
@@ -264,5 +266,98 @@ describe("431/T7 — CierresBodegaAdminRepository.revertirConciliacion", () => {
     await expect(
       repoCon(prisma).revertirConciliacion({ id: "cb1", actorUsuarioId: "u-maestro" }),
     ).resolves.toBe("updated");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// ⭑ FICHA 473 / T1 (R4/R8) — `corregirConciliacion`: el WHERE, el data y la fila del historial.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+//
+// El doble devuelve por defecto `montoRecibido: 485.00` en el `findUnique` previo: es el monto
+// ANTERIOR que el compare-and-swap tiene que exigir en el `WHERE`.
+
+describe("473/T1 — CierresBodegaAdminRepository.corregirConciliacion", () => {
+  const INPUT = {
+    id: "cb1",
+    montoRecibido: "600.00",
+    nota: "una nota que NO viaja",
+    actorUsuarioId: "u-maestro",
+  };
+
+  it("⭑ R8: el WHERE de corregirConciliacion exige aprobado, conciliadoAt no nulo y el monto leido", async () => {
+    const { prisma, updateMany, findUnique } = buildPrisma();
+    await repoCon(prisma).corregirConciliacion(INPUT);
+
+    const where = updateMany.mock.calls[0][0].where;
+    expect(Object.keys(where).sort()).toEqual(["conciliadoAt", "estado", "id", "montoRecibido"]);
+    expect(where.id).toBe("cb1");
+    expect(where.estado).toBe("aprobado");
+    expect(where.conciliadoAt).toEqual({ not: null });
+    // Compare-and-swap: el monto LEIDO en la misma transaccion, no el nuevo.
+    expect((where.montoRecibido as Prisma.Decimal).toFixed(2)).toBe("485.00");
+    // La lectura del previo va ANTES del update.
+    expect(findUnique.mock.invocationCallOrder[0]).toBeLessThan(
+      updateMany.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("R1/R2/R3: escribe monto nuevo (Decimal), nota, autor/instante y espejo; NO toca `estado`", async () => {
+    const { prisma, updateMany } = buildPrisma();
+    await repoCon(prisma).corregirConciliacion(INPUT);
+
+    const data = updateMany.mock.calls[0][0].data;
+    expect(data.estado).toBeUndefined(); // sigue `aprobado`: nunca pasa por pendiente
+    expect(data.montoRecibido).toBeInstanceOf(Prisma.Decimal);
+    expect(data.montoRecibido?.toFixed(2)).toBe("600.00");
+    expect(data.conciliadoNota).toBe("una nota que NO viaja");
+    expect(data.conciliadoPor).toBe("u-maestro");
+    expect(data.resueltoPor).toBe("u-maestro");
+    expect(data.conciliadoAt).toBeInstanceOf(Date);
+    expect(data.resueltoAt?.getTime()).toBe(data.conciliadoAt?.getTime());
+  });
+
+  it("R3: sin nota, la escribe como NULL", async () => {
+    const { prisma, updateMany } = buildPrisma();
+    await repoCon(prisma).corregirConciliacion({ ...INPUT, nota: null });
+    expect(updateMany.mock.calls[0][0].data.conciliadoNota).toBeNull();
+  });
+
+  it("⭑ R4: corregirConciliacion registra el monto nuevo y el anterior y no la nota", async () => {
+    const { prisma, createMany } = buildPrisma();
+    await repoCon(prisma).corregirConciliacion(INPUT);
+
+    expect(createMany).toHaveBeenCalledTimes(1);
+    const filas = createMany.mock.calls[0][0].data;
+    expect(filas).toHaveLength(1);
+    const fila = filas[0];
+    expect(fila.accion).toBe("cierre_bodega_conciliado");
+    expect(fila.entidadTipo).toBe("cierre_bodega");
+    expect(fila.entidadId).toBe("cb1");
+    expect(fila.monto?.toFixed(2)).toBe("600.00");
+    expect(fila.valorAnterior).toBe("485.00");
+    expect(fila.valorNuevo).toBe("600.00");
+    expect(fila.entidadEtiqueta).toContain("Cartago");
+    expect(JSON.stringify(fila)).not.toContain("una nota que NO viaja");
+  });
+
+  it("⭑ R8: count 0 tras leer responde conflict sin appendAccion", async () => {
+    // El monto cambio entre la lectura y la escritura (o ya no esta conciliada): el `WHERE` no casa.
+    const { prisma, createMany } = buildPrisma({ count: 0, existe: 1 });
+    const r = await repoCon(prisma).corregirConciliacion(INPUT);
+    expect(r).toBe("conflict");
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it("R7: la fila no existe -> `fuera_de_alcance`, sin update ni historial", async () => {
+    const { prisma, updateMany, createMany } = buildPrisma({ fila: null, count: 0, existe: 0 });
+    const r = await repoCon(prisma).corregirConciliacion({ ...INPUT, id: "no-existe" });
+    expect(r).toBe("fuera_de_alcance");
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it("R12: no toca ningun libro de dinero (el doble no los tiene)", async () => {
+    const { prisma } = buildPrisma();
+    await expect(repoCon(prisma).corregirConciliacion(INPUT)).resolves.toBe("updated");
   });
 });

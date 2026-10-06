@@ -134,6 +134,17 @@ const CENSO: EntradaCenso[] = [
     mutacion: /tx\.cierreBodega\.updateMany\(/,
   },
   {
+    // ⭑ FICHA 473 (D1) — CORREGIR el monto de una consolidacion ya conciliada. REUSA el tipo
+    // `cierre_bodega_conciliado` (sin migracion) con METODO PROPIO y entrada propia: un tipo con dos
+    // productores esta admitido (precedentes `zona_central_cambiada`, `orden_eliminada`). Lo que la
+    // guardia NO veria es un booleano dentro de `marcarConciliado`; por eso es otro metodo.
+    tipos: ["cierre_bodega_conciliado"],
+    archivo: "lib/repositories/CierresBodegaAdminRepository.ts",
+    metodo: "corregirConciliacion",
+    forma: "abre_tx",
+    mutacion: /tx\.cierreBodega\.updateMany\(/,
+  },
+  {
     tipos: ["pago_mensajero_registrado", "pago_tienda_registrado"],
     archivo: "lib/repositories/LiquidacionPagoRepository.ts",
     metodo: "crear",
